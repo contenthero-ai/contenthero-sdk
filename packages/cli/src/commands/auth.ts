@@ -108,27 +108,45 @@ export function awaitLoopbackKey(opts: LoopbackOptions): Promise<string> {
     }
 
     const server = http.createServer((req, res) => {
+      // CORS + Private Network Access, so the app page can deliver the key with a
+      // background fetch (and keep its own success UI) instead of navigating the
+      // browser here. Chrome treats https-public -> 127.0.0.1-local as a private
+      // network request and requires the preflight to opt in explicitly.
+      const cors: Record<string, string> = {
+        'access-control-allow-origin': req.headers.origin || '*',
+        'access-control-allow-methods': 'GET, OPTIONS',
+        'access-control-allow-headers': '*',
+        'access-control-allow-private-network': 'true',
+      }
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, cors)
+        res.end()
+        return
+      }
+
       const reqUrl = new URL(req.url || '/', 'http://127.0.0.1')
       if (reqUrl.pathname !== '/callback') {
-        res.writeHead(404, { 'content-type': 'text/plain' })
+        res.writeHead(404, { ...cors, 'content-type': 'text/plain' })
         res.end('Not found')
         return
       }
       // Bind the callback to this invocation; ignore anything with a wrong state.
       if (reqUrl.searchParams.get('state') !== state) {
-        res.writeHead(400, { 'content-type': 'text/html' })
+        res.writeHead(400, { ...cors, 'content-type': 'text/html' })
         res.end(resultPage('login error', 'Invalid request. You can close this tab.'))
         return
       }
       const error = reqUrl.searchParams.get('error')
       const got = reqUrl.searchParams.get('key')
       if (error || !got) {
-        res.writeHead(200, { 'content-type': 'text/html' })
+        res.writeHead(200, { ...cors, 'content-type': 'text/html' })
         res.end(resultPage('login cancelled', 'You can close this tab and return to your terminal.'))
         finish(() => reject(new CliError('Login was cancelled in the browser.', EXIT.AUTH)))
         return
       }
-      res.writeHead(200, { 'content-type': 'text/html' })
+      // The navigation fallback still renders this page; the fetch path ignores
+      // the body and shows the app's own in-page success instead.
+      res.writeHead(200, { ...cors, 'content-type': 'text/html' })
       res.end(resultPage('CLI connected', 'You can close this tab and return to your terminal.'))
       finish(() => resolve(got))
     })

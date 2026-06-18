@@ -50,6 +50,30 @@ test('a wrong-state callback is rejected (400) and ignored; the real one still w
   assert.equal(key, 'ch_live_real')
 })
 
+test('the loopback answers a CORS + Private Network Access preflight', async () => {
+  const result = await new Promise<{ status: number; pna: string | undefined }>((resolve, reject) => {
+    const p = awaitLoopbackKey({
+      state: 'abc',
+      onListening: (port) => {
+        const req = http.request(
+          { host: '127.0.0.1', port, path: '/callback', method: 'OPTIONS' },
+          (res) => {
+            res.resume()
+            resolve({ status: res.statusCode ?? 0, pna: res.headers['access-control-allow-private-network'] as string | undefined })
+            // unblock the awaitLoopbackKey promise so the test ends
+            void deliver(port, 'state=abc&key=ch_live_x')
+          },
+        )
+        req.on('error', reject)
+        req.end()
+      },
+    })
+    void p.catch(() => {})
+  })
+  assert.equal(result.status, 204)
+  assert.equal(result.pna, 'true')
+})
+
 test('awaitLoopbackKey times out (auth) when no callback arrives', async () => {
   await assert.rejects(
     awaitLoopbackKey({ state: 'abc', timeoutMs: 50, onListening: () => {} }),
