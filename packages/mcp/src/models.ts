@@ -83,6 +83,23 @@ function nonEmpty(ids: string[], fallback: readonly string[]): ModelEnum {
 }
 
 /**
+ * The static fallback enums, with no discovery call. Used by hosts that resolve
+ * tool schemas without a single user API key (e.g. the hosted OAuth MCP, where
+ * there is no one user at registration time). The npm/stdio server still resolves
+ * the live catalog via `resolveModelEnums`.
+ */
+export function fallbackModelEnums(): ResolvedModelEnums {
+  return {
+    image: [...IMAGE_MODELS_FALLBACK],
+    video: [...VIDEO_MODELS_FALLBACK],
+    audio: [...AUDIO_MODELS_FALLBACK],
+    upscale: [...UPSCALE_MODELS_FALLBACK],
+    lipSync: [...LIP_SYNC_MODELS_FALLBACK],
+    upscaleContentType: { ...UPSCALE_CONTENT_TYPE_FALLBACK },
+  }
+}
+
+/**
  * Build the three per-tool model enums from the live discovery catalog, falling
  * back to the static lists on any failure (missing key, network error, empty
  * result). Never throws: the server must always start.

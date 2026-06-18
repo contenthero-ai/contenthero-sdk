@@ -1,5 +1,6 @@
 /**
- * The ContentHero MCP server: intent-shaped tools over the @contenthero/sdk kernel.
+ * The ContentHero MCP tool surface: intent-shaped tools over the @contenthero/sdk
+ * kernel.
  *
  *   generate_image    - smart-wait, image models
  *   generate_video    - smart-wait, video models
@@ -14,12 +15,19 @@
  *   get_generation_status - poll an image/video outputId to its final URLs
  *   wait_for_generation - block until one or more outputIds finish (batch)
  *   get_balance       - credit balance + tier
+ *   ... plus the content-pipeline, brand-kit-write, inspiration, brand-account,
+ *   and connected-account tools.
+ *
+ * `registerTools(server, opts)` registers the whole surface against a backend
+ * resolved PER CALL via `opts.getClient(extra)`. The stdio/npm server passes a
+ * single env-configured client (identity is in the API key); the hosted OAuth
+ * server passes a factory that resolves a per-user client from the validated
+ * token's `extra.authInfo`. Tool schemas (incl. the per-tool model enums) are
+ * fixed at registration, so the model enums are supplied via `opts.models`.
  *
  * Intent-shaped generate tools rather than one generate_media: each operation
  * (generate / upscale / lip-sync) gets a tool whose schema only carries its own
- * fields, and per-tool modelId enums prevent cross-type model misuse. Image and
- * video share the async smart-wait lifecycle; audio shares almost no parameters
- * and runs synchronously.
+ * fields, and per-tool modelId enums prevent cross-type model misuse.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -34,6 +42,7 @@ import {
 import { getClient as defaultGetClient } from './client.js'
 import {
   resolveModelEnums,
+  type ResolvedModelEnums,
   BOARD_TYPES,
   BOARD_TYPE_GUIDANCE,
   IMAGE_MODEL_GUIDANCE,
@@ -94,11 +103,29 @@ const POST_PLATFORMS = [
  * How long the smart-wait tools (generate_image / generate_video / upscale /
  * generate_lip_sync) wait inline before handing back the outputId to poll.
  * Kept under the MCP SDK's default 60s client request timeout, so a slow render
- * returns the clean "still rendering, call get_generation_status" handoff rather than
- * tripping the client's timeout. Comfortably covers images (~15-30s); slower
- * video/lip-sync jobs return the pollable pending result.
+ * returns the clean "still rendering, call get_generation_status" handoff rather
+ * than tripping the client's timeout.
  */
 const SMART_WAIT_MS = 50_000
+
+/**
+ * Tool annotations drive how MCP clients group the surface. readOnlyHint=true
+ * tools list under "Read-only"; the rest list under "Interactive". publish is
+ * also flagged destructive (it pushes content to public social accounts).
+ */
+const READ = { readOnlyHint: true } as const
+const WRITE = { readOnlyHint: false } as const
+const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
+
+/** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
+export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
+
+export interface RegisterToolsOptions {
+  /** Resolve the backend client for a given call (identity bound inside it). */
+  getClient: GetClient
+  /** Per-tool model enums, fixed at registration (see resolveModelEnums). */
+  models: ResolvedModelEnums
+}
 
 export interface BuildServerOptions {
   /** Override the SDK client (for tests). Defaults to the env-configured client. */
@@ -115,19 +142,19 @@ function buildReferences(parts: References): References | undefined {
   return Object.keys(refs).length > 0 ? refs : undefined
 }
 
-export async function buildServer(options: BuildServerOptions = {}): Promise<McpServer> {
-  const getClient = options.getClient ?? defaultGetClient
-  // Resolve the per-tool model enums from the live discovery catalog (falls back
-  // to static lists if discovery is unreachable). Done once at startup, since
-  // tool schemas are advertised once; a restart picks up admin-switchboard changes.
-  const models = await resolveModelEnums(getClient)
-  const server = new McpServer({ name: 'contenthero', version: '0.2.2' })
+/**
+ * Register the full ContentHero tool surface on `server`. Synchronous: the model
+ * enums are supplied pre-resolved, and the backend client is resolved per call.
+ */
+export function registerTools(server: McpServer, opts: RegisterToolsOptions): void {
+  const { getClient, models } = opts
 
   // -- generate_image -------------------------------------------------------
   server.registerTool(
     'generate_image',
     {
       title: 'Generate Image',
+      annotations: WRITE,
       description:
         'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs.',
       inputSchema: {
@@ -151,8 +178,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const request = compact<GenerateRequest>({
           contentType: 'image',
           modelId: args.modelId,
@@ -162,12 +190,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           numImages: args.numImages,
           seed: args.seed,
           references: buildReferences({ images: args.referenceImages }),
-          // Mode (Flux pro/flex, Kontext pro/max) rides the model-agnostic
-          // parameters passthrough, which the server reads for variant + pricing.
           parameters: args.mode ? { mode: args.mode } : undefined,
         })
-        if (args.getCost) return costResult(await getClient().estimateCost(request))
-        const gen = await getClient().generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
+        if (args.getCost) return costResult(await client.estimateCost(request))
+        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
         if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
@@ -181,6 +207,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'generate_board',
     {
       title: 'Generate Reference Board',
+      annotations: WRITE,
       description:
         'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~50s; boards render slowly (minutes), so it usually returns an outputId to poll with get_generation_status.',
       inputSchema: {
@@ -208,8 +235,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const request = compact<GenerateBoardRequest>({
           boardType: args.boardType,
           prompt: args.prompt,
@@ -217,8 +245,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           numImages: args.numImages,
           boardName: args.boardName,
         })
-        if (args.getCost) return costResult(await getClient().estimateBoardCost(request))
-        const gen = await getClient().generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
+        if (args.getCost) return costResult(await client.estimateBoardCost(request))
+        const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
         if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
@@ -232,6 +260,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'generate_video',
     {
       title: 'Generate Video',
+      annotations: WRITE,
       description:
         'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode.',
       inputSchema: {
@@ -272,11 +301,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const klingMultiShot = Array.isArray(args.shots) && args.shots.length > 0
-        // multiShot is on for Kling's per-shot mode or WAN's boolean toggle; both
-        // ride the model-agnostic `parameters` passthrough into genParams.
         const wantMultiShot = klingMultiShot || args.multiShot === true
         const parameters: Record<string, unknown> = {}
         if (wantMultiShot) parameters.multiShot = true
@@ -284,15 +312,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         const request = compact<GenerateRequest>({
           contentType: 'video',
           modelId: args.modelId,
-          // Multi-shot puts per-shot prompts in `shots`, but some models (Kling 3.0)
-          // still require a top-level prompt to pass validation; the provider drops
-          // it in multi-shot, so a synthesized summary is harmless when none is given.
           prompt: klingMultiShot ? args.prompt ?? args.shots!.map((s) => s.prompt).join(' ') : args.prompt,
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
-          // Kling's per-shot total drives duration validation + pricing; the provider
-          // recomputes the per-shot timeline from `shots`. WAN multi-shot keeps the
-          // single duration field.
           duration: klingMultiShot ? args.shots!.reduce((sum, s) => sum + s.duration, 0) : args.duration,
           audioEnabled: args.audioEnabled,
           numGenerations: args.numGenerations,
@@ -307,8 +329,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
             audio: args.referenceAudio,
           }),
         })
-        if (args.getCost) return costResult(await getClient().estimateCost(request))
-        const gen = await getClient().generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
+        if (args.getCost) return costResult(await client.estimateCost(request))
+        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
         if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
@@ -322,6 +344,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'generate_audio',
     {
       title: 'Generate Audio',
+      annotations: WRITE,
       description:
         'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling).',
       inputSchema: {
@@ -340,8 +363,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const request = compact<GenerateRequest>({
           contentType: 'audio',
           modelId: args.modelId,
@@ -352,8 +376,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           durationSeconds: args.durationSeconds,
           promptInfluence: args.promptInfluence,
         })
-        if (args.getCost) return costResult(await getClient().estimateCost(request))
-        const result = await getClient().generate(request)
+        if (args.getCost) return costResult(await client.estimateCost(request))
+        const result = await client.generate(request)
         return audioResult(result)
       } catch (err) {
         return errorResult(err)
@@ -366,6 +390,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'upscale',
     {
       title: 'Upscale',
+      annotations: WRITE,
       description:
         'Upscale an existing image or video to a higher resolution. Provide the source media URL and a model-supported factor. Waits for the result; if the job is still running it returns an outputId to poll with get_generation_status.',
       inputSchema: {
@@ -379,8 +404,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of upscaling (nothing runs, nothing is charged).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const isVideo = models.upscaleContentType[args.modelId] === 'video'
         const request = compact<GenerateRequest>({
           contentType: isVideo ? 'video' : 'image',
@@ -389,8 +415,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           duration: isVideo ? args.durationSeconds : undefined,
           references: isVideo ? { videos: [args.sourceUrl] } : { images: [args.sourceUrl] },
         })
-        if (args.getCost) return costResult(await getClient().estimateCost(request))
-        const gen = await getClient().generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
+        if (args.getCost) return costResult(await client.estimateCost(request))
+        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
         if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
@@ -404,6 +430,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'generate_lip_sync',
     {
       title: 'Generate Lip Sync',
+      annotations: WRITE,
       description:
         'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Waits up to ~50s; if still rendering it returns an outputId to poll with get_generation_status.',
       inputSchema: {
@@ -431,8 +458,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const request = compact<GenerateRequest>({
           contentType: 'video',
           modelId: args.modelId,
@@ -447,8 +475,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
             audio: args.audioUrl ? [args.audioUrl] : undefined,
           }),
         })
-        if (args.getCost) return costResult(await getClient().estimateCost(request))
-        const gen = await getClient().generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
+        if (args.getCost) return costResult(await client.estimateCost(request))
+        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
         if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
@@ -462,6 +490,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'transcribe',
     {
       title: 'Transcribe Audio',
+      annotations: READ,
       description:
         'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, free, no polling).',
       inputSchema: {
@@ -473,9 +502,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         diarize: z.boolean().optional().describe('Label each speaker (diarization).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        const t = await getClient().transcribe({
+        const client = await getClient(extra)
+        const t = await client.transcribe({
           audioUrl: args.audioUrl,
           languageCode: args.languageCode,
           diarize: args.diarize,
@@ -492,12 +522,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_avatars',
     {
       title: 'List Avatars',
+      annotations: READ,
       description:
         "List the account's avatars. Each avatar has an imageUrl (its base look) and a defaultVoiceId, which feed generate_lip_sync. Call get_avatar for full detail and the avatar's looks.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return avatarListResult(await getClient().listAvatars())
+        const client = await getClient(extra)
+        return avatarListResult(await client.listAvatars())
       } catch (err) {
         return errorResult(err)
       }
@@ -509,15 +541,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_avatar',
     {
       title: 'Get Avatar',
+      annotations: READ,
       description:
         'Get one avatar by id: its base image (use as generate_lip_sync imageUrl), default voice, traits, and its looks (outfit variations).',
       inputSchema: {
         avatarId: z.string().describe('The avatar id from list_avatars.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return avatarResult(await getClient().getAvatar(args.avatarId))
+        const client = await getClient(extra)
+        return avatarResult(await client.getAvatar(args.avatarId))
       } catch (err) {
         return errorResult(err)
       }
@@ -529,12 +563,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_voices',
     {
       title: 'List Voices',
+      annotations: READ,
       description:
         "List the account's saved voices (favorites first). Each has a voiceId for generate_lip_sync / generate_audio (TTS). Call get_voice for full detail.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return voiceListResult(await getClient().listVoices())
+        const client = await getClient(extra)
+        return voiceListResult(await client.listVoices())
       } catch (err) {
         return errorResult(err)
       }
@@ -546,14 +582,16 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_voice',
     {
       title: 'Get Voice',
+      annotations: READ,
       description: 'Get one voice by its voiceId: provider, traits (accent/language/gender/age), description, and a preview URL.',
       inputSchema: {
         voiceId: z.string().describe('The voice id from list_voices.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return voiceResult(await getClient().getVoice(args.voiceId))
+        const client = await getClient(extra)
+        return voiceResult(await client.getVoice(args.voiceId))
       } catch (err) {
         return errorResult(err)
       }
@@ -565,12 +603,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_brand_kits',
     {
       title: 'List Brand Kits',
+      annotations: READ,
       description:
         "List the account's brand kits (default first). Call get_brand_kit for one kit's full brand context (voice, visual identity, audience, sections, accounts, knowledge) to write on-brand content.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return brandKitListResult(await getClient().listBrandKits())
+        const client = await getClient(extra)
+        return brandKitListResult(await client.listBrandKits())
       } catch (err) {
         return errorResult(err)
       }
@@ -582,15 +622,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_brand_kit',
     {
       title: 'Get Brand Kit',
+      annotations: READ,
       description:
         'Get one brand kit in full: business overview, positioning, audience, voice profile, visual identity (logos/colors/typography), curated sections, linked brand + inspiration accounts, and a knowledge-base summary. Use it to ground on-brand generation.',
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id from list_brand_kits.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return brandKitResult(await getClient().getBrandKit(args.brandKitId))
+        const client = await getClient(extra)
+        return brandKitResult(await client.getBrandKit(args.brandKitId))
       } catch (err) {
         return errorResult(err)
       }
@@ -602,6 +644,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'update_brand_kit',
     {
       title: 'Update Brand Kit',
+      annotations: WRITE,
       description:
         "Update a brand kit's identity fields: business name, positioning, audience, voice profile, visual style, content strategy, etc. Only the fields you pass change. Requires a key with the brandkit:write scope. Get the current kit first with get_brand_kit.",
       inputSchema: {
@@ -619,10 +662,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const { brandKitId, ...input } = args
-        return brandKitResult(await getClient().updateBrandKit(brandKitId, input))
+        return brandKitResult(await client.updateBrandKit(brandKitId, input))
       } catch (err) {
         return errorResult(err)
       }
@@ -634,15 +678,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'archive_brand_kit',
     {
       title: 'Archive Brand Kit',
+      annotations: WRITE,
       description:
         'Archive a brand kit (reversible; ContentHero never hard-deletes). Requires the brandkit:write scope.',
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id to archive.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return brandKitArchivedResult(await getClient().archiveBrandKit(args.brandKitId))
+        const client = await getClient(extra)
+        return brandKitArchivedResult(await client.archiveBrandKit(args.brandKitId))
       } catch (err) {
         return errorResult(err)
       }
@@ -654,6 +700,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'add_brand_kit_section',
     {
       title: 'Add Brand Kit Section',
+      annotations: WRITE,
       description:
         "Add a curated section to a brand kit (a tab + name + a list of fields). Fields are objects like { key, label, type, value }. Requires the brandkit:write scope.",
       inputSchema: {
@@ -664,10 +711,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Field objects: { key, label, type, value }.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return brandKitSectionResult(
-          await getClient().addBrandKitSection(args.brandKitId, {
+          await client.addBrandKitSection(args.brandKitId, {
             tab: args.tab,
             sectionName: args.sectionName,
             sortOrder: args.sortOrder,
@@ -686,6 +734,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'update_brand_kit_section',
     {
       title: 'Update Brand Kit Section',
+      annotations: WRITE,
       description:
         "Update a brand-kit section's name, order, or fields. Pass the full fields array to replace it. Requires the brandkit:write scope.",
       inputSchema: {
@@ -696,10 +745,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Replacement field objects.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return brandKitSectionResult(
-          await getClient().updateBrandKitSection(args.brandKitId, args.sectionId, {
+          await client.updateBrandKitSection(args.brandKitId, args.sectionId, {
             sectionName: args.sectionName,
             sortOrder: args.sortOrder,
             fields: args.fields,
@@ -717,6 +767,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'archive_brand_kit_section',
     {
       title: 'Archive Brand Kit Section',
+      annotations: WRITE,
       description:
         'Archive a brand-kit section (soft delete, reversible). Use it to remove a section an agent added. Requires the brandkit:write scope.',
       inputSchema: {
@@ -724,10 +775,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         sectionId: z.string().describe('The section id to archive.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return brandKitSectionResult(
-          await getClient().archiveBrandKitSection(args.brandKitId, args.sectionId),
+          await client.archiveBrandKitSection(args.brandKitId, args.sectionId),
           'Archived section',
         )
       } catch (err) {
@@ -741,6 +793,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_media',
     {
       title: 'List Media',
+      annotations: READ,
       description:
         "List the account's recent studio outputs (generated images, videos, audio, transcripts), newest first. Reference boards are included too; filter with kind='board' (or 'creation'/'look'). Each item has an id and its variation URLs. Call get_media for one output's full detail and individual variations.",
       inputSchema: {
@@ -756,10 +809,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return mediaListResult(
-          await getClient().listMedia({
+          await client.listMedia({
             contentType: args.contentType,
             kind: args.kind,
             status: args.status,
@@ -777,6 +831,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_media',
     {
       title: 'Get Media',
+      annotations: READ,
       description:
         'Get one studio output by id: its variations (URLs), prompt/script, model, and specs. The id may be the full output id, its first 8 characters, or either with a "-N" suffix to address one variation (1-based, e.g. "...abcd-2"). A whole-output id returns all variations.',
       inputSchema: {
@@ -785,29 +840,32 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           .describe('The output id (full or first-8), optionally with a "-N" variation suffix.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return mediaResult(await getClient().getMedia(args.id))
+        const client = await getClient(extra)
+        return mediaResult(await client.getMedia(args.id))
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- get_generation_status -----------------------------------------------------
+  // -- get_generation_status ------------------------------------------------
   server.registerTool(
     'get_generation_status',
     {
       title: 'Get Generation Status',
+      annotations: READ,
       description:
         'Get the current status of an image or video generation by its outputId (returned by generate_image / generate_video when a render is still in progress). Returns the final URLs once complete, otherwise the current status plus a poll_after_seconds hint. For a blocking wait on one or more outputIds, use wait_for_generation.',
       inputSchema: {
         outputId: z.string().describe('The outputId from generate_image or generate_video.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        const gen = await getClient().getGeneration(args.outputId)
+        const client = await getClient(extra)
+        const gen = await client.getGeneration(args.outputId)
         return generationStatusResult(gen)
       } catch (err) {
         return errorResult(err)
@@ -820,6 +878,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'wait_for_generation',
     {
       title: 'Wait For Generation',
+      annotations: READ,
       description:
         'Wait for one or more in-progress generations (outputIds from generate_image / generate_video / upscale / generate_lip_sync / generate_board) to finish, and return their final URLs. Blocks up to ~50s per call; if a render is still running it returns the current status with a poll_after_seconds hint to call again. Pass wait=false for an instant status snapshot instead of blocking.',
       inputSchema: {
@@ -834,17 +893,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           .describe('Block until terminal (up to ~50s) when true (the default). false = an instant snapshot, no blocking.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const blocking = args.wait !== false
         const gens = await Promise.all(
           args.outputIds.map(async (id) => {
-            if (!blocking) return getClient().getGeneration(id)
+            if (!blocking) return client.getGeneration(id)
             try {
-              return await getClient().waitForGeneration(id, { timeoutMs: SMART_WAIT_MS })
+              return await client.waitForGeneration(id, { timeoutMs: SMART_WAIT_MS })
             } catch (err) {
-              // Still rendering past the smart-wait window: hand back the current snapshot.
-              if (err instanceof GenerationTimeoutError) return getClient().getGeneration(id)
+              if (err instanceof GenerationTimeoutError) return client.getGeneration(id)
               throw err
             }
           }),
@@ -861,6 +920,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_posts',
     {
       title: 'List Posts',
+      annotations: READ,
       description:
         "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, pipeline_stage (id/slug/name), folder, favorite, or a title search. Call get_post for one post's full detail (destinations + assets).",
       inputSchema: {
@@ -872,10 +932,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return postListResult(
-          await getClient().listPosts({
+          await client.listPosts({
             status: args.status,
             platform: args.platform,
             pipelineStage: args.pipelineStage,
@@ -895,15 +956,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_post',
     {
       title: 'Get Post',
+      annotations: READ,
       description:
         "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish destinations and attached assets.",
       inputSchema: {
         postId: z.string().describe('The post id from list_posts.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return postResult(await getClient().getPost(args.postId))
+        const client = await getClient(extra)
+        return postResult(await client.getPost(args.postId))
       } catch (err) {
         return errorResult(err)
       }
@@ -915,12 +978,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_pipeline_stages',
     {
       title: 'List Pipeline Stages',
+      annotations: READ,
       description:
         "List the account's pipeline stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_post / update_post.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return pipelineStageListResult(await getClient().listPipelineStages())
+        const client = await getClient(extra)
+        return pipelineStageListResult(await client.listPipelineStages())
       } catch (err) {
         return errorResult(err)
       }
@@ -932,6 +997,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'create_post',
     {
       title: 'Create Post',
+      annotations: WRITE,
       description:
         "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_post. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the pipeline:write scope.",
       inputSchema: {
@@ -941,10 +1007,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         stage: z.string().optional().describe('Pipeline stage id, slug, or name. Defaults to the first stage.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return postSummaryResult(
-          await getClient().createPost({
+          await client.createPost({
             title: args.title,
             platform: args.platform,
             description: args.description,
@@ -963,6 +1030,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'update_post',
     {
       title: 'Update Post',
+      annotations: WRITE,
       description:
         'Update a post\'s fields: title, description, script, notes, status, platform, or pipeline stage (move it through the pipeline by passing `stage`). Requires the pipeline:write scope.',
       inputSchema: {
@@ -976,10 +1044,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         notes: z.string().optional(),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         const { postId, ...input } = args
-        return postSummaryResult(await getClient().updatePost(postId, input), 'Updated')
+        return postSummaryResult(await client.updatePost(postId, input), 'Updated')
       } catch (err) {
         return errorResult(err)
       }
@@ -991,15 +1060,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'archive_post',
     {
       title: 'Archive Post',
+      annotations: WRITE,
       description:
         'Archive a post (sets status to archived; reversible by updating the status back). ContentHero never hard-deletes. Requires the pipeline:write scope.',
       inputSchema: {
         postId: z.string().describe('The post id to archive.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return postSummaryResult(await getClient().archivePost(args.postId), 'Archived')
+        const client = await getClient(extra)
+        return postSummaryResult(await client.archivePost(args.postId), 'Archived')
       } catch (err) {
         return errorResult(err)
       }
@@ -1011,6 +1082,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'add_post_destination',
     {
       title: 'Add Post Destination',
+      annotations: WRITE,
       description:
         "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Requires the pipeline:write scope.",
       inputSchema: {
@@ -1021,10 +1093,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         scheduledAt: z.string().optional().describe('ISO-8601 scheduled time for this destination.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return destinationResult(
-          await getClient().addPostDestination(args.postId, {
+          await client.addPostDestination(args.postId, {
             platform: args.platform,
             format: args.format,
             connectedAccountId: args.connectedAccountId,
@@ -1042,6 +1115,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'update_post_destination',
     {
       title: 'Update Post Destination',
+      annotations: WRITE,
       description:
         'Update one of a post\'s destinations (format, connected account, scheduled time, or status). Requires the pipeline:write scope.',
       inputSchema: {
@@ -1053,10 +1127,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         status: z.string().optional(),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return destinationResult(
-          await getClient().updatePostDestination(args.postId, args.destinationId, {
+          await client.updatePostDestination(args.postId, args.destinationId, {
             format: args.format,
             connectedAccountId: args.connectedAccountId,
             scheduledAt: args.scheduledAt,
@@ -1074,6 +1149,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'add_post_asset',
     {
       title: 'Add Post Asset',
+      annotations: WRITE,
       description:
         "Attach an asset to a post by URL (e.g. a generated image/video URL from get_media, or any public link). Sets the post cover from the first image. Requires the assets:write scope.",
       inputSchema: {
@@ -1083,10 +1159,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         displayName: z.string().optional().describe('Optional display name.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return assetResult(
-          await getClient().addPostAsset(args.postId, {
+          await client.addPostAsset(args.postId, {
             assetType: args.assetType,
             assetUrl: args.assetUrl,
             displayName: args.displayName,
@@ -1103,6 +1180,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'schedule_post',
     {
       title: 'Schedule Post',
+      annotations: WRITE,
       description:
         'Queue a post for future publishing: set the scheduled time on the post and all its destinations (pass scheduledAt=null to clear). This only queues; use publish_post to publish now. Requires the pipeline:write scope.',
       inputSchema: {
@@ -1113,9 +1191,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           .describe('ISO-8601 timestamp to schedule, or null to clear the schedule.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return postSummaryResult(await getClient().schedulePost(args.postId, args.scheduledAt), 'Scheduled')
+        const client = await getClient(extra)
+        return postSummaryResult(await client.schedulePost(args.postId, args.scheduledAt), 'Scheduled')
       } catch (err) {
         return errorResult(err)
       }
@@ -1127,6 +1206,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'publish_post',
     {
       title: 'Publish Post',
+      annotations: PUBLISH,
       description:
         "Publish a post NOW to its destinations (a single platform when `platform` is given, otherwise all). Each destination must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns per-destination results.",
       inputSchema: {
@@ -1134,9 +1214,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all destinations.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return publishResult(await getClient().publishPost(args.postId, { platform: args.platform }))
+        const client = await getClient(extra)
+        return publishResult(await client.publishPost(args.postId, { platform: args.platform }))
       } catch (err) {
         return errorResult(err)
       }
@@ -1148,12 +1229,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_inspiration_accounts',
     {
       title: 'List Inspiration Accounts',
+      annotations: READ,
       description:
         "List the creators/competitors the account tracks for inspiration. Use these as grounding for research; call list_outliers for their top content or get_inspiration_account for one account's detail.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return trackedAccountListResult(await getClient().listInspirationAccounts(), 'inspiration account(s)')
+        const client = await getClient(extra)
+        return trackedAccountListResult(await client.listInspirationAccounts(), 'inspiration account(s)')
       } catch (err) {
         return errorResult(err)
       }
@@ -1165,16 +1248,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_inspiration_account',
     {
       title: 'Get Inspiration Account',
+      annotations: READ,
       description:
         "Get one tracked inspiration account with its content count and a few top outliers (by score). Use it to study a specific creator.",
       inputSchema: {
         accountId: z.string().describe('The account id from list_inspiration_accounts.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        const detail = await getClient().getInspirationAccount(args.accountId)
-        return inspirationAccountResult(detail)
+        const client = await getClient(extra)
+        return inspirationAccountResult(await client.getInspirationAccount(args.accountId))
       } catch (err) {
         return errorResult(err)
       }
@@ -1186,6 +1270,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_outliers',
     {
       title: 'List Outliers',
+      annotations: READ,
       description:
         "List top-performing content (outliers) from the creators the account tracks, ranked by outlier score (how far a post overperformed its creator's baseline). Filter by platform, content type, minimum score, or a text search. Call get_inspiration_content for one item's full detail incl. transcript. This is the core research read for finding what's working.",
       inputSchema: {
@@ -1198,10 +1283,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
+        const client = await getClient(extra)
         return outlierListResult(
-          await getClient().listOutliers({
+          await client.listOutliers({
             platform: args.platform,
             contentType: args.contentType,
             minOutlierScore: args.minOutlierScore,
@@ -1222,15 +1308,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_inspiration_content',
     {
       title: 'Get Inspiration Content',
+      annotations: READ,
       description:
         "Get one tracked-content item in full: engagement stats, outlier score, hashtags, and the transcript when available. Use it to study exactly what a high-performing post says and does.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_outliers or get_inspiration_account.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return inspirationContentResult(await getClient().getInspirationContent(args.contentId))
+        const client = await getClient(extra)
+        return inspirationContentResult(await client.getInspirationContent(args.contentId))
       } catch (err) {
         return errorResult(err)
       }
@@ -1242,12 +1330,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_brand_accounts',
     {
       title: 'List Brand Accounts',
+      annotations: READ,
       description:
         "List the account owner's OWN connected social accounts that ContentHero tracks for performance (distinct from list_brand_kits, which are the brand identity documents). Call get_brand_account_performance for one account's stats.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return trackedAccountListResult(await getClient().listBrandAccounts(), 'brand account(s)')
+        const client = await getClient(extra)
+        return trackedAccountListResult(await client.listBrandAccounts(), 'brand account(s)')
       } catch (err) {
         return errorResult(err)
       }
@@ -1259,15 +1349,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_brand_account_performance',
     {
       title: 'Get Brand Account Performance',
+      annotations: READ,
       description:
         "Get the performance summary for one of the owner's brand accounts: content count, total and average views/likes/comments, average engagement and outlier score, plus top and recent content. Use it to ground decisions in how the owner's own content actually performs.",
       inputSchema: {
         accountId: z.string().describe('The account id from list_brand_accounts.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return brandPerformanceResult(await getClient().getBrandAccountPerformance(args.accountId))
+        const client = await getClient(extra)
+        return brandPerformanceResult(await client.getBrandAccountPerformance(args.accountId))
       } catch (err) {
         return errorResult(err)
       }
@@ -1279,12 +1371,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'list_connected_accounts',
     {
       title: 'List Connected Accounts',
+      annotations: READ,
       description:
         "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on add_post_destination, then publish_post. Read-only: connecting an account is done in the ContentHero app.",
     },
-    async () => {
+    async (extra) => {
       try {
-        return connectedAccountListResult(await getClient().listConnectedAccounts())
+        const client = await getClient(extra)
+        return connectedAccountListResult(await client.listConnectedAccounts())
       } catch (err) {
         return errorResult(err)
       }
@@ -1296,15 +1390,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_connected_account',
     {
       title: 'Get Connected Account',
+      annotations: READ,
       description:
         "Get one connected account's detail: platform, status, and capabilities. Use it to confirm a target can publish before attaching it to a post.",
       inputSchema: {
         accountId: z.string().describe('The connected account id from list_connected_accounts.'),
       },
     },
-    async (args) => {
+    async (args, extra) => {
       try {
-        return connectedAccountResult(await getClient().getConnectedAccount(args.accountId))
+        const client = await getClient(extra)
+        return connectedAccountResult(await client.getConnectedAccount(args.accountId))
       } catch (err) {
         return errorResult(err)
       }
@@ -1316,17 +1412,28 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     'get_balance',
     {
       title: 'Get Balance',
+      annotations: READ,
       description: 'Get the current ContentHero credit balance, subscription tier, and auto-top-up state.',
     },
-    async () => {
+    async (extra) => {
       try {
-        const balance = await getClient().getBalance()
-        return balanceResult(balance)
+        const client = await getClient(extra)
+        return balanceResult(await client.getBalance())
       } catch (err) {
         return errorResult(err)
       }
     },
   )
+}
 
+/**
+ * Build a stdio-style server bound to a single env-configured client. The model
+ * enums are resolved live from the discovery catalog (the client has a key).
+ */
+export async function buildServer(options: BuildServerOptions = {}): Promise<McpServer> {
+  const getClient = options.getClient ?? defaultGetClient
+  const models = await resolveModelEnums(getClient)
+  const server = new McpServer({ name: 'contenthero', version: '0.2.4' })
+  registerTools(server, { getClient: () => getClient(), models })
   return server
 }
