@@ -8,15 +8,16 @@ This monorepo holds the public packages:
 |---|---|
 | [`@contenthero/sdk`](./packages/sdk) | The TypeScript kernel: a thin, typed client over the ContentHero `/api/v1` surface. |
 | [`@contenthero/mcp`](./packages/mcp) | The MCP server: ContentHero tools for any MCP client (Claude, Cursor, and others), built on the SDK. |
-
-The CLI (`@contenthero/cli`) lands here next.
+| [`@contenthero/cli`](./packages/cli) | The command-line interface: `contenthero <noun> <verb>` from any terminal or agent shell, built on the SDK. |
 
 ## Install
 
 ```bash
 npm install @contenthero/sdk
-# or run the MCP server directly
+# run the MCP server directly
 npx -y @contenthero/mcp
+# install the CLI
+npm install -g @contenthero/cli
 ```
 
 ## Quick start (SDK)

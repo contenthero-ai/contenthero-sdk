@@ -1,6 +1,6 @@
 {
   "name": "@contenthero/cli",
-  "version": "0.2.4",
+  "version": "0.1.0",
   "description": "Official ContentHero CLI. Generate media, run the content pipeline, and read your brand/research context from the terminal or any agent shell. Rides the @contenthero/sdk kernel.",
   "type": "module",
   "bin": {
