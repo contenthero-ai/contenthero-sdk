@@ -4,45 +4,63 @@ import http from 'node:http'
 import { awaitLoopbackKey } from './auth.js'
 import { CliError, EXIT } from '../errors.js'
 
-/** Fire a GET at the loopback callback and resolve with its HTTP status. */
-function deliver(port: number, query: string): Promise<number> {
+const BASE = 'https://app.contenthero.ai'
+
+/** Fire a GET at the loopback callback (no redirect-follow) and return status + location. */
+function deliver(port: number, query: string): Promise<{ status: number; location?: string }> {
   return new Promise((resolve, reject) => {
-    const req = http.get(`http://127.0.0.1:${port}/callback?${query}`, (res) => {
-      res.resume()
-      res.on('end', () => resolve(res.statusCode ?? 0))
-    })
+    const req = http.request(
+      { host: '127.0.0.1', port, path: `/callback?${query}`, method: 'GET' },
+      (res) => {
+        res.resume()
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, location: res.headers.location as string | undefined }),
+        )
+      },
+    )
     req.on('error', reject)
+    req.end()
   })
 }
 
-test('awaitLoopbackKey resolves with the key the browser hands back', async () => {
+test('awaitLoopbackKey resolves with the key and 302-redirects to the styled done page', async () => {
+  let delivered: Promise<{ status: number; location?: string }> | undefined
   const key = await awaitLoopbackKey({
     state: 'abc',
+    redirectBase: BASE,
     onListening: (port) => {
-      void deliver(port, 'state=abc&key=ch_live_resolved')
+      delivered = deliver(port, 'state=abc&key=ch_live_resolved')
     },
   })
+  const redirect = await delivered!
   assert.equal(key, 'ch_live_resolved')
+  assert.equal(redirect.status, 302)
+  assert.equal(redirect.location, `${BASE}/cli/auth/done?status=connected`)
 })
 
-test('awaitLoopbackKey rejects (auth) when the browser denies', async () => {
+test('awaitLoopbackKey rejects (auth) and redirects to cancelled when the browser denies', async () => {
+  let delivered: Promise<{ status: number; location?: string }> | undefined
   await assert.rejects(
     awaitLoopbackKey({
       state: 'abc',
+      redirectBase: BASE,
       onListening: (port) => {
-        void deliver(port, 'state=abc&error=access_denied')
+        delivered = deliver(port, 'state=abc&error=access_denied')
       },
     }),
     (err: unknown) => err instanceof CliError && err.exitCode === EXIT.AUTH,
   )
+  const redirect = await delivered!
+  assert.equal(redirect.location, `${BASE}/cli/auth/done?status=cancelled`)
 })
 
 test('a wrong-state callback is rejected (400) and ignored; the real one still wins', async () => {
   let wrongStatus = 0
   const key = await awaitLoopbackKey({
     state: 'right',
+    redirectBase: BASE,
     onListening: async (port) => {
-      wrongStatus = await deliver(port, 'state=WRONG&key=ch_live_attacker')
+      wrongStatus = (await deliver(port, 'state=WRONG&key=ch_live_attacker')).status
       void deliver(port, 'state=right&key=ch_live_real')
     },
   })
@@ -50,33 +68,9 @@ test('a wrong-state callback is rejected (400) and ignored; the real one still w
   assert.equal(key, 'ch_live_real')
 })
 
-test('the loopback answers a CORS + Private Network Access preflight', async () => {
-  const result = await new Promise<{ status: number; pna: string | undefined }>((resolve, reject) => {
-    const p = awaitLoopbackKey({
-      state: 'abc',
-      onListening: (port) => {
-        const req = http.request(
-          { host: '127.0.0.1', port, path: '/callback', method: 'OPTIONS' },
-          (res) => {
-            res.resume()
-            resolve({ status: res.statusCode ?? 0, pna: res.headers['access-control-allow-private-network'] as string | undefined })
-            // unblock the awaitLoopbackKey promise so the test ends
-            void deliver(port, 'state=abc&key=ch_live_x')
-          },
-        )
-        req.on('error', reject)
-        req.end()
-      },
-    })
-    void p.catch(() => {})
-  })
-  assert.equal(result.status, 204)
-  assert.equal(result.pna, 'true')
-})
-
 test('awaitLoopbackKey times out (auth) when no callback arrives', async () => {
   await assert.rejects(
-    awaitLoopbackKey({ state: 'abc', timeoutMs: 50, onListening: () => {} }),
+    awaitLoopbackKey({ state: 'abc', redirectBase: BASE, timeoutMs: 50, onListening: () => {} }),
     (err: unknown) => err instanceof CliError && err.exitCode === EXIT.AUTH,
   )
 })

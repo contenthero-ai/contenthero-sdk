@@ -82,6 +82,14 @@ async function verifyAndStore(key: string, ctx: Context, label?: string): Promis
 export interface LoopbackOptions {
   /** The state nonce the browser callback must echo back. */
   state: string
+  /**
+   * App base URL the browser is redirected back to after delivering the key, so
+   * the user lands on a real on-brand success page (`/cli/auth/done`) instead of
+   * this raw-IP listener. Delivering the key needs a navigation to localhost (an
+   * https page cannot fetch http://127.0.0.1 reliably), so we make that hop
+   * instant and bounce straight back to the app.
+   */
+  redirectBase: string
   /** Called with the bound port once the listener is up (to build + open the URL). */
   onListening: (port: number) => void
   /** Give up after this many ms (default 3 minutes). */
@@ -90,13 +98,15 @@ export interface LoopbackOptions {
 
 /**
  * Start a localhost listener and resolve with the API key the browser hands back
- * to `/callback?state=<state>&key=<key>`. Rejects on `error=...`, a listener
- * failure, or timeout. A callback whose state does not match is rejected with 400
- * and ignored (the listener keeps waiting), so a stray or forged hit cannot end
- * the flow. Exported for testing the loopback contract in-process.
+ * to `/callback?state=<state>&key=<key>`. On a valid hit it 302-redirects the
+ * browser to `<redirectBase>/cli/auth/done` so the user lands on a styled app
+ * page. Rejects on `error=...`, a listener failure, or timeout. A callback whose
+ * state does not match is rejected with 400 and ignored (the listener keeps
+ * waiting), so a stray or forged hit cannot end the flow. Exported for testing.
  */
 export function awaitLoopbackKey(opts: LoopbackOptions): Promise<string> {
-  const { state, onListening, timeoutMs = LOGIN_TIMEOUT_MS } = opts
+  const { state, redirectBase, onListening, timeoutMs = LOGIN_TIMEOUT_MS } = opts
+  const doneUrl = (status: string) => `${redirectBase}/cli/auth/done?status=${status}`
   return new Promise<string>((resolve, reject) => {
     let settled = false
     const finish = (fn: () => void) => {
@@ -108,46 +118,30 @@ export function awaitLoopbackKey(opts: LoopbackOptions): Promise<string> {
     }
 
     const server = http.createServer((req, res) => {
-      // CORS + Private Network Access, so the app page can deliver the key with a
-      // background fetch (and keep its own success UI) instead of navigating the
-      // browser here. Chrome treats https-public -> 127.0.0.1-local as a private
-      // network request and requires the preflight to opt in explicitly.
-      const cors: Record<string, string> = {
-        'access-control-allow-origin': req.headers.origin || '*',
-        'access-control-allow-methods': 'GET, OPTIONS',
-        'access-control-allow-headers': '*',
-        'access-control-allow-private-network': 'true',
-      }
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204, cors)
-        res.end()
-        return
-      }
-
       const reqUrl = new URL(req.url || '/', 'http://127.0.0.1')
       if (reqUrl.pathname !== '/callback') {
-        res.writeHead(404, { ...cors, 'content-type': 'text/plain' })
+        res.writeHead(404, { 'content-type': 'text/plain' })
         res.end('Not found')
         return
       }
       // Bind the callback to this invocation; ignore anything with a wrong state.
       if (reqUrl.searchParams.get('state') !== state) {
-        res.writeHead(400, { ...cors, 'content-type': 'text/html' })
+        res.writeHead(400, { 'content-type': 'text/html' })
         res.end(resultPage('login error', 'Invalid request. You can close this tab.'))
         return
       }
       const error = reqUrl.searchParams.get('error')
       const got = reqUrl.searchParams.get('key')
       if (error || !got) {
-        res.writeHead(200, { ...cors, 'content-type': 'text/html' })
-        res.end(resultPage('login cancelled', 'You can close this tab and return to your terminal.'))
+        // Bounce to the styled cancelled page, then reject the CLI promise.
+        res.writeHead(302, { location: doneUrl('cancelled') })
+        res.end()
         finish(() => reject(new CliError('Login was cancelled in the browser.', EXIT.AUTH)))
         return
       }
-      // The navigation fallback still renders this page; the fetch path ignores
-      // the body and shows the app's own in-page success instead.
-      res.writeHead(200, { ...cors, 'content-type': 'text/html' })
-      res.end(resultPage('CLI connected', 'You can close this tab and return to your terminal.'))
+      // Key captured: bounce the browser to the on-brand success page on the app.
+      res.writeHead(302, { location: doneUrl('connected') })
+      res.end()
       finish(() => resolve(got))
     })
 
@@ -176,6 +170,7 @@ async function browserLogin(ctx: Context): Promise<void> {
 
   const key = await awaitLoopbackKey({
     state,
+    redirectBase: base,
     onListening: (port) => {
       const authUrl = `${base}/cli/auth?port=${port}&state=${state}&label=${encodeURIComponent(label)}`
       process.stderr.write(
