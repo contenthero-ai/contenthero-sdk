@@ -10,15 +10,19 @@
 import { errorFromResponse, GenerationFailedError, GenerationTimeoutError } from './errors.js'
 import type {
   AddAssetInput,
+  AddBrandKitSectionInput,
   AddDestinationInput,
   Avatar,
   AvatarSummary,
   Balance,
   BrandAccountPerformance,
   BrandKit,
+  BrandKitSectionRecord,
   BrandKitSummary,
   CostEstimate,
   CreatePostInput,
+  UpdateBrandKitInput,
+  UpdateBrandKitSectionInput,
   InspirationAccountDetail,
   InspirationContent,
   ListOutliersOptions,
@@ -239,6 +243,58 @@ export class ContentHero {
   /** Get one brand kit, fully assembled (the get half). Throws NotFoundError if absent. */
   async getBrandKit(brandKitId: string): Promise<BrandKit> {
     return this.request<BrandKit>('GET', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`)
+  }
+
+  /**
+   * Update a brand kit's identity fields (positioning, audience, voice, visual
+   * style, ...). Requires a key with the `brandkit:write` scope. Returns the full
+   * updated kit.
+   */
+  async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput): Promise<BrandKit> {
+    return this.request<BrandKit>('PATCH', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`, input)
+  }
+
+  /** Archive a brand kit (reversible). Requires the `brandkit:write` scope. */
+  async archiveBrandKit(brandKitId: string): Promise<BrandKitSummary> {
+    const data = await this.request<{ brandKit: BrandKitSummary }>(
+      'PATCH',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`,
+      { archive: true },
+    )
+    return data.brandKit
+  }
+
+  /** Add a curated section to a brand kit. Requires the `brandkit:write` scope. */
+  async addBrandKitSection(brandKitId: string, input: AddBrandKitSectionInput): Promise<BrandKitSectionRecord> {
+    const data = await this.request<{ section: BrandKitSectionRecord }>(
+      'POST',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections`,
+      input,
+    )
+    return data.section
+  }
+
+  /** Update a brand-kit section. Requires the `brandkit:write` scope. */
+  async updateBrandKitSection(
+    brandKitId: string,
+    sectionId: string,
+    input: UpdateBrandKitSectionInput,
+  ): Promise<BrandKitSectionRecord> {
+    const data = await this.request<{ section: BrandKitSectionRecord }>(
+      'PATCH',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections/${encodeURIComponent(sectionId)}`,
+      input,
+    )
+    return data.section
+  }
+
+  /** Archive a brand-kit section (soft delete, reversible). Requires `brandkit:write`. */
+  async archiveBrandKitSection(brandKitId: string, sectionId: string): Promise<BrandKitSectionRecord> {
+    const data = await this.request<{ section: BrandKitSectionRecord }>(
+      'DELETE',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections/${encodeURIComponent(sectionId)}`,
+    )
+    return data.section
   }
 
   /** List the account's recent studio outputs (the list half of the list+get pair). */

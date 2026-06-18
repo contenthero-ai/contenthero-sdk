@@ -12,6 +12,7 @@ import type {
   BrandKit,
   BrandKitSummary,
   BrandAccountPerformance,
+  BrandKitSectionRecord,
   CostEstimate,
   Generation,
   GenerateResult,
@@ -189,6 +190,17 @@ export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
 export function brandKitResult(kit: BrandKit): CallToolResult {
   const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (id ${kit.id}):`
   return text([header, '', JSON.stringify(kit, null, 2)].join('\n'))
+}
+
+/** A created/updated/archived brand-kit section. */
+export function brandKitSectionResult(s: BrandKitSectionRecord, verb = 'Section'): CallToolResult {
+  const fieldCount = Array.isArray(s.fields) ? s.fields.length : 0
+  return text(`${verb}: "${s.sectionName}" in tab "${s.tab}" (id ${s.id}) | ${fieldCount} field(s).`)
+}
+
+/** A brand kit that was just archived. */
+export function brandKitArchivedResult(kit: BrandKitSummary): CallToolResult {
+  return text(`Archived brand kit "${kit.name}" (id ${kit.id}).`)
 }
 
 /** List of studio outputs (media). */

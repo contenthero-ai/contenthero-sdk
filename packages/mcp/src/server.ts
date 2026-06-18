@@ -48,8 +48,10 @@ import {
   avatarListResult,
   avatarResult,
   balanceResult,
+  brandKitArchivedResult,
   brandKitListResult,
   brandKitResult,
+  brandKitSectionResult,
   brandPerformanceResult,
   completedResult,
   costResult,
@@ -587,6 +589,145 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     async (args) => {
       try {
         return brandKitResult(await getClient().getBrandKit(args.brandKitId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_brand_kit -----------------------------------------------------
+  server.registerTool(
+    'update_brand_kit',
+    {
+      title: 'Update Brand Kit',
+      description:
+        "Update a brand kit's identity fields: business name, positioning, audience, voice profile, visual style, content strategy, etc. Only the fields you pass change. Requires a key with the brandkit:write scope. Get the current kit first with get_brand_kit.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        name: z.string().optional(),
+        businessName: z.string().optional(),
+        websiteUrl: z.string().optional(),
+        primaryOffer: z.string().optional(),
+        nicheDefinition: z.string().optional(),
+        positioning: z.record(z.string(), z.unknown()).optional().describe('Positioning object (free-form).'),
+        audience: z.record(z.string(), z.unknown()).optional().describe('Audience object (free-form).'),
+        voiceProfile: z.record(z.string(), z.unknown()).optional().describe('Voice profile object (tone, style, ...).'),
+        visualStyle: z.string().optional(),
+        designPrinciples: z.array(z.string()).optional(),
+        contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
+      },
+    },
+    async (args) => {
+      try {
+        const { brandKitId, ...input } = args
+        return brandKitResult(await getClient().updateBrandKit(brandKitId, input))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- archive_brand_kit ----------------------------------------------------
+  server.registerTool(
+    'archive_brand_kit',
+    {
+      title: 'Archive Brand Kit',
+      description:
+        'Archive a brand kit (reversible; ContentHero never hard-deletes). Requires the brandkit:write scope.',
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id to archive.'),
+      },
+    },
+    async (args) => {
+      try {
+        return brandKitArchivedResult(await getClient().archiveBrandKit(args.brandKitId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- add_brand_kit_section ------------------------------------------------
+  server.registerTool(
+    'add_brand_kit_section',
+    {
+      title: 'Add Brand Kit Section',
+      description:
+        "Add a curated section to a brand kit (a tab + name + a list of fields). Fields are objects like { key, label, type, value }. Requires the brandkit:write scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        tab: z.string().describe('The tab the section belongs to (e.g. "voice", "overview").'),
+        sectionName: z.string().describe('The section title.'),
+        sortOrder: z.number().int().optional().describe('Order within the tab (default 99 = end).'),
+        fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Field objects: { key, label, type, value }.'),
+      },
+    },
+    async (args) => {
+      try {
+        return brandKitSectionResult(
+          await getClient().addBrandKitSection(args.brandKitId, {
+            tab: args.tab,
+            sectionName: args.sectionName,
+            sortOrder: args.sortOrder,
+            fields: args.fields,
+          }),
+          'Added section',
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_brand_kit_section ---------------------------------------------
+  server.registerTool(
+    'update_brand_kit_section',
+    {
+      title: 'Update Brand Kit Section',
+      description:
+        "Update a brand-kit section's name, order, or fields. Pass the full fields array to replace it. Requires the brandkit:write scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        sectionId: z.string().describe('The section id (from get_brand_kit).'),
+        sectionName: z.string().optional(),
+        sortOrder: z.number().int().optional(),
+        fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Replacement field objects.'),
+      },
+    },
+    async (args) => {
+      try {
+        return brandKitSectionResult(
+          await getClient().updateBrandKitSection(args.brandKitId, args.sectionId, {
+            sectionName: args.sectionName,
+            sortOrder: args.sortOrder,
+            fields: args.fields,
+          }),
+          'Updated section',
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- archive_brand_kit_section --------------------------------------------
+  server.registerTool(
+    'archive_brand_kit_section',
+    {
+      title: 'Archive Brand Kit Section',
+      description:
+        'Archive a brand-kit section (soft delete, reversible). Use it to remove a section an agent added. Requires the brandkit:write scope.',
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        sectionId: z.string().describe('The section id to archive.'),
+      },
+    },
+    async (args) => {
+      try {
+        return brandKitSectionResult(
+          await getClient().archiveBrandKitSection(args.brandKitId, args.sectionId),
+          'Archived section',
+        )
       } catch (err) {
         return errorResult(err)
       }

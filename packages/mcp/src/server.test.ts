@@ -250,6 +250,11 @@ function fakeClient(overrides = {}) {
       topContent: [{ id: 'bc1', platform: 'instagram', contentType: 'reel', title: 'best reel', url: 'https://ig/bc1', thumbnailUrl: null, viewCount: 200_000, likeCount: 12_000, commentCount: 800, shareCount: 400, durationSeconds: 30, outlierScore: 2.1, engagementRate: 0.07, viewsPerFollower: 16, publishedAt: 't', sourceCreator: null, accountHandle: 'contenthero' }],
       recentContent: [],
     }),
+    updateBrandKit: async (id, input) => ({ id, name: input.name ?? 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }),
+    archiveBrandKit: async (id) => ({ id, name: 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: false, isActive: true, isFavorited: false, isArchived: true, createdAt: 't' }),
+    addBrandKitSection: async (_id, input) => ({ id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: input.sortOrder ?? 99, fields: input.fields ?? [] }),
+    updateBrandKitSection: async (_id, sectionId, input) => ({ id: sectionId, tab: 'voice', sectionName: input.sectionName ?? 'Brand Voice', sortOrder: input.sortOrder ?? 0, fields: input.fields ?? [] }),
+    archiveBrandKitSection: async (_id, sectionId) => ({ id: sectionId, tab: 'voice', sectionName: 'Brand Voice', sortOrder: 0, fields: [] }),
     ...overrides,
   }
 }
@@ -267,8 +272,11 @@ test('advertises exactly the v1 tools', async () => {
   const { tools } = await mcp.listTools()
   const names = tools.map((t) => t.name).sort()
   assert.deepEqual(names, [
+    'add_brand_kit_section',
     'add_post_asset',
     'add_post_destination',
+    'archive_brand_kit',
+    'archive_brand_kit_section',
     'archive_post',
     'create_post',
     'generate_audio',
@@ -298,6 +306,8 @@ test('advertises exactly the v1 tools', async () => {
     'publish_post',
     'schedule_post',
     'transcribe',
+    'update_brand_kit',
+    'update_brand_kit_section',
     'update_post',
     'update_post_destination',
     'upscale',
@@ -1058,4 +1068,61 @@ test('get_brand_account_performance reports totals and averages', async () => {
   assert.match(res.content[0].text, /content tracked: 50/)
   assert.match(res.content[0].text, /1\.0M views/)
   assert.match(res.content[0].text, /5\.5% engagement/)
+})
+
+// -- brand-kit writes ---------------------------------------------------------
+
+test('update_brand_kit passes the changed fields through and returns the kit', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      updateBrandKit: async (id, input) => {
+        captured = { id, input }
+        return { id, name: input.name ?? 'ContentHero', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'update_brand_kit',
+    arguments: { brandKitId: 'bk1', voiceProfile: { tone: 'bold' }, nicheDefinition: 'AI video' },
+  })
+  assert.equal(captured.id, 'bk1')
+  assert.deepEqual(captured.input.voiceProfile, { tone: 'bold' })
+  assert.equal(captured.input.nicheDefinition, 'AI video')
+  assert.match(res.content[0].text, /Brand kit "ContentHero"/)
+})
+
+test('archive_brand_kit confirms the archive', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'archive_brand_kit', arguments: { brandKitId: 'bk1' } })
+  assert.match(res.content[0].text, /Archived brand kit "ContentHero" \(id bk1\)/)
+})
+
+test('add_brand_kit_section creates a section with tab + name', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      addBrandKitSection: async (id, input) => {
+        captured = { id, input }
+        return { id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: 99, fields: input.fields ?? [] }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'add_brand_kit_section',
+    arguments: { brandKitId: 'bk1', tab: 'voice', sectionName: 'Catchphrases', fields: [{ key: 'a', value: 'b' }] },
+  })
+  assert.equal(captured.input.tab, 'voice')
+  assert.equal(captured.input.sectionName, 'Catchphrases')
+  assert.match(res.content[0].text, /Added section: "Catchphrases" in tab "voice" \(id sec-new\)/)
+  assert.match(res.content[0].text, /1 field/)
+})
+
+test('archive_brand_kit_section soft-deletes the section', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({
+    name: 'archive_brand_kit_section',
+    arguments: { brandKitId: 'bk1', sectionId: 'sec9' },
+  })
+  assert.match(res.content[0].text, /Archived section: .* \(id sec9\)/)
 })

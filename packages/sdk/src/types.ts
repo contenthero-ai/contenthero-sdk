@@ -330,6 +330,47 @@ export interface BrandKit extends BrandKitSummary {
   knowledge: BrandKitKnowledge[]
 }
 
+/** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
+export interface UpdateBrandKitInput {
+  name?: string
+  businessName?: string | null
+  websiteUrl?: string | null
+  primaryOffer?: string | null
+  nicheDefinition?: string | null
+  positioning?: Record<string, unknown> | null
+  audience?: Record<string, unknown> | null
+  voiceProfile?: Record<string, unknown> | null
+  visualStyle?: string | null
+  designPrinciples?: string[]
+  brandColors?: unknown[]
+  typography?: Record<string, unknown> | null
+  contentStrategy?: Record<string, unknown> | null
+}
+
+/** A brand-kit section record (returned by the section write methods). */
+export interface BrandKitSectionRecord {
+  id: string
+  tab: string
+  sectionName: string
+  sortOrder: number
+  fields: unknown[]
+}
+
+/** Fields to add a brand-kit section. */
+export interface AddBrandKitSectionInput {
+  tab: string
+  sectionName: string
+  sortOrder?: number
+  fields?: unknown[]
+}
+
+/** Fields to update a brand-kit section. */
+export interface UpdateBrandKitSectionInput {
+  sectionName?: string
+  sortOrder?: number
+  fields?: unknown[]
+}
+
 /** A studio output's media kind. */
 export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
 
