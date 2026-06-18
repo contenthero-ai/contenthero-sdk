@@ -714,3 +714,28 @@ export interface BrandAccountPerformance {
   topContent: Outlier[]
   recentContent: Outlier[]
 }
+
+// ---------------------------------------------------------------------------
+// Connected accounts (publish targets)
+// ---------------------------------------------------------------------------
+
+/**
+ * A connected social account: a publish target. Read-only (connecting an account
+ * is a web-only OAuth flow). The safe projection only; no tokens are ever exposed.
+ */
+export interface ConnectedAccount {
+  id: string
+  platform: string | null
+  accountId: string | null
+  accountName: string | null
+  accountHandle: string | null
+  accountUrl: string | null
+  connectionStatus: string | null
+  connectionType: string | null
+  /** What this connection can do (publish, analytics, ...); platform-shaped. */
+  capabilities: Record<string, unknown> | null
+  isDefault: boolean
+  lastSyncedAt: string | null
+  lastValidatedAt: string | null
+  createdAt: string | null
+}

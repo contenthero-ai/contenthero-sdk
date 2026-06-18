@@ -19,6 +19,7 @@ import type {
   BrandKit,
   BrandKitSectionRecord,
   BrandKitSummary,
+  ConnectedAccount,
   CostEstimate,
   CreatePostInput,
   UpdateBrandKitInput,
@@ -508,6 +509,25 @@ export class ContentHero {
       'GET',
       `/api/v1/brand-accounts/${encodeURIComponent(accountId)}/performance`,
     )
+  }
+
+  // -------------------------------------------------------------------------
+  // Connected accounts (publish targets)
+  // -------------------------------------------------------------------------
+
+  /** List the account's connected social accounts (publish targets), default first. */
+  async listConnectedAccounts(): Promise<ConnectedAccount[]> {
+    const data = await this.request<{ accounts: ConnectedAccount[] }>('GET', '/api/v1/connected-accounts')
+    return data.accounts
+  }
+
+  /** Get one connected account by id. Throws NotFoundError if absent. */
+  async getConnectedAccount(accountId: string): Promise<ConnectedAccount> {
+    const data = await this.request<{ account: ConnectedAccount }>(
+      'GET',
+      `/api/v1/connected-accounts/${encodeURIComponent(accountId)}`,
+    )
+    return data.account
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */

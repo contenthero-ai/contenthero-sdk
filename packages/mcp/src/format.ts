@@ -13,6 +13,7 @@ import type {
   BrandKitSummary,
   BrandAccountPerformance,
   BrandKitSectionRecord,
+  ConnectedAccount,
   CostEstimate,
   Generation,
   GenerateResult,
@@ -403,6 +404,39 @@ export function inspirationContentResult(c: InspirationContent): CallToolResult 
       c.hashtags.length ? `hashtags: ${c.hashtags.join(' ')}` : null,
       c.description ? `description: ${c.description}` : null,
       c.transcript ? `transcript:\n${c.transcript}` : 'transcript: none',
+    ]),
+  )
+}
+
+/** One line summarizing a connected account (a publish target). */
+function connectedAccountLine(a: ConnectedAccount): string {
+  const handle = a.accountHandle ? `@${a.accountHandle}` : (a.accountName ?? '(unnamed)')
+  const status = a.connectionStatus ? ` | ${a.connectionStatus}` : ''
+  return `- ${handle} (id ${a.id}) | ${a.platform ?? '?'}${a.isDefault ? ' [default]' : ''}${status}`
+}
+
+/** List of connected accounts (publish targets). */
+export function connectedAccountListResult(accounts: ConnectedAccount[]): CallToolResult {
+  if (!accounts.length) {
+    return text('No connected accounts. Connect a social account in the ContentHero app to publish.')
+  }
+  return text(
+    [`${accounts.length} connected account(s):`, ...accounts.map(connectedAccountLine)].join('\n'),
+  )
+}
+
+/** One connected account in detail, including its capabilities. */
+export function connectedAccountResult(a: ConnectedAccount): CallToolResult {
+  const handle = a.accountHandle ? `@${a.accountHandle}` : (a.accountName ?? '(unnamed)')
+  const caps = a.capabilities ? Object.keys(a.capabilities).filter((k) => (a.capabilities as Record<string, unknown>)[k]) : []
+  return text(
+    lines([
+      `${handle} (id ${a.id}) | ${a.platform ?? '?'}${a.isDefault ? ' [default]' : ''}`,
+      `status: ${a.connectionStatus ?? 'unknown'}${a.connectionType ? ` (${a.connectionType})` : ''}`,
+      a.accountUrl ? `url: ${a.accountUrl}` : null,
+      caps.length ? `capabilities: ${caps.join(', ')}` : null,
+      a.lastValidatedAt ? `last validated: ${a.lastValidatedAt}` : null,
+      `Use this id as connectedAccountId on add_post_destination to publish here.`,
     ]),
   )
 }

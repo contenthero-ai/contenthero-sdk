@@ -255,6 +255,10 @@ function fakeClient(overrides = {}) {
     addBrandKitSection: async (_id, input) => ({ id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: input.sortOrder ?? 99, fields: input.fields ?? [] }),
     updateBrandKitSection: async (_id, sectionId, input) => ({ id: sectionId, tab: 'voice', sectionName: input.sectionName ?? 'Brand Voice', sortOrder: input.sortOrder ?? 0, fields: input.fields ?? [] }),
     archiveBrandKitSection: async (_id, sectionId) => ({ id: sectionId, tab: 'voice', sectionName: 'Brand Voice', sortOrder: 0, fields: [] }),
+    listConnectedAccounts: async () => [
+      { id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' },
+    ],
+    getConnectedAccount: async (id) => ({ id, platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: false }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' }),
     ...overrides,
   }
 }
@@ -288,6 +292,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_balance',
     'get_brand_account_performance',
     'get_brand_kit',
+    'get_connected_account',
     'get_generation_status',
     'get_inspiration_account',
     'get_inspiration_content',
@@ -297,6 +302,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_avatars',
     'list_brand_accounts',
     'list_brand_kits',
+    'list_connected_accounts',
     'list_inspiration_accounts',
     'list_media',
     'list_outliers',
@@ -1125,4 +1131,23 @@ test('archive_brand_kit_section soft-deletes the section', async () => {
     arguments: { brandKitId: 'bk1', sectionId: 'sec9' },
   })
   assert.match(res.content[0].text, /Archived section: .* \(id sec9\)/)
+})
+
+// -- connected accounts -------------------------------------------------------
+
+test('list_connected_accounts shows handle, platform, and default flag', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_connected_accounts', arguments: {} })
+  assert.match(res.content[0].text, /@contenthero \(id ca1\)/)
+  assert.match(res.content[0].text, /\[default\]/)
+  assert.match(res.content[0].text, /connected/)
+})
+
+test('get_connected_account lists enabled capabilities', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_connected_account', arguments: { accountId: 'ca1' } })
+  // capabilities with a truthy value are surfaced; analytics:false is omitted.
+  assert.match(res.content[0].text, /capabilities: publish/)
+  assert.ok(!/analytics/.test(res.content[0].text), 'falsy capabilities are not listed')
+  assert.match(res.content[0].text, /connectedAccountId on add_post_destination/)
 })

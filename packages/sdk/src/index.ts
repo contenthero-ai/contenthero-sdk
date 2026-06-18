@@ -66,6 +66,7 @@ export type {
   ListOutliersOptions,
   OutliersResult,
   BrandAccountPerformance,
+  ConnectedAccount,
 } from './types.js'
 export {
   ContentHeroError,

@@ -54,6 +54,8 @@ import {
   brandKitSectionResult,
   brandPerformanceResult,
   completedResult,
+  connectedAccountListResult,
+  connectedAccountResult,
   costResult,
   destinationResult,
   inspirationAccountResult,
@@ -1266,6 +1268,43 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     async (args) => {
       try {
         return brandPerformanceResult(await getClient().getBrandAccountPerformance(args.accountId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_connected_accounts ----------------------------------------------
+  server.registerTool(
+    'list_connected_accounts',
+    {
+      title: 'List Connected Accounts',
+      description:
+        "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on add_post_destination, then publish_post. Read-only: connecting an account is done in the ContentHero app.",
+    },
+    async () => {
+      try {
+        return connectedAccountListResult(await getClient().listConnectedAccounts())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_connected_account ------------------------------------------------
+  server.registerTool(
+    'get_connected_account',
+    {
+      title: 'Get Connected Account',
+      description:
+        "Get one connected account's detail: platform, status, and capabilities. Use it to confirm a target can publish before attaching it to a post.",
+      inputSchema: {
+        accountId: z.string().describe('The connected account id from list_connected_accounts.'),
+      },
+    },
+    async (args) => {
+      try {
+        return connectedAccountResult(await getClient().getConnectedAccount(args.accountId))
       } catch (err) {
         return errorResult(err)
       }
