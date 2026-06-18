@@ -61,6 +61,10 @@ import {
   brandKitListResult,
   brandKitResult,
   brandKitSectionResult,
+  brandKnowledgeListResult,
+  brandKnowledgeDetailResult,
+  brandKnowledgeSearchResult,
+  brandKnowledgeItemResult,
   brandPerformanceResult,
   completedResult,
   connectedAccountListResult,
@@ -788,6 +792,149 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- search_brand_knowledge -----------------------------------------------
+  server.registerTool(
+    'search_brand_knowledge',
+    {
+      title: 'Search Brand Knowledge',
+      annotations: READ,
+      description:
+        "Semantic search over a brand kit's knowledge base (everything the owner has uploaded: notes, docs, articles, video transcripts). Returns the most relevant passages, ranked. This is the deep-grounding read: use it to pull what the brand has said about a topic before drafting or deciding. Requires the brandkit:read scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id (from list_brand_kits / get_brand_kit).'),
+        query: z.string().describe('What to search for, in natural language.'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max matches (default 8).'),
+        threshold: z.number().min(0).max(1).optional().describe('Minimum similarity 0-1 (default 0.45).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return brandKnowledgeSearchResult(
+          await client.searchBrandKnowledge(args.brandKitId, args.query, {
+            limit: args.limit,
+            threshold: args.threshold,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_brand_knowledge -------------------------------------------------
+  server.registerTool(
+    'list_brand_knowledge',
+    {
+      title: 'List Brand Knowledge',
+      annotations: READ,
+      description:
+        "The complete, paginated index of a brand kit's knowledge items (titles and metadata, no bodies). Use it to browse what exists, or to find an item's id before get_brand_knowledge or remove_brand_knowledge. For relevance retrieval, use search_brand_knowledge instead. Requires the brandkit:read scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        limit: z.number().int().min(1).max(200).optional().describe('How many to return (default 50).'),
+        offset: z.number().int().min(0).optional().describe('Pagination offset.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return brandKnowledgeListResult(
+          await client.listBrandKnowledge(args.brandKitId, { limit: args.limit, offset: args.offset }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_brand_knowledge --------------------------------------------------
+  server.registerTool(
+    'get_brand_knowledge',
+    {
+      title: 'Get Brand Knowledge',
+      annotations: READ,
+      description:
+        "Get one knowledge item's stored body by id (the capped anchor text; the full document is embedded for search, not stored verbatim). Use search_brand_knowledge for the deep content. Requires the brandkit:read scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        knowledgeId: z.string().describe('The knowledge item id (from list_brand_knowledge or search_brand_knowledge).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return brandKnowledgeDetailResult(await client.getBrandKnowledge(args.brandKitId, args.knowledgeId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- add_brand_knowledge --------------------------------------------------
+  server.registerTool(
+    'add_brand_knowledge',
+    {
+      title: 'Add Brand Knowledge',
+      annotations: WRITE,
+      description:
+        "Add an item to a brand kit's knowledge base so it can be searched later. This is how the brand's knowledge grows over time: capture a lesson learned, a brand decision, an asset description, an article, or a video. Source can be text (a note), url (a page to scrape), youtube (a video transcript), or file (a base64 document or image; video/audio files are not supported here). Requires the brandkit:write scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        sourceType: z.enum(['text', 'url', 'youtube', 'file']).describe('How the content is provided.'),
+        text: z.string().optional().describe('For sourceType "text": the note body.'),
+        url: z.string().optional().describe('For sourceType "url" or "youtube": the link.'),
+        fileData: z.string().optional().describe('For sourceType "file": base64-encoded file bytes (document or image).'),
+        fileExt: z.string().optional().describe('For sourceType "file": the extension without a dot, e.g. "pdf".'),
+        title: z.string().optional().describe('Optional title (otherwise derived from the content).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return brandKnowledgeItemResult(
+          await client.addBrandKnowledge(args.brandKitId, {
+            sourceType: args.sourceType,
+            text: args.text,
+            url: args.url,
+            fileData: args.fileData,
+            fileExt: args.fileExt,
+            title: args.title,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- remove_brand_knowledge -----------------------------------------------
+  server.registerTool(
+    'remove_brand_knowledge',
+    {
+      title: 'Remove Brand Knowledge',
+      annotations: WRITE,
+      description:
+        "Remove a knowledge item and its embedding chunks from a brand kit's knowledge base. Requires the brandkit:write scope.",
+      inputSchema: {
+        brandKitId: z.string().describe('The brand kit id.'),
+        knowledgeId: z.string().describe('The knowledge item id to remove.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const res = await client.removeBrandKnowledge(args.brandKitId, args.knowledgeId)
+        return brandKnowledgeItemResult(
+          { id: res.id, title: null, sourceType: null, sourceUrl: null, createdAt: null, updatedAt: null },
+          'Removed',
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // -- list_media -----------------------------------------------------------
   server.registerTool(
     'list_media',
@@ -1231,12 +1378,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Inspiration Accounts',
       annotations: READ,
       description:
-        "List the creators/competitors the account tracks for inspiration. Use these as grounding for research; call list_outliers for their top content or get_inspiration_account for one account's detail.",
+        "List the creators/competitors the account tracks for inspiration. Use these as grounding for research; call list_outliers for their top content or get_inspiration_account for one account's detail. Pass brandKitId to scope to the inspiration accounts linked to a specific brand kit.",
+      inputSchema: {
+        brandKitId: z.string().optional().describe('Scope to the inspiration accounts linked to this brand kit (from get_brand_kit).'),
+      },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return trackedAccountListResult(await client.listInspirationAccounts(), 'inspiration account(s)')
+        return trackedAccountListResult(
+          await client.listInspirationAccounts({ brandKitId: args.brandKitId }),
+          'inspiration account(s)',
+        )
       } catch (err) {
         return errorResult(err)
       }
@@ -1279,6 +1432,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         minOutlierScore: z.number().optional().describe('Only content at or above this outlier score.'),
         search: z.string().optional().describe('Text search across title, creator, handle, and description.'),
         sortBy: z.enum(['score', 'date', 'views']).optional().describe("Sort order (default 'score')."),
+        brandKitId: z.string().optional().describe('Scope to the inspiration accounts linked to this brand kit (from get_brand_kit).'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
       },
@@ -1293,6 +1447,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             minOutlierScore: args.minOutlierScore,
             search: args.search,
             sortBy: args.sortBy,
+            brandKitId: args.brandKitId,
             limit: args.limit,
             offset: args.offset,
           }),
@@ -1332,12 +1487,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Brand Accounts',
       annotations: READ,
       description:
-        "List the account owner's OWN connected social accounts that ContentHero tracks for performance (distinct from list_brand_kits, which are the brand identity documents). Call get_brand_account_performance for one account's stats.",
+        "List the account owner's OWN connected social accounts that ContentHero tracks for performance (distinct from list_brand_kits, which are the brand identity documents). Call get_brand_account_performance for one account's stats. Pass brandKitId to scope to the brand accounts linked to a specific brand kit.",
+      inputSchema: {
+        brandKitId: z.string().optional().describe('Scope to the brand accounts linked to this brand kit (from get_brand_kit).'),
+      },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return trackedAccountListResult(await client.listBrandAccounts(), 'brand account(s)')
+        return trackedAccountListResult(
+          await client.listBrandAccounts({ brandKitId: args.brandKitId }),
+          'brand account(s)',
+        )
       } catch (err) {
         return errorResult(err)
       }

@@ -13,6 +13,10 @@ import type {
   BrandKitSummary,
   BrandAccountPerformance,
   BrandKitSectionRecord,
+  BrandKnowledgeItem,
+  BrandKnowledgeDetail,
+  BrandKnowledgeListResult,
+  BrandKnowledgeMatch,
   ConnectedAccount,
   CostEstimate,
   Generation,
@@ -200,6 +204,46 @@ export function brandKitSectionResult(s: BrandKitSectionRecord, verb = 'Section'
 }
 
 /** A brand kit that was just archived. */
+export function brandKnowledgeListResult(result: BrandKnowledgeListResult): CallToolResult {
+  if (!result.items.length) {
+    return text('No knowledge items in this brand kit yet. Add one with add_brand_knowledge.')
+  }
+  const more = result.hasMore ? ` (showing ${result.items.length} of ${result.total})` : ''
+  const lines = result.items.map(
+    (k) => `- ${k.title ?? '(untitled)'} [${k.sourceType ?? 'unknown'}] (id ${k.id})`,
+  )
+  return text([`${result.total} knowledge item(s)${more}:`, ...lines].join('\n'))
+}
+
+export function brandKnowledgeDetailResult(item: BrandKnowledgeDetail): CallToolResult {
+  return text(
+    [
+      `${item.title ?? '(untitled)'} [${item.sourceType ?? 'unknown'}] (id ${item.id})`,
+      item.sourceUrl ? `Source: ${item.sourceUrl}` : null,
+      '',
+      item.content ?? '(no stored body; use search_brand_knowledge for the full depth)',
+    ]
+      .filter((l) => l !== null)
+      .join('\n'),
+  )
+}
+
+export function brandKnowledgeSearchResult(matches: BrandKnowledgeMatch[]): CallToolResult {
+  if (!matches.length) {
+    return text('No matching knowledge found. Try a broader query or a lower threshold.')
+  }
+  const blocks = matches.map((m, i) => {
+    const score = m.similarity.toFixed(3)
+    const header = `[${i + 1}] ${m.title ?? '(untitled)'} (item ${m.knowledgeId ?? '?'}, score ${score})`
+    return `${header}\n${m.content}`
+  })
+  return text([`${matches.length} match(es):`, ...blocks].join('\n\n'))
+}
+
+export function brandKnowledgeItemResult(item: BrandKnowledgeItem, verb = 'Added'): CallToolResult {
+  return text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (id ${item.id}).`)
+}
+
 export function brandKitArchivedResult(kit: BrandKitSummary): CallToolResult {
   return text(`Archived brand kit "${kit.name}" (id ${kit.id}).`)
 }

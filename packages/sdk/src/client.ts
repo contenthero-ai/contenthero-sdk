@@ -11,6 +11,7 @@ import { errorFromResponse, GenerationFailedError, GenerationTimeoutError } from
 import type {
   AddAssetInput,
   AddBrandKitSectionInput,
+  AddBrandKnowledgeInput,
   AddDestinationInput,
   Avatar,
   AvatarSummary,
@@ -19,7 +20,13 @@ import type {
   BrandKit,
   BrandKitSectionRecord,
   BrandKitSummary,
+  BrandKnowledgeDetail,
+  BrandKnowledgeItem,
+  BrandKnowledgeListResult,
+  BrandKnowledgeMatch,
   ConnectedAccount,
+  ListTrackedAccountsOptions,
+  SearchBrandKnowledgeOptions,
   CostEstimate,
   CreatePostInput,
   UpdateBrandKitInput,
@@ -298,6 +305,68 @@ export class ContentHero {
     return data.section
   }
 
+  // -------------------------------------------------------------------------
+  // Brand knowledge (a brand kit's knowledge base)
+  // -------------------------------------------------------------------------
+
+  /** The complete, paginated index of a brand kit's knowledge items. Requires `brandkit:read`. */
+  async listBrandKnowledge(
+    brandKitId: string,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<BrandKnowledgeListResult> {
+    const q = new URLSearchParams()
+    if (options.limit != null) q.set('limit', String(options.limit))
+    if (options.offset != null) q.set('offset', String(options.offset))
+    const qs = q.toString()
+    return this.request<BrandKnowledgeListResult>(
+      'GET',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge${qs ? `?${qs}` : ''}`,
+    )
+  }
+
+  /** Get one knowledge item with its stored body. Requires `brandkit:read`. */
+  async getBrandKnowledge(brandKitId: string, knowledgeId: string): Promise<BrandKnowledgeDetail> {
+    const data = await this.request<{ item: BrandKnowledgeDetail }>(
+      'GET',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge/${encodeURIComponent(knowledgeId)}`,
+    )
+    return data.item
+  }
+
+  /** Semantic search over a brand kit's knowledge base. Requires `brandkit:read`. */
+  async searchBrandKnowledge(
+    brandKitId: string,
+    query: string,
+    options: SearchBrandKnowledgeOptions = {},
+  ): Promise<BrandKnowledgeMatch[]> {
+    const q = new URLSearchParams({ q: query })
+    if (options.limit != null) q.set('limit', String(options.limit))
+    if (options.threshold != null) q.set('threshold', String(options.threshold))
+    const data = await this.request<{ matches: BrandKnowledgeMatch[] }>(
+      'GET',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge/search?${q.toString()}`,
+    )
+    return data.matches
+  }
+
+  /** Add an item to a brand kit's knowledge base (text/url/youtube/file). Requires `brandkit:write`. */
+  async addBrandKnowledge(brandKitId: string, input: AddBrandKnowledgeInput): Promise<BrandKnowledgeItem> {
+    const data = await this.request<{ item: BrandKnowledgeItem }>(
+      'POST',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge`,
+      input,
+    )
+    return data.item
+  }
+
+  /** Remove a knowledge item and its embedding chunks. Requires `brandkit:write`. */
+  async removeBrandKnowledge(brandKitId: string, knowledgeId: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge/${encodeURIComponent(knowledgeId)}`,
+    )
+  }
+
   /** List the account's recent studio outputs (the list half of the list+get pair). */
   async listMedia(options: ListMediaOptions = {}): Promise<MediaSummary[]> {
     const q = new URLSearchParams()
@@ -461,8 +530,9 @@ export class ContentHero {
   // -------------------------------------------------------------------------
 
   /** List the account's tracked inspiration accounts (creators/competitors). */
-  async listInspirationAccounts(): Promise<TrackedAccount[]> {
-    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', '/api/v1/inspiration/accounts')
+  async listInspirationAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccount[]> {
+    const qs = options.brandKitId ? `?brand_kit_id=${encodeURIComponent(options.brandKitId)}` : ''
+    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', `/api/v1/inspiration/accounts${qs}`)
     return data.accounts
   }
 
@@ -482,6 +552,7 @@ export class ContentHero {
     if (options.minOutlierScore != null) q.set('min_outlier_score', String(options.minOutlierScore))
     if (options.search) q.set('search', options.search)
     if (options.sortBy) q.set('sort_by', options.sortBy)
+    if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
     const qs = q.toString()
@@ -498,8 +569,9 @@ export class ContentHero {
   }
 
   /** List the account's own brand social accounts (the basis for own-performance reads). */
-  async listBrandAccounts(): Promise<TrackedAccount[]> {
-    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', '/api/v1/brand-accounts')
+  async listBrandAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccount[]> {
+    const qs = options.brandKitId ? `?brand_kit_id=${encodeURIComponent(options.brandKitId)}` : ''
+    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', `/api/v1/brand-accounts${qs}`)
     return data.accounts
   }
 

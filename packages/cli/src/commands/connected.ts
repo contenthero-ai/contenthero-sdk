@@ -22,9 +22,14 @@ export function registerBrandAccount(program: Command): void {
   brandAccount
     .command('list')
     .description("List the owner's brand social accounts")
-    .action(async (_opts, command: Command) => {
+    .option('--brand-kit <id>', 'scope to the brand accounts linked to this brand kit')
+    .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      emit(await client.listBrandAccounts(), ctx, trackedAccountsTable)
+      emit(
+        await client.listBrandAccounts({ brandKitId: opts.brandKit as string | undefined }),
+        ctx,
+        trackedAccountsTable,
+      )
     })
 
   brandAccount

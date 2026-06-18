@@ -60,9 +60,14 @@ export function registerInspiration(program: Command): void {
   inspiration
     .command('accounts')
     .description('List the creators/competitors the account tracks')
-    .action(async (_opts, command: Command) => {
+    .option('--brand-kit <id>', 'scope to the inspiration accounts linked to this brand kit')
+    .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      emit(await client.listInspirationAccounts(), ctx, trackedAccountsTable)
+      emit(
+        await client.listInspirationAccounts({ brandKitId: opts.brandKit as string | undefined }),
+        ctx,
+        trackedAccountsTable,
+      )
     })
 
   inspiration
@@ -93,6 +98,7 @@ export function registerInspiration(program: Command): void {
     .option('--min-score <n>', 'only content at or above this outlier score', toFloat)
     .option('--search <text>', 'text search across title, creator, handle, description')
     .option('--sort <sort>', `sort order: ${SORTS.join(', ')} (default score)`)
+    .option('--brand-kit <id>', 'scope to the inspiration accounts linked to this brand kit')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .option('--offset <n>', 'pagination offset', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
@@ -106,6 +112,7 @@ export function registerInspiration(program: Command): void {
         minOutlierScore: opts.minScore as number | undefined,
         search: opts.search as string | undefined,
         sortBy: opts.sort as Sort | undefined,
+        brandKitId: opts.brandKit as string | undefined,
         limit: opts.limit as number | undefined,
         offset: opts.offset as number | undefined,
       })

@@ -255,6 +255,15 @@ function fakeClient(overrides = {}) {
     addBrandKitSection: async (_id, input) => ({ id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: input.sortOrder ?? 99, fields: input.fields ?? [] }),
     updateBrandKitSection: async (_id, sectionId, input) => ({ id: sectionId, tab: 'voice', sectionName: input.sectionName ?? 'Brand Voice', sortOrder: input.sortOrder ?? 0, fields: input.fields ?? [] }),
     archiveBrandKitSection: async (_id, sectionId) => ({ id: sectionId, tab: 'voice', sectionName: 'Brand Voice', sortOrder: 0, fields: [] }),
+    listBrandKnowledge: async () => ({
+      items: [{ id: 'kn1', title: 'Launch playbook', sourceType: 'text', sourceUrl: null, createdAt: 't', updatedAt: 't' }],
+      total: 1,
+      hasMore: false,
+    }),
+    getBrandKnowledge: async (_id, knowledgeId) => ({ id: knowledgeId, title: 'Launch playbook', sourceType: 'text', sourceUrl: null, createdAt: 't', updatedAt: 't', content: 'Lead with the customer outcome.' }),
+    searchBrandKnowledge: async (_id, query) => [{ knowledgeId: 'kn1', title: 'Launch playbook', content: `match for ${query}`, similarity: 0.82, sourceUrl: null, chunkIndex: 0 }],
+    addBrandKnowledge: async (_id, input) => ({ id: 'kn-new', title: input.title ?? 'Untitled Resource', sourceType: input.sourceType, sourceUrl: input.url ?? null, createdAt: 't', updatedAt: 't' }),
+    removeBrandKnowledge: async (_id, knowledgeId) => ({ id: knowledgeId }),
     listConnectedAccounts: async () => [
       { id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' },
     ],
@@ -277,6 +286,7 @@ test('advertises exactly the v1 tools', async () => {
   const names = tools.map((t) => t.name).sort()
   assert.deepEqual(names, [
     'add_brand_kit_section',
+    'add_brand_knowledge',
     'add_post_asset',
     'add_post_destination',
     'archive_brand_kit',
@@ -292,6 +302,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_balance',
     'get_brand_account_performance',
     'get_brand_kit',
+    'get_brand_knowledge',
     'get_connected_account',
     'get_generation_status',
     'get_inspiration_account',
@@ -302,6 +313,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_avatars',
     'list_brand_accounts',
     'list_brand_kits',
+    'list_brand_knowledge',
     'list_connected_accounts',
     'list_inspiration_accounts',
     'list_media',
@@ -310,7 +322,9 @@ test('advertises exactly the v1 tools', async () => {
     'list_posts',
     'list_voices',
     'publish_post',
+    'remove_brand_knowledge',
     'schedule_post',
+    'search_brand_knowledge',
     'transcribe',
     'update_brand_kit',
     'update_brand_kit_section',
@@ -1131,6 +1145,71 @@ test('archive_brand_kit_section soft-deletes the section', async () => {
     arguments: { brandKitId: 'bk1', sectionId: 'sec9' },
   })
   assert.match(res.content[0].text, /Archived section: .* \(id sec9\)/)
+})
+
+// -- brand knowledge ----------------------------------------------------------
+
+test('search_brand_knowledge returns ranked matches', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({
+    name: 'search_brand_knowledge',
+    arguments: { brandKitId: 'bk1', query: 'launch tone' },
+  })
+  assert.match(res.content[0].text, /1 match/)
+  assert.match(res.content[0].text, /Launch playbook/)
+  assert.match(res.content[0].text, /score 0\.820/)
+})
+
+test('list_brand_knowledge lists items with ids', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_brand_knowledge', arguments: { brandKitId: 'bk1' } })
+  assert.match(res.content[0].text, /1 knowledge item/)
+  assert.match(res.content[0].text, /id kn1/)
+})
+
+test('get_brand_knowledge returns the stored body', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_brand_knowledge', arguments: { brandKitId: 'bk1', knowledgeId: 'kn1' } })
+  assert.match(res.content[0].text, /Lead with the customer outcome/)
+})
+
+test('add_brand_knowledge ingests a text note', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      addBrandKnowledge: async (id, input) => {
+        captured = { id, input }
+        return { id: 'kn-new', title: input.title ?? 'Note', sourceType: input.sourceType, sourceUrl: null, createdAt: 't', updatedAt: 't' }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'add_brand_knowledge',
+    arguments: { brandKitId: 'bk1', sourceType: 'text', text: 'Always credit the customer.', title: 'Tone rule' },
+  })
+  assert.equal(captured.input.sourceType, 'text')
+  assert.equal(captured.input.text, 'Always credit the customer.')
+  assert.match(res.content[0].text, /Added knowledge item: "Tone rule" \[text\] \(id kn-new\)/)
+})
+
+test('remove_brand_knowledge removes by id', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'remove_brand_knowledge', arguments: { brandKitId: 'bk1', knowledgeId: 'kn9' } })
+  assert.match(res.content[0].text, /Removed knowledge item: .* \(id kn9\)/)
+})
+
+test('list_outliers forwards brandKitId for brand-scoped reads', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      listOutliers: async (options) => {
+        captured = options
+        return { outliers: [], total: 0, hasMore: false }
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'list_outliers', arguments: { brandKitId: 'bk1' } })
+  assert.equal(captured.brandKitId, 'bk1')
 })
 
 // -- connected accounts -------------------------------------------------------

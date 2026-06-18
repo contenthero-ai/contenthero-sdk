@@ -2,17 +2,24 @@
  * `contenthero brand-kit` - brand kits (the brand identity documents).
  *   brand-kit list | get | update | archive
  *   brand-kit section add | update | archive
+ *   brand-kit knowledge list | get | search | add | remove
  *
  * Reads are open; writes need brandkit:write. Free-form identity objects
  * (positioning, audience, voice profile, content strategy) and section fields
  * are passed as JSON.
  */
 
+import { readFileSync } from 'node:fs'
+import { extname } from 'node:path'
 import type { Command } from 'commander'
 import type {
   BrandKit,
   BrandKitSectionRecord,
   BrandKitSummary,
+  BrandKnowledgeDetail,
+  BrandKnowledgeItem,
+  BrandKnowledgeListResult,
+  BrandKnowledgeMatch,
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -183,5 +190,141 @@ export function registerBrandKit(program: Command): void {
       const { client, ctx } = makeClient(command)
       const s = await client.archiveBrandKitSection(brandKitId, sectionId)
       emit(s, ctx, (rec: BrandKitSectionRecord) => recordHuman(rec, 'Archived section'))
+    })
+
+  // -- brand-kit knowledge --------------------------------------------------
+  const knowledge = brandKit
+    .command('knowledge')
+    .description('A brand kit\'s knowledge base: list, get, semantic search, add, remove')
+
+  knowledge
+    .command('list')
+    .description('List the knowledge items in a brand kit (the complete index)')
+    .argument('<brandKitId>', 'the brand kit id')
+    .option('--limit <n>', 'how many to return (default 50)', toInt)
+    .option('--offset <n>', 'pagination offset', toInt)
+    .action(async (brandKitId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const result = await client.listBrandKnowledge(brandKitId, {
+        limit: opts.limit as number | undefined,
+        offset: opts.offset as number | undefined,
+      })
+      emit(result, ctx, (r: BrandKnowledgeListResult) =>
+        table(
+          ['ID', 'TITLE', 'SOURCE', 'CREATED'],
+          r.items.map((k) => [k.id.slice(0, 8), k.title ?? '', k.sourceType ?? '', k.createdAt ?? '']),
+        ),
+      )
+    })
+
+  knowledge
+    .command('get')
+    .description('Get one knowledge item with its stored body')
+    .argument('<brandKitId>', 'the brand kit id')
+    .argument('<knowledgeId>', 'the knowledge item id')
+    .action(async (brandKitId: string, knowledgeId: string, _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const item = await client.getBrandKnowledge(brandKitId, knowledgeId)
+      emit(item, ctx, (k: BrandKnowledgeDetail) =>
+        keyValues([
+          ['Title', k.title ?? ''],
+          ['Id', k.id],
+          ['Source type', k.sourceType ?? ''],
+          ['Source url', k.sourceUrl ?? ''],
+          ['Body', k.content ?? '(use search for the full depth)'],
+        ]),
+      )
+    })
+
+  knowledge
+    .command('search')
+    .description('Semantic search over a brand kit\'s knowledge base')
+    .argument('<brandKitId>', 'the brand kit id')
+    .argument('<query>', 'what to search for (natural language)')
+    .option('--limit <n>', 'max matches (default 8)', toInt)
+    .option('--threshold <n>', 'minimum similarity 0-1 (default 0.45)', parseFloat)
+    .action(async (brandKitId: string, query: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const matches = await client.searchBrandKnowledge(brandKitId, query, {
+        limit: opts.limit as number | undefined,
+        threshold: opts.threshold as number | undefined,
+      })
+      emit(matches, ctx, (ms: BrandKnowledgeMatch[]) =>
+        ms.length
+          ? ms
+              .map(
+                (m, i) =>
+                  `[${i + 1}] ${m.title ?? '(untitled)'} (item ${m.knowledgeId ?? '?'}, score ${m.similarity.toFixed(3)})\n${m.content}`,
+              )
+              .join('\n\n')
+          : 'No matching knowledge found.',
+      )
+    })
+
+  knowledge
+    .command('add')
+    .description('Add an item to a brand kit\'s knowledge base (requires brandkit:write)')
+    .argument('<brandKitId>', 'the brand kit id')
+    .option('--text <text>', 'add a text note')
+    .option('--url <url>', 'scrape and add a web page')
+    .option('--youtube <url>', 'add a YouTube video transcript')
+    .option('--file <path>', 'add a local document or image file (PDF, DOCX, PNG, etc.)')
+    .option('--title <title>', 'optional title (else derived)')
+    .action(async (brandKitId: string, opts: Record<string, unknown>, command: Command) => {
+      const text = opts.text as string | undefined
+      const url = opts.url as string | undefined
+      const youtube = opts.youtube as string | undefined
+      const file = opts.file as string | undefined
+      const provided = [text, url, youtube, file].filter((v) => v != null)
+      if (provided.length !== 1) {
+        throw new CliError(
+          'Provide exactly one source: --text, --url, --youtube, or --file.',
+          EXIT.USAGE,
+        )
+      }
+      const { client, ctx } = makeClient(command)
+      let input
+      if (text != null) {
+        input = { sourceType: 'text' as const, text }
+      } else if (url != null) {
+        input = { sourceType: 'url' as const, url }
+      } else if (youtube != null) {
+        input = { sourceType: 'youtube' as const, url: youtube }
+      } else {
+        const ext = extname(file!).replace(/^\./, '').toLowerCase()
+        if (!ext) throw new CliError('Could not determine the file extension from --file.', EXIT.USAGE)
+        let fileData: string
+        try {
+          fileData = readFileSync(file!).toString('base64')
+        } catch (err) {
+          throw new CliError(
+            `Could not read --file: ${err instanceof Error ? err.message : String(err)}`,
+            EXIT.USAGE,
+          )
+        }
+        input = { sourceType: 'file' as const, fileData, fileExt: ext }
+      }
+      const item = await client.addBrandKnowledge(brandKitId, {
+        ...input,
+        title: opts.title as string | undefined,
+      })
+      emit(item, ctx, (k: BrandKnowledgeItem) =>
+        keyValues([
+          ['Added', k.title ?? '(untitled)'],
+          ['Id', k.id],
+          ['Source type', k.sourceType ?? ''],
+        ]),
+      )
+    })
+
+  knowledge
+    .command('remove')
+    .description('Remove a knowledge item and its embeddings (requires brandkit:write)')
+    .argument('<brandKitId>', 'the brand kit id')
+    .argument('<knowledgeId>', 'the knowledge item id to remove')
+    .action(async (brandKitId: string, knowledgeId: string, _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const res = await client.removeBrandKnowledge(brandKitId, knowledgeId)
+      emit(res, ctx, (r: { id: string }) => keyValues([['Removed', r.id]]))
     })
 }

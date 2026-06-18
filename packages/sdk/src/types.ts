@@ -283,11 +283,15 @@ export interface BrandKitSummary {
 
 /** A brand/inspiration account linked to a brand kit. */
 export interface BrandKitAccount {
+  /** The tracked-account id; feeds getInspirationAccount / getBrandAccountPerformance. */
+  id: string | null
   platform: string | null
   name: string | null
   handle: string | null
   avatarUrl: string | null
   followerCount: number | null
+  /** 'brand' or 'inspiration'. */
+  accountType: string | null
 }
 
 /** A curated section of a brand kit (overview / voice tabs). */
@@ -299,13 +303,75 @@ export interface BrandKitSection {
   fields: unknown[]
 }
 
-/** A knowledge-base item (body truncated to a preview). */
+/** A knowledge-base item (body truncated to a preview), as embedded in `getBrandKit`. */
 export interface BrandKitKnowledge {
   id: string
   title: string | null
   sourceType: string | null
   sourceUrl: string | null
   contentPreview: string | null
+}
+
+/** A knowledge-base item in the dedicated list/get surface (metadata). */
+export interface BrandKnowledgeItem {
+  id: string
+  title: string | null
+  sourceType: string | null
+  sourceUrl: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+/** A knowledge item with its stored body (a capped anchor; use search for depth). */
+export interface BrandKnowledgeDetail extends BrandKnowledgeItem {
+  content: string | null
+}
+
+/** Result of `listBrandKnowledge`: a page of items plus pagination metadata. */
+export interface BrandKnowledgeListResult {
+  items: BrandKnowledgeItem[]
+  total: number
+  hasMore: boolean
+}
+
+/** One ranked chunk match from `searchBrandKnowledge`. */
+export interface BrandKnowledgeMatch {
+  /** The parent item id (fetch the whole item with getBrandKnowledge). */
+  knowledgeId: string | null
+  title: string | null
+  /** The matching chunk content. */
+  content: string
+  similarity: number
+  sourceUrl: string | null
+  chunkIndex: number | null
+}
+
+/** How a knowledge item is ingested. */
+export type BrandKnowledgeSourceType = 'text' | 'url' | 'youtube' | 'file'
+
+/** Input for `addBrandKnowledge`. */
+export interface AddBrandKnowledgeInput {
+  sourceType: BrandKnowledgeSourceType
+  /** text source: the note body. */
+  text?: string
+  /** url / youtube source: the link. */
+  url?: string
+  /** file source: base64-encoded file bytes (documents and images; not video/audio). */
+  fileData?: string
+  /** file source: the file extension (no dot), e.g. "pdf". */
+  fileExt?: string
+  /** Optional explicit title (else derived from the content). */
+  title?: string
+  /** Optional tag ids to attach. */
+  tags?: { id: string }[]
+}
+
+/** Options for `searchBrandKnowledge`. */
+export interface SearchBrandKnowledgeOptions {
+  /** Max matches to return (1-50, default 8). */
+  limit?: number
+  /** Minimum cosine similarity (0-1, default 0.45). */
+  threshold?: number
 }
 
 /** Full brand kit as returned by `getBrandKit` (the whole document). */
@@ -694,8 +760,16 @@ export interface ListOutliersOptions {
   search?: string
   /** 'score' (default), 'date', or 'views'. */
   sortBy?: 'score' | 'date' | 'views'
+  /** Scope to the inspiration accounts linked to this brand kit. */
+  brandKitId?: string
   limit?: number
   offset?: number
+}
+
+/** Options for `listInspirationAccounts` / `listBrandAccounts`. */
+export interface ListTrackedAccountsOptions {
+  /** Scope to the accounts linked to this brand kit. */
+  brandKitId?: string
 }
 
 /** Result of `listOutliers`: a page of outliers plus pagination metadata. */
