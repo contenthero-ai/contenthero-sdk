@@ -1,0 +1,50 @@
+{
+  "name": "@contenthero/sdk",
+  "version": "0.2.1",
+  "description": "Official ContentHero SDK. Programmatic media generation (image, video, audio) on the ContentHero Studio API. The shared kernel the ContentHero MCP and CLI sit on.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/contenthero-ai/contenthero-sdk.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "contenthero",
+    "ai",
+    "image-generation",
+    "video-generation",
+    "text-to-speech",
+    "generative-media",
+    "sdk"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "private": false,
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "tsx": "^4.22.3"
+  }
+}

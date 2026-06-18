@@ -1,0 +1,52 @@
+{
+  "name": "@contenthero/mcp",
+  "version": "0.2.1",
+  "description": "Official ContentHero MCP server. Generate images, video, and audio from any MCP client (Claude Code, Claude Desktop, etc.) using your ContentHero API key.",
+  "type": "module",
+  "bin": {
+    "contenthero-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/contenthero-ai/contenthero-sdk.git",
+    "directory": "packages/mcp"
+  },
+  "keywords": [
+    "contenthero",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "image-generation",
+    "video-generation",
+    "text-to-speech"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "@contenthero/sdk": "^0.2.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "tsx": "^4.22.3"
+  }
+}

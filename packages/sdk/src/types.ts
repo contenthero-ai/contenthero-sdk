@@ -1,0 +1,409 @@
+/**
+ * Public request/response types for the ContentHero SDK.
+ *
+ * These mirror the server contract in the ContentHero app
+ * (lib/studio/v1-request.ts and the /api/v1 route responses). The request is a
+ * thin envelope: a typed core of universal fields, a `references` object, and a
+ * model-specific `parameters` passthrough for the long tail. Per-model
+ * capabilities (which models accept which fields) are validated server-side
+ * against the same registry that drives the Studio UI.
+ */
+
+/**
+ * Reference inputs (image-to-image, video-to-video, frame conditioning).
+ *
+ * Every value may be either a media URL OR one of your own output ids, so you
+ * can chain generations: pass a previous generation's id and the server
+ * substitutes that output's URL (ownership-checked). The id may be the full
+ * output id, its first 8 characters, or either with a `-N` variation suffix
+ * (1-based), e.g. `"a1b2c3d4-2"`. Without a suffix the first variation is used.
+ */
+export interface References {
+  /** Image references / image-to-image inputs (URL or output id). */
+  images?: string[]
+  /** Video references, e.g. video-to-video models (URL or output id). */
+  videos?: string[]
+  /** Audio references, e.g. lip-sync custom audio input (URL or output id). */
+  audio?: string[]
+  /** First frame for video models that accept one (URL or output id). */
+  startFrame?: string
+  /** Last frame for video models that accept one (URL or output id). */
+  endFrame?: string
+}
+
+/**
+ * A generation request. `modelId` is always required. For image/video the
+ * `prompt` and typed-core fields apply; for audio (ElevenLabs) the audio fields
+ * apply. Anything a specific model supports beyond the typed core can be passed
+ * through `parameters`.
+ */
+export interface GenerateRequest {
+  /** Media kind. Optional: inferred from the model when omitted. */
+  contentType?: 'image' | 'video' | 'audio'
+  /** Model identifier, e.g. 'nano-banana-2'. Required. */
+  modelId: string
+  /** Text prompt. Required for image/video and for music/sfx audio. */
+  prompt?: string
+
+  // Typed core (image / video)
+  aspectRatio?: string
+  resolution?: string
+  /** Quality mode for models that expose it separately (e.g. GPT Image). */
+  quality?: string
+  /** Number of images to produce (image models). */
+  numImages?: number
+  /** Number of variations to produce (video models). */
+  numGenerations?: number
+  /** Clip duration in seconds (video models). */
+  duration?: number
+  /** Enable generated audio on video models that support it. */
+  audioEnabled?: boolean
+  negativePrompt?: string
+  seed?: number
+  /** Upscale factor for upscale models, e.g. "2x", "4x" (validated per model). */
+  upscaleFactor?: string
+  references?: References
+
+  /** Model-specific parameters passed through to the provider (long tail). */
+  parameters?: Record<string, unknown>
+
+  // Audio (ElevenLabs)
+  /** Text to speak (text-to-speech). */
+  text?: string
+  /** ElevenLabs voice id (text-to-speech). */
+  voiceId?: string
+  /** Human-readable voice name, stored for display (text-to-speech). */
+  voiceName?: string
+  /** Duration in seconds (music / sound effects). */
+  durationSeconds?: number
+  /** How literally to follow the prompt, 0.0 to 1.0 (sound effects). */
+  promptInfluence?: number
+
+  /**
+   * Optional client-chosen id for idempotency. Must be a UUID; it becomes the
+   * generation's id. Re-submitting with the same id returns the existing job
+   * instead of starting (and charging for) another, so retries are safe. You
+   * also know the id up front and can poll `getGeneration` immediately.
+   */
+  outputId?: string
+}
+
+/** The nine Reference Board types. */
+export type BoardType =
+  | 'character'
+  | 'pose'
+  | 'mascot'
+  | 'creature'
+  | 'weapon'
+  | 'vehicle'
+  | 'object'
+  | 'location'
+  | 'shot'
+
+/**
+ * A Reference Board generation request. A board is a dense multi-panel reference
+ * sheet built from a source image and/or a written description, on a fixed
+ * pipeline (3:4 / 4K). Provide at least one of `referenceImages` or `prompt`.
+ */
+export interface GenerateBoardRequest {
+  /** One of the nine board types. Required. */
+  boardType: BoardType
+  /**
+   * Freeform description / context. The source image leads when both are given;
+   * required when no `referenceImages` are provided (text-only boards).
+   */
+  prompt?: string
+  /**
+   * Image references the board is built from: each a URL or one of your own
+   * output ids (e.g. "<id>" or "<id>-2") to chain from an earlier generation.
+   */
+  referenceImages?: string[]
+  /** Number of variations to produce (1-4). Defaults to 1. */
+  numImages?: number
+  /** Optional user-facing board name. */
+  boardName?: string
+  /** Optional avatar id to associate the board with. */
+  avatarId?: string
+  /**
+   * Optional client-chosen id for idempotency. Must be a UUID; it becomes the
+   * board's id. Re-submitting with the same id returns the existing job.
+   */
+  outputId?: string
+}
+
+/** Lifecycle state of a generation. */
+export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+/**
+ * Result of submitting a generation. Image/video return `status: 'processing'`
+ * (poll with `getGeneration`, or use `generateAndWait`). Audio is synchronous
+ * and returns `status: 'completed'` with `outputUrls` already populated.
+ */
+export interface GenerateResult {
+  outputId: string
+  status: 'processing' | 'completed'
+  /** Estimated credit cost computed server-side. */
+  creditsEstimate?: number
+  /** Present when the result is already complete (audio). */
+  outputUrls?: string[]
+  /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
+  idempotentReplay?: boolean
+}
+
+/**
+ * Result of a get_cost preflight (`estimateCost` / `estimateBoardCost`): the credit
+ * estimate only, with no generation run and nothing charged. It equals what the real
+ * generate would charge; audio covered by a BYO ElevenLabs key estimates 0.
+ */
+export interface CostEstimate {
+  creditsEstimate: number
+  /** Always true on a cost-preview response. */
+  getCost: true
+  modelId?: string
+  contentType?: 'image' | 'video' | 'audio'
+}
+
+/** A generation record as returned by `getGeneration` and `generateAndWait`. */
+export interface Generation {
+  outputId: string
+  status: GenerationStatus
+  contentType: 'image' | 'video' | 'audio'
+  modelId: string
+  /** Output asset URLs. Empty until the generation completes. */
+  outputUrls: string[]
+  /** Error detail when `status` is 'failed', otherwise null. */
+  error: string | null
+  createdAt: string
+  completedAt: string | null
+}
+
+/** Subscription tiers the API normalizes balances against. */
+export type SubscriptionTier = 'mortal' | 'hero' | 'champion' | 'legend'
+
+/** Account credit standing as returned by `getBalance`. */
+export interface Balance {
+  balance: number
+  tier: SubscriptionTier
+  autoTopupEnabled: boolean
+}
+
+/** Options for `generateAndWait`'s polling behavior. */
+export interface WaitOptions {
+  /** Milliseconds between status polls. Default 3000. */
+  pollIntervalMs?: number
+  /** Give up after this many milliseconds. Default 600000 (10 minutes). */
+  timeoutMs?: number
+  /** Abort the wait (does not cancel the server-side job). */
+  signal?: AbortSignal
+}
+
+/** Request to transcribe an audio URL to text. */
+export interface TranscribeRequest {
+  /** Public URL of the audio to transcribe. */
+  audioUrl: string
+  /** Optional ISO language hint (e.g. "en"); auto-detected when omitted. */
+  languageCode?: string
+  /** Label each speaker (diarization). */
+  diarize?: boolean
+}
+
+/** Result of transcribing audio. Synchronous (no polling). */
+export interface Transcription {
+  outputId: string
+  transcript: string
+  language: string
+  wordCount: number
+  /** Source audio length in seconds, when known. */
+  durationSeconds: number | null
+}
+
+/** An avatar as returned by `listAvatars` (the list projection). */
+export interface AvatarSummary {
+  id: string
+  name: string
+  /** The avatar's base image (profile photo); the default look for lip-sync. */
+  imageUrl: string | null
+  defaultVoiceId: string | null
+  isDefault: boolean
+  status: string
+}
+
+/** An outfit/look variation of an avatar. */
+export interface AvatarLook {
+  id: string
+  name: string | null
+  imageUrl: string | null
+  lookType: string | null
+  isDefault: boolean
+}
+
+/** Full avatar detail as returned by `getAvatar`. */
+export interface Avatar extends AvatarSummary {
+  description: string | null
+  age: string | null
+  gender: string | null
+  ethnicity: string | null
+  niche: string[]
+  createdAt: string | null
+  looks: AvatarLook[]
+}
+
+/** A voice as returned by `listVoices` (the list projection). */
+export interface VoiceSummary {
+  voiceId: string
+  name: string | null
+  provider: string | null
+  isFavorited: boolean
+  previewUrl: string | null
+  lastUsedAt: string | null
+}
+
+/** Full voice detail as returned by `getVoice`. */
+export interface Voice extends VoiceSummary {
+  accent: string | null
+  language: string | null
+  gender: string | null
+  age: string | null
+  description: string | null
+  useCase: string | null
+}
+
+/** A brand kit as returned by `listBrandKits` (the list projection). */
+export interface BrandKitSummary {
+  id: string
+  name: string
+  businessName: string | null
+  nicheDefinition: string | null
+  isDefault: boolean
+  isActive: boolean
+  isFavorited: boolean
+  isArchived: boolean
+  createdAt: string | null
+}
+
+/** A brand/inspiration account linked to a brand kit. */
+export interface BrandKitAccount {
+  platform: string | null
+  name: string | null
+  handle: string | null
+  avatarUrl: string | null
+  followerCount: number | null
+}
+
+/** A curated section of a brand kit (overview / voice tabs). */
+export interface BrandKitSection {
+  tab: string
+  sectionName: string
+  sortOrder: number
+  /** Field objects: { key, label, type, value }. */
+  fields: unknown[]
+}
+
+/** A knowledge-base item (body truncated to a preview). */
+export interface BrandKitKnowledge {
+  id: string
+  title: string | null
+  sourceType: string | null
+  sourceUrl: string | null
+  contentPreview: string | null
+}
+
+/** Full brand kit as returned by `getBrandKit` (the whole document). */
+export interface BrandKit extends BrandKitSummary {
+  websiteUrl: string | null
+  sourceType: string | null
+  primaryOffer: string | null
+  positioning: Record<string, unknown> | null
+  audience: Record<string, unknown> | null
+  voiceProfile: Record<string, unknown> | null
+  logos: unknown[]
+  brandColors: unknown[]
+  typography: Record<string, unknown> | null
+  visualStyle: string | null
+  designPrinciples: string[]
+  socialAccounts: unknown[]
+  contentStrategy: Record<string, unknown> | null
+  assets: unknown[]
+  sections: BrandKitSection[]
+  brandAccounts: BrandKitAccount[]
+  inspirationAccounts: BrandKitAccount[]
+  knowledge: BrandKitKnowledge[]
+}
+
+/** A studio output's media kind. */
+export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
+
+/** One variation (slot) of a studio output. */
+export interface MediaVariation {
+  /** 1-based variation number (matches the UI and a share link's ?v=N). */
+  variation: number
+  url: string | null
+  status: string
+  isFavorited: boolean
+}
+
+/** A studio output as returned by `listMedia` (the list projection). */
+export interface MediaSummary {
+  id: string
+  type: MediaType
+  model: string | null
+  prompt: string | null
+  status: string
+  createdAt: string | null
+  variationCount: number
+  /** Resolved (non-null) variation URLs. */
+  urls: string[]
+  /** Asset class: 'creation' (default), 'board' (a reference board), or 'look'. */
+  kind: string | null
+  /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
+  boardType: string | null
+}
+
+/** Full studio output detail as returned by `getMedia`. */
+export interface MediaItem extends MediaSummary {
+  script: string | null
+  aspectRatio: string | null
+  resolution: string | null
+  duration: number | null
+  creditsUsed: number | null
+  variations: MediaVariation[]
+  /** Set when the requested token addressed a single variation; else null. */
+  selectedVariation: number | null
+}
+
+/** Options for `listMedia`. */
+export interface ListMediaOptions {
+  contentType?: MediaType | MediaType[]
+  status?: string
+  /** Filter by asset class: 'creation', 'board', or 'look'. */
+  kind?: 'creation' | 'board' | 'look'
+  limit?: number
+  offset?: number
+}
+
+/** The operation a model performs within its content type. */
+export type ModelKind = 'generate' | 'upscale' | 'lip-sync' | 'voice'
+
+/**
+ * A model's capability surface, as advertised by the discovery endpoint. Typed
+ * loosely (an index signature for the long tail) because the full contract is
+ * validated server-side; the fields below are the stable ones clients reason
+ * about.
+ */
+export interface ModelCapabilities {
+  kind: ModelKind
+  outputType: 'image' | 'video' | 'audio' | 'text' | 'voice'
+  promptMode: 'required' | 'optional' | 'none'
+  [key: string]: unknown
+}
+
+/** A model in the discovery catalog returned by `listModels`. */
+export interface ModelInfo {
+  modelId: string
+  displayName: string
+  description: string | null
+  contentType: 'image' | 'video' | 'audio'
+  kind: ModelKind
+  tags: string[]
+  capabilities: ModelCapabilities
+}

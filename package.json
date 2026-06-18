@@ -1,0 +1,26 @@
+{
+  "name": "contenthero-sdk",
+  "version": "0.0.0",
+  "description": "The ContentHero developer platform: the @contenthero/sdk kernel and the tools that sit on it (@contenthero/mcp, and the CLI).",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @contenthero/sdk && npm run build --workspace @contenthero/mcp",
+    "clean": "npm run clean --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/contenthero-ai/contenthero-sdk.git"
+  },
+  "license": "MIT"
+}
