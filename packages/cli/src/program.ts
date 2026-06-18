@@ -15,6 +15,10 @@ import { registerAuth } from './commands/auth.js'
 import { registerConfig } from './commands/config.js'
 import { registerAccount } from './commands/account.js'
 import { registerModel } from './commands/model.js'
+import { registerGenerate } from './commands/generate.js'
+import { registerUpscale } from './commands/upscale.js'
+import { registerGeneration } from './commands/generation.js'
+import { registerMedia } from './commands/media.js'
 
 /** Read our own version from package.json (kept in lockstep with sdk + mcp). */
 function readVersion(): string {
@@ -49,6 +53,10 @@ export function buildProgram(): Command {
   registerConfig(program)
   registerAccount(program)
   registerModel(program)
+  registerGenerate(program)
+  registerUpscale(program)
+  registerGeneration(program)
+  registerMedia(program)
 
   return program
 }
