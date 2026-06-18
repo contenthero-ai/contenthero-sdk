@@ -28,6 +28,10 @@ test('every top-level command group is registered', () => {
     'brand-kit',
     'avatar',
     'voice',
+    'inspiration',
+    'brand-account',
+    'connected-account',
+    'schema',
   ]) {
     assert.ok(names.includes(expected), `missing top-level command: ${expected}`)
   }
@@ -57,4 +61,36 @@ test('brand-kit exposes its verbs and the section group', () => {
 test('avatar and voice expose list + get', () => {
   assert.deepEqual(subcommands('avatar').sort(), ['get', 'list'])
   assert.deepEqual(subcommands('voice').sort(), ['get', 'list'])
+})
+
+test('inspiration exposes accounts/account/outliers/content', () => {
+  const subs = subcommands('inspiration')
+  for (const n of ['accounts', 'account', 'outliers', 'content']) {
+    assert.ok(subs.includes(n), `inspiration is missing: ${n}`)
+  }
+})
+
+test('schema dumps a scoped command with its options, needing no key', async () => {
+  const program = buildProgram()
+  program.exitOverride()
+  const chunks: string[] = []
+  const orig = process.stdout.write.bind(process.stdout)
+  ;(process.stdout as { write: unknown }).write = (s: string) => {
+    chunks.push(String(s))
+    return true
+  }
+  try {
+    await program.parseAsync(['node', 'contenthero', 'schema', 'generate', 'image'])
+  } finally {
+    ;(process.stdout as { write: unknown }).write = orig
+  }
+  const dumped = JSON.parse(chunks.join('')) as {
+    globalOptions: Array<{ flags: string }>
+    commands: Array<{ command: string; options: Array<{ flags: string; required: boolean }> }>
+  }
+  assert.equal(dumped.commands.length, 1)
+  assert.equal(dumped.commands[0]?.command, 'generate image')
+  const model = dumped.commands[0]?.options.find((o) => o.flags.includes('--model'))
+  assert.ok(model?.required, 'model option is marked required')
+  assert.ok(dumped.globalOptions.some((o) => o.flags.includes('--api-key')))
 })

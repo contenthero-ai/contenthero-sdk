@@ -23,6 +23,9 @@ import { registerPost } from './commands/post.js'
 import { registerPipeline } from './commands/pipeline.js'
 import { registerBrandKit } from './commands/brandkit.js'
 import { registerIdentity } from './commands/identity.js'
+import { registerInspiration } from './commands/inspiration.js'
+import { registerBrandAccount, registerConnectedAccount } from './commands/connected.js'
+import { registerSchema } from './commands/schema.js'
 
 /** Read our own version from package.json (kept in lockstep with sdk + mcp). */
 function readVersion(): string {
@@ -65,6 +68,10 @@ export function buildProgram(): Command {
   registerPipeline(program)
   registerBrandKit(program)
   registerIdentity(program)
+  registerInspiration(program)
+  registerBrandAccount(program)
+  registerConnectedAccount(program)
+  registerSchema(program)
 
   return program
 }
