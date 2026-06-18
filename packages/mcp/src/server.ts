@@ -121,7 +121,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
   // to static lists if discovery is unreachable). Done once at startup, since
   // tool schemas are advertised once; a restart picks up admin-switchboard changes.
   const models = await resolveModelEnums(getClient)
-  const server = new McpServer({ name: 'contenthero', version: '0.2.1' })
+  const server = new McpServer({ name: 'contenthero', version: '0.2.2' })
 
   // -- generate_image -------------------------------------------------------
   server.registerTool(
