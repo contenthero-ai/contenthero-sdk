@@ -11,11 +11,16 @@ import type {
   Balance,
   BrandKit,
   BrandKitSummary,
+  BrandAccountPerformance,
   CostEstimate,
   Generation,
   GenerateResult,
+  InspirationAccountDetail,
+  InspirationContent,
   MediaItem,
   MediaSummary,
+  Outlier,
+  OutliersResult,
   PipelineStage,
   PostAsset,
   PostDestination,
@@ -23,6 +28,7 @@ import type {
   PostListResult,
   PostSummary,
   PublishPostResult,
+  TrackedAccount,
   Transcription,
   Voice,
   VoiceSummary,
@@ -315,6 +321,96 @@ export function publishResult(r: PublishPostResult): CallToolResult {
   )
   const header = `Published ${r.publishedCount}/${r.results.length} destination(s)${r.failedCount ? `, ${r.failedCount} failed` : ''}:`
   return text([header, ...rows].join('\n'), r.publishedCount === 0)
+}
+
+// -- inspiration / research ---------------------------------------------------
+
+/** Compact integer formatting (1.2M, 45.3K) for engagement counts. */
+function compactNum(n: number | null): string {
+  if (n == null) return '?'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
+/** One line summarizing a tracked account. */
+function accountLine(a: TrackedAccount): string {
+  const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
+  return `- ${handle} (id ${a.id}) | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`
+}
+
+/** List of tracked accounts (inspiration or brand). */
+export function trackedAccountListResult(accounts: TrackedAccount[], noun: string): CallToolResult {
+  if (!accounts.length) return text(`No ${noun} found. Add one in the ContentHero app first.`)
+  return text([`${accounts.length} ${noun}:`, ...accounts.map(accountLine)].join('\n'))
+}
+
+/** One line summarizing an outlier / content item. */
+function outlierLine(o: Outlier): string {
+  const score = o.outlierScore != null ? `${o.outlierScore.toFixed(1)}x` : 'n/a'
+  const creator = o.sourceCreator || (o.accountHandle ? `@${o.accountHandle}` : '')
+  return `- [${score}] ${o.title ?? '(untitled)'}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (id ${o.id})`
+}
+
+/** A page of outliers. */
+export function outlierListResult(result: OutliersResult): CallToolResult {
+  if (!result.outliers.length) {
+    return text('No outliers found. Track some creators in the ContentHero app, or widen the filters.')
+  }
+  const more = result.hasMore ? ` (showing ${result.outliers.length} of ${result.total})` : ''
+  return text(
+    [`${result.total} outlier(s) by score${more}:`, ...result.outliers.map(outlierLine)].join('\n'),
+  )
+}
+
+/** One inspiration account with its top content. */
+export function inspirationAccountResult(d: InspirationAccountDetail): CallToolResult {
+  const a = d.account
+  const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
+  return text(
+    lines([
+      `${handle} (id ${a.id}) | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
+      `tracked content: ${d.contentCount}`,
+      d.topContent.length ? `top outliers:` : 'top outliers: none yet',
+      ...d.topContent.map(outlierLine),
+    ]),
+  )
+}
+
+/** One tracked-content item in full, including transcript. */
+export function inspirationContentResult(c: InspirationContent): CallToolResult {
+  const stats = `${compactNum(c.viewCount)} views, ${compactNum(c.likeCount)} likes, ${compactNum(c.commentCount)} comments`
+  const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
+  return text(
+    lines([
+      `${c.title ?? '(untitled)'} (id ${c.id})`,
+      `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
+      `${stats}${score ? ` | ${score}` : ''}`,
+      c.url ? `url: ${c.url}` : null,
+      c.publishedAt ? `published: ${c.publishedAt}` : null,
+      c.hashtags.length ? `hashtags: ${c.hashtags.join(' ')}` : null,
+      c.description ? `description: ${c.description}` : null,
+      c.transcript ? `transcript:\n${c.transcript}` : 'transcript: none',
+    ]),
+  )
+}
+
+/** Performance summary for a brand account. */
+export function brandPerformanceResult(p: BrandAccountPerformance): CallToolResult {
+  const a = p.account
+  const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
+  const avgEng = p.averages.engagementRate != null ? `${(p.averages.engagementRate * 100).toFixed(1)}%` : 'n/a'
+  const avgScore = p.averages.outlierScore != null ? `${p.averages.outlierScore.toFixed(2)}x` : 'n/a'
+  return text(
+    lines([
+      `${handle} (id ${a.id}) | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
+      `content tracked: ${p.contentCount}`,
+      `totals: ${compactNum(p.totals.views)} views, ${compactNum(p.totals.likes)} likes, ${compactNum(p.totals.comments)} comments`,
+      `averages: ${compactNum(p.averages.views)} views/post, ${avgEng} engagement, ${avgScore} outlier score`,
+      p.topContent.length ? `top content:` : null,
+      ...p.topContent.map(outlierLine),
+    ]),
+  )
 }
 
 /** Map any thrown error onto a readable isError result. */

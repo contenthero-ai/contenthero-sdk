@@ -50,20 +50,25 @@ import {
   balanceResult,
   brandKitListResult,
   brandKitResult,
+  brandPerformanceResult,
   completedResult,
   costResult,
   destinationResult,
+  inspirationAccountResult,
+  inspirationContentResult,
   mediaListResult,
   mediaResult,
   errorResult,
   generationBatchResult,
   generationStatusResult,
+  outlierListResult,
   pendingResult,
   pipelineStageListResult,
   postListResult,
   postResult,
   postSummaryResult,
   publishResult,
+  trackedAccountListResult,
   transcriptResult,
   voiceListResult,
   voiceResult,
@@ -989,6 +994,137 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
     async (args) => {
       try {
         return publishResult(await getClient().publishPost(args.postId, { platform: args.platform }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_inspiration_accounts --------------------------------------------
+  server.registerTool(
+    'list_inspiration_accounts',
+    {
+      title: 'List Inspiration Accounts',
+      description:
+        "List the creators/competitors the account tracks for inspiration. Use these as grounding for research; call list_outliers for their top content or get_inspiration_account for one account's detail.",
+    },
+    async () => {
+      try {
+        return trackedAccountListResult(await getClient().listInspirationAccounts(), 'inspiration account(s)')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_inspiration_account ----------------------------------------------
+  server.registerTool(
+    'get_inspiration_account',
+    {
+      title: 'Get Inspiration Account',
+      description:
+        "Get one tracked inspiration account with its content count and a few top outliers (by score). Use it to study a specific creator.",
+      inputSchema: {
+        accountId: z.string().describe('The account id from list_inspiration_accounts.'),
+      },
+    },
+    async (args) => {
+      try {
+        const detail = await getClient().getInspirationAccount(args.accountId)
+        return inspirationAccountResult(detail)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_outliers --------------------------------------------------------
+  server.registerTool(
+    'list_outliers',
+    {
+      title: 'List Outliers',
+      description:
+        "List top-performing content (outliers) from the creators the account tracks, ranked by outlier score (how far a post overperformed its creator's baseline). Filter by platform, content type, minimum score, or a text search. Call get_inspiration_content for one item's full detail incl. transcript. This is the core research read for finding what's working.",
+      inputSchema: {
+        platform: z.enum(['youtube', 'instagram']).optional().describe('Filter to one platform.'),
+        contentType: z.string().optional().describe("Filter by content type, e.g. 'video', 'short', 'reel'."),
+        minOutlierScore: z.number().optional().describe('Only content at or above this outlier score.'),
+        search: z.string().optional().describe('Text search across title, creator, handle, and description.'),
+        sortBy: z.enum(['score', 'date', 'views']).optional().describe("Sort order (default 'score')."),
+        limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
+        offset: z.number().int().min(0).optional().describe('Pagination offset.'),
+      },
+    },
+    async (args) => {
+      try {
+        return outlierListResult(
+          await getClient().listOutliers({
+            platform: args.platform,
+            contentType: args.contentType,
+            minOutlierScore: args.minOutlierScore,
+            search: args.search,
+            sortBy: args.sortBy,
+            limit: args.limit,
+            offset: args.offset,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_inspiration_content ----------------------------------------------
+  server.registerTool(
+    'get_inspiration_content',
+    {
+      title: 'Get Inspiration Content',
+      description:
+        "Get one tracked-content item in full: engagement stats, outlier score, hashtags, and the transcript when available. Use it to study exactly what a high-performing post says and does.",
+      inputSchema: {
+        contentId: z.string().describe('The content id from list_outliers or get_inspiration_account.'),
+      },
+    },
+    async (args) => {
+      try {
+        return inspirationContentResult(await getClient().getInspirationContent(args.contentId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_brand_accounts --------------------------------------------------
+  server.registerTool(
+    'list_brand_accounts',
+    {
+      title: 'List Brand Accounts',
+      description:
+        "List the account owner's OWN connected social accounts that ContentHero tracks for performance (distinct from list_brand_kits, which are the brand identity documents). Call get_brand_account_performance for one account's stats.",
+    },
+    async () => {
+      try {
+        return trackedAccountListResult(await getClient().listBrandAccounts(), 'brand account(s)')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_brand_account_performance ----------------------------------------
+  server.registerTool(
+    'get_brand_account_performance',
+    {
+      title: 'Get Brand Account Performance',
+      description:
+        "Get the performance summary for one of the owner's brand accounts: content count, total and average views/likes/comments, average engagement and outlier score, plus top and recent content. Use it to ground decisions in how the owner's own content actually performs.",
+      inputSchema: {
+        accountId: z.string().describe('The account id from list_brand_accounts.'),
+      },
+    },
+    async (args) => {
+      try {
+        return brandPerformanceResult(await getClient().getBrandAccountPerformance(args.accountId))
       } catch (err) {
         return errorResult(err)
       }

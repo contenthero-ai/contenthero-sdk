@@ -14,10 +14,17 @@ import type {
   Avatar,
   AvatarSummary,
   Balance,
+  BrandAccountPerformance,
   BrandKit,
   BrandKitSummary,
   CostEstimate,
   CreatePostInput,
+  InspirationAccountDetail,
+  InspirationContent,
+  ListOutliersOptions,
+  Outlier,
+  OutliersResult,
+  TrackedAccount,
   GenerateBoardRequest,
   GenerateRequest,
   GenerateResult,
@@ -389,6 +396,61 @@ export class ContentHero {
       'POST',
       `/api/v1/posts/${encodeURIComponent(postId)}/publish`,
       options.platform ? { platform: options.platform } : {},
+    )
+  }
+
+  // -------------------------------------------------------------------------
+  // Inspiration / research reads
+  // -------------------------------------------------------------------------
+
+  /** List the account's tracked inspiration accounts (creators/competitors). */
+  async listInspirationAccounts(): Promise<TrackedAccount[]> {
+    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', '/api/v1/inspiration/accounts')
+    return data.accounts
+  }
+
+  /** Get one inspiration account with its content count and top outliers. */
+  async getInspirationAccount(accountId: string): Promise<InspirationAccountDetail> {
+    return this.request<InspirationAccountDetail>(
+      'GET',
+      `/api/v1/inspiration/accounts/${encodeURIComponent(accountId)}`,
+    )
+  }
+
+  /** List top-performing content from the creators the account tracks, by outlier score. */
+  async listOutliers(options: ListOutliersOptions = {}): Promise<OutliersResult> {
+    const q = new URLSearchParams()
+    if (options.platform) q.set('platform', options.platform)
+    if (options.contentType) q.set('content_type', options.contentType)
+    if (options.minOutlierScore != null) q.set('min_outlier_score', String(options.minOutlierScore))
+    if (options.search) q.set('search', options.search)
+    if (options.sortBy) q.set('sort_by', options.sortBy)
+    if (options.limit != null) q.set('limit', String(options.limit))
+    if (options.offset != null) q.set('offset', String(options.offset))
+    const qs = q.toString()
+    return this.request<OutliersResult>('GET', `/api/v1/inspiration/outliers${qs ? `?${qs}` : ''}`)
+  }
+
+  /** Get one tracked-content item in full (incl. transcript, engagement, hashtags). */
+  async getInspirationContent(contentId: string): Promise<InspirationContent> {
+    const data = await this.request<{ content: InspirationContent }>(
+      'GET',
+      `/api/v1/inspiration/content/${encodeURIComponent(contentId)}`,
+    )
+    return data.content
+  }
+
+  /** List the account's own brand social accounts (the basis for own-performance reads). */
+  async listBrandAccounts(): Promise<TrackedAccount[]> {
+    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', '/api/v1/brand-accounts')
+    return data.accounts
+  }
+
+  /** Get the performance summary for one of the account's brand accounts. */
+  async getBrandAccountPerformance(accountId: string): Promise<BrandAccountPerformance> {
+    return this.request<BrandAccountPerformance>(
+      'GET',
+      `/api/v1/brand-accounts/${encodeURIComponent(accountId)}/performance`,
     )
   }
 

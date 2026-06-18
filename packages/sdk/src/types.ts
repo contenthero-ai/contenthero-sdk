@@ -585,3 +585,91 @@ export interface PublishPostResult {
   publishedCount: number
   failedCount: number
 }
+
+// ---------------------------------------------------------------------------
+// Inspiration / research reads
+// ---------------------------------------------------------------------------
+
+/** A tracked account: an inspiration creator or one of the caller's brand accounts. */
+export interface TrackedAccount {
+  id: string
+  platform: string | null
+  /** Platform-level account id (the shared key into tracked content). */
+  accountId: string | null
+  handle: string | null
+  name: string | null
+  avatarUrl: string | null
+  followerCount: number | null
+  lastSyncedAt: string | null
+  syncStatus: string | null
+  accountType: string | null
+}
+
+/** A piece of tracked content (the list projection used for outliers). */
+export interface Outlier {
+  id: string
+  platform: string | null
+  contentType: string | null
+  title: string | null
+  url: string | null
+  thumbnailUrl: string | null
+  viewCount: number | null
+  likeCount: number | null
+  commentCount: number | null
+  shareCount: number | null
+  durationSeconds: number | null
+  outlierScore: number | null
+  engagementRate: number | null
+  viewsPerFollower: number | null
+  publishedAt: string | null
+  sourceCreator: string | null
+  accountHandle: string | null
+}
+
+/** Full tracked-content detail as returned by `getInspirationContent`. */
+export interface InspirationContent extends Outlier {
+  description: string | null
+  transcript: string | null
+  hashtags: string[]
+  keywords: string[]
+  mentions: string[]
+  audioInfo: Record<string, unknown> | null
+  followerCountSnapshot: number | null
+}
+
+/** One inspiration account with its content count and top outliers. */
+export interface InspirationAccountDetail {
+  account: TrackedAccount
+  contentCount: number
+  topContent: Outlier[]
+}
+
+/** Options for `listOutliers`. */
+export interface ListOutliersOptions {
+  platform?: string
+  contentType?: string
+  /** Only content scoring at or above this outlier score. */
+  minOutlierScore?: number
+  search?: string
+  /** 'score' (default), 'date', or 'views'. */
+  sortBy?: 'score' | 'date' | 'views'
+  limit?: number
+  offset?: number
+}
+
+/** Result of `listOutliers`: a page of outliers plus pagination metadata. */
+export interface OutliersResult {
+  outliers: Outlier[]
+  total: number
+  hasMore: boolean
+}
+
+/** Performance summary for one of the caller's brand accounts. */
+export interface BrandAccountPerformance {
+  account: TrackedAccount
+  contentCount: number
+  totals: { views: number; likes: number; comments: number }
+  averages: { views: number | null; engagementRate: number | null; outlierScore: number | null }
+  topContent: Outlier[]
+  recentContent: Outlier[]
+}

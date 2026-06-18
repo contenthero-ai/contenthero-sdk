@@ -55,6 +55,13 @@ export type {
   AddAssetInput,
   PublishDestinationResult,
   PublishPostResult,
+  TrackedAccount,
+  Outlier,
+  InspirationContent,
+  InspirationAccountDetail,
+  ListOutliersOptions,
+  OutliersResult,
+  BrandAccountPerformance,
 } from './types.js'
 export {
   ContentHeroError,
