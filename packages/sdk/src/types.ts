@@ -356,9 +356,11 @@ export interface AddBrandKnowledgeInput {
   text?: string
   /** url / youtube source: the link. */
   url?: string
-  /** file source: base64-encoded file bytes (documents and images; not video/audio). */
+  /** file source: base64-encoded file bytes (use this OR fileUrl; best for small documents and images). */
   fileData?: string
-  /** file source: the file extension (no dot), e.g. "pdf". */
+  /** file source: a hosted URL the server fetches (use this OR fileData; needed for large files and video/audio). */
+  fileUrl?: string
+  /** file source: the file extension (no dot), e.g. "pdf". Inferred from fileUrl when omitted. */
   fileExt?: string
   /** Optional explicit title (else derived from the content). */
   title?: string

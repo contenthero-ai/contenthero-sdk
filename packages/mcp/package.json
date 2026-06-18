@@ -1,6 +1,6 @@
 {
   "name": "@contenthero/mcp",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Official ContentHero MCP server. Generate images, video, and audio from any MCP client (Claude Code, Claude Desktop, etc.) using your ContentHero API key.",
   "type": "module",
   "bin": {
@@ -41,7 +41,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@contenthero/sdk": "^0.2.3",
+    "@contenthero/sdk": "^0.2.4",
     "@modelcontextprotocol/sdk": "1.26.0",
     "zod": "^4.3.6"
   },

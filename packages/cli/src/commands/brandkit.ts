@@ -269,16 +269,19 @@ export function registerBrandKit(program: Command): void {
     .option('--url <url>', 'scrape and add a web page')
     .option('--youtube <url>', 'add a YouTube video transcript')
     .option('--file <path>', 'add a local document or image file (PDF, DOCX, PNG, etc.)')
+    .option('--file-url <url>', 'add a hosted file by URL the server fetches (large files, video, audio)')
+    .option('--file-ext <ext>', 'extension for --file-url when not in the URL, e.g. pdf')
     .option('--title <title>', 'optional title (else derived)')
     .action(async (brandKitId: string, opts: Record<string, unknown>, command: Command) => {
       const text = opts.text as string | undefined
       const url = opts.url as string | undefined
       const youtube = opts.youtube as string | undefined
       const file = opts.file as string | undefined
-      const provided = [text, url, youtube, file].filter((v) => v != null)
+      const fileUrl = opts.fileUrl as string | undefined
+      const provided = [text, url, youtube, file, fileUrl].filter((v) => v != null)
       if (provided.length !== 1) {
         throw new CliError(
-          'Provide exactly one source: --text, --url, --youtube, or --file.',
+          'Provide exactly one source: --text, --url, --youtube, --file, or --file-url.',
           EXIT.USAGE,
         )
       }
@@ -290,6 +293,8 @@ export function registerBrandKit(program: Command): void {
         input = { sourceType: 'url' as const, url }
       } else if (youtube != null) {
         input = { sourceType: 'youtube' as const, url: youtube }
+      } else if (fileUrl != null) {
+        input = { sourceType: 'file' as const, fileUrl, fileExt: opts.fileExt as string | undefined }
       } else {
         const ext = extname(file!).replace(/^\./, '').toLowerCase()
         if (!ext) throw new CliError('Could not determine the file extension from --file.', EXIT.USAGE)
