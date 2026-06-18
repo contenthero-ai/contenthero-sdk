@@ -1,0 +1,52 @@
+{
+  "name": "@contenthero/cli",
+  "version": "0.2.4",
+  "description": "Official ContentHero CLI. Generate media, run the content pipeline, and read your brand/research context from the terminal or any agent shell. Rides the @contenthero/sdk kernel.",
+  "type": "module",
+  "bin": {
+    "contenthero": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/contenthero-ai/contenthero-sdk.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "contenthero",
+    "cli",
+    "ai",
+    "image-generation",
+    "video-generation",
+    "text-to-speech",
+    "content-pipeline"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "@contenthero/sdk": "^0.2.2",
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "tsx": "^4.22.3"
+  }
+}

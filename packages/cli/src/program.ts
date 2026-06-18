@@ -1,0 +1,54 @@
+/**
+ * Build the commander program: global options + the command tree.
+ *
+ * Global options are defined on the root and merged onto every command via
+ * `optsWithGlobals()` (see context.ts). `exitOverride` makes commander throw a
+ * CommanderError instead of calling process.exit, so index.ts owns all exit
+ * codes in one place.
+ */
+
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { Command } from 'commander'
+import { registerAuth } from './commands/auth.js'
+import { registerConfig } from './commands/config.js'
+import { registerAccount } from './commands/account.js'
+import { registerModel } from './commands/model.js'
+
+/** Read our own version from package.json (kept in lockstep with sdk + mcp). */
+function readVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as {
+      version?: string
+    }
+    return pkg.version ?? '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
+export function buildProgram(): Command {
+  const program = new Command()
+
+  program
+    .name('contenthero')
+    .description(
+      'ContentHero CLI: generate media, run the content pipeline, and read your brand and research context.',
+    )
+    .version(readVersion(), '-v, --version', 'print the CLI version')
+    .option('--json', 'output raw JSON (the default)')
+    .option('--human', 'render human-readable output instead of JSON')
+    .option('--api-key <key>', 'API key (overrides env and the stored credential)')
+    .option('--base-url <url>', 'API base URL (overrides env and stored config)')
+    .showHelpAfterError('(add --help for usage)')
+    .exitOverride()
+
+  registerAuth(program)
+  registerConfig(program)
+  registerAccount(program)
+  registerModel(program)
+
+  return program
+}
