@@ -16,6 +16,13 @@ import type {
   GenerateResult,
   MediaItem,
   MediaSummary,
+  PipelineStage,
+  PostAsset,
+  PostDestination,
+  PostDetail,
+  PostListResult,
+  PostSummary,
+  PublishPostResult,
   Transcription,
   Voice,
   VoiceSummary,
@@ -224,6 +231,90 @@ export function balanceResult(b: Balance): CallToolResult {
   return text(
     `Balance: ${b.balance} credits (tier: ${b.tier}, auto top-up: ${b.autoTopupEnabled ? 'on' : 'off'}).`,
   )
+}
+
+// -- posts (content pipeline) -------------------------------------------------
+
+/** One line summarizing a post. */
+function postLine(p: PostSummary): string {
+  const where = p.platforms.length ? p.platforms.join('+') : (p.platform ?? 'general')
+  const when = p.publishedAt
+    ? ` | published ${p.publishedAt}`
+    : p.scheduledAt
+      ? ` | scheduled ${p.scheduledAt}`
+      : ''
+  return `- ${p.title || '(untitled)'} (id ${p.id}) | ${p.status} | ${where}${when}`
+}
+
+/** List of posts with pagination context. */
+export function postListResult(result: PostListResult): CallToolResult {
+  if (!result.posts.length) return text('No posts found.')
+  const more = result.hasMore ? ` (showing ${result.posts.length} of ${result.total}; raise limit/offset for more)` : ''
+  return text([`${result.total} post(s)${more}:`, ...result.posts.map(postLine)].join('\n'))
+}
+
+/** A single post summary line (create / update / schedule / archive results). */
+export function postSummaryResult(p: PostSummary, prefix = 'Post'): CallToolResult {
+  const stage = p.pipelineStageId ? ` | stage ${p.pipelineStageId}` : ''
+  return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}`)
+}
+
+/** One post in full, with its destinations and assets. */
+export function postResult(p: PostDetail): CallToolResult {
+  return text(
+    lines([
+      `${p.title || '(untitled)'} (id ${p.id}) | ${p.status} | platform: ${p.platform ?? 'general'}`,
+      p.pipelineStageId ? `stage: ${p.pipelineStageId}` : null,
+      p.scheduledAt ? `scheduled: ${p.scheduledAt}` : null,
+      p.publishedAt ? `published: ${p.publishedAt}` : null,
+      p.publishUrl ? `publish url: ${p.publishUrl}` : null,
+      p.description ? `description: ${p.description}` : null,
+      p.script ? `script: ${p.script}` : null,
+      p.notes ? `notes: ${p.notes}` : null,
+      `destinations (${p.destinations.length}):`,
+      ...p.destinations.map(
+        (d) =>
+          `  - ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}`,
+      ),
+      `assets (${p.assets.length}):`,
+      ...p.assets.map((a) => `  - [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id})`),
+    ]),
+  )
+}
+
+/** List of pipeline stages (the agent resolves a stage from here before placing a post). */
+export function pipelineStageListResult(stages: PipelineStage[]): CallToolResult {
+  if (!stages.length) return text('No pipeline stages found.')
+  const rows = stages.map(
+    (s) => `- ${s.name} (id ${s.id}${s.slug ? `, slug ${s.slug}` : ''})${s.isDefault ? ' [default]' : ''}`,
+  )
+  return text([`${stages.length} pipeline stage(s) (in order):`, ...rows].join('\n'))
+}
+
+/** A created or updated destination. */
+export function destinationResult(d: PostDestination): CallToolResult {
+  return text(
+    `Destination: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}.`,
+  )
+}
+
+/** An attached asset. */
+export function assetResult(a: PostAsset): CallToolResult {
+  return text(`Asset attached: [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id}).`)
+}
+
+/** The result of publishing a post (per-destination outcomes). */
+export function publishResult(r: PublishPostResult): CallToolResult {
+  if (!r.results.length) {
+    return text('Nothing to publish: this post has no destinations. Add one with add_post_destination first.', true)
+  }
+  const rows = r.results.map((d) =>
+    d.success
+      ? `- ${d.platform}: published${d.url ? ` | ${d.url}` : ''}`
+      : `- ${d.platform}: FAILED | ${d.error ?? 'unknown error'}`,
+  )
+  const header = `Published ${r.publishedCount}/${r.results.length} destination(s)${r.failedCount ? `, ${r.failedCount} failed` : ''}:`
+  return text([header, ...rows].join('\n'), r.publishedCount === 0)
 }
 
 /** Map any thrown error onto a readable isError result. */

@@ -407,3 +407,181 @@ export interface ModelInfo {
   tags: string[]
   capabilities: ModelCapabilities
 }
+
+// ---------------------------------------------------------------------------
+// Content pipeline (posts)
+// ---------------------------------------------------------------------------
+
+/** Platforms a post or destination may target. */
+export type PostPlatform =
+  | 'youtube'
+  | 'instagram'
+  | 'tiktok'
+  | 'facebook'
+  | 'linkedin'
+  | 'x'
+  | 'threads'
+  | 'general'
+
+/** A post's lifecycle status. 'archived' is the archive state (no hard delete). */
+export type PostStatus = 'draft' | 'active' | 'completed' | 'archived'
+
+/**
+ * A pipeline stage. Stages are per-account customizable (renamed, reordered,
+ * added, removed), so resolve one with `listPipelineStages` rather than assuming
+ * fixed names. The `id` is the only fully stable handle; `slug` is frozen at
+ * creation and `name` is a display label.
+ */
+export interface PipelineStage {
+  id: string
+  name: string
+  slug: string | null
+  color: string | null
+  sortOrder: number
+  isDefault: boolean
+}
+
+/** A post as returned by `listPosts` (the list projection). */
+export interface PostSummary {
+  id: string
+  title: string
+  description: string | null
+  platform: string | null
+  status: string
+  pipelineStageId: string | null
+  pipelineOrder: number | null
+  contentType: string | null
+  coverUrl: string | null
+  isFavorite: boolean
+  folderId: string | null
+  scheduledAt: string | null
+  publishedAt: string | null
+  publishUrl: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  /** Distinct destination platforms attached to this post. */
+  platforms: string[]
+}
+
+/** An asset attached to a post. */
+export interface PostAsset {
+  id: string
+  assetType: string | null
+  assetId: string | null
+  assetUrl: string | null
+  displayName: string | null
+  sortOrder: number
+}
+
+/** A publish destination on a post (one platform + connected account). */
+export interface PostDestination {
+  id: string
+  connectedAccountId: string | null
+  platform: string | null
+  format: string | null
+  status: string | null
+  scheduledAt: string | null
+  publishedAt: string | null
+}
+
+/** Full post detail as returned by `getPost`, with its assets and destinations. */
+export interface PostDetail extends PostSummary {
+  script: string | null
+  notes: string | null
+  metadata: Record<string, unknown> | null
+  assets: PostAsset[]
+  destinations: PostDestination[]
+}
+
+/** Result of `listPosts`: a page of posts plus pagination metadata. */
+export interface PostListResult {
+  posts: PostSummary[]
+  total: number
+  hasMore: boolean
+}
+
+/** Options for `listPosts`. */
+export interface ListPostsOptions {
+  status?: string
+  platform?: string
+  /** A stage id, slug, or name; resolved against your stages server-side. */
+  pipelineStage?: string
+  folderId?: string
+  isFavorite?: boolean
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+/** Fields to create a post. `stage` accepts a stage id, slug, or name. */
+export interface CreatePostInput {
+  title: string
+  platform: PostPlatform
+  description?: string | null
+  stage?: string | null
+  folderId?: string | null
+  status?: PostStatus
+}
+
+/** Fields to update a post. `stage` accepts a stage id, slug, or name. */
+export interface UpdatePostInput {
+  title?: string
+  description?: string | null
+  platform?: PostPlatform
+  status?: PostStatus
+  stage?: string | null
+  pipelineOrder?: number
+  folderId?: string | null
+  isFavorite?: boolean
+  coverUrl?: string | null
+  scheduledAt?: string | null
+  publishedAt?: string | null
+  publishUrl?: string | null
+  script?: string | null
+  notes?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+/** Fields to attach (or replace) a destination on a post. Upserts on platform. */
+export interface AddDestinationInput {
+  platform: PostPlatform
+  format?: string
+  connectedAccountId?: string | null
+  scheduledAt?: string | null
+  platformSpecificData?: Record<string, unknown> | null
+}
+
+/** Fields to update a destination. */
+export interface UpdateDestinationInput {
+  format?: string
+  status?: string
+  connectedAccountId?: string | null
+  scheduledAt?: string | null
+  platformSpecificData?: Record<string, unknown> | null
+}
+
+/** Fields to attach an asset to a post by URL. */
+export interface AddAssetInput {
+  assetType: 'image' | 'video' | 'audio' | 'document' | 'link'
+  assetUrl: string
+  assetId?: string | null
+  displayName?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+/** The result of publishing one destination. */
+export interface PublishDestinationResult {
+  success: boolean
+  platform: string
+  destinationId: string | null
+  url?: string
+  error?: string
+}
+
+/** The result of `publishPost`: per-destination outcomes plus tallies. */
+export interface PublishPostResult {
+  postId: string
+  results: PublishDestinationResult[]
+  publishedCount: number
+  failedCount: number
+}

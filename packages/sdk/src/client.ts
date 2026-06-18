@@ -9,22 +9,36 @@
 
 import { errorFromResponse, GenerationFailedError, GenerationTimeoutError } from './errors.js'
 import type {
+  AddAssetInput,
+  AddDestinationInput,
   Avatar,
   AvatarSummary,
   Balance,
   BrandKit,
   BrandKitSummary,
   CostEstimate,
+  CreatePostInput,
   GenerateBoardRequest,
   GenerateRequest,
   GenerateResult,
   Generation,
   ListMediaOptions,
+  ListPostsOptions,
   MediaItem,
   MediaSummary,
   ModelInfo,
+  PipelineStage,
+  PostAsset,
+  PostDestination,
+  PostDetail,
+  PostListResult,
+  PostPlatform,
+  PostSummary,
+  PublishPostResult,
   TranscribeRequest,
   Transcription,
+  UpdateDestinationInput,
+  UpdatePostInput,
   Voice,
   VoiceSummary,
   WaitOptions,
@@ -257,6 +271,125 @@ export class ContentHero {
     const query = options.contentType ? `?contentType=${options.contentType}` : ''
     const data = await this.request<{ models: ModelInfo[] }>('GET', `/api/v1/models${query}`)
     return data.models
+  }
+
+  // -------------------------------------------------------------------------
+  // Content pipeline (posts)
+  // -------------------------------------------------------------------------
+
+  /** List the account's posts (most recently updated first), with optional filters. */
+  async listPosts(options: ListPostsOptions = {}): Promise<PostListResult> {
+    const q = new URLSearchParams()
+    if (options.status) q.set('status', options.status)
+    if (options.platform) q.set('platform', options.platform)
+    if (options.pipelineStage) q.set('pipeline_stage', options.pipelineStage)
+    if (options.folderId) q.set('folder_id', options.folderId)
+    if (options.isFavorite) q.set('is_favorite', 'true')
+    if (options.search) q.set('search', options.search)
+    if (options.limit != null) q.set('limit', String(options.limit))
+    if (options.offset != null) q.set('offset', String(options.offset))
+    const qs = q.toString()
+    return this.request<PostListResult>('GET', `/api/v1/posts${qs ? `?${qs}` : ''}`)
+  }
+
+  /** Get one post with its assets and destinations. Throws NotFoundError if absent. */
+  async getPost(postId: string): Promise<PostDetail> {
+    const data = await this.request<{ post: PostDetail }>(
+      'GET',
+      `/api/v1/posts/${encodeURIComponent(postId)}`,
+    )
+    return data.post
+  }
+
+  /** Create a post. `stage` accepts a stage id, slug, or name (defaults to the first stage). */
+  async createPost(input: CreatePostInput): Promise<PostSummary> {
+    const data = await this.request<{ post: PostSummary }>('POST', '/api/v1/posts', input)
+    return data.post
+  }
+
+  /** Update a post's fields. `stage` accepts a stage id, slug, or name. */
+  async updatePost(postId: string, input: UpdatePostInput): Promise<PostSummary> {
+    const data = await this.request<{ post: PostSummary }>(
+      'PATCH',
+      `/api/v1/posts/${encodeURIComponent(postId)}`,
+      input,
+    )
+    return data.post
+  }
+
+  /** Archive a post (status -> 'archived'). No hard delete. */
+  async archivePost(postId: string): Promise<PostSummary> {
+    return this.updatePost(postId, { status: 'archived' })
+  }
+
+  /**
+   * List the account's pipeline stages (sorted), seeding the defaults on first
+   * access. Use this to resolve a stage before placing a post; stages are
+   * per-account customizable.
+   */
+  async listPipelineStages(): Promise<PipelineStage[]> {
+    const data = await this.request<{ stages: PipelineStage[] }>('GET', '/api/v1/pipeline-stages')
+    return data.stages
+  }
+
+  /** Attach (or replace) a destination on a post. Upserts on platform. */
+  async addPostDestination(postId: string, input: AddDestinationInput): Promise<PostDestination> {
+    const data = await this.request<{ destination: PostDestination }>(
+      'POST',
+      `/api/v1/posts/${encodeURIComponent(postId)}/destinations`,
+      input,
+    )
+    return data.destination
+  }
+
+  /** Update one of a post's destinations. */
+  async updatePostDestination(
+    postId: string,
+    destinationId: string,
+    input: UpdateDestinationInput,
+  ): Promise<PostDestination> {
+    const data = await this.request<{ destination: PostDestination }>(
+      'PATCH',
+      `/api/v1/posts/${encodeURIComponent(postId)}/destinations?destination_id=${encodeURIComponent(destinationId)}`,
+      input,
+    )
+    return data.destination
+  }
+
+  /** Attach an asset to a post by URL (file uploads stay web-only). */
+  async addPostAsset(postId: string, input: AddAssetInput): Promise<PostAsset> {
+    const data = await this.request<{ asset: PostAsset }>(
+      'POST',
+      `/api/v1/posts/${encodeURIComponent(postId)}/assets`,
+      input,
+    )
+    return data.asset
+  }
+
+  /**
+   * Schedule a post: set (or clear, with null) the publish time on the post and
+   * all its destinations. This queues; publishing now is `publishPost`.
+   */
+  async schedulePost(postId: string, scheduledAt: string | null): Promise<PostSummary> {
+    const data = await this.request<{ post: PostSummary }>(
+      'POST',
+      `/api/v1/posts/${encodeURIComponent(postId)}/schedule`,
+      { scheduledAt },
+    )
+    return data.post
+  }
+
+  /**
+   * Publish a post NOW. Publishes a single platform when `platform` is given,
+   * otherwise every destination. Requires a key with the `publish:write` scope.
+   * Each destination publishes independently; check per-destination results.
+   */
+  async publishPost(postId: string, options: { platform?: PostPlatform } = {}): Promise<PublishPostResult> {
+    return this.request<PublishPostResult>(
+      'POST',
+      `/api/v1/posts/${encodeURIComponent(postId)}/publish`,
+      options.platform ? { platform: options.platform } : {},
+    )
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */

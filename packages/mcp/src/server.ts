@@ -43,6 +43,7 @@ import {
   LIP_SYNC_MODEL_GUIDANCE,
 } from './models.js'
 import {
+  assetResult,
   audioResult,
   avatarListResult,
   avatarResult,
@@ -51,16 +52,34 @@ import {
   brandKitResult,
   completedResult,
   costResult,
+  destinationResult,
   mediaListResult,
   mediaResult,
   errorResult,
   generationBatchResult,
   generationStatusResult,
   pendingResult,
+  pipelineStageListResult,
+  postListResult,
+  postResult,
+  postSummaryResult,
+  publishResult,
   transcriptResult,
   voiceListResult,
   voiceResult,
 } from './format.js'
+
+/** Platforms a post or destination may target. */
+const POST_PLATFORMS = [
+  'youtube',
+  'instagram',
+  'tiktok',
+  'facebook',
+  'linkedin',
+  'x',
+  'threads',
+  'general',
+] as const
 
 /**
  * How long the smart-wait tools (generate_image / generate_video / upscale /
@@ -683,6 +702,293 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
           }),
         )
         return generationBatchResult(gens)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_posts -----------------------------------------------------------
+  server.registerTool(
+    'list_posts',
+    {
+      title: 'List Posts',
+      description:
+        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, pipeline_stage (id/slug/name), folder, favorite, or a title search. Call get_post for one post's full detail (destinations + assets).",
+      inputSchema: {
+        status: z.enum(['draft', 'active', 'completed', 'archived']).optional().describe('Filter by lifecycle status.'),
+        platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
+        pipelineStage: z.string().optional().describe('Filter by a pipeline stage id, slug, or name.'),
+        search: z.string().optional().describe('Case-insensitive title search.'),
+        limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 50).'),
+        offset: z.number().int().min(0).optional().describe('Pagination offset.'),
+      },
+    },
+    async (args) => {
+      try {
+        return postListResult(
+          await getClient().listPosts({
+            status: args.status,
+            platform: args.platform,
+            pipelineStage: args.pipelineStage,
+            search: args.search,
+            limit: args.limit,
+            offset: args.offset,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_post -------------------------------------------------------------
+  server.registerTool(
+    'get_post',
+    {
+      title: 'Get Post',
+      description:
+        "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish destinations and attached assets.",
+      inputSchema: {
+        postId: z.string().describe('The post id from list_posts.'),
+      },
+    },
+    async (args) => {
+      try {
+        return postResult(await getClient().getPost(args.postId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_pipeline_stages -------------------------------------------------
+  server.registerTool(
+    'list_pipeline_stages',
+    {
+      title: 'List Pipeline Stages',
+      description:
+        "List the account's pipeline stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_post / update_post.",
+    },
+    async () => {
+      try {
+        return pipelineStageListResult(await getClient().listPipelineStages())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_post ----------------------------------------------------------
+  server.registerTool(
+    'create_post',
+    {
+      title: 'Create Post',
+      description:
+        "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_post. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the pipeline:write scope.",
+      inputSchema: {
+        title: z.string().describe('Post title (required).'),
+        platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
+        description: z.string().optional().describe('Optional description / caption draft.'),
+        stage: z.string().optional().describe('Pipeline stage id, slug, or name. Defaults to the first stage.'),
+      },
+    },
+    async (args) => {
+      try {
+        return postSummaryResult(
+          await getClient().createPost({
+            title: args.title,
+            platform: args.platform,
+            description: args.description,
+            stage: args.stage,
+          }),
+          'Created',
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_post ----------------------------------------------------------
+  server.registerTool(
+    'update_post',
+    {
+      title: 'Update Post',
+      description:
+        'Update a post\'s fields: title, description, script, notes, status, platform, or pipeline stage (move it through the pipeline by passing `stage`). Requires the pipeline:write scope.',
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        platform: z.enum(POST_PLATFORMS).optional(),
+        status: z.enum(['draft', 'active', 'completed', 'archived']).optional(),
+        stage: z.string().optional().describe('Move the post to this stage (id, slug, or name).'),
+        script: z.string().optional(),
+        notes: z.string().optional(),
+      },
+    },
+    async (args) => {
+      try {
+        const { postId, ...input } = args
+        return postSummaryResult(await getClient().updatePost(postId, input), 'Updated')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- archive_post ---------------------------------------------------------
+  server.registerTool(
+    'archive_post',
+    {
+      title: 'Archive Post',
+      description:
+        'Archive a post (sets status to archived; reversible by updating the status back). ContentHero never hard-deletes. Requires the pipeline:write scope.',
+      inputSchema: {
+        postId: z.string().describe('The post id to archive.'),
+      },
+    },
+    async (args) => {
+      try {
+        return postSummaryResult(await getClient().archivePost(args.postId), 'Archived')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- add_post_destination -------------------------------------------------
+  server.registerTool(
+    'add_post_destination',
+    {
+      title: 'Add Post Destination',
+      description:
+        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Requires the pipeline:write scope.",
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        platform: z.enum(POST_PLATFORMS).describe('Destination platform.'),
+        format: z.string().optional().describe("Platform format, e.g. 'post', 'reel', 'story', 'short', 'thread'."),
+        connectedAccountId: z.string().optional().describe('The connected account to publish through.'),
+        scheduledAt: z.string().optional().describe('ISO-8601 scheduled time for this destination.'),
+      },
+    },
+    async (args) => {
+      try {
+        return destinationResult(
+          await getClient().addPostDestination(args.postId, {
+            platform: args.platform,
+            format: args.format,
+            connectedAccountId: args.connectedAccountId,
+            scheduledAt: args.scheduledAt,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_post_destination ----------------------------------------------
+  server.registerTool(
+    'update_post_destination',
+    {
+      title: 'Update Post Destination',
+      description:
+        'Update one of a post\'s destinations (format, connected account, scheduled time, or status). Requires the pipeline:write scope.',
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        destinationId: z.string().describe('The destination id (from get_post).'),
+        format: z.string().optional(),
+        connectedAccountId: z.string().optional(),
+        scheduledAt: z.string().optional().describe('ISO-8601 scheduled time, or empty to clear.'),
+        status: z.string().optional(),
+      },
+    },
+    async (args) => {
+      try {
+        return destinationResult(
+          await getClient().updatePostDestination(args.postId, args.destinationId, {
+            format: args.format,
+            connectedAccountId: args.connectedAccountId,
+            scheduledAt: args.scheduledAt,
+            status: args.status,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- add_post_asset -------------------------------------------------------
+  server.registerTool(
+    'add_post_asset',
+    {
+      title: 'Add Post Asset',
+      description:
+        "Attach an asset to a post by URL (e.g. a generated image/video URL from get_media, or any public link). Sets the post cover from the first image. Requires the assets:write scope.",
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        assetType: z.enum(['image', 'video', 'audio', 'document', 'link']).describe('The kind of asset.'),
+        assetUrl: z.string().describe('Public URL of the asset.'),
+        displayName: z.string().optional().describe('Optional display name.'),
+      },
+    },
+    async (args) => {
+      try {
+        return assetResult(
+          await getClient().addPostAsset(args.postId, {
+            assetType: args.assetType,
+            assetUrl: args.assetUrl,
+            displayName: args.displayName,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- schedule_post --------------------------------------------------------
+  server.registerTool(
+    'schedule_post',
+    {
+      title: 'Schedule Post',
+      description:
+        'Queue a post for future publishing: set the scheduled time on the post and all its destinations (pass scheduledAt=null to clear). This only queues; use publish_post to publish now. Requires the pipeline:write scope.',
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        scheduledAt: z
+          .string()
+          .nullable()
+          .describe('ISO-8601 timestamp to schedule, or null to clear the schedule.'),
+      },
+    },
+    async (args) => {
+      try {
+        return postSummaryResult(await getClient().schedulePost(args.postId, args.scheduledAt), 'Scheduled')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- publish_post ---------------------------------------------------------
+  server.registerTool(
+    'publish_post',
+    {
+      title: 'Publish Post',
+      description:
+        "Publish a post NOW to its destinations (a single platform when `platform` is given, otherwise all). Each destination must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns per-destination results.",
+      inputSchema: {
+        postId: z.string().describe('The post id to publish.'),
+        platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all destinations.'),
+      },
+    },
+    async (args) => {
+      try {
+        return publishResult(await getClient().publishPost(args.postId, { platform: args.platform }))
       } catch (err) {
         return errorResult(err)
       }

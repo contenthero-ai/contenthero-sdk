@@ -179,6 +179,49 @@ function fakeClient(overrides = {}) {
       cap('elevenlabs-transcribe', 'audio', 'generate', 'text'),
       cap('elevenlabs-voice-changer', 'audio', 'voice', 'audio'),
     ],
+    listPosts: async () => ({
+      posts: [
+        { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
+      ],
+      total: 1,
+      hasMore: false,
+    }),
+    getPost: async (id) => ({
+      id,
+      title: 'Launch clip',
+      description: 'a clip',
+      platform: 'instagram',
+      status: 'draft',
+      pipelineStageId: 'st1',
+      pipelineOrder: 0,
+      contentType: null,
+      coverUrl: null,
+      isFavorite: false,
+      folderId: null,
+      scheduledAt: null,
+      publishedAt: null,
+      publishUrl: null,
+      createdAt: 't',
+      updatedAt: 't',
+      platforms: ['instagram'],
+      script: null,
+      notes: null,
+      metadata: null,
+      assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null, sortOrder: 0 }],
+      destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null }],
+    }),
+    createPost: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    updatePost: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    archivePost: async (id) => ({ id, title: 'Launch clip', description: null, platform: 'instagram', status: 'archived', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    listPipelineStages: async () => [
+      { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
+      { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
+    ],
+    addPostDestination: async (_postId, input) => ({ id: 'd-new', connectedAccountId: input.connectedAccountId ?? null, platform: input.platform, format: input.format ?? 'post', status: 'draft', scheduledAt: null, publishedAt: null }),
+    updatePostDestination: async (_postId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
+    addPostAsset: async (_postId, input) => ({ id: 'as-new', assetType: input.assetType, assetId: null, assetUrl: input.assetUrl, displayName: input.displayName ?? null, sortOrder: 1 }),
+    schedulePost: async (id) => ({ id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: '2026-07-01T00:00:00Z', publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    publishPost: async (postId) => ({ postId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
     ...overrides,
   }
 }
@@ -196,6 +239,10 @@ test('advertises exactly the v1 tools', async () => {
   const { tools } = await mcp.listTools()
   const names = tools.map((t) => t.name).sort()
   assert.deepEqual(names, [
+    'add_post_asset',
+    'add_post_destination',
+    'archive_post',
+    'create_post',
     'generate_audio',
     'generate_board',
     'generate_image',
@@ -206,12 +253,19 @@ test('advertises exactly the v1 tools', async () => {
     'get_brand_kit',
     'get_generation_status',
     'get_media',
+    'get_post',
     'get_voice',
     'list_avatars',
     'list_brand_kits',
     'list_media',
+    'list_pipeline_stages',
+    'list_posts',
     'list_voices',
+    'publish_post',
+    'schedule_post',
     'transcribe',
+    'update_post',
+    'update_post_destination',
     'upscale',
     'wait_for_generation',
   ])
@@ -819,4 +873,102 @@ test('generate_audio rejects transcribe (outputType filter)', async () => {
     blocked = true
   }
   assert.ok(blocked, 'transcribe (text output) must not be selectable on generate_audio')
+})
+
+// -- posts (content pipeline) -------------------------------------------------
+
+test('list_posts surfaces id, status, and platform with pagination context', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_posts', arguments: {} })
+  assert.match(res.content[0].text, /Launch clip \(id p1\)/)
+  assert.match(res.content[0].text, /draft/)
+  assert.ok(!res.isError)
+})
+
+test('get_post returns the post with its destinations and assets', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_post', arguments: { postId: 'p1' } })
+  assert.match(res.content[0].text, /destinations \(1\)/)
+  assert.match(res.content[0].text, /instagram \(id d1\)/)
+  assert.match(res.content[0].text, /assets \(1\)/)
+})
+
+test('create_post passes the title/platform/stage through and returns the new id', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createPost: async (input) => {
+        captured = input
+        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'create_post',
+    arguments: { title: 'Launch clip', platform: 'instagram', stage: 'ideation' },
+  })
+  assert.equal(captured.title, 'Launch clip')
+  assert.equal(captured.platform, 'instagram')
+  assert.equal(captured.stage, 'ideation')
+  assert.match(res.content[0].text, /Created: Launch clip \(id p-new\)/)
+})
+
+test('list_pipeline_stages lists stages with id and slug for resolution', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_pipeline_stages', arguments: {} })
+  assert.match(res.content[0].text, /Ideation \(id st1, slug ideation\)/)
+  assert.match(res.content[0].text, /Published \(id st2, slug published\)/)
+})
+
+test('archive_post sets the status to archived', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'archive_post', arguments: { postId: 'p1' } })
+  assert.match(res.content[0].text, /Archived: .* \| archived/)
+})
+
+test('add_post_destination passes platform + connected account through', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      addPostDestination: async (_postId, input) => {
+        captured = input
+        return { id: 'd-new', connectedAccountId: input.connectedAccountId ?? null, platform: input.platform, format: input.format ?? 'post', status: 'draft', scheduledAt: null, publishedAt: null }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'add_post_destination',
+    arguments: { postId: 'p1', platform: 'youtube', format: 'short', connectedAccountId: 'ca9' },
+  })
+  assert.equal(captured.platform, 'youtube')
+  assert.equal(captured.connectedAccountId, 'ca9')
+  assert.match(res.content[0].text, /youtube \(id d-new\)/)
+})
+
+test('schedule_post sets the scheduled time', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({
+    name: 'schedule_post',
+    arguments: { postId: 'p1', scheduledAt: '2026-07-01T00:00:00Z' },
+  })
+  assert.match(res.content[0].text, /Scheduled:/)
+})
+
+test('publish_post reports per-destination results', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'publish_post', arguments: { postId: 'p1' } })
+  assert.match(res.content[0].text, /Published 1\/1 destination/)
+  assert.match(res.content[0].text, /instagram: published/)
+  assert.ok(!res.isError)
+})
+
+test('publish_post flags a total failure as an error result', async () => {
+  const mcp = await connect(
+    fakeClient({
+      publishPost: async (postId) => ({ postId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'publish_post', arguments: { postId: 'p1' } })
+  assert.match(res.content[0].text, /token expired/)
+  assert.ok(res.isError, 'a 0-published publish should be an error result')
 })
