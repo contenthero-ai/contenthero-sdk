@@ -19,6 +19,10 @@ import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
 import { registerGeneration } from './commands/generation.js'
 import { registerMedia } from './commands/media.js'
+import { registerPost } from './commands/post.js'
+import { registerPipeline } from './commands/pipeline.js'
+import { registerBrandKit } from './commands/brandkit.js'
+import { registerIdentity } from './commands/identity.js'
 
 /** Read our own version from package.json (kept in lockstep with sdk + mcp). */
 function readVersion(): string {
@@ -57,6 +61,10 @@ export function buildProgram(): Command {
   registerUpscale(program)
   registerGeneration(program)
   registerMedia(program)
+  registerPost(program)
+  registerPipeline(program)
+  registerBrandKit(program)
+  registerIdentity(program)
 
   return program
 }
