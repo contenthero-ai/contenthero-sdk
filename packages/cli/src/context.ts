@@ -87,6 +87,19 @@ export function makeClient(command: Command): { client: ContentHero; ctx: Contex
       EXIT.AUTH,
     )
   }
-  const client = new ContentHero({ apiKey: ctx.apiKey, baseUrl: ctx.baseUrl })
+  const client = new ContentHero({
+    apiKey: ctx.apiKey,
+    baseUrl: ctx.baseUrl,
+    // Tag spends from the CLI as the 'cli' transport channel (the CLI spends
+    // through an api key, so this header is what distinguishes it from raw api).
+    fetch: (input, init) =>
+      fetch(input, {
+        ...init,
+        headers: {
+          ...(init?.headers as Record<string, string> | undefined),
+          'X-ContentHero-Channel': 'cli',
+        },
+      }),
+  })
   return { client, ctx }
 }
