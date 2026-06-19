@@ -19,6 +19,20 @@ export function getClient(): ContentHero {
       'CONTENTHERO_API_KEY is not set. Add it to the env of your ContentHero MCP server config.',
     )
   }
-  cached = new ContentHero({ apiKey, baseUrl: process.env.CONTENTHERO_BASE_URL })
+  cached = new ContentHero({
+    apiKey,
+    baseUrl: process.env.CONTENTHERO_BASE_URL,
+    // Tag spends from the stdio MCP as the 'mcp' transport channel, matching the
+    // hosted OAuth MCP. The MCP spends through an api key, so this header is what
+    // distinguishes it from a raw api-key or cli caller on credit_transactions.
+    fetch: (input, init) =>
+      fetch(input, {
+        ...init,
+        headers: {
+          ...(init?.headers as Record<string, string> | undefined),
+          'X-ContentHero-Channel': 'mcp',
+        },
+      }),
+  })
   return cached
 }
