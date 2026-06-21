@@ -11,6 +11,7 @@
  */
 
 import { pathToFileURL } from 'node:url'
+import { realpathSync } from 'node:fs'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { buildServer } from './server.js'
 
@@ -28,8 +29,22 @@ async function main(): Promise<void> {
 
 // Only boot the stdio server when this module is the process entry point (the
 // `contenthero-mcp` bin). When imported as a library, this is skipped.
+//
+// process.argv[1] may be a SYMLINK (npx / npm `.bin/contenthero-mcp` always is,
+// and macOS /tmp is symlinked too), while Node sets import.meta.url to the
+// module's REALPATH. Comparing the symlink path directly fails → the server
+// silently no-ops on exit 0. Resolve the symlink before comparing so the bin
+// boots under npx while the library-import path stays side-effect-free.
+const entry = process.argv[1]
+let entryRealUrl: string | undefined
+try {
+  entryRealUrl = entry ? pathToFileURL(realpathSync(entry)).href : undefined
+} catch {
+  entryRealUrl = undefined
+}
 const invokedDirectly =
-  !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+  !!entry &&
+  (import.meta.url === pathToFileURL(entry).href || import.meta.url === entryRealUrl)
 
 if (invokedDirectly) {
   main().catch((err) => {
