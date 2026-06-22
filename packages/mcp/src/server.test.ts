@@ -280,7 +280,7 @@ function fakeClient(overrides = {}) {
     ],
     addPostDestination: async (_postId, input) => ({ id: 'd-new', connectedAccountId: input.connectedAccountId ?? null, platform: input.platform, format: input.format ?? 'post', status: 'draft', scheduledAt: null, publishedAt: null }),
     updatePostDestination: async (_postId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
-    addPostAsset: async (_postId, input) => ({ id: 'as-new', assetType: input.assetType, assetId: null, assetUrl: input.assetUrl, displayName: input.displayName ?? null, sortOrder: 1 }),
+    addPostAsset: async (_postId, input) => ({ id: 'as-new', assetType: input.assetType ?? (input.outputId ? 'image' : null), assetId: input.outputId ?? null, assetUrl: input.assetUrl ?? (input.outputId ? 'https://cloud/resolved.png' : null), displayName: input.displayName ?? null, sortOrder: 1 }),
     schedulePost: async (id) => ({ id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: '2026-07-01T00:00:00Z', publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     publishPost: async (postId) => ({ postId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
     listInspirationAccounts: async () => [
@@ -1247,6 +1247,25 @@ test('complete_media_upload finalizes and returns the public URL', async () => {
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /id up1/)
   assert.match(res.content[0].text, /https:\/\/cloud\/up1\.png/)
+})
+
+test('add_post_asset forwards an output-id (attach generated/uploaded media by id)', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      addPostAsset: async (_postId, input) => {
+        captured = input
+        return { id: 'as9', assetType: 'image', assetId: input.outputId ?? null, assetUrl: 'https://cloud/resolved.png', displayName: null, sortOrder: 0 }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'add_post_asset',
+    arguments: { postId: 'p1', outputId: 'abcd1234-2' },
+  })
+  assert.ok(!res.isError)
+  assert.equal(captured.outputId, 'abcd1234-2')
+  assert.match(res.content[0].text, /https:\/\/cloud\/resolved\.png/)
 })
 
 test('import_media re-hosts a URL and returns a referenceable output', async () => {

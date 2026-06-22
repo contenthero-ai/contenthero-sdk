@@ -785,10 +785,17 @@ export interface UpdateDestinationInput {
   platformSpecificData?: Record<string, unknown> | null
 }
 
-/** Fields to attach an asset to a post by URL. */
+/** Fields to attach an asset to a post: by URL, or by output-id (outputId). */
 export interface AddAssetInput {
-  assetType: 'image' | 'video' | 'audio' | 'document' | 'link'
-  assetUrl: string
+  /** Required with assetUrl; optional with outputId (inferred from the media type). */
+  assetType?: 'image' | 'video' | 'audio' | 'document' | 'link'
+  /** A public URL. Provide this or outputId. */
+  assetUrl?: string
+  /**
+   * A media token (output id, first-8, or "-N") of generated or uploaded media,
+   * resolved server-side to its URL and type. Provide this or assetUrl.
+   */
+  outputId?: string | null
   assetId?: string | null
   displayName?: string | null
   metadata?: Record<string, unknown> | null

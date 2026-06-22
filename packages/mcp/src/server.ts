@@ -1552,7 +1552,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Add Post Destination',
       annotations: WRITE,
       description:
-        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform first for the exact fields. Requires the pipeline:write scope.",
+        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform first for the exact fields. In platformSettings, media URL fields (mediaItems, videoUrl, thumbnailUrl, ...) also accept an outputId of generated/uploaded media, resolved server-side. Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         platform: z.enum(POST_PLATFORMS).describe('Destination platform.'),
@@ -1629,11 +1629,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Add Post Asset',
       annotations: WRITE,
       description:
-        "Attach an asset to a post by URL (e.g. a generated image/video URL from get_media, or any public link). Sets the post cover from the first image. Requires the assets:write scope.",
+        "Attach an asset to a post, by outputId (generated or uploaded media, resolved to its URL) or by a public assetUrl. With outputId the assetType is inferred. Sets the post cover from the first image. Requires the assets:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
-        assetType: z.enum(['image', 'video', 'audio', 'document', 'link']).describe('The kind of asset.'),
-        assetUrl: z.string().describe('Public URL of the asset.'),
+        outputId: z
+          .string()
+          .optional()
+          .describe('A media token (output id, first-8, or "-N") of generated/uploaded media. Provide this or assetUrl.'),
+        assetUrl: z.string().optional().describe('Public URL of the asset. Provide this or outputId.'),
+        assetType: z
+          .enum(['image', 'video', 'audio', 'document', 'link'])
+          .optional()
+          .describe('The kind of asset. Required with assetUrl; inferred when using outputId.'),
         displayName: z.string().optional().describe('Optional display name.'),
       },
     },
@@ -1642,6 +1649,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         return assetResult(
           await client.addPostAsset(args.postId, {
+            outputId: args.outputId,
             assetType: args.assetType,
             assetUrl: args.assetUrl,
             displayName: args.displayName,

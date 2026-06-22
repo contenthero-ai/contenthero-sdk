@@ -312,20 +312,25 @@ export function registerPost(program: Command): void {
 
   asset
     .command('add')
-    .description('Attach an asset to a post by URL (requires assets:write)')
+    .description('Attach an asset to a post by output-id or URL (requires assets:write)')
     .argument('<postId>', 'the post id')
-    .requiredOption('--type <type>', 'asset type: image, video, audio, document, link')
-    .requiredOption('--url <url>', 'public URL of the asset')
+    .option('--output-id <id>', 'media token (output id, first-8, or "-N") of generated/uploaded media')
+    .option('--url <url>', 'public URL of the asset (alternative to --output-id)')
+    .option('--type <type>', 'asset type: image, video, audio, document, link (required with --url)')
     .option('--name <name>', 'optional display name')
     .action(async (postId: string, opts: Record<string, unknown>, command: Command) => {
+      if (!opts.outputId && !opts.url) {
+        throw new CliError('Provide --output-id or --url.', EXIT.USAGE)
+      }
       const types = ['image', 'video', 'audio', 'document', 'link']
-      if (!types.includes(opts.type as string)) {
+      if (opts.type && !types.includes(opts.type as string)) {
         throw new CliError(`Invalid --type "${opts.type}". Expected one of: ${types.join(', ')}.`, EXIT.USAGE)
       }
       const { client, ctx } = makeClient(command)
       const a = await client.addPostAsset(postId, {
-        assetType: opts.type as 'image' | 'video' | 'audio' | 'document' | 'link',
-        assetUrl: opts.url as string,
+        outputId: opts.outputId as string | undefined,
+        assetType: opts.type as 'image' | 'video' | 'audio' | 'document' | 'link' | undefined,
+        assetUrl: opts.url as string | undefined,
         displayName: opts.name as string | undefined,
       })
       emit(a, ctx, () =>
