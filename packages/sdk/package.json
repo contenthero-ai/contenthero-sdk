@@ -1,6 +1,6 @@
 {
   "name": "@contenthero/sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Official ContentHero SDK. Programmatic media generation (image, video, audio) on the ContentHero Studio API. The shared kernel the ContentHero MCP and CLI sit on.",
   "type": "module",
   "main": "./dist/index.js",
