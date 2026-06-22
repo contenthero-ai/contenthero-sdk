@@ -15,6 +15,7 @@ import { registerAuth } from './commands/auth.js'
 import { registerConfig } from './commands/config.js'
 import { registerAccount } from './commands/account.js'
 import { registerModel } from './commands/model.js'
+import { registerElement } from './commands/element.js'
 import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
 import { registerGeneration } from './commands/generation.js'
@@ -60,6 +61,7 @@ export function buildProgram(): Command {
   registerConfig(program)
   registerAccount(program)
   registerModel(program)
+  registerElement(program)
   registerGenerate(program)
   registerUpscale(program)
   registerGeneration(program)

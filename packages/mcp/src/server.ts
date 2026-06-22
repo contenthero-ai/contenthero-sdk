@@ -77,6 +77,9 @@ import {
   mediaResult,
   modelListResult,
   modelResult,
+  elementListResult,
+  elementResult,
+  elementDeletedResult,
   errorResult,
   generationBatchResult,
   generationStatusResult,
@@ -299,13 +302,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         elements: z
           .array(
             z.object({
-              name: z.string().describe('Reference it in the prompt as @name.'),
-              description: z.string().optional().describe('What the element represents.'),
-              images: z.array(z.string()).describe('Image URLs or previous output ids for this element.'),
+              elementId: z.string().optional().describe('Reference a saved element by id (from list_elements / create_element). Resolves to its name + images.'),
+              name: z.string().optional().describe('Inline element: reference it in the prompt as @name.'),
+              description: z.string().optional().describe('Inline element: what it represents.'),
+              images: z.array(z.string()).optional().describe('Inline element: image URLs or previous output ids.'),
             }),
           )
           .optional()
-          .describe('Named reference elements (Kling 3.0): each is a group of images addressable in the prompt as @name. Requires a startFrame. See get_model promptReferences for which models accept elements (named_tag scheme).'),
+          .describe('Named reference elements (Kling 3.0): each is a saved element ({ elementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Requires a startFrame. See get_model promptReferences (named_tag scheme).'),
         multiShot: z
           .boolean()
           .optional()
@@ -1053,6 +1057,127 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return modelResult(await client.getModel(args.modelId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_elements --------------------------------------------------------
+  server.registerTool(
+    'list_elements',
+    {
+      title: 'List Elements',
+      annotations: READ,
+      description:
+        "List the account's saved reference elements: reusable named groups of images (a character, prop, location) addressable in a Kling prompt as @name. Reference one in a generation by elementId.",
+      inputSchema: {},
+    },
+    async (_args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return elementListResult(await client.listElements())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_element ----------------------------------------------------------
+  server.registerTool(
+    'get_element',
+    {
+      title: 'Get Element',
+      annotations: READ,
+      description: "Get one saved reference element by id: its name, category, description, and images.",
+      inputSchema: { id: z.string().describe('The element id.') },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return elementResult(await client.getElement(args.id))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_element -------------------------------------------------------
+  server.registerTool(
+    'create_element',
+    {
+      title: 'Create Element',
+      annotations: WRITE,
+      description:
+        "Create a reusable reference element from 2-4 images (or 1 video) of one entity (a character, prop, location). Images may be URLs or output-id tokens, so you can generate the angle shots first and assemble an element from them. Reference it later in a Kling 3.0 generation via references.elements [{ elementId }] and @name in the prompt.",
+      inputSchema: {
+        name: z.string().describe('Referenced in the prompt as @name.'),
+        description: z.string().describe('What the element represents (required).'),
+        category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("Kind of entity (default 'auto')."),
+        images: z.array(z.string()).optional().describe('2-4 image URLs or output-id tokens.'),
+        video: z.string().optional().describe('A single video URL or output-id token (alternative to images).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return elementResult(
+          await client.createElement({
+            name: args.name,
+            description: args.description,
+            category: args.category,
+            images: args.images,
+            video: args.video,
+          }),
+          'Created',
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_element -------------------------------------------------------
+  server.registerTool(
+    'update_element',
+    {
+      title: 'Update Element',
+      annotations: WRITE,
+      description: "Update a saved element's name, description, or category.",
+      inputSchema: {
+        id: z.string().describe('The element id.'),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        category: z.enum(['auto', 'character', 'location', 'prop']).optional(),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return elementResult(
+          await client.updateElement(args.id, { name: args.name, description: args.description, category: args.category }),
+          'Updated',
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- delete_element -------------------------------------------------------
+  server.registerTool(
+    'delete_element',
+    {
+      title: 'Delete Element',
+      annotations: WRITE,
+      description: 'Delete a saved reference element.',
+      inputSchema: { id: z.string().describe('The element id.') },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.deleteElement(args.id)
+        return elementDeletedResult(args.id)
       } catch (err) {
         return errorResult(err)
       }

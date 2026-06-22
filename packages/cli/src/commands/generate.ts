@@ -102,6 +102,7 @@ export function registerGenerate(program: Command): void {
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
       .option('--ref-video <urlOrId>', 'reference video (URL or output id); repeatable', collect)
       .option('--ref-audio <urlOrId>', 'reference audio (URL or output id); repeatable', collect)
+      .option('--element <id>', 'saved reference element id (Kling 3.0, @name in prompt); repeatable', collect)
       .option('--multi-shot', 'enable multi-shot mode (e.g. WAN 2.6)')
       .option('--shots <json>', 'Kling 3.0 multi-shot: JSON array of { prompt, duration } objects', toJson),
   ).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
@@ -132,6 +133,7 @@ export function registerGenerate(program: Command): void {
         images: opts.ref as string[] | undefined,
         videos: opts.refVideo as string[] | undefined,
         audio: opts.refAudio as string[] | undefined,
+        elements: (opts.element as string[] | undefined)?.map((elementId) => ({ elementId })),
       }),
     })
     await runGeneration(client, ctx, request, runOptions(opts))

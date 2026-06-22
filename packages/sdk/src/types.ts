@@ -37,14 +37,48 @@ export interface References {
   elements?: ReferenceElement[]
 }
 
-/** A named group of reference images, addressable in the prompt as @name (Kling 3.0). */
+/**
+ * A named group of reference images, addressable in the prompt as @name (Kling
+ * 3.0). Provide EITHER a saved element by `elementId`, OR define one inline with
+ * `name` + `images`.
+ */
 export interface ReferenceElement {
-  /** Referenced in the prompt as @name. */
-  name: string
-  /** What the element represents (passed to the provider for conditioning). */
+  /** Reference a saved element-library entry by id (resolves to its name + images). */
+  elementId?: string
+  /** Inline: referenced in the prompt as @name. */
+  name?: string
+  /** Inline: what the element represents (passed to the provider for conditioning). */
   description?: string
-  /** Supporting image URLs or output-id tokens for this element. */
-  images: string[]
+  /** Inline: supporting image URLs or output-id tokens for this element. */
+  images?: string[]
+}
+
+/** A saved reference element in the account's library (the persistent form). */
+export interface Element {
+  id: string
+  name: string
+  /** 'auto' | 'character' | 'location' | 'prop'. */
+  category: string
+  description: string | null
+  /** The element's supporting image URLs. */
+  input_urls: string[]
+  /** A single supporting video URL (alternative to images), if any. */
+  input_video_url: string | null
+  /** A representative image/video URL for previews. */
+  preview_url: string
+  created_at: string
+}
+
+/** Create an element from 2-4 images (or 1 video). Inputs may be URLs or output-id tokens. */
+export interface CreateElementRequest {
+  name: string
+  description: string
+  /** 'auto' | 'character' | 'location' | 'prop' (default 'auto'). */
+  category?: string
+  /** 2-4 image URLs or output-id tokens (one of images/video is required). */
+  images?: string[]
+  /** A single video URL or output-id token (alternative to images). */
+  video?: string
 }
 
 /**

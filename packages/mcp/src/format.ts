@@ -19,6 +19,7 @@ import type {
   BrandKnowledgeMatch,
   ConnectedAccount,
   CostEstimate,
+  Element,
   Generation,
   GenerateResult,
   InspirationAccountDetail,
@@ -294,6 +295,40 @@ export function mediaResult(m: MediaItem): CallToolResult {
 export function balanceResult(b: Balance): CallToolResult {
   return text(
     `Balance: ${b.balance} credits (tier: ${b.tier}, auto top-up: ${b.autoTopupEnabled ? 'on' : 'off'}).`,
+  )
+}
+
+// -- reference elements (named reference library) -----------------------------
+
+/** List of the account's saved reference elements. */
+export function elementListResult(items: Element[]): CallToolResult {
+  if (!items.length) {
+    return text('No reference elements. Create one with create_element, then reference it in a Kling generation by elementId.')
+  }
+  const rows = items.map((e) => {
+    const media = e.input_video_url ? '1 video' : `${e.input_urls.length} image(s)`
+    return `- ${e.name} (id ${e.id}) | ${e.category} | ${media}${e.description ? ` | ${e.description.slice(0, 60)}` : ''}`
+  })
+  return text([`${items.length} element(s):`, ...rows].join('\n'))
+}
+
+/** Confirmation that an element was deleted. */
+export function elementDeletedResult(id: string): CallToolResult {
+  return text(`Deleted element ${id}.`)
+}
+
+/** One saved reference element. */
+export function elementResult(e: Element, verb?: string): CallToolResult {
+  if (verb) {
+    return text(`${verb} element "${e.name}" (id ${e.id}, ${e.category}). Reference it in a Kling generation via references.elements [{ elementId: "${e.id}" }] and @${e.name} in the prompt.`)
+  }
+  return text(
+    lines([
+      `${e.name} (id ${e.id}) | ${e.category}`,
+      e.description ? `description: ${e.description}` : null,
+      e.input_video_url ? `video: ${e.input_video_url}` : `images (${e.input_urls.length}): ${e.input_urls.join(', ')}`,
+      `Reference in a Kling prompt as @${e.name}; pass references.elements [{ elementId: "${e.id}" }].`,
+    ]),
   )
 }
 

@@ -46,6 +46,8 @@ import type {
   MediaItem,
   MediaSummary,
   ModelInfo,
+  Element,
+  CreateElementRequest,
   PipelineStage,
   PostAsset,
   PostDestination,
@@ -415,6 +417,43 @@ export class ContentHero {
    */
   async getModel(modelId: string): Promise<ModelInfo> {
     return this.request<ModelInfo>('GET', `/api/v1/models/${encodeURIComponent(modelId)}`)
+  }
+
+  // -------------------------------------------------------------------------
+  // Reference elements (named reference library, Kling 3.0)
+  // -------------------------------------------------------------------------
+
+  /** List the account's saved reference elements (newest first). */
+  async listElements(): Promise<Element[]> {
+    const data = await this.request<{ elements: Element[] }>('GET', '/api/v1/elements')
+    return data.elements
+  }
+
+  /** Get one saved reference element by id. */
+  async getElement(id: string): Promise<Element> {
+    return this.request<Element>('GET', `/api/v1/elements/${encodeURIComponent(id)}`)
+  }
+
+  /**
+   * Create a reusable reference element from 2-4 images (or 1 video). Inputs may
+   * be URLs or output-id tokens (generate the angle shots first, then assemble).
+   * Reference it later in a Kling generation via references.elements [{ elementId }].
+   */
+  async createElement(request: CreateElementRequest): Promise<Element> {
+    return this.request<Element>('POST', '/api/v1/elements', request)
+  }
+
+  /** Update a saved element's name / description / category. */
+  async updateElement(
+    id: string,
+    patch: { name?: string; description?: string; category?: string },
+  ): Promise<Element> {
+    return this.request<Element>('PATCH', `/api/v1/elements/${encodeURIComponent(id)}`, patch)
+  }
+
+  /** Delete a saved element. */
+  async deleteElement(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request<{ deleted: boolean; id: string }>('DELETE', `/api/v1/elements/${encodeURIComponent(id)}`)
   }
 
   // -------------------------------------------------------------------------
