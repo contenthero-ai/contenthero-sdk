@@ -68,6 +68,7 @@ export type {
   PostAsset,
   PostDestination,
   PostDetail,
+  Tag,
   PostListResult,
   ListPostsOptions,
   CreatePostInput,

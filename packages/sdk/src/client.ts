@@ -61,6 +61,7 @@ import type {
   PostListResult,
   PostPlatform,
   PostSummary,
+  Tag,
   PublishPostResult,
   TranscribeRequest,
   Transcription,
@@ -678,6 +679,38 @@ export class ContentHero {
       'DELETE',
       `/api/v1/posts/${encodeURIComponent(postId)}/destinations?destination_id=${encodeURIComponent(destinationId)}`,
     )
+  }
+
+  // -------------------------------------------------------------------------
+  // Tags (the organizational tag library; set a post's tags via the `tags`
+  // field on createPost / updatePost)
+  // -------------------------------------------------------------------------
+
+  /** List the account's tags. */
+  async listTags(): Promise<Tag[]> {
+    const data = await this.request<{ tags: Tag[] }>('GET', '/api/v1/tags')
+    return data.tags
+  }
+
+  /** Create a tag (the name is lowercased). Throws if it already exists. */
+  async createTag(name: string): Promise<Tag> {
+    const data = await this.request<{ tag: Tag }>('POST', '/api/v1/tags', { name })
+    return data.tag
+  }
+
+  /** Rename a tag (preserves its post assignments). */
+  async updateTag(id: string, name: string): Promise<Tag> {
+    const data = await this.request<{ tag: Tag }>(
+      'PATCH',
+      `/api/v1/tags/${encodeURIComponent(id)}`,
+      { name },
+    )
+    return data.tag
+  }
+
+  /** Delete a tag from the account (cascades off every post). */
+  async deleteTag(id: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>('DELETE', `/api/v1/tags/${encodeURIComponent(id)}`)
   }
 
   /**

@@ -270,6 +270,7 @@ function fakeClient(overrides = {}) {
       metadata: null,
       assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null, sortOrder: 0 }],
       destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
+      tags: ['contenthero', 'feature'],
     }),
     createPost: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     updatePost: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
@@ -329,6 +330,13 @@ function fakeClient(overrides = {}) {
       { id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' },
     ],
     getConnectedAccount: async (id) => ({ id, platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: false }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' }),
+    listTags: async () => [
+      { id: 't1', name: 'contenthero', isDefault: false, isSystem: false },
+      { id: 't2', name: 'feature', isDefault: false, isSystem: false },
+    ],
+    createTag: async (name) => ({ id: 't-new', name: name.toLowerCase(), isDefault: false, isSystem: false }),
+    updateTag: async (id, name) => ({ id, name: name.toLowerCase(), isDefault: false, isSystem: false }),
+    deleteTag: async (id) => ({ id }),
     reorderPostAssets: async (_postId, assetIds) => assetIds.map((id, i) => ({ id, assetType: 'image', assetId: null, assetUrl: `https://cdn/${id}.png`, displayName: null, sortOrder: i })),
     removePostAsset: async (_postId, assetId) => ({ id: assetId }),
     removePostDestination: async (_postId, destinationId) => ({ id: destinationId }),
@@ -363,7 +371,9 @@ test('advertises exactly the v1 tools', async () => {
     'create_element',
     'create_media_upload',
     'create_post',
+    'create_tag',
     'delete_element',
+    'delete_tag',
     'generate_audio',
     'generate_board',
     'generate_image',
@@ -398,6 +408,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_pipeline_stages',
     'list_platforms',
     'list_posts',
+    'list_tags',
     'list_voices',
     'publish_post',
     'remove_brand_knowledge',
@@ -412,6 +423,7 @@ test('advertises exactly the v1 tools', async () => {
     'update_element',
     'update_post',
     'update_post_destination',
+    'update_tag',
     'upscale',
     'wait_for_generation',
   ])
@@ -1053,6 +1065,55 @@ test('get_platform passes platform + format through and renders the field shape'
   assert.match(res.content[0].text, /platformSettings/)
 })
 
+test('list_tags lists the account tags', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_tags', arguments: {} })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /contenthero \(id t1\)/)
+  assert.match(res.content[0].text, /feature \(id t2\)/)
+})
+
+test('create_tag lowercases and returns the tag', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createTag: async (name) => {
+        captured = name
+        return { id: 't9', name: name.toLowerCase(), isDefault: false, isSystem: false }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'create_tag', arguments: { name: 'Reference Boards' } })
+  assert.ok(!res.isError)
+  assert.equal(captured, 'Reference Boards')
+  assert.match(res.content[0].text, /Created: reference boards \(id t9\)/)
+})
+
+test('delete_tag destroys the tag and notes the cascade', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'delete_tag', arguments: { tagId: 't1' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /Tag deleted \(id t1\)/)
+  assert.match(res.content[0].text, /removed from all posts/)
+})
+
+test('create_post forwards tags', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createPost: async (input) => {
+        captured = input
+        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'create_post',
+    arguments: { title: 'X', platform: 'instagram', tags: ['contenthero', 'feature'] },
+  })
+  assert.deepEqual(captured.tags, ['contenthero', 'feature'])
+})
+
 test('list_brand_kits surfaces id, name, and default flag', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_brand_kits', arguments: {} })
@@ -1161,6 +1222,7 @@ test('get_post returns the post with its destinations and assets', async () => {
   assert.match(res.content[0].text, /instagram \(id d1\)/)
   // The destination's platformSettings keys are surfaced (the publish payload).
   assert.match(res.content[0].text, /settings: caption, mediaItems/)
+  assert.match(res.content[0].text, /tags: contenthero, feature/)
   assert.match(res.content[0].text, /assets \(1\)/)
 })
 

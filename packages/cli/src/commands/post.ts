@@ -85,6 +85,12 @@ function destinationHuman(d: PostDestination): string {
   ])
 }
 
+/** Parse a comma-separated --tags option into an array of names. */
+function parseTagsOpt(value: unknown): string[] | undefined {
+  if (typeof value !== 'string') return undefined
+  return value.split(',').map((s) => s.trim()).filter(Boolean)
+}
+
 /** Parse a --settings JSON-object argument into platformSettings. */
 function parsePlatformSettings(json: string | undefined): Record<string, unknown> | undefined {
   if (json === undefined) return undefined
@@ -181,6 +187,9 @@ export function registerPost(program: Command): void {
     .requiredOption('--platform <platform>', `primary platform: ${PLATFORMS.join(', ')}`)
     .option('--description <text>', 'description / caption draft')
     .option('--stage <stage>', 'pipeline stage id, slug, or name (defaults to the first stage)')
+    .option('--cover-url <url>', 'public URL for the post cover')
+    .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
+    .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)')
     .action(async (title: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string)
       const { client, ctx } = makeClient(command)
@@ -189,6 +198,9 @@ export function registerPost(program: Command): void {
         platform: opts.platform as PostPlatform,
         description: opts.description as string | undefined,
         stage: opts.stage as string | undefined,
+        coverUrl: opts.coverUrl as string | undefined,
+        coverOutputId: opts.coverOutputId as string | undefined,
+        tags: parseTagsOpt(opts.tags),
       })
       emit(await client.createPost(input), ctx, (p: PostSummary) => summaryHuman(p, 'Created'))
     })
@@ -204,6 +216,9 @@ export function registerPost(program: Command): void {
     .option('--stage <stage>', 'move the post to this stage (id, slug, or name)')
     .option('--script <text>')
     .option('--notes <text>')
+    .option('--cover-url <url>', 'public URL for the post cover')
+    .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
+    .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)')
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
       assertStatus(opts.status as string | undefined)
@@ -216,6 +231,9 @@ export function registerPost(program: Command): void {
         stage: opts.stage as string | undefined,
         script: opts.script as string | undefined,
         notes: opts.notes as string | undefined,
+        coverUrl: opts.coverUrl as string | undefined,
+        coverOutputId: opts.coverOutputId as string | undefined,
+        tags: parseTagsOpt(opts.tags),
       })
       emit(await client.updatePost(id, input), ctx, (p: PostSummary) => summaryHuman(p, 'Updated'))
     })

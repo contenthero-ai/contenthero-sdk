@@ -16,6 +16,7 @@ import { registerConfig } from './commands/config.js'
 import { registerAccount } from './commands/account.js'
 import { registerModel } from './commands/model.js'
 import { registerPlatform } from './commands/platform.js'
+import { registerTag } from './commands/tag.js'
 import { registerElement } from './commands/element.js'
 import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
@@ -71,6 +72,7 @@ export function buildProgram(): Command {
   registerGeneration(program)
   registerMedia(program)
   registerPost(program)
+  registerTag(program)
   registerPipeline(program)
   registerBrandKit(program)
   registerIdentity(program)

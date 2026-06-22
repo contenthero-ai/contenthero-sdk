@@ -26,6 +26,7 @@ test('every top-level command group is registered', () => {
     'generation',
     'media',
     'post',
+    'tag',
     'pipeline',
     'brand-kit',
     'avatar',

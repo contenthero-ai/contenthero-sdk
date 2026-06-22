@@ -80,6 +80,9 @@ import {
   assetOrderResult,
   assetRemovedResult,
   destinationRemovedResult,
+  tagListResult,
+  tagResult,
+  tagDeletedResult,
   modelListResult,
   modelResult,
   platformListResult,
@@ -1476,6 +1479,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
         description: z.string().optional().describe('Optional description / caption draft.'),
         stage: z.string().optional().describe('Pipeline stage id, slug, or name. Defaults to the first stage.'),
+        coverUrl: z.string().optional().describe('Public URL for the post cover (the card thumbnail).'),
+        coverOutputId: z
+          .string()
+          .optional()
+          .describe('A media token (output id, first-8, or "-N") for the cover, resolved to its URL. Use this or coverUrl.'),
+        tags: z
+          .array(z.string())
+          .optional()
+          .describe('Tag names to set on the post (must already exist; see list_tags / create_tag). Replaces the set.'),
       },
     },
     async (args, extra) => {
@@ -1487,6 +1499,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             platform: args.platform,
             description: args.description,
             stage: args.stage,
+            coverUrl: args.coverUrl,
+            coverOutputId: args.coverOutputId,
+            tags: args.tags,
           }),
           'Created',
         )
@@ -1503,7 +1518,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Post',
       annotations: WRITE,
       description:
-        'Update a post\'s fields: title, description, script, notes, status, platform, or pipeline stage (move it through the pipeline by passing `stage`). Requires the pipeline:write scope.',
+        "Update a post's fields: title, description, script, notes, status, platform, cover (coverUrl/coverOutputId), or pipeline stage (move it through the pipeline by passing `stage`). Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         title: z.string().optional(),
@@ -1513,6 +1528,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         stage: z.string().optional().describe('Move the post to this stage (id, slug, or name).'),
         script: z.string().optional(),
         notes: z.string().optional(),
+        coverUrl: z.string().optional().describe('Public URL for the post cover.'),
+        coverOutputId: z
+          .string()
+          .optional()
+          .describe('A media token (output id, first-8, or "-N") for the cover, resolved to its URL.'),
+        tags: z
+          .array(z.string())
+          .optional()
+          .describe('Tag names to set on the post (must already exist; replaces the set). Omit to leave tags unchanged.'),
       },
     },
     async (args, extra) => {
@@ -1731,6 +1755,93 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         return destinationRemovedResult(
           await client.removePostDestination(args.postId, args.destinationId),
         )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_tags ------------------------------------------------------------
+  server.registerTool(
+    'list_tags',
+    {
+      title: 'List Tags',
+      annotations: READ,
+      description:
+        "List the account's tags (the organizational tag library). Set a post's tags with the `tags` field on create_post / update_post. A tag is just a lowercase name.",
+      inputSchema: {},
+    },
+    async (extra) => {
+      try {
+        const client = await getClient(extra)
+        return tagListResult(await client.listTags())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_tag -----------------------------------------------------------
+  server.registerTool(
+    'create_tag',
+    {
+      title: 'Create Tag',
+      annotations: WRITE,
+      description:
+        "Create a tag in the account's tag library (the name is lowercased). Tags organize posts; apply them with the `tags` field on create_post / update_post. Requires the pipeline:write scope.",
+      inputSchema: {
+        name: z.string().describe('The tag name (lowercased on save).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return tagResult(await client.createTag(args.name), 'Created')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_tag -----------------------------------------------------------
+  server.registerTool(
+    'update_tag',
+    {
+      title: 'Update Tag',
+      annotations: WRITE,
+      description:
+        'Rename a tag (preserves its assignments on all posts). To detach a tag from one post, set that post\'s `tags` without it via update_post. Requires the pipeline:write scope.',
+      inputSchema: {
+        tagId: z.string().describe('The tag id (from list_tags).'),
+        name: z.string().describe('The new tag name (lowercased on save).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return tagResult(await client.updateTag(args.tagId, args.name), 'Renamed')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- delete_tag -----------------------------------------------------------
+  server.registerTool(
+    'delete_tag',
+    {
+      title: 'Delete Tag',
+      annotations: WRITE,
+      description:
+        "Delete a tag from the account's library. This DESTROYS the tag and removes it from every post it was on. To just detach a tag from one post, set that post's `tags` without it via update_post instead. Requires the pipeline:write scope.",
+      inputSchema: {
+        tagId: z.string().describe('The tag id (from list_tags).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return tagDeletedResult(await client.deleteTag(args.tagId))
       } catch (err) {
         return errorResult(err)
       }

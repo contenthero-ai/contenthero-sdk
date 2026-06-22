@@ -703,6 +703,16 @@ export interface PostDetail extends PostSummary {
   metadata: Record<string, unknown> | null
   assets: PostAsset[]
   destinations: PostDestination[]
+  /** Tag names on the post (organizational). */
+  tags: string[]
+}
+
+/** An account tag (the organizational tag library). */
+export interface Tag {
+  id: string
+  name: string
+  isDefault: boolean
+  isSystem: boolean
 }
 
 /** Result of `listPosts`: a page of posts plus pagination metadata. */
@@ -733,6 +743,12 @@ export interface CreatePostInput {
   stage?: string | null
   folderId?: string | null
   status?: PostStatus
+  /** A public URL for the post cover (the card thumbnail). */
+  coverUrl?: string | null
+  /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
+  coverOutputId?: string | null
+  /** Tag names to set on the post (must already exist; replaces the set). */
+  tags?: string[]
 }
 
 /** Fields to update a post. `stage` accepts a stage id, slug, or name. */
@@ -746,6 +762,10 @@ export interface UpdatePostInput {
   folderId?: string | null
   isFavorite?: boolean
   coverUrl?: string | null
+  /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
+  coverOutputId?: string | null
+  /** Tag names to set on the post (must already exist; replaces the set). */
+  tags?: string[]
   scheduledAt?: string | null
   publishedAt?: string | null
   publishUrl?: string | null

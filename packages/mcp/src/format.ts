@@ -39,6 +39,7 @@ import type {
   PostDetail,
   PostListResult,
   PostSummary,
+  Tag,
   PublishPostResult,
   TrackedAccount,
   Transcription,
@@ -556,6 +557,7 @@ export function postResult(p: PostDetail): CallToolResult {
       p.description ? `description: ${p.description}` : null,
       p.script ? `script: ${p.script}` : null,
       p.notes ? `notes: ${p.notes}` : null,
+      p.tags?.length ? `tags: ${p.tags.join(', ')}` : null,
       `destinations (${p.destinations.length}):`,
       ...p.destinations.map((d) => {
         const set = settingsKeys(d.platformSettings)
@@ -621,6 +623,24 @@ export function assetRemovedResult(r: { id: string }): CallToolResult {
 /** Confirmation of a detached destination. */
 export function destinationRemovedResult(r: { id: string }): CallToolResult {
   return text(`Destination removed (id ${r.id}).`)
+}
+
+/** The account's tags. */
+export function tagListResult(tags: Tag[]): CallToolResult {
+  if (!tags.length) return text('No tags yet. Create one with create_tag.')
+  return text(
+    [`${tags.length} tag(s):`, ...tags.map((t) => `- ${t.name} (id ${t.id})`)].join('\n'),
+  )
+}
+
+/** A created or renamed tag. */
+export function tagResult(t: Tag, verb = 'Tag'): CallToolResult {
+  return text(`${verb}: ${t.name} (id ${t.id}).`)
+}
+
+/** Confirmation of a deleted tag. */
+export function tagDeletedResult(r: { id: string }): CallToolResult {
+  return text(`Tag deleted (id ${r.id}). It was removed from all posts.`)
 }
 
 /** The result of publishing a post (per-destination outcomes). */
