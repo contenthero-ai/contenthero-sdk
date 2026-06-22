@@ -77,6 +77,8 @@ import {
   mediaResult,
   modelListResult,
   modelResult,
+  platformListResult,
+  platformResult,
   elementListResult,
   elementResult,
   elementDeletedResult,
@@ -1057,6 +1059,54 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return modelResult(await client.getModel(args.modelId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_platforms -------------------------------------------------------
+  server.registerTool(
+    'list_platforms',
+    {
+      title: 'List Platforms',
+      annotations: READ,
+      description:
+        "List the platforms this account can publish to (the discovery catalog): each platform's formats and whether a connected account exists for it. Use this to pick a platform and format, then call get_platform for the exact fields a post requires. Source of truth for valid platforms/formats; do not hardcode them.",
+      inputSchema: {},
+    },
+    async (extra) => {
+      try {
+        const client = await getClient(extra)
+        return platformListResult(await client.listPlatforms())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_platform ---------------------------------------------------------
+  server.registerTool(
+    'get_platform',
+    {
+      title: 'Get Platform',
+      annotations: READ,
+      description:
+        "Get one platform's full publishing shape: the fields, options (enums), and character limits a post requires per format (post, reel, short, story, thread). Ground a destination's platformSettings against this instead of guessing the fields. Optionally pass a format to narrow the result.",
+      inputSchema: {
+        platform: z
+          .enum(POST_PLATFORMS)
+          .describe('The platform id, e.g. from list_platforms (such as "instagram").'),
+        format: z
+          .string()
+          .optional()
+          .describe('Optional format to narrow to (e.g. "reel", "short", "story", "thread").'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return platformResult(await client.getPlatform(args.platform, { format: args.format }))
       } catch (err) {
         return errorResult(err)
       }

@@ -884,3 +884,43 @@ export interface ConnectedAccount {
   lastValidatedAt: string | null
   createdAt: string | null
 }
+
+// ---------------------------------------------------------------------------
+// Publish platforms (destination discovery)
+// ---------------------------------------------------------------------------
+
+/** One selectable format for a platform (e.g. reel, short, story, thread). */
+export interface PlatformFormatInfo {
+  value: string
+  label: string
+}
+
+/**
+ * A publish target in the catalog (the list_platforms item): the platform, its
+ * formats, and whether the caller has an active connected account for it. Call
+ * getPlatform for the full per-format request shape.
+ */
+export interface PlatformSummary {
+  platform: string
+  name: string
+  formats: PlatformFormatInfo[]
+  /** Whether the caller can publish here now (has an active connected account). */
+  connected: boolean
+}
+
+/**
+ * One platform's full publishing shape (the getPlatform result): the fields,
+ * options, and limits a post requires per format, which a client fills as a
+ * destination's platformSettings.
+ */
+export interface PlatformSchema {
+  platform: string
+  name: string
+  formats: string[]
+  postingModes: string[]
+  /** Constrained-field option sets (e.g. visibility, privacyLevel, categoryId). */
+  enums: Record<string, readonly unknown[]>
+  characterLimits: Record<string, number> | null
+  /** Per-format field template: field names + default values (File handles stripped). */
+  fieldTemplatesByFormat: Record<string, Record<string, unknown>>
+}

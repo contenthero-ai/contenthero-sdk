@@ -46,6 +46,8 @@ import type {
   MediaItem,
   MediaSummary,
   ModelInfo,
+  PlatformSummary,
+  PlatformSchema,
   Element,
   CreateElementRequest,
   PipelineStage,
@@ -417,6 +419,36 @@ export class ContentHero {
    */
   async getModel(modelId: string): Promise<ModelInfo> {
     return this.request<ModelInfo>('GET', `/api/v1/models/${encodeURIComponent(modelId)}`)
+  }
+
+  // -------------------------------------------------------------------------
+  // Publish platforms (destination discovery)
+  // -------------------------------------------------------------------------
+
+  /**
+   * List the platforms this account can publish to (the discovery catalog):
+   * their formats, and whether a connected account exists for each. The source
+   * of truth for valid platforms/formats; call getPlatform for one platform's
+   * full request shape before configuring a destination.
+   */
+  async listPlatforms(): Promise<PlatformSummary[]> {
+    const data = await this.request<{ platforms: PlatformSummary[] }>('GET', '/api/v1/platforms')
+    return data.platforms
+  }
+
+  /**
+   * Get one platform's full publishing shape: the fields, options (enums), and
+   * character limits a post requires per format. Use this to construct a
+   * destination's platformSettings against the platform's real fields instead of
+   * guessing. Optionally narrow to one format. Throws NotFoundError for an
+   * unknown platform.
+   */
+  async getPlatform(platform: string, options: { format?: string } = {}): Promise<PlatformSchema> {
+    const query = options.format ? `?format=${encodeURIComponent(options.format)}` : ''
+    return this.request<PlatformSchema>(
+      'GET',
+      `/api/v1/platforms/${encodeURIComponent(platform)}${query}`,
+    )
   }
 
   // -------------------------------------------------------------------------

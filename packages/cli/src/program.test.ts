@@ -19,6 +19,7 @@ test('every top-level command group is registered', () => {
     'config',
     'account',
     'model',
+    'platform',
     'generate',
     'upscale',
     'generation',
@@ -61,6 +62,11 @@ test('brand-kit exposes its verbs and the section group', () => {
 test('avatar and voice expose list + get', () => {
   assert.deepEqual(subcommands('avatar').sort(), ['get', 'list'])
   assert.deepEqual(subcommands('voice').sort(), ['get', 'list'])
+})
+
+test('model and platform expose list + get', () => {
+  assert.deepEqual(subcommands('model').sort(), ['get', 'list'])
+  assert.deepEqual(subcommands('platform').sort(), ['get', 'list'])
 })
 
 test('inspiration exposes accounts/account/outliers/content', () => {

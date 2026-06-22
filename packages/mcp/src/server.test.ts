@@ -208,6 +208,38 @@ function fakeClient(overrides = {}) {
         instruction: 'Describe each reference by its role or content in the prompt.',
       },
     }),
+    listPlatforms: async () => [
+      {
+        platform: 'instagram',
+        name: 'Instagram',
+        formats: [
+          { value: 'reel', label: 'Reel' },
+          { value: 'post', label: 'Post' },
+          { value: 'story', label: 'Story' },
+        ],
+        connected: true,
+      },
+      {
+        platform: 'youtube',
+        name: 'YouTube',
+        formats: [
+          { value: 'video', label: 'Long-form Video' },
+          { value: 'short', label: 'YouTube Short' },
+        ],
+        connected: false,
+      },
+    ],
+    getPlatform: async (platform, options = {}) => ({
+      platform,
+      name: 'Instagram',
+      formats: options.format ? [options.format] : ['reel', 'post', 'story'],
+      postingModes: ['automatic', 'notify_me'],
+      enums: {},
+      characterLimits: { caption: 2200 },
+      fieldTemplatesByFormat: {
+        post: { mediaItems: [], caption: '', postingMode: 'automatic', format: 'post' },
+      },
+    }),
     listPosts: async () => ({
       posts: [
         { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
@@ -341,6 +373,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_inspiration_content',
     'get_media',
     'get_model',
+    'get_platform',
     'get_post',
     'get_voice',
     'list_avatars',
@@ -354,6 +387,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_models',
     'list_outliers',
     'list_pipeline_stages',
+    'list_platforms',
     'list_posts',
     'list_voices',
     'publish_post',
@@ -963,6 +997,48 @@ test('get_model passes the id through and renders the full request shape', async
   // Reference-addressing guidance is rendered.
   assert.match(res.content[0].text, /Referencing \(numbered_tag, bound\)/)
   assert.match(res.content[0].text, /@Image\{n\} \(up to 9\)/)
+})
+
+test('list_platforms surfaces platforms, formats, and the connected flag', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_platforms', arguments: {} })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /instagram \(Instagram\) \[connected\]/)
+  assert.match(res.content[0].text, /youtube \(YouTube\)/)
+  // Points the agent to get_platform for the full shape.
+  assert.match(res.content[0].text, /get_platform/)
+})
+
+test('get_platform passes platform + format through and renders the field shape', async () => {
+  let captured: { platform?: string; format?: string } = {}
+  const mcp = await connect(
+    fakeClient({
+      getPlatform: async (platform, options = {}) => {
+        captured = { platform, format: options.format }
+        return {
+          platform,
+          name: 'Instagram',
+          formats: ['post'],
+          postingModes: ['automatic', 'notify_me'],
+          enums: {},
+          characterLimits: { caption: 2200 },
+          fieldTemplatesByFormat: {
+            post: { mediaItems: [], caption: '', postingMode: 'automatic', format: 'post' },
+          },
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'get_platform',
+    arguments: { platform: 'instagram', format: 'post' },
+  })
+  assert.ok(!res.isError)
+  assert.equal(captured.platform, 'instagram')
+  assert.equal(captured.format, 'post')
+  assert.match(res.content[0].text, /post: mediaItems, caption/)
+  assert.match(res.content[0].text, /caption: 2200/)
+  assert.match(res.content[0].text, /platformSettings/)
 })
 
 test('list_brand_kits surfaces id, name, and default flag', async () => {

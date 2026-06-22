@@ -27,6 +27,8 @@ import type {
   MediaItem,
   MediaSummary,
   ModelInfo,
+  PlatformSummary,
+  PlatformSchema,
   Outlier,
   OutliersResult,
   PipelineStage,
@@ -427,6 +429,54 @@ export function modelResult(m: ModelInfo): CallToolResult {
       ...promptReferenceLines(m.promptReferences),
       '',
       "Build the request within this shape, preview cost with the matching generate tool's getCost option, then run it.",
+    ]),
+  )
+}
+
+export function platformListResult(platforms: PlatformSummary[]): CallToolResult {
+  if (!platforms.length) return text('No publish platforms found.')
+  const rows = platforms.map((p) => {
+    const fmts = p.formats.map((f) => f.value).join(', ')
+    return `- ${p.platform} (${p.name})${p.connected ? ' [connected]' : ''} | formats: ${fmts || 'post'}`
+  })
+  return text(
+    [
+      `${platforms.length} publish platform(s). Call get_platform(platform[, format]) for the exact fields, options, and limits a post requires:`,
+      ...rows,
+    ].join('\n'),
+  )
+}
+
+export function platformResult(p: PlatformSchema): CallToolResult {
+  const fmtBlocks = p.formats.map((fmt) => {
+    const fields = Object.keys(p.fieldTemplatesByFormat[fmt] ?? {})
+    return `  ${fmt}: ${fields.length ? fields.join(', ') : '(no fields)'}`
+  })
+  const enumLines = Object.entries(p.enums).map(([k, vals]) => {
+    const rendered = vals
+      .map((v) => (v && typeof v === 'object' && 'id' in (v as Record<string, unknown>) ? String((v as Record<string, unknown>).id) : String(v)))
+      .join(', ')
+    return `  ${k}: ${rendered}`
+  })
+  const limitLines = p.characterLimits
+    ? Object.entries(p.characterLimits).map(([k, n]) => `  ${k}: ${n}`)
+    : []
+  return text(
+    lines([
+      `${p.platform} (${p.name})`,
+      `formats: ${p.formats.join(', ')}`,
+      `posting modes: ${p.postingModes.join(', ')}`,
+      '',
+      'Fields by format (set these as platformSettings on add_post_destination / update_post_destination):',
+      ...fmtBlocks,
+      enumLines.length ? '' : null,
+      enumLines.length ? 'Allowed option values:' : null,
+      ...enumLines,
+      limitLines.length ? '' : null,
+      limitLines.length ? 'Character limits:' : null,
+      ...limitLines,
+      '',
+      'Fill platformSettings to this shape, then attach with add_post_destination (or update_post_destination).',
     ]),
   )
 }
