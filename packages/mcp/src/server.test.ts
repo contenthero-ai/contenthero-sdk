@@ -329,6 +329,9 @@ function fakeClient(overrides = {}) {
       { id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' },
     ],
     getConnectedAccount: async (id) => ({ id, platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: false }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' }),
+    createMediaUpload: async (input) => ({ outputId: 'up1', uploadUrl: 'https://storage/sign/up1?token=abc', storagePath: `u/upload-up1.${input.fileName.split('.').pop()}`, expiresAt: '2026-07-01T00:00:00Z' }),
+    completeMediaUpload: async (outputId) => ({ outputId, url: `https://cloud/${outputId}.png` }),
+    importMedia: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
     ...overrides,
   }
 }
@@ -353,7 +356,9 @@ test('advertises exactly the v1 tools', async () => {
     'archive_brand_kit',
     'archive_brand_kit_section',
     'archive_post',
+    'complete_media_upload',
     'create_element',
+    'create_media_upload',
     'create_post',
     'delete_element',
     'generate_audio',
@@ -376,6 +381,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_platform',
     'get_post',
     'get_voice',
+    'import_media',
     'list_avatars',
     'list_brand_accounts',
     'list_brand_kits',
@@ -1211,6 +1217,56 @@ test('add_post_destination passes platform + connected account through', async (
   assert.deepEqual(captured.platformSettings, { title: 'My Short', shortVideoUrl: 'https://cdn/v.mp4' })
   assert.match(res.content[0].text, /youtube \(id d-new\)/)
   assert.match(res.content[0].text, /settings: title, shortVideoUrl/)
+})
+
+test('create_media_upload returns the signed URL and the next step', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createMediaUpload: async (input) => {
+        captured = input
+        return { outputId: 'up9', uploadUrl: 'https://storage/sign/up9?token=xyz', storagePath: 'u/upload-up9.png', expiresAt: '2026-07-01T00:00:00Z' }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'create_media_upload',
+    arguments: { fileName: 'cover.png', contentType: 'image/png' },
+  })
+  assert.ok(!res.isError)
+  assert.equal(captured.fileName, 'cover.png')
+  assert.equal(captured.contentType, 'image/png')
+  assert.match(res.content[0].text, /id up9/)
+  assert.match(res.content[0].text, /https:\/\/storage\/sign\/up9/)
+  assert.match(res.content[0].text, /complete_media_upload/)
+})
+
+test('complete_media_upload finalizes and returns the public URL', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'complete_media_upload', arguments: { outputId: 'up1' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /id up1/)
+  assert.match(res.content[0].text, /https:\/\/cloud\/up1\.png/)
+})
+
+test('import_media re-hosts a URL and returns a referenceable output', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      importMedia: async (input) => {
+        captured = input
+        return { outputId: 'im9', url: 'https://cloud/im9.png' }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'import_media',
+    arguments: { url: 'https://example.com/logo.png' },
+  })
+  assert.ok(!res.isError)
+  assert.equal(captured.url, 'https://example.com/logo.png')
+  assert.match(res.content[0].text, /id im9/)
+  assert.match(res.content[0].text, /add_post_asset/)
 })
 
 test('schedule_post sets the scheduled time', async () => {

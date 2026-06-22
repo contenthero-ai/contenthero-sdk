@@ -45,6 +45,10 @@ import type {
   ListPostsOptions,
   MediaItem,
   MediaSummary,
+  CreateMediaUploadInput,
+  CreateMediaUploadResult,
+  ImportMediaInput,
+  UploadedMedia,
   ModelInfo,
   PlatformSummary,
   PlatformSchema,
@@ -397,6 +401,72 @@ export class ContentHero {
    */
   async getMedia(idToken: string): Promise<MediaItem> {
     return this.request<MediaItem>('GET', `/api/v1/media/${encodeURIComponent(idToken)}`)
+  }
+
+  // -------------------------------------------------------------------------
+  // Media upload (bring your own file or URL -> first-class media)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Start a presigned upload (phase 1): pre-creates the media row and returns a
+   * signed uploadUrl. PUT the bytes to uploadUrl (with the file's Content-Type),
+   * then call completeMediaUpload(outputId). Prefer uploadMedia() which does all
+   * three steps.
+   */
+  async createMediaUpload(input: CreateMediaUploadInput): Promise<CreateMediaUploadResult> {
+    return this.request<CreateMediaUploadResult>('POST', '/api/v1/media/uploads', input)
+  }
+
+  /** Finalize a presigned upload (phase 2) after the bytes were PUT to uploadUrl. */
+  async completeMediaUpload(outputId: string): Promise<UploadedMedia> {
+    return this.request<UploadedMedia>(
+      'POST',
+      `/api/v1/media/uploads/${encodeURIComponent(outputId)}/complete`,
+    )
+  }
+
+  /**
+   * Upload a file as first-class media in one call: create -> PUT the bytes to the
+   * signed URL -> complete. Returns the new media (referenceable by outputId in
+   * generations and post assets). `data` is the raw bytes (Blob, Buffer, Uint8Array,
+   * or ArrayBuffer). For a remote URL you already have, use importMedia instead.
+   */
+  async uploadMedia(
+    data: Blob | ArrayBuffer | ArrayBufferView,
+    opts: { fileName: string; contentType: string },
+  ): Promise<UploadedMedia> {
+    const sizeBytes =
+      data instanceof Blob
+        ? data.size
+        : data instanceof ArrayBuffer
+          ? data.byteLength
+          : data.byteLength
+    const created = await this.createMediaUpload({
+      fileName: opts.fileName,
+      contentType: opts.contentType,
+      sizeBytes,
+    })
+    // The PUT goes to Supabase storage (not our API), so it uses a bare fetch
+    // with only the file's Content-Type, none of our auth headers.
+    const put = await this.fetchImpl(created.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': opts.contentType },
+      body: data as BodyInit,
+    })
+    if (!put.ok) {
+      const detail = await put.text().catch(() => '')
+      throw new Error(`Upload PUT failed (HTTP ${put.status})${detail ? `: ${detail}` : ''}`)
+    }
+    return this.completeMediaUpload(created.outputId)
+  }
+
+  /**
+   * Import a remote URL as first-class media: the server fetches and re-hosts it.
+   * Use when the file is already on a public URL (or from an environment that can't
+   * read local files). Returns the new media, referenceable by outputId.
+   */
+  async importMedia(input: ImportMediaInput): Promise<UploadedMedia> {
+    return this.request<UploadedMedia>('POST', '/api/v1/media/imports', input)
   }
 
   /**

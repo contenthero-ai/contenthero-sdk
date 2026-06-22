@@ -26,6 +26,8 @@ import type {
   InspirationContent,
   MediaItem,
   MediaSummary,
+  CreateMediaUploadResult,
+  UploadedMedia,
   ModelInfo,
   PlatformSummary,
   PlatformSchema,
@@ -291,6 +293,26 @@ export function mediaResult(m: MediaItem): CallToolResult {
         (v) => `  ${v.variation}. ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}`,
       ),
     ]),
+  )
+}
+
+/** Phase 1 of an upload: the signed URL + the PUT-then-complete instructions. */
+export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
+  return text(
+    lines([
+      `Upload created (id ${r.outputId}). Two steps remain:`,
+      `1. PUT the file bytes to this URL with the file's Content-Type (expires ${r.expiresAt}):`,
+      `   ${r.uploadUrl}`,
+      `2. Call complete_media_upload(outputId: "${r.outputId}") to finalize.`,
+      'Once complete, reference the media by its outputId in generations or post assets.',
+    ]),
+  )
+}
+
+/** A finalized upload or import: a first-class media output. */
+export function uploadedMediaResult(r: UploadedMedia): CallToolResult {
+  return text(
+    `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
   )
 }
 

@@ -75,6 +75,8 @@ import {
   inspirationContentResult,
   mediaListResult,
   mediaResult,
+  mediaUploadResult,
+  uploadedMediaResult,
   modelListResult,
   modelResult,
   platformListResult,
@@ -1012,6 +1014,88 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return mediaResult(await client.getMedia(args.id))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_media_upload --------------------------------------------------
+  server.registerTool(
+    'create_media_upload',
+    {
+      title: 'Create Media Upload',
+      annotations: WRITE,
+      description:
+        "Upload a local file as first-class media (phase 1 of 2). Returns a signed uploadUrl; PUT the file bytes to it with the file's Content-Type, then call complete_media_upload with the returned outputId. The finished media is referenceable by outputId in generate_* and add_post_asset. For a file already on a public URL, use import_media instead. Requires the assets:write scope.",
+      inputSchema: {
+        fileName: z.string().describe('The file name (used for its extension), e.g. "cover.png".'),
+        contentType: z.string().describe('The file MIME type, e.g. "image/png" or "video/mp4".'),
+        sizeBytes: z.number().optional().describe('Optional file size in bytes.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return mediaUploadResult(
+          await client.createMediaUpload({
+            fileName: args.fileName,
+            contentType: args.contentType,
+            sizeBytes: args.sizeBytes,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- complete_media_upload ------------------------------------------------
+  server.registerTool(
+    'complete_media_upload',
+    {
+      title: 'Complete Media Upload',
+      annotations: WRITE,
+      description:
+        'Finalize a media upload (phase 2 of 2) after the file bytes were PUT to the signed uploadUrl from create_media_upload. Publishes the media and returns its outputId + public URL. Requires the assets:write scope.',
+      inputSchema: {
+        outputId: z.string().describe('The outputId returned by create_media_upload.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return uploadedMediaResult(await client.completeMediaUpload(args.outputId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- import_media ---------------------------------------------------------
+  server.registerTool(
+    'import_media',
+    {
+      title: 'Import Media',
+      annotations: WRITE,
+      description:
+        'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and add_post_asset). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
+      inputSchema: {
+        url: z.string().describe('A public http(s) URL to fetch and re-host.'),
+        contentType: z.string().optional().describe('Optional MIME override (else taken from the response).'),
+        fileName: z.string().optional().describe('Optional file name (used for its extension).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return uploadedMediaResult(
+          await client.importMedia({
+            url: args.url,
+            contentType: args.contentType,
+            fileName: args.fileName,
+          }),
+        )
       } catch (err) {
         return errorResult(err)
       }

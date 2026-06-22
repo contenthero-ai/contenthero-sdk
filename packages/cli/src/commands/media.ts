@@ -7,22 +7,44 @@
  * the full output id, its first 8 chars, or either with a "-N" variation suffix.
  */
 
+import { readFile } from 'node:fs/promises'
+import { basename, extname } from 'node:path'
 import type { Command } from 'commander'
-import type { MediaItem, MediaSummary, MediaType } from '@contenthero/sdk'
+import type { MediaItem, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt } from '../args.js'
 
 const MEDIA_TYPES: MediaType[] = ['image', 'video', 'audio', 'transcript']
-const KINDS = ['creation', 'board', 'look'] as const
+const KINDS = ['creation', 'board', 'look', 'upload'] as const
 type Kind = (typeof KINDS)[number]
+
+/** Minimal extension -> MIME map for local uploads (defaults to octet-stream). */
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+  gif: 'image/gif', svg: 'image/svg+xml', mp4: 'video/mp4', mov: 'video/quicktime',
+  webm: 'video/webm', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4',
+  ogg: 'audio/ogg', pdf: 'application/pdf', json: 'application/json', txt: 'text/plain',
+}
+
+function mimeForFile(path: string): string {
+  const ext = extname(path).replace('.', '').toLowerCase()
+  return MIME_BY_EXT[ext] ?? 'application/octet-stream'
+}
 
 /** Shorten a prompt for table display. */
 function clip(text: string | null, max = 48): string {
   if (!text) return ''
   const oneLine = text.replace(/\s+/g, ' ').trim()
   return oneLine.length > max ? oneLine.slice(0, max - 1) + '…' : oneLine
+}
+
+function uploadedHuman(m: UploadedMedia): string {
+  return keyValues([
+    ['Output id', m.outputId],
+    ['URL', m.url],
+  ])
 }
 
 export function registerMedia(program: Command): void {
@@ -93,5 +115,41 @@ export function registerMedia(program: Command): void {
         )
         return `${head}\n\n${variations}`
       })
+    })
+
+  media
+    .command('upload')
+    .description('Upload a local file as first-class media (requires assets:write)')
+    .argument('<file>', 'path to the local file')
+    .option('--content-type <mime>', 'MIME type override (else inferred from the extension)')
+    .option('--name <name>', 'file name override (else the basename)')
+    .action(async (file: string, opts: Record<string, unknown>, command: Command) => {
+      let bytes: Buffer
+      try {
+        bytes = await readFile(file)
+      } catch {
+        throw new CliError(`Cannot read file: ${file}`, EXIT.USAGE)
+      }
+      const fileName = (opts.name as string | undefined) ?? basename(file)
+      const contentType = (opts.contentType as string | undefined) ?? mimeForFile(file)
+      const { client, ctx } = makeClient(command)
+      const m = await client.uploadMedia(bytes, { fileName, contentType })
+      emit(m, ctx, uploadedHuman)
+    })
+
+  media
+    .command('import')
+    .description('Import a remote URL as first-class media (requires assets:write)')
+    .argument('<url>', 'public http(s) URL to fetch and re-host')
+    .option('--content-type <mime>', 'MIME type override (else taken from the response)')
+    .option('--name <name>', 'file name override (used for the extension)')
+    .action(async (url: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const m = await client.importMedia({
+        url,
+        contentType: opts.contentType as string | undefined,
+        fileName: opts.name as string | undefined,
+      })
+      emit(m, ctx, uploadedHuman)
     })
 }

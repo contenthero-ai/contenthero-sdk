@@ -534,10 +534,38 @@ export interface MediaItem extends MediaSummary {
 export interface ListMediaOptions {
   contentType?: MediaType | MediaType[]
   status?: string
-  /** Filter by asset class: 'creation', 'board', or 'look'. */
-  kind?: 'creation' | 'board' | 'look'
+  /** Filter by asset class: 'creation', 'board', 'look', or 'upload'. */
+  kind?: 'creation' | 'board' | 'look' | 'upload'
   limit?: number
   offset?: number
+}
+
+/** Fields to start a presigned media upload (phase 1 of uploadMedia). */
+export interface CreateMediaUploadInput {
+  fileName: string
+  contentType: string
+  sizeBytes?: number
+}
+
+/** A pending upload: PUT the bytes to uploadUrl, then completeMediaUpload(outputId). */
+export interface CreateMediaUploadResult {
+  outputId: string
+  uploadUrl: string
+  storagePath: string
+  expiresAt: string
+}
+
+/** Fields to import a remote URL as first-class media. */
+export interface ImportMediaInput {
+  url: string
+  contentType?: string
+  fileName?: string
+}
+
+/** A finalized upload/import: a first-class media output (referenceable by outputId). */
+export interface UploadedMedia {
+  outputId: string
+  url: string
 }
 
 /** The operation a model performs within its content type. */
