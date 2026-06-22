@@ -329,6 +329,9 @@ function fakeClient(overrides = {}) {
       { id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' },
     ],
     getConnectedAccount: async (id) => ({ id, platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: false }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' }),
+    reorderPostAssets: async (_postId, assetIds) => assetIds.map((id, i) => ({ id, assetType: 'image', assetId: null, assetUrl: `https://cdn/${id}.png`, displayName: null, sortOrder: i })),
+    removePostAsset: async (_postId, assetId) => ({ id: assetId }),
+    removePostDestination: async (_postId, destinationId) => ({ id: destinationId }),
     createMediaUpload: async (input) => ({ outputId: 'up1', uploadUrl: 'https://storage/sign/up1?token=abc', storagePath: `u/upload-up1.${input.fileName.split('.').pop()}`, expiresAt: '2026-07-01T00:00:00Z' }),
     completeMediaUpload: async (outputId) => ({ outputId, url: `https://cloud/${outputId}.png` }),
     importMedia: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
@@ -398,6 +401,9 @@ test('advertises exactly the v1 tools', async () => {
     'list_voices',
     'publish_post',
     'remove_brand_knowledge',
+    'remove_post_asset',
+    'remove_post_destination',
+    'reorder_post_assets',
     'schedule_post',
     'search_brand_knowledge',
     'transcribe',
@@ -1247,6 +1253,40 @@ test('complete_media_upload finalizes and returns the public URL', async () => {
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /id up1/)
   assert.match(res.content[0].text, /https:\/\/cloud\/up1\.png/)
+})
+
+test('reorder_post_assets sets the order and lists the assets', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      reorderPostAssets: async (_postId, assetIds) => {
+        captured = assetIds
+        return assetIds.map((id, i) => ({ id, assetType: 'image', assetId: null, assetUrl: `https://cdn/${id}.png`, displayName: null, sortOrder: i }))
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'reorder_post_assets',
+    arguments: { postId: 'p1', assetIds: ['as3', 'as1', 'as2'] },
+  })
+  assert.ok(!res.isError)
+  assert.deepEqual(captured, ['as3', 'as1', 'as2'])
+  assert.match(res.content[0].text, /Assets reordered \(3\)/)
+  assert.match(res.content[0].text, /1\. \[image\] https:\/\/cdn\/as3\.png/)
+})
+
+test('remove_post_asset detaches by id', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'remove_post_asset', arguments: { postId: 'p1', assetId: 'as7' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /Asset removed \(id as7\)/)
+})
+
+test('remove_post_destination detaches by id', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'remove_post_destination', arguments: { postId: 'p1', destinationId: 'd7' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /Destination removed \(id d7\)/)
 })
 
 test('add_post_asset forwards an output-id (attach generated/uploaded media by id)', async () => {

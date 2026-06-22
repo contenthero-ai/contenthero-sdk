@@ -641,7 +641,7 @@ export class ContentHero {
     return data.destination
   }
 
-  /** Attach an asset to a post by URL (file uploads stay web-only). */
+  /** Attach an asset to a post by URL or outputId. */
   async addPostAsset(postId: string, input: AddAssetInput): Promise<PostAsset> {
     const data = await this.request<{ asset: PostAsset }>(
       'POST',
@@ -649,6 +649,35 @@ export class ContentHero {
       input,
     )
     return data.asset
+  }
+
+  /**
+   * Reorder a post's assets (e.g. carousel slide order). `assetIds` must list all
+   * of the post's asset ids in the desired order. Returns the assets reordered.
+   */
+  async reorderPostAssets(postId: string, assetIds: string[]): Promise<PostAsset[]> {
+    const data = await this.request<{ assets: PostAsset[] }>(
+      'PATCH',
+      `/api/v1/posts/${encodeURIComponent(postId)}/assets`,
+      { assetIds },
+    )
+    return data.assets
+  }
+
+  /** Detach an asset from a post. */
+  async removePostAsset(postId: string, assetId: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/api/v1/posts/${encodeURIComponent(postId)}/assets?asset_id=${encodeURIComponent(assetId)}`,
+    )
+  }
+
+  /** Detach a destination from a post. */
+  async removePostDestination(postId: string, destinationId: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/api/v1/posts/${encodeURIComponent(postId)}/destinations?destination_id=${encodeURIComponent(destinationId)}`,
+    )
   }
 
   /**

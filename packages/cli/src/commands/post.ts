@@ -13,6 +13,7 @@
 import type { Command } from 'commander'
 import type {
   CreatePostInput,
+  PostAsset,
   PostDetail,
   PostDestination,
   PostListResult,
@@ -307,6 +308,17 @@ export function registerPost(program: Command): void {
       emit(d, ctx, destinationHuman)
     })
 
+  destination
+    .command('remove')
+    .description("Detach a destination from a post (requires pipeline:write)")
+    .argument('<postId>', 'the post id')
+    .argument('<destinationId>', 'the destination id (from `post get`)')
+    .action(async (postId: string, destinationId: string, _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const r = await client.removePostDestination(postId, destinationId)
+      emit(r, ctx, () => `Destination removed (id ${r.id}).`)
+    })
+
   // -- post asset -----------------------------------------------------------
   const asset = post.command('asset').description('Manage a post\'s assets')
 
@@ -341,5 +353,32 @@ export function registerPost(program: Command): void {
           ['URL', a.assetUrl ?? ''],
         ]),
       )
+    })
+
+  asset
+    .command('reorder')
+    .description("Set a post's asset order, e.g. carousel slides (requires assets:write)")
+    .argument('<postId>', 'the post id')
+    .argument('<assetIds...>', "all of the post's asset ids (from `post get`), in the desired order")
+    .action(async (postId: string, assetIds: string[], _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const assets = await client.reorderPostAssets(postId, assetIds)
+      emit(assets, ctx, (rows: PostAsset[]) =>
+        table(
+          ['#', 'TYPE', 'ID', 'URL'],
+          rows.map((a, i) => [String(i + 1), a.assetType ?? '', a.id.slice(0, 8), a.assetUrl ?? '']),
+        ),
+      )
+    })
+
+  asset
+    .command('remove')
+    .description('Detach an asset from a post (requires assets:write)')
+    .argument('<postId>', 'the post id')
+    .argument('<assetId>', 'the asset id (from `post get`)')
+    .action(async (postId: string, assetId: string, _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const r = await client.removePostAsset(postId, assetId)
+      emit(r, ctx, () => `Asset removed (id ${r.id}).`)
     })
 }

@@ -77,6 +77,9 @@ import {
   mediaResult,
   mediaUploadResult,
   uploadedMediaResult,
+  assetOrderResult,
+  assetRemovedResult,
+  destinationRemovedResult,
   modelListResult,
   modelResult,
   platformListResult,
@@ -1654,6 +1657,79 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             assetUrl: args.assetUrl,
             displayName: args.displayName,
           }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- reorder_post_assets --------------------------------------------------
+  server.registerTool(
+    'reorder_post_assets',
+    {
+      title: 'Reorder Post Assets',
+      annotations: WRITE,
+      description:
+        "Set a post's asset order (e.g. the carousel slide order; the first image is the cover). Pass assetIds as ALL of the post's asset ids (from get_post) in the desired order. Requires the assets:write scope.",
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        assetIds: z
+          .array(z.string())
+          .describe("All of the post's asset ids (from get_post), in the desired order."),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return assetOrderResult(await client.reorderPostAssets(args.postId, args.assetIds))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- remove_post_asset ----------------------------------------------------
+  server.registerTool(
+    'remove_post_asset',
+    {
+      title: 'Remove Post Asset',
+      annotations: WRITE,
+      description:
+        'Detach an asset from a post by its asset id (from get_post). Requires the assets:write scope.',
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        assetId: z.string().describe('The asset id (from get_post).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return assetRemovedResult(await client.removePostAsset(args.postId, args.assetId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- remove_post_destination ----------------------------------------------
+  server.registerTool(
+    'remove_post_destination',
+    {
+      title: 'Remove Post Destination',
+      annotations: WRITE,
+      description:
+        'Detach a publish destination from a post by its destination id (from get_post). Requires the pipeline:write scope.',
+      inputSchema: {
+        postId: z.string().describe('The post id.'),
+        destinationId: z.string().describe('The destination id (from get_post).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return destinationRemovedResult(
+          await client.removePostDestination(args.postId, args.destinationId),
         )
       } catch (err) {
         return errorResult(err)

@@ -602,6 +602,27 @@ export function assetResult(a: PostAsset): CallToolResult {
   return text(`Asset attached: [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id}).`)
 }
 
+/** A post's assets in their (new) order. */
+export function assetOrderResult(assets: PostAsset[]): CallToolResult {
+  if (!assets.length) return text('No assets on this post.')
+  return text(
+    [
+      `Assets reordered (${assets.length}):`,
+      ...assets.map((a, i) => `  ${i + 1}. [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id})`),
+    ].join('\n'),
+  )
+}
+
+/** Confirmation of a detached asset. */
+export function assetRemovedResult(r: { id: string }): CallToolResult {
+  return text(`Asset removed (id ${r.id}).`)
+}
+
+/** Confirmation of a detached destination. */
+export function destinationRemovedResult(r: { id: string }): CallToolResult {
+  return text(`Destination removed (id ${r.id}).`)
+}
+
 /** The result of publishing a post (per-destination outcomes). */
 export function publishResult(r: PublishPostResult): CallToolResult {
   if (!r.results.length) {

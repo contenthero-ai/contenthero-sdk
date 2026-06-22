@@ -19,6 +19,7 @@ import { registerPlatform } from './commands/platform.js'
 import { registerElement } from './commands/element.js'
 import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
+import { registerTranscribe } from './commands/transcribe.js'
 import { registerGeneration } from './commands/generation.js'
 import { registerMedia } from './commands/media.js'
 import { registerPost } from './commands/post.js'
@@ -66,6 +67,7 @@ export function buildProgram(): Command {
   registerElement(program)
   registerGenerate(program)
   registerUpscale(program)
+  registerTranscribe(program)
   registerGeneration(program)
   registerMedia(program)
   registerPost(program)

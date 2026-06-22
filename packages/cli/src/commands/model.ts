@@ -92,6 +92,7 @@ export function registerModel(program: Command): void {
           ...(ar?.supported?.length ? [['Aspect ratio', ar.supported.join(', ')] as [string, string]] : []),
           ...(dur ? [['Duration', dur] as [string, string]] : []),
           ...(audio?.supported ? [['Audio', audio.alwaysOn ? 'always on' : 'supported'] as [string, string]] : []),
+          ...(cap(model, 'negativePrompt') ? [['Negative prompt', 'supported'] as [string, string]] : []),
           ...(refMax > 0 ? [['Max references', refMax] as [string, number]] : []),
           ...(gen ? [['Generations', `${gen.min}-${gen.max} (default ${gen.default})`] as [string, string]] : []),
           ...(enabledFeatures.length ? [['Features', enabledFeatures.join(', ')] as [string, string]] : []),
