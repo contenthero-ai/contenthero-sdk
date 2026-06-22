@@ -64,6 +64,15 @@ function summaryHuman(p: PostSummary, action?: string): string {
 }
 
 function destinationHuman(d: PostDestination): string {
+  const settingsKeys = d.platformSettings
+    ? Object.keys(d.platformSettings).filter((k) => {
+        const v = (d.platformSettings as Record<string, unknown>)[k]
+        if (v == null) return false
+        if (Array.isArray(v)) return v.length > 0
+        if (typeof v === 'string') return v.length > 0
+        return true
+      })
+    : []
   return keyValues([
     ['Destination', d.id],
     ['Platform', d.platform ?? ''],
@@ -71,7 +80,23 @@ function destinationHuman(d: PostDestination): string {
     ['Connected account', d.connectedAccountId ?? '(none)'],
     ['Status', d.status ?? ''],
     ...(d.scheduledAt ? [['Scheduled', d.scheduledAt] as [string, string]] : []),
+    ...(settingsKeys.length ? [['Settings', settingsKeys.join(', ')] as [string, string]] : []),
   ])
+}
+
+/** Parse a --settings JSON-object argument into platformSettings. */
+function parsePlatformSettings(json: string | undefined): Record<string, unknown> | undefined {
+  if (json === undefined) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    throw new CliError('--settings must be valid JSON (e.g. \'{"caption":"hi"}\').', EXIT.USAGE)
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new CliError('--settings must be a JSON object.', EXIT.USAGE)
+  }
+  return parsed as Record<string, unknown>
 }
 
 export function registerPost(program: Command): void {
@@ -246,6 +271,7 @@ export function registerPost(program: Command): void {
     .option('--format <format>', "platform format, e.g. post, reel, story, short, thread")
     .option('--account <id>', 'connected account id (from `connected-account list`)')
     .option('--scheduled <iso>', 'ISO-8601 scheduled time for this destination')
+    .option('--settings <json>', 'platform publish config as a JSON object (shape from `platform get`)')
     .action(async (postId: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string)
       const { client, ctx } = makeClient(command)
@@ -254,6 +280,7 @@ export function registerPost(program: Command): void {
         format: opts.format as string | undefined,
         connectedAccountId: opts.account as string | undefined,
         scheduledAt: opts.scheduled as string | undefined,
+        platformSettings: parsePlatformSettings(opts.settings as string | undefined),
       })
       emit(d, ctx, destinationHuman)
     })
@@ -267,6 +294,7 @@ export function registerPost(program: Command): void {
     .option('--account <id>', 'connected account id')
     .option('--scheduled <iso>', 'ISO-8601 scheduled time')
     .option('--status <status>')
+    .option('--settings <json>', 'platform publish config as a JSON object (replaces existing; shape from `platform get`)')
     .action(async (postId: string, destinationId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const d = await client.updatePostDestination(postId, destinationId, {
@@ -274,6 +302,7 @@ export function registerPost(program: Command): void {
         connectedAccountId: opts.account as string | undefined,
         scheduledAt: opts.scheduled as string | undefined,
         status: opts.status as string | undefined,
+        platformSettings: parsePlatformSettings(opts.settings as string | undefined),
       })
       emit(d, ctx, destinationHuman)
     })

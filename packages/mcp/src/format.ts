@@ -535,10 +535,10 @@ export function postResult(p: PostDetail): CallToolResult {
       p.script ? `script: ${p.script}` : null,
       p.notes ? `notes: ${p.notes}` : null,
       `destinations (${p.destinations.length}):`,
-      ...p.destinations.map(
-        (d) =>
-          `  - ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}`,
-      ),
+      ...p.destinations.map((d) => {
+        const set = settingsKeys(d.platformSettings)
+        return `  - ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}${set ? ` | settings: ${set}` : ''}`
+      }),
       `assets (${p.assets.length}):`,
       ...p.assets.map((a) => `  - [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id})`),
     ]),
@@ -554,10 +554,24 @@ export function pipelineStageListResult(stages: PipelineStage[]): CallToolResult
   return text([`${stages.length} pipeline stage(s) (in order):`, ...rows].join('\n'))
 }
 
+/** The non-empty keys of a destination's platformSettings, for a compact summary. */
+function settingsKeys(settings: Record<string, unknown> | null | undefined): string | null {
+  if (!settings) return null
+  const keys = Object.keys(settings).filter((k) => {
+    const v = settings[k]
+    if (v == null) return false
+    if (Array.isArray(v)) return v.length > 0
+    if (typeof v === 'string') return v.length > 0
+    return true
+  })
+  return keys.length ? keys.join(', ') : null
+}
+
 /** A created or updated destination. */
 export function destinationResult(d: PostDestination): CallToolResult {
+  const set = settingsKeys(d.platformSettings)
   return text(
-    `Destination: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}.`,
+    `Destination: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}${set ? ` | settings: ${set}` : ' | no settings (set platformSettings to make it publishable)'}.`,
   )
 }
 

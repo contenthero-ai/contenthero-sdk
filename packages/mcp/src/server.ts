@@ -1468,13 +1468,17 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Add Post Destination',
       annotations: WRITE,
       description:
-        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Requires the pipeline:write scope.",
+        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform first for the exact fields. Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         platform: z.enum(POST_PLATFORMS).describe('Destination platform.'),
         format: z.string().optional().describe("Platform format, e.g. 'post', 'reel', 'story', 'short', 'thread'."),
         connectedAccountId: z.string().optional().describe('The connected account to publish through.'),
         scheduledAt: z.string().optional().describe('ISO-8601 scheduled time for this destination.'),
+        platformSettings: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Per-platform/per-format publish config (mediaItems, caption, thumbnails, privacy, etc.). Get the exact field shape for this platform + format from get_platform.'),
       },
     },
     async (args, extra) => {
@@ -1486,6 +1490,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             format: args.format,
             connectedAccountId: args.connectedAccountId,
             scheduledAt: args.scheduledAt,
+            platformSettings: args.platformSettings,
           }),
         )
       } catch (err) {
@@ -1501,7 +1506,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Post Destination',
       annotations: WRITE,
       description:
-        'Update one of a post\'s destinations (format, connected account, scheduled time, or status). Requires the pipeline:write scope.',
+        "Update one of a post's destinations (format, connected account, scheduled time, status, or platformSettings). Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform for the exact fields. It replaces the destination's settings, so include the full object. Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         destinationId: z.string().describe('The destination id (from get_post).'),
@@ -1509,6 +1514,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         connectedAccountId: z.string().optional(),
         scheduledAt: z.string().optional().describe('ISO-8601 scheduled time, or empty to clear.'),
         status: z.string().optional(),
+        platformSettings: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Per-platform/per-format publish config (mediaItems, caption, thumbnails, privacy, etc.); replaces the existing settings. Get the field shape from get_platform.'),
       },
     },
     async (args, extra) => {
@@ -1520,6 +1529,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             connectedAccountId: args.connectedAccountId,
             scheduledAt: args.scheduledAt,
             status: args.status,
+            platformSettings: args.platformSettings,
           }),
         )
       } catch (err) {

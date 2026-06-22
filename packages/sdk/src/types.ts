@@ -660,6 +660,12 @@ export interface PostDestination {
   status: string | null
   scheduledAt: string | null
   publishedAt: string | null
+  /**
+   * Per-platform/per-format publish config: the publish payload for this
+   * destination (mediaItems, caption, thumbnails, privacy, etc.). The shape per
+   * platform/format comes from getPlatform. Null when not yet set.
+   */
+  platformSettings: Record<string, unknown> | null
 }
 
 /** Full post detail as returned by `getPost`, with its assets and destinations. */
@@ -726,6 +732,13 @@ export interface AddDestinationInput {
   format?: string
   connectedAccountId?: string | null
   scheduledAt?: string | null
+  /**
+   * Per-platform/per-format publish config (mediaItems, caption, thumbnails,
+   * privacy, etc.). Get the exact shape for the platform + format from
+   * getPlatform, then fill it here.
+   */
+  platformSettings?: Record<string, unknown> | null
+  /** @deprecated Use platformSettings. Still accepted for back-compat. */
   platformSpecificData?: Record<string, unknown> | null
 }
 
@@ -735,6 +748,12 @@ export interface UpdateDestinationInput {
   status?: string
   connectedAccountId?: string | null
   scheduledAt?: string | null
+  /**
+   * Per-platform/per-format publish config (mediaItems, caption, thumbnails,
+   * privacy, etc.). Get the exact shape from getPlatform, then fill it here.
+   */
+  platformSettings?: Record<string, unknown> | null
+  /** @deprecated Use platformSettings. Still accepted for back-compat. */
   platformSpecificData?: Record<string, unknown> | null
 }
 

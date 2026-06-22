@@ -269,7 +269,7 @@ function fakeClient(overrides = {}) {
       notes: null,
       metadata: null,
       assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null, sortOrder: 0 }],
-      destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null }],
+      destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
     }),
     createPost: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     updatePost: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
@@ -1147,6 +1147,8 @@ test('get_post returns the post with its destinations and assets', async () => {
   const res = await mcp.callTool({ name: 'get_post', arguments: { postId: 'p1' } })
   assert.match(res.content[0].text, /destinations \(1\)/)
   assert.match(res.content[0].text, /instagram \(id d1\)/)
+  // The destination's platformSettings keys are surfaced (the publish payload).
+  assert.match(res.content[0].text, /settings: caption, mediaItems/)
   assert.match(res.content[0].text, /assets \(1\)/)
 })
 
@@ -1189,17 +1191,26 @@ test('add_post_destination passes platform + connected account through', async (
     fakeClient({
       addPostDestination: async (_postId, input) => {
         captured = input
-        return { id: 'd-new', connectedAccountId: input.connectedAccountId ?? null, platform: input.platform, format: input.format ?? 'post', status: 'draft', scheduledAt: null, publishedAt: null }
+        return { id: 'd-new', connectedAccountId: input.connectedAccountId ?? null, platform: input.platform, format: input.format ?? 'post', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: input.platformSettings ?? null }
       },
     }),
   )
   const res = await mcp.callTool({
     name: 'add_post_destination',
-    arguments: { postId: 'p1', platform: 'youtube', format: 'short', connectedAccountId: 'ca9' },
+    arguments: {
+      postId: 'p1',
+      platform: 'youtube',
+      format: 'short',
+      connectedAccountId: 'ca9',
+      platformSettings: { title: 'My Short', shortVideoUrl: 'https://cdn/v.mp4' },
+    },
   })
   assert.equal(captured.platform, 'youtube')
   assert.equal(captured.connectedAccountId, 'ca9')
+  // platformSettings is forwarded to the SDK and surfaced in the result.
+  assert.deepEqual(captured.platformSettings, { title: 'My Short', shortVideoUrl: 'https://cdn/v.mp4' })
   assert.match(res.content[0].text, /youtube \(id d-new\)/)
+  assert.match(res.content[0].text, /settings: title, shortVideoUrl/)
 })
 
 test('schedule_post sets the scheduled time', async () => {
