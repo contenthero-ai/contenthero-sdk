@@ -179,6 +179,35 @@ function fakeClient(overrides = {}) {
       cap('elevenlabs-transcribe', 'audio', 'generate', 'text'),
       cap('elevenlabs-voice-changer', 'audio', 'voice', 'audio'),
     ],
+    getModel: async (modelId) => ({
+      modelId,
+      displayName: 'Veo 3.1 Fast',
+      description: 'fast text+image to video',
+      contentType: 'video',
+      kind: 'generate',
+      tags: ['fast'],
+      isDefault: true,
+      capabilities: {
+        kind: 'generate',
+        outputType: 'video',
+        promptMode: 'required',
+        promptMaxChars: 1500,
+        inputTypes: ['text', 'startFrame'],
+        resolution: { supported: ['720p', '1080p'], default: '720p' },
+        aspectRatio: { supported: ['16:9', '9:16'], default: '16:9' },
+        duration: { mode: 'discrete', options: [4, 6, 8], default: 8 },
+        audio: { supported: true, alwaysOn: true },
+        maxImageRefs: 1,
+        generations: { min: 1, max: 4, default: 1 },
+        features: { recreate: true, edit: false },
+      },
+      promptReferences: {
+        scheme: 'descriptive',
+        honored: true,
+        inputs: [{ for: 'image', token: null, max: 3 }],
+        instruction: 'Describe each reference by its role or content in the prompt.',
+      },
+    }),
     listPosts: async () => ({
       posts: [
         { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
@@ -308,6 +337,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_inspiration_account',
     'get_inspiration_content',
     'get_media',
+    'get_model',
     'get_post',
     'get_voice',
     'list_avatars',
@@ -317,6 +347,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_connected_accounts',
     'list_inspiration_accounts',
     'list_media',
+    'list_models',
     'list_outliers',
     'list_pipeline_stages',
     'list_posts',
@@ -846,6 +877,87 @@ test('get_media passes the id token through and lists variations', async () => {
   assert.equal(capturedId, 'abcd1234-2')
   assert.match(res.content[0].text, /variation 2/)
   assert.match(res.content[0].text, /https:\/\/cdn\/2\.png/)
+})
+
+test('list_models surfaces ids, content type, and a capability summary', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_models', arguments: {} })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /nano-banana-2/)
+  assert.match(res.content[0].text, /veo-3\.1-fast/)
+  // Compact summary fields rendered for the video model (audio, refs, etc.).
+  assert.match(res.content[0].text, /\[video\]/)
+  // Points the agent to get_model for grounding.
+  assert.match(res.content[0].text, /get_model/)
+})
+
+test('list_models forwards the contentType filter', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      listModels: async (opts) => {
+        captured = opts
+        return [cap('veo-3.1-fast', 'video', 'generate', 'video')]
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'list_models', arguments: { contentType: 'video' } })
+  assert.deepEqual(captured, { contentType: 'video' })
+})
+
+test('get_model passes the id through and renders the full request shape', async () => {
+  let capturedId
+  const mcp = await connect(
+    fakeClient({
+      getModel: async (modelId) => {
+        capturedId = modelId
+        return {
+          modelId,
+          displayName: 'Veo 3.1 Fast',
+          description: 'fast text+image to video',
+          contentType: 'video',
+          kind: 'generate',
+          tags: ['fast'],
+          isDefault: true,
+          capabilities: {
+            kind: 'generate',
+            outputType: 'video',
+            promptMode: 'required',
+            promptMaxChars: 1500,
+            inputTypes: ['text', 'startFrame', 'imageRef', 'videoRef'],
+            resolution: { supported: ['720p', '1080p'], default: '720p' },
+            aspectRatio: { supported: ['16:9', '9:16'], default: '16:9' },
+            duration: { mode: 'discrete', options: [4, 6, 8], default: 8 },
+            audio: { supported: true, alwaysOn: true },
+            maxImageRefs: 1,
+            generations: { min: 1, max: 4, default: 1 },
+            features: { recreate: true, edit: false },
+          },
+          promptReferences: {
+            scheme: 'numbered_tag',
+            honored: true,
+            inputs: [
+              { for: 'image', token: '@Image{n}', max: 9 },
+              { for: 'video', token: '@Video{n}', max: 3 },
+            ],
+            instruction: 'Tag each reference in the prompt by order (@Image{n}, @Video{n}). This model binds the tags to the references.',
+          },
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_model', arguments: { modelId: 'veo-3.1-fast' } })
+  assert.ok(!res.isError)
+  assert.equal(capturedId, 'veo-3.1-fast')
+  assert.match(res.content[0].text, /required \(max 1500 chars\)/)
+  assert.match(res.content[0].text, /4s\|6s\|8s/)
+  assert.match(res.content[0].text, /720p, 1080p/)
+  assert.match(res.content[0].text, /audio: supported \(always on\)/)
+  // Only enabled features are listed (recreate on, edit off).
+  assert.match(res.content[0].text, /features: recreate/)
+  // Reference-addressing guidance is rendered.
+  assert.match(res.content[0].text, /Referencing \(numbered_tag, bound\)/)
+  assert.match(res.content[0].text, /@Image\{n\} \(up to 9\)/)
 })
 
 test('list_brand_kits surfaces id, name, and default flag', async () => {

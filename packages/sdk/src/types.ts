@@ -29,6 +29,22 @@ export interface References {
   startFrame?: string
   /** Last frame for video models that accept one (URL or output id). */
   endFrame?: string
+  /**
+   * Named reference elements (Kling 3.0), each addressable in the prompt as
+   * @name. Requires a startFrame alongside them. See get_model's promptReferences
+   * for which models support elements.
+   */
+  elements?: ReferenceElement[]
+}
+
+/** A named group of reference images, addressable in the prompt as @name (Kling 3.0). */
+export interface ReferenceElement {
+  /** Referenced in the prompt as @name. */
+  name: string
+  /** What the element represents (passed to the provider for conditioning). */
+  description?: string
+  /** Supporting image URLs or output-id tokens for this element. */
+  images: string[]
 }
 
 /**
@@ -506,7 +522,22 @@ export interface ModelCapabilities {
   [key: string]: unknown
 }
 
-/** A model in the discovery catalog returned by `listModels`. */
+/**
+ * How to address a model's references in the prompt (from get_model). Tells an
+ * agent the scheme the model actually binds, so references are tagged correctly.
+ */
+export interface PromptReferences {
+  /** 'numbered_tag' (@Image1) | 'named_tag' (@name) | 'numbered_prose' ("image 1") | 'descriptive' | 'none'. */
+  scheme: 'numbered_tag' | 'named_tag' | 'numbered_prose' | 'descriptive' | 'none'
+  /** Whether the model semantically binds the addressing (vs positional-only). */
+  honored: boolean
+  /** The model's multi-reference buckets and the token to use for each ({n}/{name}). */
+  inputs: Array<{ for: string; token: string | null; max: number }>
+  /** One-sentence guidance for weaving references into the prompt. */
+  instruction: string
+}
+
+/** A model in the discovery catalog returned by `listModels` / `getModel`. */
 export interface ModelInfo {
   modelId: string
   displayName: string
@@ -514,7 +545,11 @@ export interface ModelInfo {
   contentType: 'image' | 'video' | 'audio'
   kind: ModelKind
   tags: string[]
+  /** True for the default model of its content type. */
+  isDefault?: boolean
   capabilities: ModelCapabilities
+  /** How to address references in the prompt (present on getModel; optional on list items). */
+  promptReferences?: PromptReferences
 }
 
 // ---------------------------------------------------------------------------

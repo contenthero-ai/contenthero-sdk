@@ -406,6 +406,17 @@ export class ContentHero {
     return data.models
   }
 
+  /**
+   * Get one model's full request shape by id: the exact parameters it accepts
+   * (input types, modes, duration range, resolutions, aspect ratios, max refs,
+   * generation count, promptMode, promptMaxChars, features). Use this to ground
+   * a generation against the model's real capabilities instead of guessing.
+   * Throws NotFoundError for an unknown, disabled, or hidden model id.
+   */
+  async getModel(modelId: string): Promise<ModelInfo> {
+    return this.request<ModelInfo>('GET', `/api/v1/models/${encodeURIComponent(modelId)}`)
+  }
+
   // -------------------------------------------------------------------------
   // Content pipeline (posts)
   // -------------------------------------------------------------------------

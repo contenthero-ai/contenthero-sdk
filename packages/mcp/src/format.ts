@@ -25,6 +25,7 @@ import type {
   InspirationContent,
   MediaItem,
   MediaSummary,
+  ModelInfo,
   Outlier,
   OutliersResult,
   PipelineStage,
@@ -294,6 +295,120 @@ export function balanceResult(b: Balance): CallToolResult {
   return text(
     `Balance: ${b.balance} credits (tier: ${b.tier}, auto top-up: ${b.autoTopupEnabled ? 'on' : 'off'}).`,
   )
+}
+
+// -- models (discovery catalog) -----------------------------------------------
+
+/** Read a possibly-absent capability field from the loosely-typed bag. */
+function cap(m: ModelInfo, key: string): any {
+  return (m.capabilities as Record<string, unknown>)[key]
+}
+
+/** Human duration spec, e.g. "5s|10s", "4-12s", "8s", or null when not applicable. */
+function durationSummary(d: any): string | null {
+  if (!d || d.mode === 'none') return null
+  if (d.mode === 'locked') return `${d.value}s`
+  if (d.mode === 'discrete') return Array.isArray(d.options) ? `${d.options.join('s|')}s` : null
+  if (d.mode === 'range') return `${d.min}-${d.max}s`
+  return null
+}
+
+/** Compact, decision-relevant capability summary for the list view. */
+function capabilitySummary(m: ModelInfo): string {
+  const parts: string[] = []
+  const inputs = cap(m, 'inputTypes')
+  if (Array.isArray(inputs) && inputs.length) parts.push(`inputs:${inputs.join('+')}`)
+  const dur = durationSummary(cap(m, 'duration'))
+  if (dur) parts.push(`dur:${dur}`)
+  const res = cap(m, 'resolution')?.supported
+  if (Array.isArray(res) && res.length) parts.push(`res:${res.join('/')}`)
+  const ar = cap(m, 'aspectRatio')?.supported
+  if (Array.isArray(ar) && ar.length) parts.push(`ar:${ar.join('/')}`)
+  if (cap(m, 'audio')?.supported) parts.push('audio')
+  const refMax = Math.max(
+    cap(m, 'maxImageRefs') ?? 0,
+    cap(m, 'maxVideoRefs') ?? 0,
+    cap(m, 'maxAudioRefs') ?? 0,
+  )
+  if (refMax > 0) parts.push(`refs:≤${refMax}`)
+  return parts.join(' | ')
+}
+
+/** List of models in the discovery catalog. */
+export function modelListResult(models: ModelInfo[]): CallToolResult {
+  if (!models.length) return text('No models found.')
+  const rows = models.map((m) => {
+    const summary = capabilitySummary(m)
+    const def = m.isDefault ? ' [default]' : ''
+    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind}${summary ? ` | ${summary}` : ''}`
+  })
+  return text(
+    [
+      `${models.length} model(s). Call get_model(modelId) for the full request shape before generating:`,
+      ...rows,
+    ].join('\n'),
+  )
+}
+
+/** One model's full request shape (the grounding view). */
+export function modelResult(m: ModelInfo): CallToolResult {
+  const res = cap(m, 'resolution')
+  const ar = cap(m, 'aspectRatio')
+  const dur = cap(m, 'duration')
+  const gen = cap(m, 'generations')
+  const audio = cap(m, 'audio')
+  const features = cap(m, 'features') as Record<string, boolean> | undefined
+  const enabledFeatures = features ? Object.keys(features).filter((k) => features[k]) : []
+  const refLines = [
+    cap(m, 'maxImageRefs') ? `image refs: up to ${cap(m, 'maxImageRefs')}` : null,
+    cap(m, 'maxVideoRefs') ? `video refs: up to ${cap(m, 'maxVideoRefs')}` : null,
+    cap(m, 'maxAudioRefs') ? `audio refs: up to ${cap(m, 'maxAudioRefs')}` : null,
+  ].filter(Boolean) as string[]
+
+  return text(
+    lines([
+      `${m.modelId} (${m.displayName})${m.isDefault ? ' [default]' : ''}`,
+      `type: ${m.contentType} | operation: ${m.kind}`,
+      m.description ? `description: ${m.description}` : null,
+      m.tags.length ? `tags: ${m.tags.join(', ')}` : null,
+      '',
+      'Request shape:',
+      `  prompt: ${cap(m, 'promptMode') ?? 'optional'}${cap(m, 'promptMaxChars') ? ` (max ${cap(m, 'promptMaxChars')} chars)` : ''}`,
+      Array.isArray(cap(m, 'inputTypes')) && cap(m, 'inputTypes').length
+        ? `  input types: ${cap(m, 'inputTypes').join(', ')}`
+        : null,
+      res?.supported?.length
+        ? `  resolution: ${res.supported.join(', ')}${res.default ? ` (default ${res.default})` : ''}`
+        : null,
+      ar?.supported?.length
+        ? `  aspect ratio: ${ar.supported.join(', ')}${ar.default ? ` (default ${ar.default})` : ''}`
+        : null,
+      durationSummary(dur) ? `  duration: ${durationSummary(dur)}${dur?.default ? ` (default ${dur.default}s)` : ''}` : null,
+      audio?.supported ? `  audio: supported${audio.alwaysOn ? ' (always on)' : ''}` : null,
+      cap(m, 'negativePrompt') ? '  negativePrompt: supported' : null,
+      gen ? `  generations: ${gen.min}-${gen.max} (default ${gen.default})` : null,
+      ...refLines.map((l) => `  ${l}`),
+      enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
+      ...promptReferenceLines(m.promptReferences),
+      '',
+      "Build the request within this shape, preview cost with the matching generate tool's getCost option, then run it.",
+    ]),
+  )
+}
+
+/** Render the reference-addressing guidance (how to tag references in the prompt). */
+function promptReferenceLines(pr: ModelInfo['promptReferences']): Array<string | null> {
+  if (!pr || pr.scheme === 'none') return []
+  const tokens = pr.inputs
+    .filter((i) => i.token)
+    .map((i) => `${i.token}${i.max > 1 ? ` (up to ${i.max})` : ''}`)
+    .join(', ')
+  return [
+    '',
+    `Referencing (${pr.scheme}${pr.honored ? ', bound' : ', positional'}):`,
+    `  ${pr.instruction}`,
+    tokens ? `  tokens: ${tokens}` : null,
+  ]
 }
 
 // -- posts (content pipeline) -------------------------------------------------

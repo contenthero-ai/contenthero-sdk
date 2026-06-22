@@ -75,6 +75,8 @@ import {
   inspirationContentResult,
   mediaListResult,
   mediaResult,
+  modelListResult,
+  modelResult,
   errorResult,
   generationBatchResult,
   generationStatusResult,
@@ -294,6 +296,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('Reference audio (e.g. Seedance references mode, audio-driven video): each a URL or a previous output id. Only used by models that accept audio references.'),
+        elements: z
+          .array(
+            z.object({
+              name: z.string().describe('Reference it in the prompt as @name.'),
+              description: z.string().optional().describe('What the element represents.'),
+              images: z.array(z.string()).describe('Image URLs or previous output ids for this element.'),
+            }),
+          )
+          .optional()
+          .describe('Named reference elements (Kling 3.0): each is a group of images addressable in the prompt as @name. Requires a startFrame. See get_model promptReferences for which models accept elements (named_tag scheme).'),
         multiShot: z
           .boolean()
           .optional()
@@ -331,6 +343,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             images: args.referenceImages,
             videos: args.referenceVideos,
             audio: args.referenceAudio,
+            elements: args.elements,
           }),
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
@@ -993,6 +1006,53 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return mediaResult(await client.getMedia(args.id))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- list_models ----------------------------------------------------------
+  server.registerTool(
+    'list_models',
+    {
+      title: 'List Models',
+      annotations: READ,
+      description:
+        "List the generation models available to this account (the discovery catalog): which models exist, their content type and operation, and a compact capability summary. Use this to pick a model, then call get_model for its full request shape before generating. Source of truth for valid model ids; do not hardcode them.",
+      inputSchema: {
+        contentType: z
+          .enum(['image', 'video', 'audio'])
+          .optional()
+          .describe('Filter to one content type.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return modelListResult(await client.listModels({ contentType: args.contentType }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_model ------------------------------------------------------------
+  server.registerTool(
+    'get_model',
+    {
+      title: 'Get Model',
+      annotations: READ,
+      description:
+        "Get one model's full request shape by id: the exact parameters it accepts (input types, prompt mode and char cap, duration range, resolutions, aspect ratios, max references, generation count, audio, features). Ground a generation against this instead of guessing the parameters, then preview cost with the matching generate tool's getCost option before running it.",
+      inputSchema: {
+        modelId: z.string().describe('The model id, e.g. from list_models (such as "veo-3.1-fast").'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return modelResult(await client.getModel(args.modelId))
       } catch (err) {
         return errorResult(err)
       }
