@@ -177,3 +177,54 @@ test('generateAndWait throws GenerationTimeoutError past the deadline', async ()
     (err: unknown) => err instanceof GenerationTimeoutError,
   )
 })
+
+test('favorite posts to /api/v1/favorite with the asset target', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { favorited: true } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.favorite({ assetType: 'brand_kit', id: 'bk1' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/favorite')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { assetType: 'brand_kit', id: 'bk1' })
+})
+
+test('favorite targets a studio variation slot via variationIndex', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { favorited: true } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.favorite({ id: 'output-uuid', variationIndex: 2 })
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { id: 'output-uuid', variationIndex: 2 })
+})
+
+test('unfavorite, archive, and unarchive hit their routes', async () => {
+  const unfav = stubFetch([{ status: 200, body: { favorited: false } }])
+  const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: unfav.fetch, baseUrl: 'https://example.test' })
+  await c1.unfavorite({ assetType: 'post', id: 'p1' })
+  assert.equal(unfav.calls[0]?.url, 'https://example.test/api/v1/unfavorite')
+
+  const arch = stubFetch([{ status: 200, body: { archived: true } }])
+  const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: arch.fetch, baseUrl: 'https://example.test' })
+  await c2.archive({ assetType: 'brand_kit_section', id: 's1' })
+  assert.equal(arch.calls[0]?.url, 'https://example.test/api/v1/archive')
+  assert.deepEqual(JSON.parse(arch.calls[0]?.init?.body as string), { assetType: 'brand_kit_section', id: 's1' })
+
+  const unarch = stubFetch([{ status: 200, body: { archived: false } }])
+  const c3 = new ContentHero({ apiKey: 'ch_live_test', fetch: unarch.fetch, baseUrl: 'https://example.test' })
+  await c3.unarchive({ assetType: 'project', id: 'pr1' })
+  assert.equal(unarch.calls[0]?.url, 'https://example.test/api/v1/unarchive')
+})
+
+test('list filters append favorited and archived query params', async () => {
+  const media = stubFetch([{ status: 200, body: { media: [] } }])
+  const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: media.fetch, baseUrl: 'https://example.test' })
+  await c1.listMedia({ favorited: true })
+  assert.equal(media.calls[0]?.url, 'https://example.test/api/v1/media?favorited=true')
+
+  const kits = stubFetch([{ status: 200, body: { brandKits: [] } }])
+  const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: kits.fetch, baseUrl: 'https://example.test' })
+  await c2.listBrandKits({ archived: true })
+  assert.equal(kits.calls[0]?.url, 'https://example.test/api/v1/brand-kits?archived=true')
+
+  const voices = stubFetch([{ status: 200, body: { voices: [] } }])
+  const c3 = new ContentHero({ apiKey: 'ch_live_test', fetch: voices.fetch, baseUrl: 'https://example.test' })
+  await c3.listVoices({ favorited: true })
+  assert.equal(voices.calls[0]?.url, 'https://example.test/api/v1/voices?favorited=true')
+})

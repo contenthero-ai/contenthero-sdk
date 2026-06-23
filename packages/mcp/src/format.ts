@@ -153,7 +153,7 @@ export function avatarResult(a: Avatar): CallToolResult {
       a.looks.length ? `looks (${a.looks.length}):` : 'looks: none',
       ...a.looks.map(
         (l) =>
-          `  - ${l.name ?? l.lookType ?? 'look'} (id ${l.id})${l.isDefault ? ' [default]' : ''}: ${l.imageUrl ?? 'none'}`,
+          `  - ${l.name ?? l.lookType ?? 'look'} (id ${l.id})${l.isDefault ? ' [default]' : ''}${l.isFavorited ? ' [favorite]' : ''}${l.isArchived ? ' [archived]' : ''}: ${l.imageUrl ?? 'none'}`,
       ),
     ]),
   )
@@ -251,8 +251,20 @@ export function brandKnowledgeItemResult(item: BrandKnowledgeItem, verb = 'Added
   return text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (id ${item.id}).`)
 }
 
-export function brandKitArchivedResult(kit: BrandKitSummary): CallToolResult {
-  return text(`Archived brand kit "${kit.name}" (id ${kit.id}).`)
+/**
+ * Confirmation of a universal favorite / unfavorite / archive / unarchive action.
+ * `target` describes what was acted on: a studio variation slot when
+ * variationIndex is set, otherwise a top-level asset by type + id.
+ */
+export function statusActionResult(
+  action: 'Favorited' | 'Unfavorited' | 'Archived' | 'Unarchived',
+  target: { assetType?: string; id: string; variationIndex?: number },
+): CallToolResult {
+  const what =
+    target.variationIndex != null
+      ? `variation ${target.variationIndex} of output ${target.id}`
+      : `${target.assetType ?? 'asset'} ${target.id}`
+  return text(`${action} ${what}.`)
 }
 
 /** List of studio outputs (media). */
@@ -291,7 +303,7 @@ export function mediaResult(m: MediaItem): CallToolResult {
       `status: ${m.status}${m.creditsUsed != null ? ` | ${m.creditsUsed} credits` : ''}`,
       `variations (${m.variationCount}):`,
       ...m.variations.map(
-        (v) => `  ${v.variation}. ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}`,
+        (v) => `  ${v.variation}. ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}${v.isArchived ? ' [archived]' : ''}`,
       ),
     ]),
   )

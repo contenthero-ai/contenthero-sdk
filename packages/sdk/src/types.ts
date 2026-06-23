@@ -285,6 +285,8 @@ export interface AvatarLook {
   imageUrl: string | null
   lookType: string | null
   isDefault: boolean
+  isFavorited: boolean
+  isArchived: boolean
 }
 
 /** Full avatar detail as returned by `getAvatar`. */
@@ -318,6 +320,12 @@ export interface Voice extends VoiceSummary {
   useCase: string | null
 }
 
+/** Options for `listVoices`. */
+export interface ListVoicesOptions {
+  /** When true, return only favorited voices. */
+  favorited?: boolean
+}
+
 /** A brand kit as returned by `listBrandKits` (the list projection). */
 export interface BrandKitSummary {
   id: string
@@ -329,6 +337,14 @@ export interface BrandKitSummary {
   isFavorited: boolean
   isArchived: boolean
   createdAt: string | null
+}
+
+/** Options for `listBrandKits`. */
+export interface ListBrandKitsOptions {
+  /** When true, return only favorited brand kits. */
+  favorited?: boolean
+  /** When true, return only archived brand kits (default excludes archived). */
+  archived?: boolean
 }
 
 /** A brand/inspiration account linked to a brand kit. */
@@ -499,6 +515,7 @@ export interface MediaVariation {
   url: string | null
   status: string
   isFavorited: boolean
+  isArchived: boolean
 }
 
 /** A studio output as returned by `listMedia` (the list projection). */
@@ -536,6 +553,10 @@ export interface ListMediaOptions {
   status?: string
   /** Filter by asset class: 'creation', 'board', 'look', or 'upload'. */
   kind?: 'creation' | 'board' | 'look' | 'upload'
+  /** When true, return only outputs that have a favorited (non-archived) variation. */
+  favorited?: boolean
+  /** When true, return only outputs that have an archived variation. */
+  archived?: boolean
   limit?: number
   offset?: number
 }
@@ -907,6 +928,8 @@ export interface ListOutliersOptions {
   sortBy?: 'score' | 'date' | 'views'
   /** Scope to the inspiration accounts linked to this brand kit. */
   brandKitId?: string
+  /** When true, return only content the caller has favorited. */
+  favorited?: boolean
   limit?: number
   offset?: number
 }
@@ -997,4 +1020,48 @@ export interface PlatformSchema {
   characterLimits: Record<string, number> | null
   /** Per-format field template: field names + default values (File handles stripped). */
   fieldTemplatesByFormat: Record<string, Record<string, unknown>>
+}
+
+// ---------------------------------------------------------------------------
+// Favorites & archive (universal set/clear across asset types)
+// ---------------------------------------------------------------------------
+
+/** The asset types that can be favorited. */
+export type FavoriteAssetType =
+  | 'post'
+  | 'voice'
+  | 'brand_kit'
+  | 'project'
+  | 'inspiration_content'
+  | 'gallery'
+
+/** The asset types that can be archived. */
+export type ArchiveAssetType = 'post' | 'brand_kit' | 'brand_kit_section' | 'project'
+
+/**
+ * The target of a favorite / unfavorite call.
+ *
+ * Provide `assetType` + `id` for a top-level asset, OR `id` + `variationIndex`
+ * (1-based) to target a single studio output variation slot, in which case the
+ * id is a studio output id and `assetType` is ignored.
+ */
+export interface FavoriteInput {
+  assetType?: FavoriteAssetType
+  id: string
+  /** 1-based variation slot; when set, `id` is a studio output id. */
+  variationIndex?: number
+}
+
+/**
+ * The target of an archive / unarchive call.
+ *
+ * Provide `assetType` + `id` for a top-level asset, OR `id` + `variationIndex`
+ * (1-based) to target a single studio output variation slot, in which case the
+ * id is a studio output id and `assetType` is ignored.
+ */
+export interface ArchiveInput {
+  assetType?: ArchiveAssetType
+  id: string
+  /** 1-based variation slot; when set, `id` is a studio output id. */
+  variationIndex?: number
 }

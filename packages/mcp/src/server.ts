@@ -30,6 +30,9 @@
  * fields, and per-tool modelId enums prevent cross-type model misuse.
  */
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import {
@@ -57,7 +60,6 @@ import {
   avatarListResult,
   avatarResult,
   balanceResult,
-  brandKitArchivedResult,
   brandKitListResult,
   brandKitResult,
   brandKitSectionResult,
@@ -100,6 +102,7 @@ import {
   postResult,
   postSummaryResult,
   publishResult,
+  statusActionResult,
   trackedAccountListResult,
   transcriptResult,
   voiceListResult,
@@ -596,12 +599,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Voices',
       annotations: READ,
       description:
-        "List the account's saved voices (favorites first). Each has a voiceId for generate_lip_sync / generate_audio (TTS). Call get_voice for full detail.",
+        "List the account's saved voices (favorites first). Set favorited=true to show only favorites. Each has a voiceId for generate_lip_sync / generate_audio (TTS). Call get_voice for full detail.",
+      inputSchema: {
+        favorited: z.boolean().optional().describe('Only favorited voices.'),
+      },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return voiceListResult(await client.listVoices())
+        return voiceListResult(await client.listVoices({ favorited: args.favorited }))
       } catch (err) {
         return errorResult(err)
       }
@@ -636,12 +642,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Brand Kits',
       annotations: READ,
       description:
-        "List the account's brand kits (default first). Call get_brand_kit for one kit's full brand context (voice, visual identity, audience, sections, accounts, knowledge) to write on-brand content.",
+        "List the account's brand kits (default first). Excludes archived kits unless archived=true; set favorited=true for only favorites. Call get_brand_kit for one kit's full brand context (voice, visual identity, audience, sections, accounts, knowledge) to write on-brand content.",
+      inputSchema: {
+        favorited: z.boolean().optional().describe('Only favorited brand kits.'),
+        archived: z.boolean().optional().describe('Only archived brand kits (default excludes archived).'),
+      },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return brandKitListResult(await client.listBrandKits())
+        return brandKitListResult(
+          await client.listBrandKits({ favorited: args.favorited, archived: args.archived }),
+        )
       } catch (err) {
         return errorResult(err)
       }
@@ -698,28 +710,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const { brandKitId, ...input } = args
         return brandKitResult(await client.updateBrandKit(brandKitId, input))
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- archive_brand_kit ----------------------------------------------------
-  server.registerTool(
-    'archive_brand_kit',
-    {
-      title: 'Archive Brand Kit',
-      annotations: WRITE,
-      description:
-        'Archive a brand kit (reversible; ContentHero never hard-deletes). Requires the brandkit:write scope.',
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id to archive.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return brandKitArchivedResult(await client.archiveBrandKit(args.brandKitId))
       } catch (err) {
         return errorResult(err)
       }
@@ -786,32 +776,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             fields: args.fields,
           }),
           'Updated section',
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- archive_brand_kit_section --------------------------------------------
-  server.registerTool(
-    'archive_brand_kit_section',
-    {
-      title: 'Archive Brand Kit Section',
-      annotations: WRITE,
-      description:
-        'Archive a brand-kit section (soft delete, reversible). Use it to remove a section an agent added. Requires the brandkit:write scope.',
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        sectionId: z.string().describe('The section id to archive.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return brandKitSectionResult(
-          await client.archiveBrandKitSection(args.brandKitId, args.sectionId),
-          'Archived section',
         )
       } catch (err) {
         return errorResult(err)
@@ -971,7 +935,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the account's recent studio outputs (generated images, videos, audio, transcripts), newest first. Reference boards are included too; filter with kind='board' (or 'creation'/'look'). Each item has an id and its variation URLs. Call get_media for one output's full detail and individual variations.",
+        "List the account's recent studio outputs (generated images, videos, audio, transcripts), newest first. Reference boards are included too; filter with kind='board' (or 'creation'/'look'). Set favorited=true to show only outputs with a favorited variation, or archived=true for outputs with an archived variation. Each item has an id and its variation URLs. Call get_media for one output's full detail and individual variations (incl. per-variation favorite/archive state).",
       inputSchema: {
         contentType: z
           .enum(['image', 'video', 'audio', 'transcript'])
@@ -982,6 +946,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("Filter by asset class: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all."),
         status: z.string().optional().describe("Status filter; defaults to 'completed'."),
+        favorited: z.boolean().optional().describe('Only outputs that have a favorited variation.'),
+        archived: z.boolean().optional().describe('Only outputs that have an archived variation.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
       },
     },
@@ -993,6 +959,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             contentType: args.contentType,
             kind: args.kind,
             status: args.status,
+            favorited: args.favorited,
+            archived: args.archived,
             limit: args.limit,
           }),
         )
@@ -1550,28 +1518,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- archive_post ---------------------------------------------------------
-  server.registerTool(
-    'archive_post',
-    {
-      title: 'Archive Post',
-      annotations: WRITE,
-      description:
-        'Archive a post (sets status to archived; reversible by updating the status back). ContentHero never hard-deletes. Requires the pipeline:write scope.',
-      inputSchema: {
-        postId: z.string().describe('The post id to archive.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return postSummaryResult(await client.archivePost(args.postId), 'Archived')
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
   // -- add_post_destination -------------------------------------------------
   server.registerTool(
     'add_post_destination',
@@ -1951,7 +1897,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Outliers',
       annotations: READ,
       description:
-        "List top-performing content (outliers) from the creators the account tracks, ranked by outlier score (how far a post overperformed its creator's baseline). Filter by platform, content type, minimum score, or a text search. Call get_inspiration_content for one item's full detail incl. transcript. This is the core research read for finding what's working.",
+        "List top-performing content (outliers) from the creators the account tracks, ranked by outlier score (how far a post overperformed its creator's baseline). Filter by platform, content type, minimum score, or a text search. Set favorited=true to show only content the account has favorited. Call get_inspiration_content for one item's full detail incl. transcript. This is the core research read for finding what's working.",
       inputSchema: {
         platform: z.enum(['youtube', 'instagram']).optional().describe('Filter to one platform.'),
         contentType: z.string().optional().describe("Filter by content type, e.g. 'video', 'short', 'reel'."),
@@ -1959,6 +1905,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         search: z.string().optional().describe('Text search across title, creator, handle, and description.'),
         sortBy: z.enum(['score', 'date', 'views']).optional().describe("Sort order (default 'score')."),
         brandKitId: z.string().optional().describe('Scope to the inspiration accounts linked to this brand kit (from get_brand_kit).'),
+        favorited: z.boolean().optional().describe('Only content the account has favorited.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
       },
@@ -1974,6 +1921,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             search: args.search,
             sortBy: args.sortBy,
             brandKitId: args.brandKitId,
+            favorited: args.favorited,
             limit: args.limit,
             offset: args.offset,
           }),
@@ -2111,6 +2059,155 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       }
     },
   )
+
+  // ===========================================================================
+  // Favorites & archive (one universal pair each, across asset types)
+  // ===========================================================================
+
+  // -- favorite -------------------------------------------------------------
+  server.registerTool(
+    'favorite',
+    {
+      title: 'Favorite',
+      annotations: WRITE,
+      description:
+        "Mark an asset as a favorite. For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent.",
+      inputSchema: {
+        assetType: z
+          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery'])
+          .optional()
+          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
+        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
+        variationIndex: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.favorite({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
+        return statusActionResult('Favorited', args)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- unfavorite -----------------------------------------------------------
+  server.registerTool(
+    'unfavorite',
+    {
+      title: 'Unfavorite',
+      annotations: WRITE,
+      description:
+        'Remove the favorite flag from an asset. Same target shape as favorite: assetType + id for a top-level asset, or output id + variationIndex (1-based) for a studio media variation. Requires the favorites:write scope. Idempotent.',
+      inputSchema: {
+        assetType: z
+          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery'])
+          .optional()
+          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
+        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
+        variationIndex: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.unfavorite({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
+        return statusActionResult('Unfavorited', args)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- archive --------------------------------------------------------------
+  server.registerTool(
+    'archive',
+    {
+      title: 'Archive',
+      annotations: WRITE,
+      description:
+        "Archive an asset (reversible; ContentHero never hard-deletes). For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a post sets its status to 'archived'. Requires the favorites:write scope. Idempotent.",
+      inputSchema: {
+        assetType: z
+          .enum(['post', 'brand_kit', 'brand_kit_section', 'project'])
+          .optional()
+          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
+        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
+        variationIndex: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.archive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
+        return statusActionResult('Archived', args)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- unarchive ------------------------------------------------------------
+  server.registerTool(
+    'unarchive',
+    {
+      title: 'Unarchive',
+      annotations: WRITE,
+      description:
+        "Unarchive an asset (restore it). For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project). To unarchive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Unarchiving a post restores it to 'draft'. Requires the favorites:write scope. Idempotent.",
+      inputSchema: {
+        assetType: z
+          .enum(['post', 'brand_kit', 'brand_kit_section', 'project'])
+          .optional()
+          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
+        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
+        variationIndex: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.unarchive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
+        return statusActionResult('Unarchived', args)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+}
+
+/** Read our own version from package.json (kept in lockstep with sdk). */
+function readVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as {
+      version?: string
+    }
+    return pkg.version ?? '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
 }
 
 /**
@@ -2120,7 +2217,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 export async function buildServer(options: BuildServerOptions = {}): Promise<McpServer> {
   const getClient = options.getClient ?? defaultGetClient
   const models = await resolveModelEnums(getClient)
-  const server = new McpServer({ name: 'contenthero', version: '0.2.4' })
+  const server = new McpServer({ name: 'contenthero', version: readVersion() })
   registerTools(server, { getClient: () => getClient(), models })
   return server
 }

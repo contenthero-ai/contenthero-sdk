@@ -43,19 +43,24 @@ export function registerBrandKit(program: Command): void {
 
   brandKit
     .command('list')
-    .description('List the account\'s brand kits (default first)')
-    .action(async (_opts, command: Command) => {
+    .description('List the account\'s brand kits (default first; excludes archived unless --archived)')
+    .option('--favorite', 'only favorited brand kits')
+    .option('--archived', 'only archived brand kits (default excludes archived)')
+    .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const kits = await client.listBrandKits()
+      const kits = await client.listBrandKits({
+        favorited: opts.favorite ? true : undefined,
+        archived: opts.archived ? true : undefined,
+      })
       emit(kits, ctx, (rows: BrandKitSummary[]) =>
         table(
-          ['ID', 'NAME', 'BUSINESS', 'DEFAULT', 'ACTIVE'],
+          ['ID', 'NAME', 'BUSINESS', 'DEFAULT', 'FAV'],
           rows.map((k) => [
             k.id.slice(0, 8),
             k.name,
             k.businessName ?? '',
             k.isDefault ? 'yes' : '',
-            k.isActive ? 'yes' : '',
+            k.isFavorited ? 'yes' : '',
           ]),
         ),
       )
@@ -126,21 +131,6 @@ export function registerBrandKit(program: Command): void {
       )
     })
 
-  brandKit
-    .command('archive')
-    .description('Archive a brand kit (reversible; requires brandkit:write)')
-    .argument('<id>', 'the brand kit id')
-    .action(async (id: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const k = await client.archiveBrandKit(id)
-      emit(k, ctx, (kit: BrandKitSummary) =>
-        keyValues([
-          ['Archived', kit.name],
-          ['Id', kit.id],
-        ]),
-      )
-    })
-
   // -- brand-kit section ----------------------------------------------------
   const section = brandKit.command('section').description('Manage a brand kit\'s curated sections')
 
@@ -179,17 +169,6 @@ export function registerBrandKit(program: Command): void {
         fields: opts.fields as unknown[] | undefined,
       })
       emit(s, ctx, (rec: BrandKitSectionRecord) => recordHuman(rec, 'Updated section'))
-    })
-
-  section
-    .command('archive')
-    .description('Archive a brand-kit section (soft delete, reversible; requires brandkit:write)')
-    .argument('<brandKitId>', 'the brand kit id')
-    .argument('<sectionId>', 'the section id to archive')
-    .action(async (brandKitId: string, sectionId: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const s = await client.archiveBrandKitSection(brandKitId, sectionId)
-      emit(s, ctx, (rec: BrandKitSectionRecord) => recordHuman(rec, 'Archived section'))
     })
 
   // -- brand-kit knowledge --------------------------------------------------

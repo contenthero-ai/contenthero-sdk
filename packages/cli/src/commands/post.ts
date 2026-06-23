@@ -239,15 +239,6 @@ export function registerPost(program: Command): void {
     })
 
   post
-    .command('archive')
-    .description('Archive a post (status -> archived; reversible)')
-    .argument('<id>', 'the post id')
-    .action(async (id: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      emit(await client.archivePost(id), ctx, (p: PostSummary) => summaryHuman(p, 'Archived'))
-    })
-
-  post
     .command('schedule')
     .description('Set or clear the scheduled publish time on a post and its destinations')
     .argument('<id>', 'the post id')

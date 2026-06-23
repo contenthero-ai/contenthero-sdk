@@ -72,9 +72,10 @@ export function registerIdentity(program: Command): void {
   voice
     .command('list')
     .description('List saved voices (favorites first)')
-    .action(async (_opts, command: Command) => {
+    .option('--favorite', 'only favorited voices')
+    .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const voices = await client.listVoices()
+      const voices = await client.listVoices({ favorited: opts.favorite ? true : undefined })
       emit(voices, ctx, (rows: VoiceSummary[]) =>
         table(
           ['VOICE ID', 'NAME', 'PROVIDER', 'FAV'],

@@ -35,6 +35,10 @@ test('every top-level command group is registered', () => {
     'brand-account',
     'connected-account',
     'schema',
+    'favorite',
+    'unfavorite',
+    'archive',
+    'unarchive',
   ]) {
     assert.ok(names.includes(expected), `missing top-level command: ${expected}`)
   }
@@ -49,21 +53,52 @@ test('generate exposes the five generation subcommands', () => {
 
 test('post exposes its verbs and nested destination/asset groups', () => {
   const subs = subcommands('post')
-  for (const n of ['list', 'get', 'create', 'update', 'archive', 'schedule', 'publish', 'destination', 'asset']) {
+  for (const n of ['list', 'get', 'create', 'update', 'schedule', 'publish', 'destination', 'asset']) {
     assert.ok(subs.includes(n), `post is missing: ${n}`)
   }
+  // Archiving moved to the universal top-level `archive` command.
+  assert.ok(!subs.includes('archive'), 'post should no longer have its own archive subcommand')
 })
 
 test('brand-kit exposes its verbs and the section group', () => {
   const subs = subcommands('brand-kit')
-  for (const n of ['list', 'get', 'update', 'archive', 'section']) {
+  for (const n of ['list', 'get', 'update', 'section']) {
     assert.ok(subs.includes(n), `brand-kit is missing: ${n}`)
   }
+  // Archiving moved to the universal top-level `archive` command.
+  assert.ok(!subs.includes('archive'), 'brand-kit should no longer have its own archive subcommand')
 })
 
 test('avatar and voice expose list + get', () => {
   assert.deepEqual(subcommands('avatar').sort(), ['get', 'list'])
   assert.deepEqual(subcommands('voice').sort(), ['get', 'list'])
+})
+
+test('universal status verbs are registered, each accepting --variation', () => {
+  const program = buildProgram()
+  for (const name of ['favorite', 'unfavorite', 'archive', 'unarchive']) {
+    const cmd = program.commands.find((c) => c.name() === name)
+    assert.ok(cmd, `missing top-level command: ${name}`)
+    assert.ok(
+      cmd!.options.some((o) => o.long === '--variation'),
+      `${name} should accept --variation`,
+    )
+  }
+})
+
+test('media and brand-kit list expose the favorite/archived filters', () => {
+  const program = buildProgram()
+  const mediaList = program.commands
+    .find((c) => c.name() === 'media')!
+    .commands.find((c) => c.name() === 'list')!
+  const mediaFlags = mediaList.options.map((o) => o.long)
+  assert.ok(mediaFlags.includes('--favorite') && mediaFlags.includes('--archived'))
+
+  const kitList = program.commands
+    .find((c) => c.name() === 'brand-kit')!
+    .commands.find((c) => c.name() === 'list')!
+  const kitFlags = kitList.options.map((o) => o.long)
+  assert.ok(kitFlags.includes('--favorite') && kitFlags.includes('--archived'))
 })
 
 test('model and platform expose list + get', () => {

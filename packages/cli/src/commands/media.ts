@@ -56,6 +56,8 @@ export function registerMedia(program: Command): void {
     .option('--type <type>', `filter by media type: ${MEDIA_TYPES.join(', ')}`)
     .option('--kind <kind>', `filter by asset class: ${KINDS.join(', ')}`)
     .option('--status <status>', "status filter (defaults to 'completed')")
+    .option('--favorite', 'only outputs with a favorited variation')
+    .option('--archived', 'only outputs with an archived variation')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
       if (opts.type && !MEDIA_TYPES.includes(opts.type as MediaType)) {
@@ -75,6 +77,8 @@ export function registerMedia(program: Command): void {
         contentType: opts.type as MediaType | undefined,
         kind: opts.kind as Kind | undefined,
         status: opts.status as string | undefined,
+        favorited: opts.favorite ? true : undefined,
+        archived: opts.archived ? true : undefined,
         limit: opts.limit as number | undefined,
       })
       emit(items, ctx, (rows: MediaSummary[]) =>
@@ -110,8 +114,14 @@ export function registerMedia(program: Command): void {
           ...(m.creditsUsed != null ? [['Credits used', m.creditsUsed] as [string, number]] : []),
         ])
         const variations = table(
-          ['VAR', 'STATUS', 'FAV', 'URL'],
-          m.variations.map((v) => [v.variation, v.status, v.isFavorited ? 'yes' : '', v.url ?? '']),
+          ['VAR', 'STATUS', 'FAV', 'ARCH', 'URL'],
+          m.variations.map((v) => [
+            v.variation,
+            v.status,
+            v.isFavorited ? 'yes' : '',
+            v.isArchived ? 'yes' : '',
+            v.url ?? '',
+          ]),
         )
         return `${head}\n\n${variations}`
       })

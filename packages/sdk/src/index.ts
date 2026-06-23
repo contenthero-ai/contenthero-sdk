@@ -36,7 +36,9 @@ export type {
   Avatar,
   VoiceSummary,
   Voice,
+  ListVoicesOptions,
   BrandKitSummary,
+  ListBrandKitsOptions,
   BrandKitAccount,
   BrandKitSection,
   BrandKitKnowledge,
@@ -87,6 +89,10 @@ export type {
   OutliersResult,
   BrandAccountPerformance,
   ConnectedAccount,
+  FavoriteAssetType,
+  ArchiveAssetType,
+  FavoriteInput,
+  ArchiveInput,
 } from './types.js'
 export {
   ContentHeroError,

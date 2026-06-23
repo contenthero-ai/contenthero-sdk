@@ -42,7 +42,11 @@ import type {
   GenerateResult,
   Generation,
   ListMediaOptions,
+  ListVoicesOptions,
+  ListBrandKitsOptions,
   ListPostsOptions,
+  FavoriteInput,
+  ArchiveInput,
   MediaItem,
   MediaSummary,
   CreateMediaUploadInput,
@@ -241,8 +245,14 @@ export class ContentHero {
   }
 
   /** List the account's saved voices (the list half of the list+get pair). */
-  async listVoices(): Promise<VoiceSummary[]> {
-    const data = await this.request<{ voices: VoiceSummary[] }>('GET', '/api/v1/voices')
+  async listVoices(options: ListVoicesOptions = {}): Promise<VoiceSummary[]> {
+    const q = new URLSearchParams()
+    if (options.favorited) q.set('favorited', 'true')
+    const qs = q.toString()
+    const data = await this.request<{ voices: VoiceSummary[] }>(
+      'GET',
+      `/api/v1/voices${qs ? `?${qs}` : ''}`,
+    )
     return data.voices
   }
 
@@ -252,8 +262,15 @@ export class ContentHero {
   }
 
   /** List the account's brand kits (the list half of the list+get pair). */
-  async listBrandKits(): Promise<BrandKitSummary[]> {
-    const data = await this.request<{ brandKits: BrandKitSummary[] }>('GET', '/api/v1/brand-kits')
+  async listBrandKits(options: ListBrandKitsOptions = {}): Promise<BrandKitSummary[]> {
+    const q = new URLSearchParams()
+    if (options.favorited) q.set('favorited', 'true')
+    if (options.archived) q.set('archived', 'true')
+    const qs = q.toString()
+    const data = await this.request<{ brandKits: BrandKitSummary[] }>(
+      'GET',
+      `/api/v1/brand-kits${qs ? `?${qs}` : ''}`,
+    )
     return data.brandKits
   }
 
@@ -269,16 +286,6 @@ export class ContentHero {
    */
   async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput): Promise<BrandKit> {
     return this.request<BrandKit>('PATCH', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`, input)
-  }
-
-  /** Archive a brand kit (reversible). Requires the `brandkit:write` scope. */
-  async archiveBrandKit(brandKitId: string): Promise<BrandKitSummary> {
-    const data = await this.request<{ brandKit: BrandKitSummary }>(
-      'PATCH',
-      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`,
-      { archive: true },
-    )
-    return data.brandKit
   }
 
   /** Add a curated section to a brand kit. Requires the `brandkit:write` scope. */
@@ -301,15 +308,6 @@ export class ContentHero {
       'PATCH',
       `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections/${encodeURIComponent(sectionId)}`,
       input,
-    )
-    return data.section
-  }
-
-  /** Archive a brand-kit section (soft delete, reversible). Requires `brandkit:write`. */
-  async archiveBrandKitSection(brandKitId: string, sectionId: string): Promise<BrandKitSectionRecord> {
-    const data = await this.request<{ section: BrandKitSectionRecord }>(
-      'DELETE',
-      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections/${encodeURIComponent(sectionId)}`,
     )
     return data.section
   }
@@ -385,6 +383,8 @@ export class ContentHero {
     }
     if (options.status) q.set('status', options.status)
     if (options.kind) q.set('kind', options.kind)
+    if (options.favorited) q.set('favorited', 'true')
+    if (options.archived) q.set('archived', 'true')
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
     const qs = q.toString()
@@ -603,11 +603,6 @@ export class ContentHero {
     return data.post
   }
 
-  /** Archive a post (status -> 'archived'). No hard delete. */
-  async archivePost(postId: string): Promise<PostSummary> {
-    return this.updatePost(postId, { status: 'archived' })
-  }
-
   /**
    * List the account's pipeline stages (sorted), seeding the defaults on first
    * access. Use this to resolve a stage before placing a post; stages are
@@ -767,6 +762,7 @@ export class ContentHero {
     if (options.search) q.set('search', options.search)
     if (options.sortBy) q.set('sort_by', options.sortBy)
     if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
+    if (options.favorited) q.set('favorited', 'true')
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
     const qs = q.toString()
@@ -814,6 +810,50 @@ export class ContentHero {
       `/api/v1/connected-accounts/${encodeURIComponent(accountId)}`,
     )
     return data.account
+  }
+
+  // -------------------------------------------------------------------------
+  // Favorites & archive (universal set/clear across asset types)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Mark an asset as favorited. Requires the `favorites:write` scope.
+   *
+   * Pass `{ assetType, id }` for a top-level asset (post, voice, brand_kit,
+   * project, inspiration_content, gallery), or `{ id, variationIndex }` to
+   * favorite a single studio output variation slot (id is a studio output id).
+   * Idempotent.
+   */
+  async favorite(input: FavoriteInput): Promise<void> {
+    await this.request<{ favorited: boolean }>('POST', '/api/v1/favorite', input)
+  }
+
+  /**
+   * Clear the favorite flag on an asset. Requires the `favorites:write` scope.
+   * Same target shape as `favorite`. Idempotent.
+   */
+  async unfavorite(input: FavoriteInput): Promise<void> {
+    await this.request<{ favorited: boolean }>('POST', '/api/v1/unfavorite', input)
+  }
+
+  /**
+   * Archive an asset. Requires the `favorites:write` scope.
+   *
+   * Pass `{ assetType, id }` for a top-level asset (post, brand_kit,
+   * brand_kit_section, project), or `{ id, variationIndex }` to archive a single
+   * studio output variation slot. Archiving a post sets its status to 'archived'.
+   * Idempotent.
+   */
+  async archive(input: ArchiveInput): Promise<void> {
+    await this.request<{ archived: boolean }>('POST', '/api/v1/archive', input)
+  }
+
+  /**
+   * Unarchive an asset. Requires the `favorites:write` scope. Same target shape
+   * as `archive`. Unarchiving a post restores it to 'draft'. Idempotent.
+   */
+  async unarchive(input: ArchiveInput): Promise<void> {
+    await this.request<{ archived: boolean }>('POST', '/api/v1/unarchive', input)
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */

@@ -274,7 +274,6 @@ function fakeClient(overrides = {}) {
     }),
     createPost: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     updatePost: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
-    archivePost: async (id) => ({ id, title: 'Launch clip', description: null, platform: 'instagram', status: 'archived', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     listPipelineStages: async () => [
       { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
       { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
@@ -313,10 +312,8 @@ function fakeClient(overrides = {}) {
       recentContent: [],
     }),
     updateBrandKit: async (id, input) => ({ id, name: input.name ?? 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }),
-    archiveBrandKit: async (id) => ({ id, name: 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: false, isActive: true, isFavorited: false, isArchived: true, createdAt: 't' }),
     addBrandKitSection: async (_id, input) => ({ id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: input.sortOrder ?? 99, fields: input.fields ?? [] }),
     updateBrandKitSection: async (_id, sectionId, input) => ({ id: sectionId, tab: 'voice', sectionName: input.sectionName ?? 'Brand Voice', sortOrder: input.sortOrder ?? 0, fields: input.fields ?? [] }),
-    archiveBrandKitSection: async (_id, sectionId) => ({ id: sectionId, tab: 'voice', sectionName: 'Brand Voice', sortOrder: 0, fields: [] }),
     listBrandKnowledge: async () => ({
       items: [{ id: 'kn1', title: 'Launch playbook', sourceType: 'text', sourceUrl: null, createdAt: 't', updatedAt: 't' }],
       total: 1,
@@ -343,6 +340,10 @@ function fakeClient(overrides = {}) {
     createMediaUpload: async (input) => ({ outputId: 'up1', uploadUrl: 'https://storage/sign/up1?token=abc', storagePath: `u/upload-up1.${input.fileName.split('.').pop()}`, expiresAt: '2026-07-01T00:00:00Z' }),
     completeMediaUpload: async (outputId) => ({ outputId, url: `https://cloud/${outputId}.png` }),
     importMedia: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
+    favorite: async () => {},
+    unfavorite: async () => {},
+    archive: async () => {},
+    unarchive: async () => {},
     ...overrides,
   }
 }
@@ -364,9 +365,7 @@ test('advertises exactly the v1 tools', async () => {
     'add_brand_knowledge',
     'add_post_asset',
     'add_post_destination',
-    'archive_brand_kit',
-    'archive_brand_kit_section',
-    'archive_post',
+    'archive',
     'complete_media_upload',
     'create_element',
     'create_media_upload',
@@ -374,6 +373,7 @@ test('advertises exactly the v1 tools', async () => {
     'create_tag',
     'delete_element',
     'delete_tag',
+    'favorite',
     'generate_audio',
     'generate_board',
     'generate_image',
@@ -418,6 +418,8 @@ test('advertises exactly the v1 tools', async () => {
     'schedule_post',
     'search_brand_knowledge',
     'transcribe',
+    'unarchive',
+    'unfavorite',
     'update_brand_kit',
     'update_brand_kit_section',
     'update_element',
@@ -1253,10 +1255,93 @@ test('list_pipeline_stages lists stages with id and slug for resolution', async 
   assert.match(res.content[0].text, /Published \(id st2, slug published\)/)
 })
 
-test('archive_post sets the status to archived', async () => {
-  const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'archive_post', arguments: { postId: 'p1' } })
-  assert.match(res.content[0].text, /Archived: .* \| archived/)
+test('archive marks a post via the universal tool', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      archive: async (input) => {
+        captured = input
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'post', id: 'p1' } })
+  assert.deepEqual(captured, { assetType: 'post', id: 'p1', variationIndex: undefined })
+  assert.match(res.content[0].text, /Archived post p1/)
+})
+
+test('favorite marks a top-level asset and reports it', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      favorite: async (input) => {
+        captured = input
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'favorite', arguments: { assetType: 'brand_kit', id: 'bk1' } })
+  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined })
+  assert.match(res.content[0].text, /Favorited brand_kit bk1/)
+})
+
+test('favorite routes a studio variation via variationIndex (no assetType)', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      favorite: async (input) => {
+        captured = input
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'favorite', arguments: { id: 'out-uuid', variationIndex: 2 } })
+  assert.deepEqual(captured, { assetType: undefined, id: 'out-uuid', variationIndex: 2 })
+  assert.match(res.content[0].text, /Favorited variation 2 of output out-uuid/)
+})
+
+test('unfavorite and unarchive hit their universal handlers', async () => {
+  let unfav, unarch
+  const mcp = await connect(
+    fakeClient({
+      unfavorite: async (input) => {
+        unfav = input
+      },
+      unarchive: async (input) => {
+        unarch = input
+      },
+    }),
+  )
+  const r1 = await mcp.callTool({ name: 'unfavorite', arguments: { assetType: 'voice', id: 'v1' } })
+  assert.deepEqual(unfav, { assetType: 'voice', id: 'v1', variationIndex: undefined })
+  assert.match(r1.content[0].text, /Unfavorited voice v1/)
+
+  const r2 = await mcp.callTool({ name: 'unarchive', arguments: { assetType: 'project', id: 'pr1' } })
+  assert.deepEqual(unarch, { assetType: 'project', id: 'pr1', variationIndex: undefined })
+  assert.match(r2.content[0].text, /Unarchived project pr1/)
+})
+
+test('list filters forward favorited/archived to the client', async () => {
+  let mediaOpts, kitOpts, voiceOpts
+  const mcp = await connect(
+    fakeClient({
+      listMedia: async (opts) => {
+        mediaOpts = opts
+        return []
+      },
+      listBrandKits: async (opts) => {
+        kitOpts = opts
+        return []
+      },
+      listVoices: async (opts) => {
+        voiceOpts = opts
+        return []
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'list_media', arguments: { favorited: true } })
+  assert.equal(mediaOpts.favorited, true)
+  await mcp.callTool({ name: 'list_brand_kits', arguments: { archived: true } })
+  assert.equal(kitOpts.archived, true)
+  await mcp.callTool({ name: 'list_voices', arguments: { favorited: true } })
+  assert.equal(voiceOpts.favorited, true)
 })
 
 test('add_post_destination passes platform + connected account through', async () => {
@@ -1493,10 +1578,18 @@ test('update_brand_kit passes the changed fields through and returns the kit', a
   assert.match(res.content[0].text, /Brand kit "ContentHero"/)
 })
 
-test('archive_brand_kit confirms the archive', async () => {
-  const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'archive_brand_kit', arguments: { brandKitId: 'bk1' } })
-  assert.match(res.content[0].text, /Archived brand kit "ContentHero" \(id bk1\)/)
+test('archive confirms a brand kit via the universal tool', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      archive: async (input) => {
+        captured = input
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'brand_kit', id: 'bk1' } })
+  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined })
+  assert.match(res.content[0].text, /Archived brand_kit bk1/)
 })
 
 test('add_brand_kit_section creates a section with tab + name', async () => {
@@ -1519,13 +1612,21 @@ test('add_brand_kit_section creates a section with tab + name', async () => {
   assert.match(res.content[0].text, /1 field/)
 })
 
-test('archive_brand_kit_section soft-deletes the section', async () => {
-  const mcp = await connect(fakeClient())
+test('archive a brand_kit_section by section id via the universal tool', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      archive: async (input) => {
+        captured = input
+      },
+    }),
+  )
   const res = await mcp.callTool({
-    name: 'archive_brand_kit_section',
-    arguments: { brandKitId: 'bk1', sectionId: 'sec9' },
+    name: 'archive',
+    arguments: { assetType: 'brand_kit_section', id: 'sec9' },
   })
-  assert.match(res.content[0].text, /Archived section: .* \(id sec9\)/)
+  assert.deepEqual(captured, { assetType: 'brand_kit_section', id: 'sec9', variationIndex: undefined })
+  assert.match(res.content[0].text, /Archived brand_kit_section sec9/)
 })
 
 // -- brand knowledge ----------------------------------------------------------

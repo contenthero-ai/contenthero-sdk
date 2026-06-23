@@ -99,6 +99,7 @@ export function registerInspiration(program: Command): void {
     .option('--search <text>', 'text search across title, creator, handle, description')
     .option('--sort <sort>', `sort order: ${SORTS.join(', ')} (default score)`)
     .option('--brand-kit <id>', 'scope to the inspiration accounts linked to this brand kit')
+    .option('--favorite', 'only content the account has favorited')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .option('--offset <n>', 'pagination offset', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
@@ -113,6 +114,7 @@ export function registerInspiration(program: Command): void {
         search: opts.search as string | undefined,
         sortBy: opts.sort as Sort | undefined,
         brandKitId: opts.brandKit as string | undefined,
+        favorited: opts.favorite ? true : undefined,
         limit: opts.limit as number | undefined,
         offset: opts.offset as number | undefined,
       })
