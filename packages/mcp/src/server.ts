@@ -1525,7 +1525,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Add Post Destination',
       annotations: WRITE,
       description:
-        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (from list_connected_accounts, web-only today) to make it publishable. Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform first for the exact fields. In platformSettings, media URL fields (mediaItems, videoUrl, thumbnailUrl, ...) also accept an outputId of generated/uploaded media, resolved server-side. Requires the pipeline:write scope.",
+        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (an id from list_connected_accounts) to make it publishable. Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform first for the exact fields. In platformSettings, media URL fields (mediaItems, videoUrl, thumbnailUrl, ...) also accept an outputId of generated/uploaded media, resolved server-side. Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         platform: z.enum(POST_PLATFORMS).describe('Destination platform.'),
