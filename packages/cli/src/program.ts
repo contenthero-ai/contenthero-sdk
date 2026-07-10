@@ -31,6 +31,7 @@ import { registerInspiration } from './commands/inspiration.js'
 import { registerBrandAccount, registerConnectedAccount } from './commands/connected.js'
 import { registerSchema } from './commands/schema.js'
 import { registerFavorites } from './commands/favorites.js'
+import { registerEditor } from './commands/editor.js'
 
 /** Read our own version from package.json (kept in lockstep with sdk + mcp). */
 function readVersion(): string {
@@ -82,6 +83,7 @@ export function buildProgram(): Command {
   registerConnectedAccount(program)
   registerSchema(program)
   registerFavorites(program)
+  registerEditor(program)
 
   return program
 }

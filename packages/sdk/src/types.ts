@@ -1065,3 +1065,55 @@ export interface ArchiveInput {
   /** 1-based variation slot; when set, `id` is a studio output id. */
   variationIndex?: number
 }
+
+// ---------------------------------------------------------------------------
+// Editor / canvas ops (programmatic parity with the manual UI + in-app agent)
+// ---------------------------------------------------------------------------
+
+/** Which write model a project's composition uses: 2D canvas layers or a 1D editor timeline. */
+export type EditorSurface = 'canvas' | 'timeline'
+
+/** One op in the shared editor/canvas op vocabulary. Opaque here: shaped by the reducer for the
+ *  project's surface (canvas layer/slide ops, or timeline clip ops). Every op has an `op` name. */
+export interface EditorOp {
+  op: string
+  [key: string]: unknown
+}
+
+/** Input to `applyEditorOps`. */
+export interface ApplyEditorOpsInput {
+  /** The project to edit. Its `kind` selects the surface (canvas vs timeline). */
+  projectId: string
+  /** The ops to apply, in order. */
+  ops: EditorOp[]
+  /** Optimistic-concurrency token from a prior read. When omitted, the server uses the current revision. */
+  expectedRevision?: number
+  /** A short human intent for the edit (attribution + observability). */
+  userIntent?: string
+}
+
+/** The per-op outcome (surface-agnostic; created ids normalized across surfaces). */
+export interface EditorOpResult {
+  op: string
+  ok: boolean
+  error?: string
+  warnings?: string[]
+  createdIds?: string[]
+}
+
+/** Result of `applyEditorOps`: the new revision + per-op results. */
+export interface ApplyEditorOpsResult {
+  surface: EditorSurface
+  revision: number
+  results: EditorOpResult[]
+}
+
+/** A project's current composition, from `getEditorComposition` (read-before-write). */
+export interface EditorComposition {
+  projectId: string
+  kind: string
+  surface: EditorSurface
+  revision: number
+  /** The full composition state (`{ slides }` for canvas, `{ tracks }` for the editor timeline). */
+  state: unknown
+}

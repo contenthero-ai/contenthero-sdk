@@ -41,6 +41,7 @@ import {
   type GenerateRequest,
   type GenerateBoardRequest,
   type References,
+  type EditorOp,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 import {
@@ -103,6 +104,8 @@ import {
   postSummaryResult,
   publishResult,
   statusActionResult,
+  editorOpsResult,
+  editorCompositionResult,
   trackedAccountListResult,
   transcriptResult,
   voiceListResult,
@@ -2190,6 +2193,101 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         await client.unarchive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
         return statusActionResult('Unarchived', args)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // ===========================================================================
+  // Editor / canvas ops (programmatic parity with the manual UI + in-app agent)
+  // ===========================================================================
+
+  server.registerTool(
+    'get_editor_project',
+    {
+      title: 'Get Editor Project',
+      annotations: READ,
+      description:
+        "Read a project's current composition (canvas slides or editor timeline) plus its revision. Call this BEFORE editing so you know the current state and can pass the revision back as expectedRevision for safe concurrent edits. Requires the editor:read scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id to read.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return editorCompositionResult(await client.getEditorComposition(args.projectId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'update_timeline',
+    {
+      title: 'Update Timeline',
+      annotations: WRITE,
+      description:
+        "Apply a batch of ops to an EDITOR (video timeline) project. Ops act on clips: move_item, trim_item, split, ripple_delete, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_item. Each op is an object with an `op` name plus its fields (e.g. { op: 'ripple_delete', itemIds: ['clip-id'] } or { op: 'move_item', itemId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). Pass expectedRevision from get_editor_project. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The editor project id.'),
+        ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The timeline ops to apply, in order.'),
+        userIntent: z.string().describe('A short description of what this edit does (for attribution).'),
+        expectedRevision: z
+          .number()
+          .int()
+          .optional()
+          .describe('The revision from get_editor_project; rejects with a conflict if a concurrent edit landed.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return editorOpsResult(
+          await client.applyEditorOps({
+            projectId: args.projectId,
+            ops: args.ops as EditorOp[],
+            userIntent: args.userIntent,
+            expectedRevision: args.expectedRevision,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'update_canvas',
+    {
+      title: 'Update Canvas',
+      annotations: WRITE,
+      description:
+        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. Each op is an object with an `op` name plus its fields. Pass expectedRevision from get_editor_project. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The canvas project id.'),
+        ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The canvas ops to apply, in order.'),
+        userIntent: z.string().describe('A short description of what this edit does (for attribution).'),
+        expectedRevision: z
+          .number()
+          .int()
+          .optional()
+          .describe('The revision from get_editor_project; rejects with a conflict if a concurrent edit landed.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return editorOpsResult(
+          await client.applyEditorOps({
+            projectId: args.projectId,
+            ops: args.ops as EditorOp[],
+            userIntent: args.userIntent,
+            expectedRevision: args.expectedRevision,
+          }),
+        )
       } catch (err) {
         return errorResult(err)
       }

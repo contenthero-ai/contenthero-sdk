@@ -45,6 +45,8 @@ import type {
   Transcription,
   Voice,
   VoiceSummary,
+  ApplyEditorOpsResult,
+  EditorComposition,
 } from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
@@ -809,4 +811,34 @@ export function errorResult(err: unknown): CallToolResult {
     return text(err.message, true)
   }
   return text('Unknown error', true)
+}
+
+// -- editor / canvas ops ------------------------------------------------------
+
+/** The outcome of an applyEditorOps batch: the new revision + a per-op summary. */
+export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
+  const okCount = r.results.filter((x) => x.ok).length
+  const failures = r.results.filter((x) => !x.ok)
+  const created = r.results.flatMap((x) => x.createdIds ?? [])
+  const lines = [
+    `Applied ${okCount}/${r.results.length} ${r.surface} op(s). New revision: ${r.revision}.`,
+  ]
+  if (created.length) lines.push(`Created: ${created.join(', ')}.`)
+  if (failures.length) {
+    lines.push('Failed ops:')
+    for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)
+  }
+  const warnings = r.results.flatMap((x) => x.warnings ?? [])
+  if (warnings.length) lines.push(`Warnings: ${warnings.join('; ')}.`)
+  // A partial failure is surfaced as an error result so the caller (agent) can self-correct.
+  return text(lines.join('\n'), failures.length > 0)
+}
+
+/** A project's current composition (read-before-write): surface, revision, and the full state JSON. */
+export function editorCompositionResult(c: EditorComposition): CallToolResult {
+  return text(
+    `Project ${c.projectId} (${c.kind}, surface: ${c.surface}), revision ${c.revision}.\n` +
+      `Pass this revision back as expectedRevision when you edit.\n\n` +
+      JSON.stringify(c.state, null, 2),
+  )
 }

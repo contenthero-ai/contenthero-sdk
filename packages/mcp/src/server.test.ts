@@ -344,6 +344,8 @@ function fakeClient(overrides = {}) {
     unfavorite: async () => {},
     archive: async () => {},
     unarchive: async () => {},
+    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'timeline', revision: 5, results: input.ops.map((o) => ({ op: o.op, ok: true })) }),
+    getEditorComposition: async (projectId) => ({ projectId, kind: 'editor', surface: 'timeline', revision: 4, state: { tracks: [] } }),
     ...overrides,
   }
 }
@@ -385,6 +387,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_brand_kit',
     'get_brand_knowledge',
     'get_connected_account',
+    'get_editor_project',
     'get_element',
     'get_generation_status',
     'get_inspiration_account',
@@ -422,10 +425,12 @@ test('advertises exactly the v1 tools', async () => {
     'unfavorite',
     'update_brand_kit',
     'update_brand_kit_section',
+    'update_canvas',
     'update_element',
     'update_post',
     'update_post_destination',
     'update_tag',
+    'update_timeline',
     'upscale',
     'wait_for_generation',
   ])
@@ -1711,4 +1716,31 @@ test('get_connected_account lists enabled capabilities', async () => {
   assert.match(res.content[0].text, /capabilities: publish/)
   assert.ok(!/analytics/.test(res.content[0].text), 'falsy capabilities are not listed')
   assert.match(res.content[0].text, /connectedAccountId on add_post_destination/)
+})
+
+test('get_editor_project reads the composition + revision', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_editor_project', arguments: { projectId: 'p1' } })
+  const body = (res.content[0]).text
+  assert.match(body, /revision 4/)
+  assert.match(body, /surface: timeline/)
+})
+
+test('update_timeline applies ops and reports the new revision', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({
+    name: 'update_timeline',
+    arguments: { projectId: 'p1', ops: [{ op: 'ripple_delete', itemIds: ['a'] }], userIntent: 'cut' },
+  })
+  assert.ok(!res.isError)
+  assert.match((res.content[0]).text, /Applied 1\/1 timeline op\(s\)\. New revision: 5\./)
+})
+
+test('update_canvas routes canvas ops through the same endpoint', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({
+    name: 'update_canvas',
+    arguments: { projectId: 'canvas1', ops: [{ op: 'create_slide' }], userIntent: 'add slide' },
+  })
+  assert.match((res.content[0]).text, /Applied 1\/1 canvas op\(s\)/)
 })

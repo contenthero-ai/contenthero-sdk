@@ -93,6 +93,12 @@ export type {
   ArchiveAssetType,
   FavoriteInput,
   ArchiveInput,
+  EditorSurface,
+  EditorOp,
+  ApplyEditorOpsInput,
+  EditorOpResult,
+  ApplyEditorOpsResult,
+  EditorComposition,
 } from './types.js'
 export {
   ContentHeroError,

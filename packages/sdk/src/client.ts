@@ -47,6 +47,9 @@ import type {
   ListPostsOptions,
   FavoriteInput,
   ArchiveInput,
+  ApplyEditorOpsInput,
+  ApplyEditorOpsResult,
+  EditorComposition,
   MediaItem,
   MediaSummary,
   CreateMediaUploadInput,
@@ -854,6 +857,31 @@ export class ContentHero {
    */
   async unarchive(input: ArchiveInput): Promise<void> {
     await this.request<{ archived: boolean }>('POST', '/api/v1/unarchive', input)
+  }
+
+  // -------------------------------------------------------------------------
+  // Editor / canvas ops (programmatic parity with the manual UI + in-app agent)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Apply a batch of ops to a project's composition (canvas slides or editor timeline) and persist
+   * atomically. The project `kind` selects the surface; the ops run through the same reducers the manual
+   * UI and in-app agent use. Requires the `editor:write` scope.
+   *
+   * Optimistic concurrency: pass `expectedRevision` (from `getEditorComposition`) to fail with a 409
+   * ConflictError if a concurrent edit landed, instead of clobbering it. Returns the new revision and the
+   * per-op results (a bad op is reported, never throws).
+   */
+  async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
+    return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', input)
+  }
+
+  /**
+   * Read a project's current composition + revision, to read-before-write. Pass the returned `revision`
+   * back as `applyEditorOps`'s `expectedRevision`. Requires the `editor:read` scope.
+   */
+  async getEditorComposition(projectId: string): Promise<EditorComposition> {
+    return this.request<EditorComposition>('GET', `/api/v1/editor/${encodeURIComponent(projectId)}`)
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */

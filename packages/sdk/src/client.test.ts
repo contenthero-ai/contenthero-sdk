@@ -228,3 +228,39 @@ test('list filters append favorited and archived query params', async () => {
   await c3.listVoices({ favorited: true })
   assert.equal(voices.calls[0]?.url, 'https://example.test/api/v1/voices?favorited=true')
 })
+
+test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'ripple_delete', ok: true }] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const out = await client.applyEditorOps({
+    projectId: 'p1',
+    ops: [{ op: 'ripple_delete', itemIds: ['a'] }],
+    userIntent: 'remove intro',
+    expectedRevision: 3,
+  })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/ops')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), {
+    projectId: 'p1',
+    ops: [{ op: 'ripple_delete', itemIds: ['a'] }],
+    userIntent: 'remove intro',
+    expectedRevision: 3,
+  })
+  assert.equal(out.surface, 'timeline')
+  assert.equal(out.revision, 4)
+  assert.equal(out.results[0]?.ok, true)
+})
+
+test('getEditorComposition GETs the encoded project path', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { projectId: 'p 1', kind: 'canvas', surface: 'canvas', revision: 2, state: { slides: [] } } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const comp = await client.getEditorComposition('p 1')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/p%201')
+  assert.equal(calls[0]?.init?.method, 'GET')
+  assert.equal(comp.surface, 'canvas')
+  assert.equal(comp.revision, 2)
+})
