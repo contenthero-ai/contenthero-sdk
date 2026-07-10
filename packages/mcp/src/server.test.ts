@@ -387,7 +387,6 @@ test('advertises exactly the v1 tools', async () => {
     'get_brand_kit',
     'get_brand_knowledge',
     'get_connected_account',
-    'get_editor_project',
     'get_element',
     'get_generation_status',
     'get_inspiration_account',
@@ -396,6 +395,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_model',
     'get_platform',
     'get_post',
+    'get_project',
     'get_voice',
     'import_media',
     'list_avatars',
@@ -1718,9 +1718,9 @@ test('get_connected_account lists enabled capabilities', async () => {
   assert.match(res.content[0].text, /connectedAccountId on add_post_destination/)
 })
 
-test('get_editor_project reads the composition + revision', async () => {
+test('get_project reads the composition + revision', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_editor_project', arguments: { projectId: 'p1' } })
+  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
   const body = (res.content[0]).text
   assert.match(body, /revision 4/)
   assert.match(body, /surface: timeline/)

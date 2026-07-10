@@ -2204,9 +2204,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // ===========================================================================
 
   server.registerTool(
-    'get_editor_project',
+    'get_project',
     {
-      title: 'Get Editor Project',
+      title: 'Get Project',
       annotations: READ,
       description:
         "Read a project's current composition (canvas slides or editor timeline) plus its revision. Call this BEFORE editing so you know the current state and can pass the revision back as expectedRevision for safe concurrent edits. Requires the editor:read scope.",
@@ -2230,7 +2230,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Timeline',
       annotations: WRITE,
       description:
-        "Apply a batch of ops to an EDITOR (video timeline) project. Ops act on clips: move_item, trim_item, split, ripple_delete, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_item. Each op is an object with an `op` name plus its fields (e.g. { op: 'ripple_delete', itemIds: ['clip-id'] } or { op: 'move_item', itemId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). Pass expectedRevision from get_editor_project. Requires the editor:write scope.",
+        "Apply a batch of ops to an EDITOR (video timeline) project. Ops act on clips: move_item, trim_item, split, ripple_delete, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_item. Each op is an object with an `op` name plus its fields (e.g. { op: 'ripple_delete', itemIds: ['clip-id'] } or { op: 'move_item', itemId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). Pass expectedRevision from get_project. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The editor project id.'),
         ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The timeline ops to apply, in order.'),
@@ -2239,7 +2239,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .int()
           .optional()
-          .describe('The revision from get_editor_project; rejects with a conflict if a concurrent edit landed.'),
+          .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.'),
       },
     },
     async (args, extra) => {
@@ -2265,7 +2265,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Canvas',
       annotations: WRITE,
       description:
-        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. Each op is an object with an `op` name plus its fields. Pass expectedRevision from get_editor_project. Requires the editor:write scope.",
+        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. Each op is an object with an `op` name plus its fields. Pass expectedRevision from get_project. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The canvas project id.'),
         ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The canvas ops to apply, in order.'),
@@ -2274,7 +2274,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .int()
           .optional()
-          .describe('The revision from get_editor_project; rejects with a conflict if a concurrent edit landed.'),
+          .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.'),
       },
     },
     async (args, extra) => {

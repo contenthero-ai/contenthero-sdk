@@ -1,11 +1,11 @@
 /**
- * `contenthero editor` - read + edit a project's composition (canvas slides or editor timeline) via ops.
+ * `contenthero project` - read + edit a project's composition (canvas slides or editor timeline) via ops.
  *
- *   editor get   <projectId>                              (requires editor:read)
- *   editor apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
+ *   project get   <projectId>                              (requires editor:read)
+ *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). Read first
- * with `editor get` to learn the current state + revision, then pass that revision as --expected-revision
+ * with `project get` to learn the current state + revision, then pass that revision as --expected-revision
  * for safe concurrent edits. All edits require the editor:write scope.
  */
 import { readFileSync } from 'node:fs'
@@ -32,12 +32,12 @@ function parseOps(raw: string): EditorOp[] {
   return parsed as EditorOp[]
 }
 
-export function registerEditor(program: Command): void {
-  const editor = program
-    .command('editor')
+export function registerProject(program: Command): void {
+  const project = program
+    .command('project')
     .description("Read + edit a project's composition (canvas or timeline) via ops")
 
-  editor
+  project
     .command('get')
     .description("Read a project's composition + revision (requires editor:read)")
     .argument('<projectId>', 'the project id')
@@ -47,14 +47,14 @@ export function registerEditor(program: Command): void {
       emit(comp, ctx, () => `Project ${comp.projectId} (${comp.kind}, ${comp.surface}), revision ${comp.revision}`)
     })
 
-  editor
+  project
     .command('apply')
     .description('Apply a batch of ops to a project composition (requires editor:write)')
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')
     .option('--ops-file <path>', 'read the ops JSON array from a file')
     .option('--intent <text>', 'a short description of the edit (for attribution)')
-    .option('--expected-revision <n>', 'revision for optimistic concurrency (from `editor get`)', toInt)
+    .option('--expected-revision <n>', 'revision for optimistic concurrency (from `project get`)', toInt)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const raw = opts.opsFile ? readFileSync(opts.opsFile as string, 'utf8') : (opts.ops as string | undefined)
       if (!raw) throw new CliError('Provide --ops <json> or --ops-file <path>.', EXIT.USAGE)

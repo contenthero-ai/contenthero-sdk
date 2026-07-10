@@ -39,16 +39,16 @@ test('every top-level command group is registered', () => {
     'unfavorite',
     'archive',
     'unarchive',
-    'editor',
+    'project',
   ]) {
     assert.ok(names.includes(expected), `missing top-level command: ${expected}`)
   }
 })
 
-test('editor exposes get + apply', () => {
-  const subs = subcommands('editor')
-  assert.ok(subs.includes('get'), 'editor should have a get subcommand')
-  assert.ok(subs.includes('apply'), 'editor should have an apply subcommand')
+test('project exposes get + apply', () => {
+  const subs = subcommands('project')
+  assert.ok(subs.includes('get'), 'project should have a get subcommand')
+  assert.ok(subs.includes('apply'), 'project should have an apply subcommand')
 })
 
 test('generate exposes the five generation subcommands', () => {
