@@ -1165,3 +1165,53 @@ export interface CreateProjectInput {
   height?: number
   brandKitId?: string
 }
+
+/** One editable field on a layer/clip type (from the type-discovery catalogs). */
+export interface EditorTypeProp {
+  name: string
+  /** A human-readable type hint (e.g. 'string', 'number', "'left' | 'center' | 'right'"). */
+  type: string
+  description?: string
+}
+
+/** A layer/clip type and its editable props. */
+export interface EditorTypeSpec {
+  type: string
+  description: string
+  props: EditorTypeProp[]
+  /** Which shared prop groups this type also accepts (keys of `sharedProps`). */
+  supports: string[]
+}
+
+/** A timeline track type and the clip types it holds. */
+export interface EditorTrackSpec {
+  trackType: string
+  description: string
+  holds: string[]
+}
+
+/** Shared prop groups reused across visual types (referenced by each type's `supports`). */
+export interface EditorSharedProps {
+  base: EditorTypeProp[]
+  transform: EditorTypeProp[]
+  decoration: EditorTypeProp[]
+  adjust: EditorTypeProp[]
+}
+
+/** The canvas layer-type catalog, from `getLayerTypes`. Makes `update_canvas` self-describing. */
+export interface LayerTypeCatalog {
+  surface: 'canvas'
+  description: string
+  sharedProps: EditorSharedProps
+  layerTypes: EditorTypeSpec[]
+}
+
+/** The editor timeline clip + track-type catalog, from `getTimelineTypes`. Makes `update_timeline`
+ *  self-describing. */
+export interface TimelineTypeCatalog {
+  surface: 'timeline'
+  description: string
+  sharedProps: EditorSharedProps
+  clipTypes: EditorTypeSpec[]
+  trackTypes: EditorTrackSpec[]
+}

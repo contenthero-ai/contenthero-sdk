@@ -53,6 +53,8 @@ import type {
   ProjectDetail,
   ListProjectsInput,
   CreateProjectInput,
+  LayerTypeCatalog,
+  TimelineTypeCatalog,
   MediaItem,
   MediaSummary,
   CreateMediaUploadInput,
@@ -928,6 +930,22 @@ export class ContentHero {
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
     return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', input)
+  }
+
+  /**
+   * The canvas layer-type catalog (types + editable props), so you know what `update_canvas` ops can
+   * create/edit. Requires the `editor:read` scope.
+   */
+  async getLayerTypes(): Promise<LayerTypeCatalog> {
+    return this.request<LayerTypeCatalog>('GET', '/api/v1/editor/layer-types')
+  }
+
+  /**
+   * The editor timeline clip + track-type catalog (types + editable props), so you know what
+   * `update_timeline` ops can create/edit. Requires the `editor:read` scope.
+   */
+  async getTimelineTypes(): Promise<TimelineTypeCatalog> {
+    return this.request<TimelineTypeCatalog>('GET', '/api/v1/editor/timeline-types')
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */

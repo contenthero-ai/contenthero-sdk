@@ -5,6 +5,8 @@
  *   project get   <projectId>                                            (requires editor:read)
  *   project create [--kind <kind>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
+ *   project layer-types                                                  (canvas types, requires editor:read)
+ *   project timeline-types                                               (editor types, requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). Read first
@@ -105,6 +107,28 @@ export function registerProject(program: Command): void {
       const { client, ctx } = makeClient(command)
       await client.deleteProject(projectId)
       emit({ success: true, projectId }, ctx, () => `Permanently deleted project ${projectId}.`)
+    })
+
+  project
+    .command('layer-types')
+    .description('List canvas layer types + editable props (requires editor:read)')
+    .action(async (_opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const cat = await client.getLayerTypes()
+      emit(cat, ctx, () => cat.layerTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n'))
+    })
+
+  project
+    .command('timeline-types')
+    .description('List editor timeline clip + track types (requires editor:read)')
+    .action(async (_opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const cat = await client.getTimelineTypes()
+      emit(cat, ctx, () => {
+        const clips = cat.clipTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n')
+        const tracks = cat.trackTypes.map((t) => `${t.trackType} holds ${t.holds.join(', ')}`).join('\n')
+        return `Clips:\n${clips}\n\nTracks:\n${tracks}`
+      })
     })
 
   project

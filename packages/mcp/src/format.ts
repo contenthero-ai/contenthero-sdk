@@ -48,6 +48,8 @@ import type {
   ApplyEditorOpsResult,
   ProjectSummary,
   ProjectDetail,
+  LayerTypeCatalog,
+  TimelineTypeCatalog,
 } from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
@@ -865,4 +867,23 @@ export function projectCreatedResult(p: ProjectDetail): CallToolResult {
 /** Confirmation of a permanent delete. */
 export function projectDeletedResult(projectId: string): CallToolResult {
   return text(`Permanently deleted project ${projectId}. This cannot be undone.`)
+}
+
+/** The canvas layer-type catalog (types + editable props) as readable text + the JSON. */
+export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
+  const lines = cat.layerTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')}; supports: ${t.supports.join(', ')})`)
+  return text(
+    `Canvas layer types (edit via update_canvas ops):\n${lines.join('\n')}\n\nShared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
+      JSON.stringify(cat, null, 2),
+  )
+}
+
+/** The editor timeline clip + track-type catalog as readable text + the JSON. */
+export function timelineTypesResult(cat: TimelineTypeCatalog): CallToolResult {
+  const clips = cat.clipTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')})`)
+  const tracks = cat.trackTypes.map((t) => `- ${t.trackType}: holds ${t.holds.join(', ')}`)
+  return text(
+    `Editor timeline clip types (edit via update_timeline ops):\n${clips.join('\n')}\n\nTrack types:\n${tracks.join('\n')}\n\nShared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
+      JSON.stringify(cat, null, 2),
+  )
 }

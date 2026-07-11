@@ -103,6 +103,12 @@ export type {
   ProjectDetail,
   ListProjectsInput,
   CreateProjectInput,
+  EditorTypeProp,
+  EditorTypeSpec,
+  EditorTrackSpec,
+  EditorSharedProps,
+  LayerTypeCatalog,
+  TimelineTypeCatalog,
 } from './types.js'
 export {
   ContentHeroError,

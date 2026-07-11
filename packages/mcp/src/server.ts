@@ -109,6 +109,8 @@ import {
   projectListResult,
   projectCreatedResult,
   projectDeletedResult,
+  layerTypesResult,
+  timelineTypesResult,
   trackedAccountListResult,
   transcriptResult,
   voiceListResult,
@@ -2244,6 +2246,44 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return projectDetailResult(await client.getProject(args.projectId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_layer_types',
+    {
+      title: 'Get Layer Types',
+      annotations: READ,
+      description:
+        'List the CANVAS layer types (image, text, solid/shape, video, graphic) and their editable props, so you know what update_canvas ops can create and set. Also returns shared prop groups (transform, decoration, adjust). Requires the editor:read scope.',
+      inputSchema: {},
+    },
+    async (_args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return layerTypesResult(await client.getLayerTypes())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_timeline_types',
+    {
+      title: 'Get Timeline Types',
+      annotations: READ,
+      description:
+        'List the EDITOR timeline clip types (video, image, text, solid, audio, graphic) with their editable props, plus the track types (media, audio, text) and what each holds, so you know what update_timeline ops can create and set. Requires the editor:read scope.',
+      inputSchema: {},
+    },
+    async (_args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return timelineTypesResult(await client.getTimelineTypes())
       } catch (err) {
         return errorResult(err)
       }

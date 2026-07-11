@@ -290,3 +290,19 @@ test('deleteProject DELETEs with the confirm=true opt-in', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p%201?confirm=true')
   assert.equal(calls[0]?.init?.method, 'DELETE')
 })
+
+test('getLayerTypes GETs the canvas catalog', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'canvas', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const cat = await client.getLayerTypes()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/layer-types')
+  assert.equal(cat.surface, 'canvas')
+})
+
+test('getTimelineTypes GETs the timeline catalog', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'timeline', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const cat = await client.getTimelineTypes()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/timeline-types')
+  assert.equal(cat.surface, 'timeline')
+})
