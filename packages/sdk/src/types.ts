@@ -1108,12 +1108,60 @@ export interface ApplyEditorOpsResult {
   results: EditorOpResult[]
 }
 
-/** A project's current composition, from `getEditorComposition` (read-before-write). */
-export interface EditorComposition {
-  projectId: string
+/** Which surface a project is: an editor (video timeline) or a canvas (slides/layers). */
+export type ProjectKind = 'editor' | 'canvas'
+
+/** Lightweight project list item (spans both surfaces), from `listProjects`. */
+export interface ProjectSummary {
+  id: string
   kind: string
+  title: string
+  orientation: string
+  width: number
+  height: number
+  thumbnailUrl: string | null
+  isArchived: boolean
+  isFavorited: boolean
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+/**
+ * A project's full detail, from `getProject` (read-before-write) and returned by `createProject`. Extends
+ * the summary with the composition `state` + `revision` (pass the revision back as `applyEditorOps`'s
+ * `expectedRevision`) plus the link fields.
+ */
+export interface ProjectDetail extends ProjectSummary {
   surface: EditorSurface
   revision: number
   /** The full composition state (`{ slides }` for canvas, `{ tracks }` for the editor timeline). */
   state: unknown
+  assetReferences: unknown
+  brandKitId: string | null
+  exportedPostId: string | null
+  exportedUrl: string | null
+  shareId: string | null
+  favoritedAt: string | null
+  archivedAt: string | null
+}
+
+/** Filters for `listProjects`. */
+export interface ListProjectsInput {
+  /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */
+  filter?: 'archived' | 'favorited'
+  /** Restrict to one surface. Omitted returns both. */
+  kind?: ProjectKind
+  /** Case-insensitive title search. */
+  search?: string
+}
+
+/** Input to `createProject`. All optional; the server applies the same defaults as the in-app new-project
+ *  flow (16:9 landscape, `editor` kind, an empty composition the app lazy-inits). */
+export interface CreateProjectInput {
+  kind?: ProjectKind
+  title?: string
+  orientation?: string
+  width?: number
+  height?: number
+  brandKitId?: string
 }

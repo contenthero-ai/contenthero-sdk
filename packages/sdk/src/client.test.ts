@@ -253,14 +253,40 @@ test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', as
   assert.equal(out.results[0]?.ok, true)
 })
 
-test('getEditorComposition GETs the encoded project path', async () => {
+test('getProject GETs the encoded /api/v1/projects path and unwraps { project }', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { projectId: 'p 1', kind: 'canvas', surface: 'canvas', revision: 2, state: { slides: [] } } },
+    { status: 200, body: { project: { id: 'p 1', kind: 'canvas', title: 'X', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 2, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const comp = await client.getEditorComposition('p 1')
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/p%201')
+  const p = await client.getProject('p 1')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p%201')
   assert.equal(calls[0]?.init?.method, 'GET')
-  assert.equal(comp.surface, 'canvas')
-  assert.equal(comp.revision, 2)
+  assert.equal(p.surface, 'canvas')
+  assert.equal(p.revision, 2)
+})
+
+test('listProjects GETs /api/v1/projects with filters and unwraps { projects }', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [{ id: 'p1', kind: 'editor', title: 'A', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null }] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const rows = await client.listProjects({ kind: 'editor', search: 'A' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects?kind=editor&search=A')
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.id, 'p1')
+})
+
+test('createProject POSTs to /api/v1/projects and unwraps { project }', async () => {
+  const { fetch, calls } = stubFetch([{ status: 201, body: { project: { id: 'new1', kind: 'editor', title: 'Untitled', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const p = await client.createProject({ kind: 'editor' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.equal(p.id, 'new1')
+})
+
+test('deleteProject DELETEs with the confirm=true opt-in', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { success: true } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.deleteProject('p 1')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p%201?confirm=true')
+  assert.equal(calls[0]?.init?.method, 'DELETE')
 })

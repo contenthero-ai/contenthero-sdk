@@ -49,7 +49,10 @@ import type {
   ArchiveInput,
   ApplyEditorOpsInput,
   ApplyEditorOpsResult,
-  EditorComposition,
+  ProjectSummary,
+  ProjectDetail,
+  ListProjectsInput,
+  CreateProjectInput,
   MediaItem,
   MediaSummary,
   CreateMediaUploadInput,
@@ -864,24 +867,67 @@ export class ContentHero {
   // -------------------------------------------------------------------------
 
   /**
+   * List the caller's projects (both editor + canvas) as lightweight summaries. Filter by archived /
+   * favorited state, by `kind`, or by a title search. Requires the `editor:read` scope.
+   */
+  async listProjects(input: ListProjectsInput = {}): Promise<ProjectSummary[]> {
+    const q = new URLSearchParams()
+    if (input.filter) q.set('filter', input.filter)
+    if (input.kind) q.set('kind', input.kind)
+    if (input.search) q.set('search', input.search)
+    const qs = q.toString()
+    const { projects } = await this.request<{ projects: ProjectSummary[] }>(
+      'GET',
+      `/api/v1/projects${qs ? `?${qs}` : ''}`,
+    )
+    return projects
+  }
+
+  /**
+   * Read a single project's full detail (metadata + composition `state` + `revision`), to read-before-write.
+   * Pass the returned `revision` back as `applyEditorOps`'s `expectedRevision`. Requires the `editor:read` scope.
+   */
+  async getProject(projectId: string): Promise<ProjectDetail> {
+    const { project } = await this.request<{ project: ProjectDetail }>(
+      'GET',
+      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+    )
+    return project
+  }
+
+  /**
+   * Create a project. All fields optional; the server applies the same defaults as the in-app new-project
+   * flow (16:9 landscape, `editor` kind, empty composition). Returns the full detail (with its id + starting
+   * revision) so you can immediately apply ops. Requires the `editor:write` scope.
+   */
+  async createProject(input: CreateProjectInput = {}): Promise<ProjectDetail> {
+    const { project } = await this.request<{ project: ProjectDetail }>('POST', '/api/v1/projects', input)
+    return project
+  }
+
+  /**
+   * PERMANENTLY delete a project (irreversible hard delete, distinct from the reversible archive). The
+   * `?confirm=true` opt-in is sent for you. To reversibly hide a project instead, use `archive`. Requires
+   * the `editor:write` scope.
+   */
+  async deleteProject(projectId: string): Promise<void> {
+    await this.request<{ success: boolean }>(
+      'DELETE',
+      `/api/v1/projects/${encodeURIComponent(projectId)}?confirm=true`,
+    )
+  }
+
+  /**
    * Apply a batch of ops to a project's composition (canvas slides or editor timeline) and persist
    * atomically. The project `kind` selects the surface; the ops run through the same reducers the manual
    * UI and in-app agent use. Requires the `editor:write` scope.
    *
-   * Optimistic concurrency: pass `expectedRevision` (from `getEditorComposition`) to fail with a 409
-   * ConflictError if a concurrent edit landed, instead of clobbering it. Returns the new revision and the
-   * per-op results (a bad op is reported, never throws).
+   * Optimistic concurrency: pass `expectedRevision` (from `getProject`) to fail with a 409 ConflictError if
+   * a concurrent edit landed, instead of clobbering it. Returns the new revision and the per-op results (a
+   * bad op is reported, never throws).
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
     return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', input)
-  }
-
-  /**
-   * Read a project's current composition + revision, to read-before-write. Pass the returned `revision`
-   * back as `applyEditorOps`'s `expectedRevision`. Requires the `editor:read` scope.
-   */
-  async getEditorComposition(projectId: string): Promise<EditorComposition> {
-    return this.request<EditorComposition>('GET', `/api/v1/editor/${encodeURIComponent(projectId)}`)
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */

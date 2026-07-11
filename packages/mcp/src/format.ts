@@ -46,7 +46,8 @@ import type {
   Voice,
   VoiceSummary,
   ApplyEditorOpsResult,
-  EditorComposition,
+  ProjectSummary,
+  ProjectDetail,
 } from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
@@ -834,11 +835,34 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
   return text(lines.join('\n'), failures.length > 0)
 }
 
-/** A project's current composition (read-before-write): surface, revision, and the full state JSON. */
-export function editorCompositionResult(c: EditorComposition): CallToolResult {
+/** A single project's full detail (read-before-write): metadata, surface, revision, and the state JSON. */
+export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
-    `Project ${c.projectId} (${c.kind}, surface: ${c.surface}), revision ${c.revision}.\n` +
+    `Project ${p.id}: "${p.title}" (${p.kind}, surface: ${p.surface}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n\n` +
-      JSON.stringify(c.state, null, 2),
+      JSON.stringify(p.state, null, 2),
   )
+}
+
+/** The project list: one line per project (id, kind, title, state flags). */
+export function projectListResult(projects: ProjectSummary[]): CallToolResult {
+  if (projects.length === 0) return text('No projects found.')
+  const lines = projects.map((p) => {
+    const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
+    return `- ${p.id}  [${p.kind}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}`
+  })
+  return text(`${projects.length} project(s):\n${lines.join('\n')}`)
+}
+
+/** A freshly created project: the id + kind to start editing against. */
+export function projectCreatedResult(p: ProjectDetail): CallToolResult {
+  return text(
+    `Created ${p.kind} project ${p.id}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+      `Use this id with update_${p.surface === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
+  )
+}
+
+/** Confirmation of a permanent delete. */
+export function projectDeletedResult(projectId: string): CallToolResult {
+  return text(`Permanently deleted project ${projectId}. This cannot be undone.`)
 }

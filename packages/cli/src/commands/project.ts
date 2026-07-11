@@ -1,7 +1,10 @@
 /**
- * `contenthero project` - read + edit a project's composition (canvas slides or editor timeline) via ops.
+ * `contenthero project` - manage projects (canvas slides or editor timeline) and edit them via ops.
  *
- *   project get   <projectId>                              (requires editor:read)
+ *   project list  [--filter <state>] [--kind <kind>] [--search <text>]   (requires editor:read)
+ *   project get   <projectId>                                            (requires editor:read)
+ *   project create [--kind <kind>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
+ *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). Read first
@@ -38,13 +41,70 @@ export function registerProject(program: Command): void {
     .description("Read + edit a project's composition (canvas or timeline) via ops")
 
   project
+    .command('list')
+    .description('List projects, both editor + canvas (requires editor:read)')
+    .option('--filter <state>', 'archived | favorited (omitted = active)')
+    .option('--kind <kind>', 'editor | canvas (omitted = both)')
+    .option('--search <text>', 'case-insensitive title search')
+    .action(async (opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const projects = await client.listProjects({
+        filter: opts.filter as 'archived' | 'favorited' | undefined,
+        kind: opts.kind as 'editor' | 'canvas' | undefined,
+        search: opts.search as string | undefined,
+      })
+      emit(projects, ctx, () =>
+        projects.length === 0
+          ? 'No projects found.'
+          : projects.map((p) => `${p.id}  [${p.kind}]  ${p.title}  ${p.orientation}`).join('\n'),
+      )
+    })
+
+  project
     .command('get')
-    .description("Read a project's composition + revision (requires editor:read)")
+    .description("Read a project's full detail + revision (requires editor:read)")
     .argument('<projectId>', 'the project id')
     .action(async (projectId: string, _opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const comp = await client.getEditorComposition(projectId)
-      emit(comp, ctx, () => `Project ${comp.projectId} (${comp.kind}, ${comp.surface}), revision ${comp.revision}`)
+      const p = await client.getProject(projectId)
+      emit(p, ctx, () => `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}`)
+    })
+
+  project
+    .command('create')
+    .description('Create a project (requires editor:write)')
+    .option('--kind <kind>', "editor | canvas (default: editor)")
+    .option('--title <text>', "project title (default: Untitled)")
+    .option('--orientation <ratio>', "e.g. 16:9, 9:16, 1:1 (default: 16:9)")
+    .option('--width <n>', 'pixel width (default: from orientation)', toInt)
+    .option('--height <n>', 'pixel height (default: from orientation)', toInt)
+    .action(async (opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const p = await client.createProject({
+        kind: opts.kind as 'editor' | 'canvas' | undefined,
+        title: opts.title as string | undefined,
+        orientation: opts.orientation as string | undefined,
+        width: opts.width as number | undefined,
+        height: opts.height as number | undefined,
+      })
+      emit(p, ctx, () => `Created ${p.kind} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
+    })
+
+  project
+    .command('delete')
+    .description('PERMANENTLY delete a project, irreversible (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .option('--yes', 'confirm the irreversible permanent delete')
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      if (!opts.yes) {
+        throw new CliError(
+          'Permanent delete is irreversible. Re-run with --yes to confirm, or archive the project instead to reversibly hide it.',
+          EXIT.USAGE,
+        )
+      }
+      const { client, ctx } = makeClient(command)
+      await client.deleteProject(projectId)
+      emit({ success: true, projectId }, ctx, () => `Permanently deleted project ${projectId}.`)
     })
 
   project

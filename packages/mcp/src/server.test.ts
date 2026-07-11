@@ -345,7 +345,12 @@ function fakeClient(overrides = {}) {
     archive: async () => {},
     unarchive: async () => {},
     applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'timeline', revision: 5, results: input.ops.map((o) => ({ op: o.op, ok: true })) }),
-    getEditorComposition: async (projectId) => ({ projectId, kind: 'editor', surface: 'timeline', revision: 4, state: { tracks: [] } }),
+    listProjects: async () => [
+      { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
+    ],
+    getProject: async (projectId) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
+    createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'timeline'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
+    deleteProject: async () => {},
     ...overrides,
   }
 }
@@ -372,8 +377,10 @@ test('advertises exactly the v1 tools', async () => {
     'create_element',
     'create_media_upload',
     'create_post',
+    'create_project',
     'create_tag',
     'delete_element',
+    'delete_project',
     'delete_tag',
     'favorite',
     'generate_audio',
@@ -411,6 +418,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_pipeline_stages',
     'list_platforms',
     'list_posts',
+    'list_projects',
     'list_tags',
     'list_voices',
     'publish_post',
@@ -1718,12 +1726,41 @@ test('get_connected_account lists enabled capabilities', async () => {
   assert.match(res.content[0].text, /connectedAccountId on add_post_destination/)
 })
 
-test('get_project reads the composition + revision', async () => {
+test('list_projects lists projects with kind + title', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_projects', arguments: {} })
+  const body = (res.content[0]).text
+  assert.match(body, /p1/)
+  assert.match(body, /\[editor\]/)
+  assert.match(body, /My Edit/)
+})
+
+test('get_project reads the full detail + revision', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
   const body = (res.content[0]).text
   assert.match(body, /revision 4/)
   assert.match(body, /surface: timeline/)
+  assert.match(body, /My Edit/)
+})
+
+test('create_project returns the new id + revision', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'create_project', arguments: { kind: 'canvas', title: 'Deck' } })
+  assert.ok(!res.isError)
+  const body = (res.content[0]).text
+  assert.match(body, /Created canvas project new1/)
+  assert.match(body, /update_canvas/)
+})
+
+test('delete_project requires confirm:true and reports the permanent delete', async () => {
+  const mcp = await connect(fakeClient())
+  // Missing confirm -> schema rejects before the handler runs.
+  const missing = await mcp.callTool({ name: 'delete_project', arguments: { projectId: 'p1' } })
+  assert.ok(missing.isError)
+  const ok = await mcp.callTool({ name: 'delete_project', arguments: { projectId: 'p1', confirm: true } })
+  assert.ok(!ok.isError)
+  assert.match((ok.content[0]).text, /Permanently deleted project p1/)
 })
 
 test('update_timeline applies ops and reports the new revision', async () => {

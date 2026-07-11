@@ -98,7 +98,11 @@ export type {
   ApplyEditorOpsInput,
   EditorOpResult,
   ApplyEditorOpsResult,
-  EditorComposition,
+  ProjectKind,
+  ProjectSummary,
+  ProjectDetail,
+  ListProjectsInput,
+  CreateProjectInput,
 } from './types.js'
 export {
   ContentHeroError,
