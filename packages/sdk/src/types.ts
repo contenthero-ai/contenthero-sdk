@@ -1166,6 +1166,20 @@ export interface CreateProjectInput {
   brandKitId?: string
 }
 
+/** A source for `importProject`: a PowerPoint / Google Slides file URL, or a Canva design id. */
+export type ImportProjectSource =
+  | { type: 'pptx'; fileUrl: string }
+  | { type: 'canva'; designId: string }
+
+/** Input to `importProject`. Creates a new canvas project from the imported deck. */
+export interface ImportProjectInput {
+  source: ImportProjectSource
+  /** Title for the created project. Defaults to 'Imported deck'. */
+  title?: string
+  /** Optional slide count for an early page-cap check. */
+  pageCount?: number
+}
+
 /** One editable field on a layer/clip type (from the type-discovery catalogs). */
 export interface EditorTypeProp {
   name: string

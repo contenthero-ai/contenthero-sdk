@@ -103,6 +103,8 @@ export type {
   ProjectDetail,
   ListProjectsInput,
   CreateProjectInput,
+  ImportProjectSource,
+  ImportProjectInput,
   EditorTypeProp,
   EditorTypeSpec,
   EditorTrackSpec,

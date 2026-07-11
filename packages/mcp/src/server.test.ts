@@ -351,6 +351,7 @@ function fakeClient(overrides = {}) {
     getProject: async (projectId) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'timeline'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
+    importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getLayerTypes: async () => ({ surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
     getTimelineTypes: async () => ({ surface: 'timeline', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
     ...overrides,
@@ -409,6 +410,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_timeline_types',
     'get_voice',
     'import_media',
+    'import_project',
     'list_avatars',
     'list_brand_accounts',
     'list_brand_kits',
@@ -1771,6 +1773,19 @@ test('create_project returns the new id + revision', async () => {
   const body = (res.content[0]).text
   assert.match(body, /Created canvas project new1/)
   assert.match(body, /update_canvas/)
+})
+
+test('import_project (pptx) creates a canvas project from a file URL', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'import_project', arguments: { sourceType: 'pptx', fileUrl: 'https://x/deck.pptx' } })
+  assert.ok(!res.isError)
+  assert.match((res.content[0]).text, /Created canvas project imp1/)
+})
+
+test('import_project (pptx) without fileUrl is an error', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'import_project', arguments: { sourceType: 'pptx' } })
+  assert.ok(res.isError)
 })
 
 test('delete_project requires confirm:true and reports the permanent delete', async () => {

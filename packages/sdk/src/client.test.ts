@@ -291,6 +291,16 @@ test('deleteProject DELETEs with the confirm=true opt-in', async () => {
   assert.equal(calls[0]?.init?.method, 'DELETE')
 })
 
+test('importProject POSTs the source to /api/v1/projects/import and unwraps { project }', async () => {
+  const { fetch, calls } = stubFetch([{ status: 201, body: { project: { id: 'imp1', kind: 'canvas', title: 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const p = await client.importProject({ source: { type: 'pptx', fileUrl: 'https://x/deck.pptx' } })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/import')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { source: { type: 'pptx', fileUrl: 'https://x/deck.pptx' } })
+  assert.equal(p.id, 'imp1')
+})
+
 test('getLayerTypes GETs the canvas catalog', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'canvas', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

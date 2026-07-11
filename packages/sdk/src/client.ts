@@ -53,6 +53,7 @@ import type {
   ProjectDetail,
   ListProjectsInput,
   CreateProjectInput,
+  ImportProjectInput,
   LayerTypeCatalog,
   TimelineTypeCatalog,
   MediaItem,
@@ -904,6 +905,17 @@ export class ContentHero {
    */
   async createProject(input: CreateProjectInput = {}): Promise<ProjectDetail> {
     const { project } = await this.request<{ project: ProjectDetail }>('POST', '/api/v1/projects', input)
+    return project
+  }
+
+  /**
+   * Import a PowerPoint / Google Slides file (by URL) or a Canva design (by id) into a NEW canvas project
+   * with editable layers, returning the created project's full detail. The Canva source uses the caller's
+   * Canva connection (a ConflictError-like 400 with code 'canva_not_connected' if not connected). Structured
+   * import can take a while (export + convert + parse). Requires the `editor:write` scope.
+   */
+  async importProject(input: ImportProjectInput): Promise<ProjectDetail> {
+    const { project } = await this.request<{ project: ProjectDetail }>('POST', '/api/v1/projects/import', input)
     return project
   }
 

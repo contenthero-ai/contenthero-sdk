@@ -2317,6 +2317,36 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   server.registerTool(
+    'import_project',
+    {
+      title: 'Import Project',
+      annotations: WRITE,
+      description:
+        "Import a PowerPoint / Google Slides file (by URL) or a Canva design (by id) into a NEW canvas project with editable layers. Set sourceType to 'pptx' and pass fileUrl (a URL to a .pptx / slides file), or set sourceType to 'canva' and pass designId (uses the account's Canva connection; fails with canva_not_connected if not linked). Returns the new project id + revision. Requires the editor:write scope.",
+      inputSchema: {
+        sourceType: z.enum(['pptx', 'canva']).describe("'pptx' for a file URL, 'canva' for a Canva design id."),
+        fileUrl: z.string().optional().describe("Required when sourceType is 'pptx': a URL to the .pptx / slides file."),
+        designId: z.string().optional().describe("Required when sourceType is 'canva': the Canva design id."),
+        title: z.string().optional().describe("Title for the created project. Defaults to 'Imported deck'."),
+      },
+    },
+    async (args, extra) => {
+      try {
+        if (args.sourceType === 'pptx' && !args.fileUrl) return errorResult(new Error("fileUrl is required when sourceType is 'pptx'."))
+        if (args.sourceType === 'canva' && !args.designId) return errorResult(new Error("designId is required when sourceType is 'canva'."))
+        const source =
+          args.sourceType === 'pptx'
+            ? ({ type: 'pptx', fileUrl: args.fileUrl as string } as const)
+            : ({ type: 'canva', designId: args.designId as string } as const)
+        const client = await getClient(extra)
+        return projectCreatedResult(await client.importProject({ source, title: args.title }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
     'delete_project',
     {
       title: 'Delete Project',
