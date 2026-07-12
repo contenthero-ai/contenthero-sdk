@@ -344,7 +344,7 @@ function fakeClient(overrides = {}) {
     unfavorite: async () => {},
     archive: async () => {},
     unarchive: async () => {},
-    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'timeline', revision: 5, results: input.ops.map((o) => ({ op: o.op, ok: true })) }),
+    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'timeline', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
     listProjects: async () => [
       { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],

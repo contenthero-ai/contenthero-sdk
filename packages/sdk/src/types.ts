@@ -1077,6 +1077,13 @@ export type EditorSurface = 'canvas' | 'timeline'
  *  project's surface (canvas layer/slide ops, or timeline clip ops). Every op has an `op` name. */
 export interface EditorOp {
   op: string
+  /**
+   * Optional client-generated stable id (uuid) for this op. When omitted, `applyEditorOps` generates one
+   * for you before sending. It is the op's identity across its whole lifecycle: the server persists it, the
+   * unique-per-project constraint makes a retried op idempotent, and a live editor client uses it to ignore
+   * the broadcast echo of its own edit.
+   */
+  op_id?: string
   [key: string]: unknown
 }
 
@@ -1097,6 +1104,8 @@ export interface ApplyEditorOpsInput {
 /** The per-op outcome (surface-agnostic; created ids normalized across surfaces). */
 export interface EditorOpResult {
   op: string
+  /** The op's stable id (the one you sent, or the one generated for you), echoed back for every op. */
+  opId: string
   ok: boolean
   error?: string
   warnings?: string[]

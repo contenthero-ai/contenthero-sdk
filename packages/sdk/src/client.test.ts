@@ -242,15 +242,28 @@ test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', as
   })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/ops')
   assert.equal(calls[0]?.init?.method, 'POST')
-  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), {
-    projectId: 'p1',
-    ops: [{ op: 'ripple_delete', itemIds: ['a'] }],
-    userIntent: 'remove intro',
-    expectedRevision: 3,
-  })
+  const sent = JSON.parse(calls[0]?.init?.body as string)
+  assert.equal(sent.projectId, 'p1')
+  assert.equal(sent.userIntent, 'remove intro')
+  assert.equal(sent.expectedRevision, 3)
+  assert.equal(sent.ops.length, 1)
+  assert.equal(sent.ops[0].op, 'ripple_delete')
+  assert.deepEqual(sent.ops[0].itemIds, ['a'])
+  // A client op_id (uuid) is generated for the op when the caller does not supply one.
+  assert.match(sent.ops[0].op_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
   assert.equal(out.surface, 'timeline')
   assert.equal(out.revision, 4)
   assert.equal(out.results[0]?.ok, true)
+})
+
+test('applyEditorOps preserves a caller-supplied op_id (idempotency key)', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'ripple_delete', opId: 'mine-1', ok: true }] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.applyEditorOps({ projectId: 'p1', ops: [{ op: 'ripple_delete', op_id: 'mine-1', itemIds: ['a'] }] })
+  const sent = JSON.parse(calls[0]?.init?.body as string)
+  assert.equal(sent.ops[0].op_id, 'mine-1')
 })
 
 test('getProject GETs the encoded /api/v1/projects path and unwraps { project }', async () => {

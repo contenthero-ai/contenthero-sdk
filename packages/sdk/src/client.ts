@@ -944,9 +944,17 @@ export class ContentHero {
    * Optimistic concurrency: pass `expectedRevision` (from `getProject`) to fail with a 409 ConflictError if
    * a concurrent edit landed, instead of clobbering it. Returns the new revision and the per-op results (a
    * bad op is reported, never throws).
+   *
+   * Each op is given a client-generated `op_id` (uuid) here if it does not already have one, so the op has a
+   * stable identity from the point of intent: resending the same batch is idempotent (the server dedupes by
+   * op_id), and a live editor sees the edit as an attributed collaborator change keyed by that id. The
+   * assigned id is echoed back on each result's `opId`.
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
-    return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', input)
+    const ops = input.ops.map((op) =>
+      typeof op.op_id === 'string' && op.op_id ? op : { ...op, op_id: globalThis.crypto.randomUUID() },
+    )
+    return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', { ...input, ops })
   }
 
   /**
