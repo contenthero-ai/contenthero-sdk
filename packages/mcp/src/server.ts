@@ -2299,7 +2299,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Project',
       annotations: WRITE,
       description:
-        "Create a new project. `kind` picks the surface: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor kind, an empty composition). Returns the new project id + revision so you can immediately add content with update_timeline / update_canvas. Requires the editor:write scope.",
+        "Create a new project. `kind` picks the surface: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor kind). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. Returns the new project id + revision. Requires the editor:write scope.",
       inputSchema: {
         kind: z.enum(['editor', 'canvas']).optional().describe("The surface. Defaults to 'editor'."),
         title: z.string().optional().describe("Project title. Defaults to 'Untitled'."),

@@ -904,8 +904,9 @@ export class ContentHero {
 
   /**
    * Create a project. All fields optional; the server applies the same defaults as the in-app new-project
-   * flow (16:9 landscape, `editor` kind, empty composition). Returns the full detail (with its id + starting
-   * revision) so you can immediately apply ops. Requires the `editor:write` scope.
+   * flow (16:9 landscape, `editor` kind). A new canvas starts with one empty slide; a new editor starts with
+   * an empty timeline. Returns the full detail (with its id + starting revision) so you can immediately apply
+   * ops. Requires the `editor:write` scope.
    */
   async createProject(input: CreateProjectInput = {}): Promise<ProjectDetail> {
     const { project } = await this.request<{ project: ProjectDetail }>('POST', '/api/v1/projects', input)
