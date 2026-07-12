@@ -54,6 +54,9 @@ import type {
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectInput,
+  StartExportInput,
+  ExportJob,
+  ExportFormatCatalog,
   LayerTypeCatalog,
   TimelineTypeCatalog,
   MediaItem,
@@ -942,6 +945,56 @@ export class ContentHero {
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
     return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', input)
+  }
+
+  /**
+   * Start an export (render) of a project's saved composition. `mp4` returns a job with status 'rendering'
+   * (poll with getExport or use exportProjectAndWait); canvas still/document formats (png/jpg/pdf/pptx) run
+   * synchronously and return 'completed' with the outputUrl. Requires the `editor:write` scope.
+   */
+  async startExport(projectId: string, input: StartExportInput = {}): Promise<ExportJob> {
+    return this.request<ExportJob>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/export`, input)
+  }
+
+  /** Poll an export job by id. Requires the `editor:read` scope. */
+  async getExport(exportId: string): Promise<ExportJob> {
+    return this.request<ExportJob>('GET', `/api/v1/exports/${encodeURIComponent(exportId)}`)
+  }
+
+  /** The kind-aware catalog of export formats + their options. Requires the `editor:read` scope. */
+  async getExportFormats(): Promise<ExportFormatCatalog> {
+    return this.request<ExportFormatCatalog>('GET', '/api/v1/export-formats')
+  }
+
+  /**
+   * Start an export and poll until it completes. Resolves with the completed job (outputUrl set), throws
+   * `GenerationFailedError` on failure, or `GenerationTimeoutError` if it does not finish within `timeoutMs`
+   * (the server job may still complete; re-poll with getExport).
+   */
+  async exportProjectAndWait(
+    projectId: string,
+    input: StartExportInput = {},
+    options: WaitOptions = {},
+  ): Promise<ExportJob> {
+    const job = await this.startExport(projectId, input)
+    if (job.status === 'completed' || job.status === 'failed') {
+      if (job.status === 'failed') throw new GenerationFailedError(job.exportId, job.errorMessage ?? 'Export failed')
+      return job
+    }
+    return this.waitForExport(job.exportId, options)
+  }
+
+  /** Poll an export job to a terminal state. */
+  async waitForExport(exportId: string, options: WaitOptions = {}): Promise<ExportJob> {
+    const { pollIntervalMs = 3000, timeoutMs = 600_000, signal } = options
+    const deadline = Date.now() + timeoutMs
+    while (true) {
+      const job = await this.getExport(exportId)
+      if (job.status === 'completed') return job
+      if (job.status === 'failed') throw new GenerationFailedError(exportId, job.errorMessage ?? 'Export failed')
+      if (Date.now() >= deadline) throw new GenerationTimeoutError(exportId)
+      await sleep(pollIntervalMs, signal)
+    }
   }
 
   /**

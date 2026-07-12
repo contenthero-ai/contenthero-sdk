@@ -1180,6 +1180,47 @@ export interface ImportProjectInput {
   pageCount?: number
 }
 
+/** Options for starting a project export. All optional; defaults: format 'mp4', 720p, watermark on. */
+export interface StartExportInput {
+  /** 'mp4' (both surfaces) or 'png'/'jpg'/'pdf'/'pptx' (canvas only). */
+  format?: string
+  /** Video resolution (mp4): '480p'|'720p'|'1080p'|'2k'|'4k'. 1080p+ is plan-gated. */
+  resolution?: string
+  /** Video quality (mp4): 'low'|'recommended'|'high'. */
+  quality?: string
+  /** Keep the watermark. Removing it is plan-gated. Defaults true. */
+  watermark?: boolean
+}
+
+/** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */
+export interface ExportJob {
+  exportId: string
+  /** 'pending' | 'rendering' | 'transferring' | 'completed' | 'failed'. */
+  status: string
+  /** The final file URL, present when status is 'completed'. */
+  outputUrl?: string | null
+  errorMessage?: string | null
+  /** 0..1 render progress. */
+  progress?: number
+}
+
+/** One format in the export catalog. */
+export interface ExportFormatSpec {
+  format: string
+  surfaces: string[]
+  /** true = async render job (poll it); false = returned completed immediately. */
+  async: boolean
+  description: string
+  options: string[]
+}
+
+/** The export-format catalog, from `getExportFormats`. */
+export interface ExportFormatCatalog {
+  formats: ExportFormatSpec[]
+  resolutions: string[]
+  qualities: string[]
+}
+
 /** One editable field on a layer/clip type (from the type-discovery catalogs). */
 export interface EditorTypeProp {
   name: string

@@ -6,6 +6,9 @@
  *   project create [--kind <kind>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
+ *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--no-watermark] [--wait]
+ *   project export-status <exportId>                                     (requires editor:read)
+ *   project export-formats                                               (requires editor:read)
  *   project layer-types                                                  (canvas types, requires editor:read)
  *   project timeline-types                                               (editor types, requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
@@ -132,6 +135,56 @@ export function registerProject(program: Command): void {
       const { client, ctx } = makeClient(command)
       const p = await client.importProject({ source, title: opts.title as string | undefined })
       emit(p, ctx, () => `Imported ${p.kind} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
+    })
+
+  project
+    .command('export')
+    .description('Export a project to a file (mp4 both surfaces; png/jpg/pdf/pptx canvas) (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .option('--format <format>', 'mp4 | png | jpg | pdf | pptx (default mp4)')
+    .option('--resolution <res>', 'mp4 resolution: 480p|720p|1080p|2k|4k (default 720p)')
+    .option('--quality <q>', 'mp4 quality: low|recommended|high')
+    .option('--no-watermark', 'remove the watermark (plan-gated)')
+    .option('--wait', 'poll until the export finishes and print the URL')
+    .option('--timeout <ms>', 'max wait when --wait (default 600000)', toInt)
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const input = {
+        format: opts.format as string | undefined,
+        resolution: opts.resolution as string | undefined,
+        quality: opts.quality as string | undefined,
+        // commander sets opts.watermark=false when --no-watermark is passed; leave undefined otherwise.
+        ...(opts.watermark === false ? { watermark: false } : {}),
+      }
+      const job = opts.wait
+        ? await client.exportProjectAndWait(projectId, input, { timeoutMs: (opts.timeout as number | undefined) ?? 600000 })
+        : await client.startExport(projectId, input)
+      emit(job, ctx, () =>
+        job.status === 'completed'
+          ? `Export ${job.exportId} completed: ${job.outputUrl}`
+          : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export-status ${job.exportId}`,
+      )
+    })
+
+  project
+    .command('export-status')
+    .description('Poll an export job by id (requires editor:read)')
+    .argument('<exportId>', 'the export id')
+    .action(async (exportId: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const job = await client.getExport(exportId)
+      emit(job, ctx, () =>
+        job.status === 'completed' ? `completed: ${job.outputUrl}` : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''}`,
+      )
+    })
+
+  project
+    .command('export-formats')
+    .description('List available export formats (requires editor:read)')
+    .action(async (_opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const cat = await client.getExportFormats()
+      emit(cat, ctx, () => cat.formats.map((f) => `${f.format} (${f.surfaces.join('/')}): ${f.description}`).join('\n'))
     })
 
   project

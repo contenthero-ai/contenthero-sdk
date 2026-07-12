@@ -301,6 +301,38 @@ test('importProject POSTs the source to /api/v1/projects/import and unwraps { pr
   assert.equal(p.id, 'imp1')
 })
 
+test('startExport POSTs to /api/v1/projects/:id/export', async () => {
+  const { fetch, calls } = stubFetch([{ status: 202, body: { exportId: 'exp1', status: 'rendering' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const job = await client.startExport('p 1', { format: 'mp4', resolution: '1080p' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p%201/export')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.equal(job.status, 'rendering')
+})
+
+test('getExport GETs /api/v1/exports/:id', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/o.mp4' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const job = await client.getExport('exp1')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/exports/exp1')
+  assert.equal(job.outputUrl, 'https://x/o.mp4')
+})
+
+test('exportProjectAndWait returns immediately when the job is already completed', async () => {
+  const { fetch } = stubFetch([{ status: 202, body: { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/o.zip' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const job = await client.exportProjectAndWait('p1', { format: 'png' })
+  assert.equal(job.status, 'completed')
+  assert.equal(job.outputUrl, 'https://x/o.zip')
+})
+
+test('getExportFormats GETs /api/v1/export-formats', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { formats: [], resolutions: [], qualities: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getExportFormats()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/export-formats')
+})
+
 test('getLayerTypes GETs the canvas catalog', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'canvas', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

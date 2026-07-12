@@ -111,6 +111,8 @@ import {
   projectDeletedResult,
   layerTypesResult,
   timelineTypesResult,
+  exportJobResult,
+  exportFormatsResult,
   trackedAccountListResult,
   transcriptResult,
   voiceListResult,
@@ -2340,6 +2342,76 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             : ({ type: 'canva', designId: args.designId as string } as const)
         const client = await getClient(extra)
         return projectCreatedResult(await client.importProject({ source, title: args.title }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'export_project',
+    {
+      title: 'Export Project',
+      annotations: WRITE,
+      description:
+        "Export (render) a project's saved composition to a downloadable file. format 'mp4' works for both editor and canvas (a video render; may take a while). Canvas projects also support 'png' / 'jpg' (one image per slide; multiple slides come back as a zip), 'pdf', and 'pptx'. For mp4, resolution ('720p' default; 1080p/2k/4k are plan-gated) and watermark (default on; removing it is plan-gated) apply. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project to export.'),
+        format: z.enum(['mp4', 'png', 'jpg', 'pdf', 'pptx']).optional().describe("Output format. Defaults to 'mp4'. png/jpg/pdf/pptx are canvas-only."),
+        resolution: z.enum(['480p', '720p', '1080p', '2k', '4k']).optional().describe("mp4 video resolution. Defaults '720p'. 1080p+ is plan-gated."),
+        quality: z.enum(['low', 'recommended', 'high']).optional().describe('mp4 video quality. Defaults recommended.'),
+        watermark: z.boolean().optional().describe('Keep the watermark. Defaults true; removing it is plan-gated.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { projectId, ...input } = args
+        const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: SMART_WAIT_MS })
+        return exportJobResult(job)
+      } catch (err) {
+        if (err instanceof GenerationTimeoutError) {
+          return exportJobResult({ exportId: err.outputId, status: 'rendering' })
+        }
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_export',
+    {
+      title: 'Get Export',
+      annotations: READ,
+      description:
+        'Poll an export job started by export_project. Returns its status and, when done, the download URL. Requires the editor:read scope.',
+      inputSchema: {
+        exportId: z.string().describe('The export id returned by export_project.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return exportJobResult(await client.getExport(args.exportId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_export_formats',
+    {
+      title: 'Get Export Formats',
+      annotations: READ,
+      description:
+        'List the export formats (and their options) available per project surface, so you know what export_project accepts. Requires the editor:read scope.',
+      inputSchema: {},
+    },
+    async (_args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return exportFormatsResult(await client.getExportFormats())
       } catch (err) {
         return errorResult(err)
       }

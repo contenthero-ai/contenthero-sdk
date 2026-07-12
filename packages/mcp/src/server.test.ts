@@ -354,6 +354,11 @@ function fakeClient(overrides = {}) {
     importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getLayerTypes: async () => ({ surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
     getTimelineTypes: async () => ({ surface: 'timeline', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
+    exportProjectAndWait: async (_projectId, input) => (input?.format && input.format !== 'mp4'
+      ? { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.zip', progress: 1 }
+      : { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.mp4', progress: 1 }),
+    getExport: async (exportId) => ({ exportId, status: 'completed', outputUrl: 'https://x/out.mp4', progress: 1 }),
+    getExportFormats: async () => ({ formats: [{ format: 'mp4', surfaces: ['editor', 'canvas'], async: true, description: 'video', options: ['resolution'] }, { format: 'pptx', surfaces: ['canvas'], async: false, description: 'powerpoint', options: [] }], resolutions: ['720p', '1080p'], qualities: ['recommended'] }),
     ...overrides,
   }
 }
@@ -385,6 +390,7 @@ test('advertises exactly the v1 tools', async () => {
     'delete_element',
     'delete_project',
     'delete_tag',
+    'export_project',
     'favorite',
     'generate_audio',
     'generate_board',
@@ -398,6 +404,8 @@ test('advertises exactly the v1 tools', async () => {
     'get_brand_knowledge',
     'get_connected_account',
     'get_element',
+    'get_export',
+    'get_export_formats',
     'get_generation_status',
     'get_inspiration_account',
     'get_inspiration_content',
@@ -1786,6 +1794,28 @@ test('import_project (pptx) without fileUrl is an error', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'import_project', arguments: { sourceType: 'pptx' } })
   assert.ok(res.isError)
+})
+
+test('export_project returns the download URL when it finishes in time', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', format: 'mp4' } })
+  assert.ok(!res.isError)
+  assert.match((res.content[0]).text, /completed/)
+  assert.match((res.content[0]).text, /out\.mp4/)
+})
+
+test('get_export polls an export job', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_export', arguments: { exportId: 'exp1' } })
+  assert.match((res.content[0]).text, /exp1/)
+})
+
+test('get_export_formats lists formats per surface', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_export_formats', arguments: {} })
+  const body = (res.content[0]).text
+  assert.match(body, /mp4/)
+  assert.match(body, /pptx/)
 })
 
 test('delete_project requires confirm:true and reports the permanent delete', async () => {

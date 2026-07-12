@@ -50,6 +50,8 @@ import type {
   ProjectDetail,
   LayerTypeCatalog,
   TimelineTypeCatalog,
+  ExportJob,
+  ExportFormatCatalog,
 } from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
@@ -874,6 +876,29 @@ export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
   const lines = cat.layerTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')}; supports: ${t.supports.join(', ')})`)
   return text(
     `Canvas layer types (edit via update_canvas ops):\n${lines.join('\n')}\n\nShared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
+      JSON.stringify(cat, null, 2),
+  )
+}
+
+/** A completed export -> the download URL; an in-flight one -> the exportId to poll. */
+export function exportJobResult(job: ExportJob): CallToolResult {
+  if (job.status === 'completed') {
+    return text(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`)
+  }
+  if (job.status === 'failed') {
+    return text(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, true)
+  }
+  const pct = typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''
+  return text(
+    `Export ${job.exportId} is ${job.status}${pct}. Still rendering. Poll get_export with this exportId for the download URL.`,
+  )
+}
+
+/** The export-format catalog as readable text + JSON. */
+export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
+  const lines = cat.formats.map((f) => `- ${f.format} (${f.surfaces.join('/')}${f.async ? ', async' : ''}): ${f.description}`)
+  return text(
+    `Export formats:\n${lines.join('\n')}\n\nResolutions (mp4): ${cat.resolutions.join(', ')}. Qualities: ${cat.qualities.join(', ')}.\n\n` +
       JSON.stringify(cat, null, 2),
   )
 }
