@@ -265,6 +265,16 @@ test('getProject GETs the encoded /api/v1/projects path and unwraps { project }'
   assert.equal(p.revision, 2)
 })
 
+test('getProject with includeRenderUrl appends the query param', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { project: { id: 'p1', kind: 'editor', title: 'X', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 2, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, renderUrl: 'https://x/p.png' } } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const p = await client.getProject('p1', { includeRenderUrl: true })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p1?includeRenderUrl=true')
+  assert.equal(p.renderUrl, 'https://x/p.png')
+})
+
 test('listProjects GETs /api/v1/projects with filters and unwraps { projects }', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [{ id: 'p1', kind: 'editor', title: 'A', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null }] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

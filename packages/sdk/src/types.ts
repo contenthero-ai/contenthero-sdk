@@ -1090,6 +1090,8 @@ export interface ApplyEditorOpsInput {
   expectedRevision?: number
   /** A short human intent for the edit (attribution + observability). */
   userIntent?: string
+  /** When true, the result includes a fingerprint-validated preview still URL of the post-edit state. */
+  includeRenderUrl?: boolean
 }
 
 /** The per-op outcome (surface-agnostic; created ids normalized across surfaces). */
@@ -1106,6 +1108,8 @@ export interface ApplyEditorOpsResult {
   surface: EditorSurface
   revision: number
   results: EditorOpResult[]
+  /** Present only when `includeRenderUrl` was set: a preview still URL of the resulting composition. */
+  renderUrl?: string | null
 }
 
 /** Which surface a project is: an editor (video timeline) or a canvas (slides/layers). */
@@ -1143,6 +1147,9 @@ export interface ProjectDetail extends ProjectSummary {
   shareId: string | null
   favoritedAt: string | null
   archivedAt: string | null
+  /** A fingerprint-validated preview still URL. Present only when getProject is called with
+   *  `includeRenderUrl` (opt-in, since it may render). */
+  renderUrl?: string | null
 }
 
 /** Filters for `listProjects`. */

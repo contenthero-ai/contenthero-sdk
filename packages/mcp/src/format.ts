@@ -829,6 +829,7 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
     `Applied ${okCount}/${r.results.length} ${r.surface} op(s). New revision: ${r.revision}.`,
   ]
   if (created.length) lines.push(`Created: ${created.join(', ')}.`)
+  if (r.renderUrl) lines.push(`Preview: ${r.renderUrl}`)
   if (failures.length) {
     lines.push('Failed ops:')
     for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)
@@ -843,7 +844,9 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
 export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
     `Project ${p.id}: "${p.title}" (${p.kind}, surface: ${p.surface}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
-      `Pass this revision back as expectedRevision when you edit.\n\n` +
+      `Pass this revision back as expectedRevision when you edit.\n` +
+      (p.renderUrl ? `Preview: ${p.renderUrl}\n` : '') +
+      `\n` +
       JSON.stringify(p.state, null, 2),
   )
 }

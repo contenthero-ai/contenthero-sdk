@@ -893,10 +893,11 @@ export class ContentHero {
    * Read a single project's full detail (metadata + composition `state` + `revision`), to read-before-write.
    * Pass the returned `revision` back as `applyEditorOps`'s `expectedRevision`. Requires the `editor:read` scope.
    */
-  async getProject(projectId: string): Promise<ProjectDetail> {
+  async getProject(projectId: string, options: { includeRenderUrl?: boolean } = {}): Promise<ProjectDetail> {
+    const qs = options.includeRenderUrl ? '?includeRenderUrl=true' : ''
     const { project } = await this.request<{ project: ProjectDetail }>(
       'GET',
-      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      `/api/v1/projects/${encodeURIComponent(projectId)}${qs}`,
     )
     return project
   }

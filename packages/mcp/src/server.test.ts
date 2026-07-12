@@ -348,7 +348,7 @@ function fakeClient(overrides = {}) {
     listProjects: async () => [
       { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],
-    getProject: async (projectId) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
+    getProject: async (projectId, options) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
     createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'timeline'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
@@ -1772,6 +1772,12 @@ test('get_timeline_types lists clip + track types', async () => {
   const body = (res.content[0]).text
   assert.match(body, /Track types/)
   assert.match(body, /media/)
+})
+
+test('get_project with includeRenderUrl surfaces the preview URL', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', includeRenderUrl: true } })
+  assert.match((res.content[0]).text, /Preview: https:\/\/x\/preview\.png/)
 })
 
 test('create_project returns the new id + revision', async () => {
