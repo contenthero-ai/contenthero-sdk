@@ -1161,6 +1161,38 @@ export interface ProjectDetail extends ProjectSummary {
   renderUrl?: string | null
 }
 
+/** One live participant in `getContext`: who is present and on what surface/scope. */
+export interface LiveContextParticipant {
+  userId: string
+  sessionId: string
+  /** The surface they are on: 'canvas' | 'editor' | 'studio' | 'content' | future surfaces. */
+  surface: string
+  projectId: string | null
+  postId: string | null
+  /** ISO timestamp of their last activity. */
+  updatedAt: string
+}
+
+/** The result of `getContext`: the most-recent-active session's live context + the full participant set. */
+export interface LiveContextResult {
+  /**
+   * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object. For a
+   * canvas session it carries `view`, `focusedSlideId`, the current selections, and a short-lived
+   * `snapshotUrl` of the focused slide (the image the user is looking at). Null when no session is live.
+   */
+  context: Record<string, unknown> | null
+  /** Metadata for that default participant, or null when no one is live. */
+  participant: LiveContextParticipant | null
+  /** Every currently-live participant, most-recent first, for multi-human callers. */
+  participants: LiveContextParticipant[]
+}
+
+/** Options for `getContext`. */
+export interface GetContextInput {
+  /** Scope to a specific project's presence (editor/canvas). Omit for the caller's most-recent surface anywhere. */
+  projectId?: string
+}
+
 /** Filters for `listProjects`. */
 export interface ListProjectsInput {
   /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */

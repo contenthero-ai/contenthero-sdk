@@ -32,6 +32,7 @@ import { registerBrandAccount, registerConnectedAccount } from './commands/conne
 import { registerSchema } from './commands/schema.js'
 import { registerFavorites } from './commands/favorites.js'
 import { registerProject } from './commands/project.js'
+import { registerContext } from './commands/context.js'
 
 /** Read our own version from package.json (kept in lockstep with sdk + mcp). */
 function readVersion(): string {
@@ -84,6 +85,7 @@ export function buildProgram(): Command {
   registerSchema(program)
   registerFavorites(program)
   registerProject(program)
+  registerContext(program)
 
   return program
 }

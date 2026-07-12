@@ -106,6 +106,7 @@ import {
   statusActionResult,
   editorOpsResult,
   projectDetailResult,
+  liveContextResult,
   projectListResult,
   projectCreatedResult,
   projectDeletedResult,
@@ -148,6 +149,23 @@ const SMART_WAIT_MS = 50_000
 const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
+
+/**
+ * Fetch a get_context snapshot signed URL and base64-encode it, so get_context can return an IMAGE content
+ * block the calling model actually sees. Best-effort: any failure returns null and the tool still returns the
+ * textual context. The signed URL is self-authorizing (no secret needed here).
+ */
+async function fetchSnapshotBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const mimeType = res.headers.get('content-type') || 'image/webp'
+    const data = Buffer.from(await res.arrayBuffer()).toString('base64')
+    return { data, mimeType }
+  } catch {
+    return null
+  }
+}
 
 /** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
 export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
@@ -2249,6 +2267,30 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return projectDetailResult(await client.getProject(args.projectId, { includeRenderUrl: args.includeRenderUrl }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_context',
+    {
+      title: 'Get Live Context',
+      annotations: READ,
+      description:
+        "Read the LIVE context of what the user is currently viewing in the open app: the active surface (canvas / editor / studio / content), the focused slide or clip, and the current selection, so you can operate on \"what the user is looking at\" instead of guessing. For a canvas session it also returns an IMAGE of the focused slide, so you can SEE the composition. Returns the most-recent-active session plus the live participant set; returns nothing if no one is currently viewing. Optionally scope to one project. Requires the context:read scope.",
+      inputSchema: {
+        projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const result = await client.getContext({ projectId: args.projectId })
+        const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
+        const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null
+        return liveContextResult(result, snapshot)
       } catch (err) {
         return errorResult(err)
       }

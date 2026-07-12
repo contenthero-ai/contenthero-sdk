@@ -349,6 +349,7 @@ function fakeClient(overrides = {}) {
       { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],
     getProject: async (projectId, options) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
+    getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
     createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'timeline'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
@@ -403,6 +404,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_brand_kit',
     'get_brand_knowledge',
     'get_connected_account',
+    'get_context',
     'get_element',
     'get_export',
     'get_export_formats',
@@ -1756,6 +1758,23 @@ test('get_project reads the full detail + revision', async () => {
   assert.match(body, /revision 4/)
   assert.match(body, /surface: timeline/)
   assert.match(body, /My Edit/)
+})
+
+test('get_context returns the context text + a focused-slide image block', async () => {
+  const origFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response(new Uint8Array([1, 2, 3, 4]), { headers: { 'content-type': 'image/webp' } })) as typeof fetch
+  try {
+    const mcp = await connect(fakeClient())
+    const res = await mcp.callTool({ name: 'get_context', arguments: {} })
+    assert.match((res.content[0]).text, /canvas surface/)
+    const image = res.content.find((c) => c.type === 'image')
+    assert.ok(image, 'expected an image content block')
+    assert.equal(image.mimeType, 'image/webp')
+    assert.ok(image.data.length > 0)
+  } finally {
+    globalThis.fetch = origFetch
+  }
 })
 
 test('get_layer_types lists canvas layer types + props', async () => {

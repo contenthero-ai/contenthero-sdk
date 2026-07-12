@@ -48,6 +48,7 @@ import type {
   ApplyEditorOpsResult,
   ProjectSummary,
   ProjectDetail,
+  LiveContextResult,
   LayerTypeCatalog,
   TimelineTypeCatalog,
   ExportJob,
@@ -849,6 +850,34 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
       `\n` +
       JSON.stringify(p.state, null, 2),
   )
+}
+
+/**
+ * Live context (get_context). Returns a text summary + the discriminated context JSON, and, when a canvas
+ * session provided a focused-slide snapshot, an IMAGE content block so the calling model can actually SEE what
+ * the user is looking at (the vision parity with the internal assistant). The caller fetches + base64-encodes
+ * the snapshot; this just assembles the result.
+ */
+export function liveContextResult(
+  result: LiveContextResult,
+  snapshot?: { data: string; mimeType: string } | null,
+): CallToolResult {
+  const { context, participant, participants } = result
+  if (!context || !participant) {
+    return text(
+      'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
+        'The user may not have the editor/studio/content open right now.',
+    )
+  }
+  const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
+  const summary =
+    `Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.\n` +
+    (snapshot ? 'An image of what the user is looking at is attached below.\n' : '') +
+    `\n` +
+    JSON.stringify(context, null, 2)
+  const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
+  if (snapshot) content.push({ type: 'image', data: snapshot.data, mimeType: snapshot.mimeType })
+  return { content }
 }
 
 /** The project list: one line per project (id, kind, title, state flags). */

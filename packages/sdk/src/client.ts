@@ -51,6 +51,8 @@ import type {
   ApplyEditorOpsResult,
   ProjectSummary,
   ProjectDetail,
+  LiveContextResult,
+  GetContextInput,
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectInput,
@@ -900,6 +902,18 @@ export class ContentHero {
       `/api/v1/projects/${encodeURIComponent(projectId)}${qs}`,
     )
     return project
+  }
+
+  /**
+   * Read the LIVE context of what the user is currently viewing in the open app: the active surface + focus +
+   * selection, and (for a canvas session) a short-lived `snapshotUrl` of the focused slide, so an agent can
+   * operate on "what the user is looking at" like the internal assistant does. Returns the most-recent-active
+   * session's context plus the full live participant set. Optionally scope to one project. Requires the
+   * `context:read` scope.
+   */
+  async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
+    const qs = input.projectId ? `?projectId=${encodeURIComponent(input.projectId)}` : ''
+    return this.request<LiveContextResult>('GET', `/api/v1/context${qs}`)
   }
 
   /**

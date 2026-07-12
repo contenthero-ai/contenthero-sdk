@@ -278,6 +278,27 @@ test('getProject GETs the encoded /api/v1/projects path and unwraps { project }'
   assert.equal(p.revision, 2)
 })
 
+test('getContext GETs /api/v1/context and returns the envelope', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: { surface: 'canvas', focusedSlideId: 's1', snapshotUrl: 'https://x/s.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const r = await client.getContext()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context')
+  assert.equal(calls[0]?.init?.method, 'GET')
+  assert.equal((r.context as Record<string, unknown>)?.surface, 'canvas')
+  assert.equal(r.participant?.userId, 'u1')
+})
+
+test('getContext with projectId appends the query param', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContext({ projectId: 'p 1' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p%201')
+})
+
 test('getProject with includeRenderUrl appends the query param', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { project: { id: 'p1', kind: 'editor', title: 'X', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 2, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, renderUrl: 'https://x/p.png' } } },
