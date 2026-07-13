@@ -545,6 +545,8 @@ export interface MediaItem extends MediaSummary {
   variations: MediaVariation[]
   /** Set when the requested token addressed a single variation; else null. */
   selectedVariation: number | null
+  /** Output-level representative still (video poster / optimized image preview), or null. */
+  thumbnailUrl: string | null
 }
 
 /** One requested item for `getMediaBatch`: a raw URL, or an output id (+ variation). */
@@ -559,7 +561,15 @@ export interface ResolvedMediaBatchItem {
   ok: boolean
   /** Echo of the requested item, to correlate results with inputs. */
   input: MediaBatchItem
+  /** The media itself (image master, or video master). */
   url: string | null
+  /**
+   * The still image to view for this item: the image itself for images, the
+   * poster still for a video's primary variation, null when no still is available
+   * (audio, transcript, non-primary video variation, raw video url). The MCP turns
+   * this into an image block; SDK/CLI just surface the URL.
+   */
+  imageUrl: string | null
   type: MediaType | null
   model: string | null
   prompt: string | null

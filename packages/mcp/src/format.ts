@@ -320,7 +320,7 @@ export function mediaResult(m: MediaItem): CallToolResult {
 }
 
 /** One resolved batch item's metadata line (no image; that is added separately). */
-function batchItemLine(it: ResolvedMediaBatchItem, index: number): string {
+function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: boolean): string {
   const label = `[${index + 1}]`
   if (!it.ok) {
     const ref = it.mediaId ?? ('url' in it.input ? it.input.url : JSON.stringify(it.input))
@@ -333,10 +333,13 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number): string {
     it.otherVariations.length > 0 ? ` | other variations: ${it.otherVariations.join(', ')}` : ''
   const model = it.model ? ` from ${it.model}` : ''
   const prompt = it.prompt ? `\n    prompt: ${it.prompt}` : ''
-  const note =
-    it.ok && it.type && it.type !== 'image'
-      ? `\n    (${it.type}: no frame preview yet; use the url)`
-      : ''
+  // Explain the absence of an image so the model does not assume it failed.
+  let note = ''
+  if (!hasImage) {
+    if (it.type === 'audio') note = '\n    (audio: no visual; use the url)'
+    else if (it.type === 'video') note = '\n    (video: no still available for this view; use the url)'
+    else if (it.type === 'transcript') note = '\n    (transcript: text only)'
+  }
   return `${label} ${idPart}${model}${others}\n    ${it.url}${prompt}${note}`
 }
 
@@ -356,7 +359,7 @@ export function mediaBatchResult(
   const shownImages = images.filter(Boolean).length
   const summary =
     `Resolved ${okCount}/${items.length} media item(s); ${shownImages} image(s) attached below.\n\n` +
-    items.map((it, i) => batchItemLine(it, i)).join('\n')
+    items.map((it, i) => batchItemLine(it, i, Boolean(images[i]))).join('\n')
   const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
   items.forEach((_, i) => {
     const img = images[i]

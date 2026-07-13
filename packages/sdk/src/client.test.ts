@@ -135,7 +135,7 @@ test('listMedia builds the query string and getMedia encodes the token', async (
   assert.equal(media[0].id, 'o1')
   assert.equal(list.calls[0]?.url, 'https://example.test/api/v1/media?contentType=image&limit=5')
 
-  const get = stubFetch([{ status: 200, body: { id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variationCount: 2, urls: [], script: null, aspectRatio: null, resolution: null, duration: null, creditsUsed: null, variations: [], selectedVariation: 2 } }])
+  const get = stubFetch([{ status: 200, body: { id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variationCount: 2, urls: [], script: null, aspectRatio: null, resolution: null, duration: null, creditsUsed: null, variations: [], selectedVariation: 2, thumbnailUrl: null } }])
   const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: get.fetch, baseUrl: 'https://example.test' })
   const item = await c2.getMedia('abcd1234-2')
   assert.equal(item.selectedVariation, 2)
@@ -148,8 +148,8 @@ test('getMediaBatch POSTs the items to /api/v1/media/batch', async () => {
       status: 200,
       body: {
         items: [
-          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', type: 'image', model: 'nb2', prompt: null, mediaId: 'o1', variation: 1, otherVariations: [2] },
-          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] },
+          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', imageUrl: 'https://cdn/1.png', type: 'image', model: 'nb2', prompt: null, mediaId: 'o1', variation: 1, otherVariations: [2] },
+          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', imageUrl: 'https://cdn/x.png', type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] },
         ],
       },
     },

@@ -86,17 +86,19 @@ function fakeClient(overrides = {}) {
         { variation: 2, url: 'https://cdn/2.png', status: 'completed', isFavorited: true },
       ],
       selectedVariation: id.includes('-2') ? 2 : null,
+      thumbnailUrl: null,
     }),
     getMediaBatch: async (items) => ({
       items: items.map((it) => {
         if ('url' in it) {
-          return { ok: true, input: it, url: it.url, type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] }
+          return { ok: true, input: it, url: it.url, imageUrl: it.url, type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] }
         }
         const variation = it.variation ?? 2
         return {
           ok: true,
           input: it,
           url: `https://cdn/${variation}.png`,
+          imageUrl: `https://cdn/${variation}.png`,
           type: 'image',
           model: 'nano-banana-2',
           prompt: 'a cat',
@@ -970,6 +972,7 @@ test('get_media resolves a batch and reports each item with its variation + url'
               ok: true,
               input: items[0],
               url: 'https://cdn/2.png',
+              imageUrl: 'https://cdn/2.png',
               type: 'image',
               model: 'nano-banana-2',
               prompt: 'a cat',

@@ -168,29 +168,47 @@ async function fetchSnapshotBase64(url: string): Promise<{ data: string; mimeTyp
 }
 
 /**
- * True when a media URL points at one of our storage hosts. Client-side SSRF
- * guard (defense in depth: the API already validates caller-supplied urls). Any
- * https host equal to cloud.contenthero.ai or ending in .supabase.co (signed
- * storage). Never fetch arbitrary hosts into an image block.
+ * True when an image URL is safe to fetch into an image block. SSRF allowlist:
+ * our storage hosts plus the finite set of generation-provider CDNs that our
+ * finalize pipeline stores as video posters (fal, cloudinary). The values fed
+ * here are server-produced (a resolved variation url or a DB-stored thumbnail),
+ * not raw caller input (the API already allowlists raw caller urls more strictly).
  */
-function isAllowedMediaHost(url: string): boolean {
+function isAllowedImageHost(url: string): boolean {
   try {
     const u = new URL(url)
     if (u.protocol !== 'https:') return false
     if (u.username || u.password) return false
-    return u.host === 'cloud.contenthero.ai' || u.host.endsWith('.supabase.co')
+    return (
+      u.host === 'cloud.contenthero.ai' ||
+      u.host.endsWith('.supabase.co') ||
+      u.host.endsWith('.fal.media') ||
+      u.host.endsWith('.cloudinary.com')
+    )
   } catch {
     return false
   }
 }
 
 /**
- * Fetch a media image URL and base64-encode it for an image content block. Only
- * fetches allowlisted storage hosts. Best-effort: any failure returns null and
- * the batch still returns the item's text metadata + url.
+ * The optimized `.preview.webp` sibling of a studio-outputs image object, or the
+ * url unchanged. Mirrors the app's previewImageSrc convention so we can prefer
+ * the light derivative when it exists (and fall back to the raw when it does not,
+ * e.g. an uploaded image or a not-yet-optimized video thumbnail). Pure string rule.
  */
-async function fetchMediaImageBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
-  if (!isAllowedMediaHost(url)) return null
+function optimizedImageSibling(url: string): string {
+  if (!url.includes('/object/public/studio-outputs/')) return url
+  if (url.includes('.preview.webp')) return url
+  const qIdx = url.indexOf('?')
+  const path = qIdx < 0 ? url : url.slice(0, qIdx)
+  const query = qIdx < 0 ? '' : url.slice(qIdx + 1)
+  const rewritten = path.replace(/\.(png|jpe?g|webp|gif|avif|tiff?)$/i, '.preview.webp')
+  if (rewritten === path) return url
+  return query ? `${rewritten}?${query}` : rewritten
+}
+
+async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
+  if (!isAllowedImageHost(url)) return null
   try {
     const res = await fetch(url)
     if (!res.ok) return null
@@ -201,6 +219,21 @@ async function fetchMediaImageBase64(url: string): Promise<{ data: string; mimeT
   } catch {
     return null
   }
+}
+
+/**
+ * Fetch a still image URL for an image content block, preferring the optimized
+ * `.preview.webp` sibling and falling back to the raw url if that is missing. This
+ * auto-upgrades as the optimization pipeline backfills derivatives, with no code
+ * change here. Best-effort: any failure returns null and the item stays text-only.
+ */
+async function fetchMediaImageBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  const optimized = optimizedImageSibling(url)
+  if (optimized !== url) {
+    const hit = await fetchImageBytes(optimized)
+    if (hit) return hit
+  }
+  return fetchImageBytes(url)
 }
 
 /** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
@@ -1069,13 +1102,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const result = await client.getMediaBatch(args.items)
-        // Image blocks are an MCP-layer concern: fetch + base64 only image items on
-        // allowlisted hosts. video/audio/errors stay text-only. See get-context §9.5.
+        // Image blocks are an MCP-layer concern: fetch the resolver-chosen still
+        // (imageUrl) for each item that has one (images + video posters). audio /
+        // transcript / posterless items stay text-only. See get-context §9.5.
         const images = await Promise.all(
           result.items.map((it) =>
-            it.ok && it.url && it.type === 'image'
-              ? fetchMediaImageBase64(it.url)
-              : Promise.resolve(null),
+            it.ok && it.imageUrl ? fetchMediaImageBase64(it.imageUrl) : Promise.resolve(null),
           ),
         )
         return mediaBatchResult(result, images)
