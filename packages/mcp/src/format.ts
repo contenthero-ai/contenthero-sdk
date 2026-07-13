@@ -26,6 +26,8 @@ import type {
   InspirationContent,
   MediaItem,
   MediaSummary,
+  MediaBatchResult,
+  ResolvedMediaBatchItem,
   CreateMediaUploadResult,
   UploadedMedia,
   ModelInfo,
@@ -315,6 +317,55 @@ export function mediaResult(m: MediaItem): CallToolResult {
       ),
     ]),
   )
+}
+
+/** One resolved batch item's metadata line (no image; that is added separately). */
+function batchItemLine(it: ResolvedMediaBatchItem, index: number): string {
+  const label = `[${index + 1}]`
+  if (!it.ok) {
+    const ref = it.mediaId ?? ('url' in it.input ? it.input.url : JSON.stringify(it.input))
+    return `${label} ERROR (${ref}): ${it.error ?? 'could not resolve'}`
+  }
+  const idPart = it.mediaId
+    ? `${it.type ?? 'media'} ${it.mediaId}${it.variation != null ? ` v${it.variation}` : ''}`
+    : `${it.type ?? 'media'} (url)`
+  const others =
+    it.otherVariations.length > 0 ? ` | other variations: ${it.otherVariations.join(', ')}` : ''
+  const model = it.model ? ` from ${it.model}` : ''
+  const prompt = it.prompt ? `\n    prompt: ${it.prompt}` : ''
+  const note =
+    it.ok && it.type && it.type !== 'image'
+      ? `\n    (${it.type}: no frame preview yet; use the url)`
+      : ''
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${prompt}${note}`
+}
+
+/**
+ * A vision-enabled media batch (get_media). Returns a text summary + one metadata
+ * line per item, and, for each image item whose bytes were fetched, an IMAGE
+ * content block so the calling model can SEE it. Images arrive as a parallel
+ * array (fetched + base64-encoded by the caller, image items only; null for
+ * video/audio/errors). This just assembles the result. See get-context §9.5.
+ */
+export function mediaBatchResult(
+  result: MediaBatchResult,
+  images: Array<{ data: string; mimeType: string } | null>,
+): CallToolResult {
+  const { items } = result
+  const okCount = items.filter((i) => i.ok).length
+  const shownImages = images.filter(Boolean).length
+  const summary =
+    `Resolved ${okCount}/${items.length} media item(s); ${shownImages} image(s) attached below.\n\n` +
+    items.map((it, i) => batchItemLine(it, i)).join('\n')
+  const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
+  items.forEach((_, i) => {
+    const img = images[i]
+    if (img) {
+      content.push({ type: 'text', text: `Image for item [${i + 1}]:` })
+      content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+    }
+  })
+  return { content }
 }
 
 /** Phase 1 of an upload: the signed URL + the PUT-then-complete instructions. */

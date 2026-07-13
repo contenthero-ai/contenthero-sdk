@@ -547,6 +547,36 @@ export interface MediaItem extends MediaSummary {
   selectedVariation: number | null
 }
 
+/** One requested item for `getMediaBatch`: a raw URL, or an output id (+ variation). */
+export type MediaBatchItem = { url: string } | { mediaId: string; variation?: number }
+
+/**
+ * One resolved item from `getMediaBatch`, uniform across the url and mediaId
+ * paths. `url` is the single thing to fetch (the MCP turns it into an image
+ * block); `ok` is false with an `error` when the item could not be resolved.
+ */
+export interface ResolvedMediaBatchItem {
+  ok: boolean
+  /** Echo of the requested item, to correlate results with inputs. */
+  input: MediaBatchItem
+  url: string | null
+  type: MediaType | null
+  model: string | null
+  prompt: string | null
+  /** The output id when resolved from a mediaId; null for a raw url. */
+  mediaId: string | null
+  /** The 1-based variation this url represents (mediaId path), else null. */
+  variation: number | null
+  /** Sibling variation numbers not returned here (mediaId-without-variation path). */
+  otherVariations: number[]
+  error?: string
+}
+
+/** Result of `getMediaBatch`: one resolved entry per requested item, in order. */
+export interface MediaBatchResult {
+  items: ResolvedMediaBatchItem[]
+}
+
 /** Options for `listMedia`. */
 export interface ListMediaOptions {
   contentType?: MediaType | MediaType[]

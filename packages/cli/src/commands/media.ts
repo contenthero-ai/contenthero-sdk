@@ -7,8 +7,8 @@
  * the full output id, its first 8 chars, or either with a "-N" variation suffix.
  */
 
-import { readFile } from 'node:fs/promises'
-import { basename, extname } from 'node:path'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
 import type { MediaItem, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -31,6 +31,22 @@ const MIME_BY_EXT: Record<string, string> = {
 function mimeForFile(path: string): string {
   const ext = extname(path).replace('.', '').toLowerCase()
   return MIME_BY_EXT[ext] ?? 'application/octet-stream'
+}
+
+/** Default file extension per media type, for --save when a URL has none. */
+const EXT_BY_TYPE: Record<string, string> = {
+  image: '.png', video: '.mp4', audio: '.mp3', transcript: '.txt',
+}
+
+/** Pick a file extension for a downloaded variation (from the URL, else the type). */
+function saveExt(url: string, type: string): string {
+  try {
+    const ext = extname(new URL(url).pathname)
+    if (ext) return ext
+  } catch {
+    /* fall through to the type default */
+  }
+  return EXT_BY_TYPE[type] ?? ''
 }
 
 /** Shorten a prompt for table display. */
@@ -100,9 +116,36 @@ export function registerMedia(program: Command): void {
     .command('get')
     .description('Get one studio output by id, with its variations')
     .argument('<id>', 'output id (full or first-8), optionally with a "-N" variation suffix')
-    .action(async (id: string, _opts, command: Command) => {
+    .option(
+      '--save <dir>',
+      'download each variation to <dir> (materialize the bytes for local viewing or re-ingestion)',
+    )
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const item = await client.getMedia(id)
+
+      // --save materializes bytes to disk: the CLI's vision affordance. A terminal
+      // cannot carry a model image block, so we hand back real files any consumer
+      // (a human, a script, or an LLM harness re-reading them) can pick up.
+      const saved: string[] = []
+      if (opts.save) {
+        const dir = String(opts.save)
+        await mkdir(dir, { recursive: true })
+        for (const v of item.variations) {
+          if (!v.url) continue
+          const res = await fetch(v.url)
+          if (!res.ok) {
+            throw new CliError(
+              `Failed to download variation ${v.variation}: HTTP ${res.status}`,
+              EXIT.GENERAL,
+            )
+          }
+          const file = join(dir, `${item.id.slice(0, 8)}-v${v.variation}${saveExt(v.url, item.type)}`)
+          await writeFile(file, Buffer.from(await res.arrayBuffer()))
+          saved.push(file)
+        }
+      }
+
       emit(item, ctx, (m: MediaItem) => {
         const head = keyValues([
           ['Id', m.id],
@@ -123,7 +166,10 @@ export function registerMedia(program: Command): void {
             v.url ?? '',
           ]),
         )
-        return `${head}\n\n${variations}`
+        const savedBlock = saved.length
+          ? `\n\nSaved ${saved.length} file(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
+          : ''
+        return `${head}\n\n${variations}${savedBlock}`
       })
     })
 

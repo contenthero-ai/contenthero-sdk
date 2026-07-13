@@ -142,6 +142,29 @@ test('listMedia builds the query string and getMedia encodes the token', async (
   assert.equal(get.calls[0]?.url, 'https://example.test/api/v1/media/abcd1234-2')
 })
 
+test('getMediaBatch POSTs the items to /api/v1/media/batch', async () => {
+  const batch = stubFetch([
+    {
+      status: 200,
+      body: {
+        items: [
+          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', type: 'image', model: 'nb2', prompt: null, mediaId: 'o1', variation: 1, otherVariations: [2] },
+          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] },
+        ],
+      },
+    },
+  ])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch: batch.fetch, baseUrl: 'https://example.test' })
+  const items = [{ mediaId: 'abcd1234' }, { url: 'https://cdn/x.png' }]
+  const res = await c.getMediaBatch(items)
+  assert.equal(res.items.length, 2)
+  assert.equal(res.items[0].variation, 1)
+  assert.deepEqual(res.items[0].otherVariations, [2])
+  assert.equal(batch.calls[0]?.url, 'https://example.test/api/v1/media/batch')
+  assert.equal(batch.calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(String(batch.calls[0]?.init?.body)), { items })
+})
+
 test('generateAndWait polls until completed', async () => {
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'gen1', status: 'processing' } },

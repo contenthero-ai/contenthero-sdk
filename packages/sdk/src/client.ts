@@ -63,6 +63,8 @@ import type {
   TimelineTypeCatalog,
   MediaItem,
   MediaSummary,
+  MediaBatchItem,
+  MediaBatchResult,
   CreateMediaUploadInput,
   CreateMediaUploadResult,
   ImportMediaInput,
@@ -416,6 +418,19 @@ export class ContentHero {
    */
   async getMedia(idToken: string): Promise<MediaItem> {
     return this.request<MediaItem>('GET', `/api/v1/media/${encodeURIComponent(idToken)}`)
+  }
+
+  /**
+   * Resolve a batch of media references to vision-ready URLs + light metadata (the
+   * micro drill-in behind get_context's macro screenshot). Each item is a raw
+   * `{ url }` or an `{ mediaId, variation? }`; a mediaId with no variation resolves
+   * to only the primary variation (siblings listed in `otherVariations`), never a
+   * whole generation. Returns one entry per item, in order; a bad item comes back
+   * with `ok: false` rather than failing the batch. Max 10 items per call (the SDK
+   * returns URLs; the MCP layer is what turns them into image blocks for a model).
+   */
+  async getMediaBatch(items: MediaBatchItem[]): Promise<MediaBatchResult> {
+    return this.request<MediaBatchResult>('POST', '/api/v1/media/batch', { items })
   }
 
   // -------------------------------------------------------------------------

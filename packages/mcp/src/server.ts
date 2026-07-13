@@ -77,7 +77,7 @@ import {
   inspirationAccountResult,
   inspirationContentResult,
   mediaListResult,
-  mediaResult,
+  mediaBatchResult,
   mediaUploadResult,
   uploadedMediaResult,
   assetOrderResult,
@@ -160,6 +160,42 @@ async function fetchSnapshotBase64(url: string): Promise<{ data: string; mimeTyp
     const res = await fetch(url)
     if (!res.ok) return null
     const mimeType = res.headers.get('content-type') || 'image/webp'
+    const data = Buffer.from(await res.arrayBuffer()).toString('base64')
+    return { data, mimeType }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * True when a media URL points at one of our storage hosts. Client-side SSRF
+ * guard (defense in depth: the API already validates caller-supplied urls). Any
+ * https host equal to cloud.contenthero.ai or ending in .supabase.co (signed
+ * storage). Never fetch arbitrary hosts into an image block.
+ */
+function isAllowedMediaHost(url: string): boolean {
+  try {
+    const u = new URL(url)
+    if (u.protocol !== 'https:') return false
+    if (u.username || u.password) return false
+    return u.host === 'cloud.contenthero.ai' || u.host.endsWith('.supabase.co')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Fetch a media image URL and base64-encode it for an image content block. Only
+ * fetches allowlisted storage hosts. Best-effort: any failure returns null and
+ * the batch still returns the item's text metadata + url.
+ */
+async function fetchMediaImageBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  if (!isAllowedMediaHost(url)) return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const mimeType = res.headers.get('content-type') || 'image/jpeg'
+    if (!mimeType.startsWith('image/')) return null
     const data = Buffer.from(await res.arrayBuffer()).toString('base64')
     return { data, mimeType }
   } catch {
@@ -1005,17 +1041,44 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Media',
       annotations: READ,
       description:
-        'Get one studio output by id: its variations (URLs), prompt/script, model, and specs. The id may be the full output id, its first 8 characters, or either with a "-N" suffix to address one variation (1-based, e.g. "...abcd-2"). A whole-output id returns all variations.',
+        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, or a layer/asset URL from get_project / get_post) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it (video/audio return metadata + the url, no frame yet). An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
-        id: z
-          .string()
-          .describe('The output id (full or first-8), optionally with a "-N" variation suffix.'),
+        items: z
+          .array(
+            z.union([
+              z.object({
+                url: z.string().describe('A media URL on our storage (from get_context / get_project / get_post).'),
+              }),
+              z.object({
+                mediaId: z.string().describe('A studio output id (full or first-8 characters).'),
+                variation: z
+                  .number()
+                  .int()
+                  .positive()
+                  .optional()
+                  .describe('1-based variation to view; omit for the primary variation only.'),
+              }),
+            ]),
+          )
+          .min(1)
+          .max(10)
+          .describe('The media to view, up to 10 items per call. Paginate with another call for more.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return mediaResult(await client.getMedia(args.id))
+        const result = await client.getMediaBatch(args.items)
+        // Image blocks are an MCP-layer concern: fetch + base64 only image items on
+        // allowlisted hosts. video/audio/errors stay text-only. See get-context §9.5.
+        const images = await Promise.all(
+          result.items.map((it) =>
+            it.ok && it.url && it.type === 'image'
+              ? fetchMediaImageBase64(it.url)
+              : Promise.resolve(null),
+          ),
+        )
+        return mediaBatchResult(result, images)
       } catch (err) {
         return errorResult(err)
       }

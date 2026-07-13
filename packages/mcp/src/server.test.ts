@@ -87,6 +87,25 @@ function fakeClient(overrides = {}) {
       ],
       selectedVariation: id.includes('-2') ? 2 : null,
     }),
+    getMediaBatch: async (items) => ({
+      items: items.map((it) => {
+        if ('url' in it) {
+          return { ok: true, input: it, url: it.url, type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] }
+        }
+        const variation = it.variation ?? 2
+        return {
+          ok: true,
+          input: it,
+          url: `https://cdn/${variation}.png`,
+          type: 'image',
+          model: 'nano-banana-2',
+          prompt: 'a cat',
+          mediaId: 'out-uuid-1',
+          variation,
+          otherVariations: variation === 2 ? [1] : [2],
+        }
+      }),
+    }),
     listBrandKits: async () => [
       { id: 'bk1', name: 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' },
     ],
@@ -939,38 +958,39 @@ test('list_media surfaces id, type, and variation count', async () => {
   assert.match(res.content[0].text, /2 variations/)
 })
 
-test('get_media passes the id token through and lists variations', async () => {
-  let capturedId
+test('get_media resolves a batch and reports each item with its variation + url', async () => {
+  let capturedItems
   const mcp = await connect(
     fakeClient({
-      getMedia: async (id) => {
-        capturedId = id
+      getMediaBatch: async (items) => {
+        capturedItems = items
         return {
-          id: 'out-uuid-1',
-          type: 'image',
-          model: 'nano-banana-2',
-          prompt: 'a cat',
-          status: 'completed',
-          createdAt: 't',
-          variationCount: 2,
-          urls: ['https://cdn/2.png'],
-          script: null,
-          aspectRatio: '1:1',
-          resolution: '2K',
-          duration: null,
-          creditsUsed: 9,
-          variations: [{ variation: 2, url: 'https://cdn/2.png', status: 'completed', isFavorited: true }],
-          selectedVariation: 2,
+          items: [
+            {
+              ok: true,
+              input: items[0],
+              url: 'https://cdn/2.png',
+              type: 'image',
+              model: 'nano-banana-2',
+              prompt: 'a cat',
+              mediaId: 'out-uuid-1',
+              variation: 2,
+              otherVariations: [1],
+            },
+          ],
         }
       },
     }),
   )
-  // The variation-qualified token form must reach the server verbatim.
-  const res = await mcp.callTool({ name: 'get_media', arguments: { id: 'abcd1234-2' } })
+  const res = await mcp.callTool({
+    name: 'get_media',
+    arguments: { items: [{ mediaId: 'abcd1234', variation: 2 }] },
+  })
   assert.ok(!res.isError)
-  assert.equal(capturedId, 'abcd1234-2')
-  assert.match(res.content[0].text, /variation 2/)
+  assert.deepEqual(capturedItems, [{ mediaId: 'abcd1234', variation: 2 }])
+  assert.match(res.content[0].text, /v2/)
   assert.match(res.content[0].text, /https:\/\/cdn\/2\.png/)
+  assert.match(res.content[0].text, /other variations: 1/)
 })
 
 test('list_models surfaces ids, content type, and a capability summary', async () => {
