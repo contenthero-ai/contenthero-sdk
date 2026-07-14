@@ -6,7 +6,7 @@
  *   project create [--kind <kind>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
- *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--no-watermark] [--wait]
+ *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--wait]
  *   project export-status <exportId>                                     (requires editor:read)
  *   project export-formats                                               (requires editor:read)
  *   project layer-types                                                  (canvas types, requires editor:read)
@@ -139,11 +139,12 @@ export function registerProject(program: Command): void {
 
   project
     .command('export')
-    .description('Export a project to a file (mp4 both surfaces; png/jpg/pdf/pptx canvas) (requires editor:write)')
+    .description('Export a project to a file (mp4/png/jpg both surfaces; pdf/pptx canvas) (requires editor:write)')
     .argument('<projectId>', 'the project id')
     .option('--format <format>', 'mp4 | png | jpg | pdf | pptx (default mp4)')
     .option('--resolution <res>', 'mp4 resolution: 480p|720p|1080p|2k|4k (default 720p)')
     .option('--quality <q>', 'mp4 quality: low|recommended|high')
+    .option('--frame <n>', 'editor still (png/jpg) only: timeline frame to render (default 0)', toInt)
     .option('--no-watermark', 'remove the watermark (plan-gated)')
     .option('--wait', 'poll until the export finishes and print the URL')
     .option('--timeout <ms>', 'max wait when --wait (default 600000)', toInt)
@@ -153,6 +154,7 @@ export function registerProject(program: Command): void {
         format: opts.format as string | undefined,
         resolution: opts.resolution as string | undefined,
         quality: opts.quality as string | undefined,
+        ...(opts.frame !== undefined ? { frame: opts.frame as number } : {}),
         // commander sets opts.watermark=false when --no-watermark is passed; leave undefined otherwise.
         ...(opts.watermark === false ? { watermark: false } : {}),
       }

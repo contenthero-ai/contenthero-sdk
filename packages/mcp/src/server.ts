@@ -2492,13 +2492,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Export Project',
       annotations: WRITE,
       description:
-        "Export (render) a project's saved composition to a downloadable file. format 'mp4' works for both editor and canvas (a video render; may take a while). Canvas projects also support 'png' / 'jpg' (one image per slide; multiple slides come back as a zip), 'pdf', and 'pptx'. For mp4, resolution ('720p' default; 1080p/2k/4k are plan-gated) and watermark (default on; removing it is plan-gated) apply. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
+        "Export (render) a project's saved composition to a downloadable file. format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both surfaces too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. For mp4, resolution ('720p' default; 1080p/2k/4k are plan-gated) and watermark (default on; removing it is plan-gated) apply. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The project to export.'),
-        format: z.enum(['mp4', 'png', 'jpg', 'pdf', 'pptx']).optional().describe("Output format. Defaults to 'mp4'. png/jpg/pdf/pptx are canvas-only."),
+        format: z.enum(['mp4', 'png', 'jpg', 'pdf', 'pptx']).optional().describe("Output format. Defaults to 'mp4'. mp4/png/jpg work for both surfaces (png/jpg on an editor project render one timeline frame); pdf/pptx are canvas-only."),
         resolution: z.enum(['480p', '720p', '1080p', '2k', '4k']).optional().describe("mp4 video resolution. Defaults '720p'. 1080p+ is plan-gated."),
         quality: z.enum(['low', 'recommended', 'high']).optional().describe('mp4 video quality. Defaults recommended.'),
         watermark: z.boolean().optional().describe('Keep the watermark. Defaults true; removing it is plan-gated.'),
+        frame: z.number().int().min(0).optional().describe('Editor still (png/jpg) only: which timeline frame to render. Clamped to the composition length. Defaults 0. Pair with the playheadFrame from get_context to capture exactly what the user is viewing.'),
       },
     },
     async (args, extra) => {

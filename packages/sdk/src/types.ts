@@ -1270,7 +1270,7 @@ export interface ImportProjectInput {
 
 /** Options for starting a project export. All optional; defaults: format 'mp4', 720p, watermark on. */
 export interface StartExportInput {
-  /** 'mp4' (both surfaces) or 'png'/'jpg'/'pdf'/'pptx' (canvas only). */
+  /** 'mp4' (both surfaces) or 'png'/'jpg' (both surfaces) or 'pdf'/'pptx' (canvas only). */
   format?: string
   /** Video resolution (mp4): '480p'|'720p'|'1080p'|'2k'|'4k'. 1080p+ is plan-gated. */
   resolution?: string
@@ -1278,6 +1278,8 @@ export interface StartExportInput {
   quality?: string
   /** Keep the watermark. Removing it is plan-gated. Defaults true. */
   watermark?: boolean
+  /** Editor still (png/jpg) only: the timeline frame to render. Clamped to the composition length. Defaults 0. */
+  frame?: number
 }
 
 /** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */
