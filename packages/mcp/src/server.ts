@@ -2374,15 +2374,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Live Context',
       annotations: READ,
       description:
-        "Read the LIVE context of what the user is currently viewing in the open app: the active surface (canvas / editor / studio / content), the focused slide or clip, and the current selection, so you can operate on \"what the user is looking at\" instead of guessing. For a canvas session it also returns an IMAGE of the focused slide, so you can SEE the composition. Returns the most-recent-active session plus the live participant set; returns nothing if no one is currently viewing. Optionally scope to one project. Requires the context:read scope.",
+        "Read the live context of what the user is currently viewing in the open app: the active surface, the focused element, the playhead, and the current selection, so you act on what the user is looking at rather than guessing. Read this first. It is fast, structured, and does not disturb the live page, and structured context alone is enough whenever the task does not depend on the exact pixels; it returns no image by default. Acquire vision only when the task genuinely requires seeing, and pick the path by what you need to see. Set capture=true to screenshot the live viewport when you need the screen as the user sees it right now, including transient interface state and unsaved edits; capturing renders the current screen on demand, so its latency and its brief interruption of the page grow with how visually heavy that screen is, so request it deliberately. On the two surfaces backed by a saved composition, the canvas and the editor, you have a second and usually better option for seeing the work itself: call export_project with the focus from this read to reconstruct that exact canvas slide or editor frame deterministically from saved data, without touching the live page and regardless of its visual weight, at the cost of showing saved rather than unsaved state. On any other surface, capture is the only way to see. Returns the most-recent-active session and the live participant set, or nothing when no one is viewing. Optionally scope to one project. Requires the context:read scope.",
       inputSchema: {
         projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere.'),
+        capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport, captured at read time. Default false returns structured context only, which is fast, leaves the page undisturbed, and is enough for most reads. Capturing renders the current screen on demand, so its latency and its brief interruption of the page grow with the visual weight of what is displayed; request it only when the task depends on seeing the live, as-shown state. On the canvas and editor surfaces, when you need to see the saved composition itself (a slide or a frame) rather than the live screen, prefer export_project, which reconstructs it deterministically from saved data."),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const result = await client.getContext({ projectId: args.projectId })
+        const result = await client.getContext({ projectId: args.projectId, capture: args.capture })
         const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null
         return liveContextResult(result, snapshot)
@@ -2499,7 +2500,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         resolution: z.enum(['480p', '720p', '1080p', '2k', '4k']).optional().describe("mp4 video resolution. Defaults '720p'. 1080p+ is plan-gated."),
         quality: z.enum(['low', 'recommended', 'high']).optional().describe('mp4 video quality. Defaults recommended.'),
         watermark: z.boolean().optional().describe('Keep the watermark. Defaults true; removing it is plan-gated.'),
-        frame: z.number().int().min(0).optional().describe('Editor still (png/jpg) only: which timeline frame to render. Clamped to the composition length. Defaults 0. Pair with the playheadFrame from get_context to capture exactly what the user is viewing.'),
+        frame: z.number().int().min(0).optional().describe('Editor still (png/jpg) only: which timeline frame to render. Clamped to the composition length. Defaults 0. Use the playhead frame from get_context to render exactly the frame the user is viewing.'),
       },
     },
     async (args, extra) => {

@@ -921,13 +921,17 @@ export class ContentHero {
 
   /**
    * Read the LIVE context of what the user is currently viewing in the open app: the active surface + focus +
-   * selection, and (for a canvas session) a short-lived `snapshotUrl` of the focused slide, so an agent can
-   * operate on "what the user is looking at" like the internal assistant does. Returns the most-recent-active
-   * session's context plus the full live participant set. Optionally scope to one project. Requires the
-   * `context:read` scope.
+   * selection, so an agent can operate on "what the user is looking at" like the internal assistant does. Fast
+   * and structured by default. Pass `capture: true` to also ping the live tab for a fresh viewport screenshot
+   * (returned as a short-lived `snapshotUrl`); for seeing a canvas slide or editor frame specifically, prefer a
+   * deterministic `exportProject` render. Returns the most-recent-active session's context plus the full live
+   * participant set. Optionally scope to one project. Requires the `context:read` scope.
    */
   async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
-    const qs = input.projectId ? `?projectId=${encodeURIComponent(input.projectId)}` : ''
+    const params = new URLSearchParams()
+    if (input.projectId) params.set('projectId', input.projectId)
+    if (input.capture) params.set('capture', 'true')
+    const qs = params.toString() ? `?${params.toString()}` : ''
     return this.request<LiveContextResult>('GET', `/api/v1/context${qs}`)
   }
 

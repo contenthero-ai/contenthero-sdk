@@ -1216,9 +1216,9 @@ export interface LiveContextParticipant {
 /** The result of `getContext`: the most-recent-active session's live context + the full participant set. */
 export interface LiveContextResult {
   /**
-   * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object. For a
-   * canvas session it carries `view`, `focusedSlideId`, the current selections, and a short-lived
-   * `snapshotUrl` of the focused slide (the image the user is looking at). Null when no session is live.
+   * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object carrying
+   * the focus (e.g. `focusedSlideId`, `playheadFrame`) and current selection. A short-lived `snapshotUrl` of
+   * the live viewport is included ONLY when the read was made with `capture: true`. Null when no session is live.
    */
   context: Record<string, unknown> | null
   /** Metadata for that default participant, or null when no one is live. */
@@ -1231,6 +1231,12 @@ export interface LiveContextResult {
 export interface GetContextInput {
   /** Scope to a specific project's presence (editor/canvas). Omit for the caller's most-recent surface anywhere. */
   projectId?: string
+  /**
+   * Opt in to vision: also ping the live tab for a fresh viewport screenshot at read time, returned as a
+   * short-lived `snapshotUrl`. Default false = structured-only (fast, never touches the live page). For seeing a
+   * canvas slide or editor frame specifically, a deterministic `exportProject` render is usually the better path.
+   */
+  capture?: boolean
 }
 
 /** Filters for `listProjects`. */
