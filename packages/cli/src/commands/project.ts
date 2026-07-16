@@ -77,6 +77,30 @@ export function registerProject(program: Command): void {
     })
 
   project
+    .command('transcript')
+    .description("Read a project's transcript mapped to its timeline clips (requires editor:read)")
+    .argument('<projectId>', 'the editor project id')
+    .option('--search <text>', 'only clip segments whose text contains this substring')
+    .option('--start <ms>', 'source-media start time in ms (with --end, filters to this window)', toInt)
+    .option('--end <ms>', 'source-media end time in ms', toInt)
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const r = await client.getTranscript(projectId, {
+        search: opts.search as string | undefined,
+        startMs: opts.start as number | undefined,
+        endMs: opts.end as number | undefined,
+      })
+      emit(r, ctx, () =>
+        r.mediaTranscribed
+          ? `Transcript for ${r.projectId}: ${r.segmentCount} clip segment(s)\n` +
+            r.segments
+              .map((s) => `${s.disabled ? `[CUT${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[in] '} ${s.clipId}: ${s.text || '(no speech)'}`)
+              .join('\n')
+          : (r.note ?? 'No transcript available yet.'),
+      )
+    })
+
+  project
     .command('create')
     .description('Create a project (requires editor:write)')
     .option('--kind <kind>', "editor | canvas (default: editor)")

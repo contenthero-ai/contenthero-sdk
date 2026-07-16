@@ -53,6 +53,7 @@ import type {
   LiveContextResult,
   LayerTypeCatalog,
   TimelineTypeCatalog,
+  TranscriptResult,
   ExportJob,
   ExportFormatCatalog,
 } from '@contenthero/sdk'
@@ -990,6 +991,26 @@ export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
 }
 
 /** The editor timeline clip + track-type catalog as readable text + the JSON. */
+export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
+  if (!r.mediaTranscribed) {
+    return text(r.note ?? 'No transcript available for this project yet.')
+  }
+  // A readable, clip-by-clip transcript in timeline order: each line is one clip, marked when it is a cut
+  // (disabled) so the agent sees what is already removed. The full structured data (clipIds, source times)
+  // follows as JSON for exact targeting via update_timeline.
+  const lines = r.segments.map((s) => {
+    const tag = s.disabled ? `[CUT${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[in]'
+    const body = s.text ? s.text : '(no speech)'
+    return `${tag} ${s.clipId}  ${s.sourceStartMs}-${s.sourceEndMs}ms: ${body}`
+  })
+  return text(
+    `Transcript for ${r.projectId} (${r.segmentCount} clip segment(s), ${r.fps}fps). [CUT] = disabled/removed, [in] = kept.\n` +
+      `Target a clipId with update_timeline set_disabled (to cut) or set_disabled disabled:false (to restore).\n\n` +
+      `${lines.join('\n')}\n\n` +
+      JSON.stringify(r, null, 2),
+  )
+}
+
 export function timelineTypesResult(cat: TimelineTypeCatalog): CallToolResult {
   const clips = cat.clipTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')})`)
   const tracks = cat.trackTypes.map((t) => `- ${t.trackType}: holds ${t.holds.join(', ')}`)

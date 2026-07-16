@@ -112,6 +112,7 @@ import {
   projectDeletedResult,
   layerTypesResult,
   timelineTypesResult,
+  editorTranscriptResult,
   exportJobResult,
   exportFormatsResult,
   trackedAccountListResult,
@@ -2425,6 +2426,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return timelineTypesResult(await client.getTimelineTypes())
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_transcript',
+    {
+      title: 'Get Transcript',
+      annotations: READ,
+      description:
+        "Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current cut state ([CUT] = disabled/removed, [in] = kept) and its exact clipId. Use this to read what is said, see which parts are already cut, then target the exact clipId(s) with update_timeline set_disabled (to cut a section) or ripple_delete. Scope with `search` (a substring, e.g. a phrase to find) or `startMs`/`endMs` (source-media time) to fetch only the part you need instead of the whole transcript. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
+      inputSchema: {
+        projectId: z.string().describe('The editor project id.'),
+        search: z.string().optional().describe('Case-insensitive substring; returns only clip segments whose text contains it.'),
+        startMs: z.number().int().min(0).optional().describe('Source-media start time in ms; with endMs, returns only segments overlapping this window.'),
+        endMs: z.number().int().min(0).optional().describe('Source-media end time in ms; companion to startMs.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { projectId, ...options } = args
+        return editorTranscriptResult(await client.getTranscript(projectId, options))
       } catch (err) {
         return errorResult(err)
       }

@@ -121,6 +121,8 @@ export type {
   EditorSharedProps,
   LayerTypeCatalog,
   TimelineTypeCatalog,
+  TranscriptSegment,
+  TranscriptResult,
 } from './types.js'
 export {
   ContentHeroError,

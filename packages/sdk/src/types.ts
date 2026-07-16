@@ -1366,3 +1366,30 @@ export interface TimelineTypeCatalog {
   clipTypes: EditorTypeSpec[]
   trackTypes: EditorTrackSpec[]
 }
+
+/** One timeline clip's transcript segment: the words spoken within it plus its current cut/disabled state. */
+export interface TranscriptSegment {
+  /** The timeline clip id, targetable by update_timeline set_disabled / ripple_delete. */
+  clipId: string
+  /** Whether the clip is currently excluded from the render. */
+  disabled: boolean
+  /** Why it was disabled ('silence' | 'manual' | 'agent'), when known. */
+  disabledReason: string | null
+  /** Start of this clip's slice within its SOURCE media, in milliseconds. */
+  sourceStartMs: number
+  /** End of this clip's slice within its SOURCE media, in milliseconds (exclusive). */
+  sourceEndMs: number
+  /** The words spoken within this clip, space-joined. Empty for a silence gap or untranscribed clip. */
+  text: string
+}
+
+export interface TranscriptResult {
+  projectId: string
+  fps: number
+  /** true when at least one clip's source media had a stored transcript. */
+  mediaTranscribed: boolean
+  segmentCount: number
+  segments: TranscriptSegment[]
+  /** Present only when nothing has been transcribed yet, explaining the empty result. */
+  note?: string
+}

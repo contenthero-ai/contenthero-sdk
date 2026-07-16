@@ -61,6 +61,7 @@ import type {
   ExportFormatCatalog,
   LayerTypeCatalog,
   TimelineTypeCatalog,
+  TranscriptResult,
   MediaItem,
   MediaSummary,
   MediaBatchItem,
@@ -1054,6 +1055,24 @@ export class ContentHero {
    */
   async getTimelineTypes(): Promise<TimelineTypeCatalog> {
     return this.request<TimelineTypeCatalog>('GET', '/api/v1/editor/timeline-types')
+  }
+
+  /**
+   * Read an editor project's transcript mapped to its timeline clips. Returns one segment per transcribable
+   * primary-track clip, in timeline order, carrying the words spoken within it plus its current disabled
+   * state, so you can read what is said, see which parts are already cut, and target exact clipIds with
+   * update_timeline (set_disabled / ripple_delete). Scope with `search` (substring) or `startMs`/`endMs`
+   * (source-media time) to fetch only the part you need. Requires the `editor:read` scope.
+   */
+  async getTranscript(
+    projectId: string,
+    options: { search?: string; startMs?: number; endMs?: number } = {},
+  ): Promise<TranscriptResult> {
+    const params = new URLSearchParams({ projectId })
+    if (options.search) params.set('search', options.search)
+    if (options.startMs !== undefined) params.set('startMs', String(options.startMs))
+    if (options.endMs !== undefined) params.set('endMs', String(options.endMs))
+    return this.request<TranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. */
