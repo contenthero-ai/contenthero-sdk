@@ -1004,8 +1004,9 @@ export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
     return `${tag} ${s.clipId}  ${s.sourceStartMs}-${s.sourceEndMs}ms: ${body}`
   })
   return text(
-    `Transcript for ${r.projectId} (${r.segmentCount} clip segment(s), ${r.fps}fps). [CUT] = disabled/removed, [in] = kept.\n` +
-      `Target a clipId with update_timeline set_disabled (to cut) or set_disabled disabled:false (to restore).\n\n` +
+    `Transcript for ${r.projectId} (${r.segmentCount} clip segment(s), ${r.fps}fps, revision ${r.revision}). [CUT] = disabled/removed, [in] = kept.\n` +
+      `Target a clipId with update_timeline set_disabled (to cut) or set_disabled disabled:false (to restore).\n` +
+      `To edit safely against a concurrent change, pass revision ${r.revision} as expectedRevision; or omit expectedRevision to just apply to the current state.\n\n` +
       `${lines.join('\n')}\n\n` +
       JSON.stringify(r, null, 2),
   )

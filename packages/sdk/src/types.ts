@@ -1387,6 +1387,12 @@ export interface TranscriptSegment {
 
 export interface TranscriptResult {
   projectId: string
+  /**
+   * The project's current optimistic-concurrency revision. Pass it straight back as `applyEditorOps` /
+   * update_timeline's `expectedRevision` to make a follow-up edit fail on a concurrent change instead of
+   * clobbering it. `expectedRevision` is optional, so omit it to just apply to the current revision.
+   */
+  revision: number
   fps: number
   /** true when at least one clip's source media had a stored transcript. */
   mediaTranscribed: boolean

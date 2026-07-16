@@ -2353,7 +2353,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Project',
       annotations: READ,
       description:
-        "Read a single project's full detail: its metadata plus the current composition (canvas slides or editor timeline) and revision. Call this BEFORE editing so you know the current state and can pass the revision back as expectedRevision for safe concurrent edits. Requires the editor:read scope.",
+        "Read a single project's full detail: its metadata plus the current composition (canvas slides or editor timeline) and revision. Read this before editing when you need to see the full current composition; you can then pass its revision back as expectedRevision for a concurrency-safe edit. Note editing does NOT require this call: update_timeline/update_canvas' expectedRevision is optional (omit to apply to the current revision), and for content-aware editor edits get_transcript already returns the revision. Requires the editor:read scope.",
       inputSchema: {
         projectId: z.string().describe('The project id to read.'),
         includeRenderUrl: z.boolean().optional().describe('Also return a preview still URL of the current composition (renders one only if it changed).'),
@@ -2438,7 +2438,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Transcript',
       annotations: READ,
       description:
-        "Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current cut state ([CUT] = disabled/removed, [in] = kept) and its exact clipId. Use this to read what is said, see which parts are already cut, then target the exact clipId(s) with update_timeline set_disabled (to cut a section) or ripple_delete. Scope with `search` (a substring, e.g. a phrase to find) or `startMs`/`endMs` (source-media time) to fetch only the part you need instead of the whole transcript. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
+        "Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current cut state ([CUT] = disabled/removed, [in] = kept) and its exact clipId. Use this to read what is said, see which parts are already cut, then target the exact clipId(s) with update_timeline set_disabled (to cut a section) or ripple_delete. Scope with `search` (a substring, e.g. a phrase to find) or `startMs`/`endMs` (source-media time) to fetch only the part you need instead of the whole transcript. Also returns the project's current `revision` so you can edit right away without a separate get_project: pass it as update_timeline's expectedRevision for a concurrency-safe edit, or omit expectedRevision to just apply to the current state. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
       inputSchema: {
         projectId: z.string().describe('The editor project id.'),
         search: z.string().optional().describe('Case-insensitive substring; returns only clip segments whose text contains it.'),
@@ -2613,7 +2613,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Timeline',
       annotations: WRITE,
       description:
-        "Apply a batch of ops to an EDITOR (video timeline) project. Ops act on clips: move_item, trim_item, split, ripple_delete, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_item. Each op is an object with an `op` name plus its fields (e.g. { op: 'ripple_delete', itemIds: ['clip-id'] } or { op: 'move_item', itemId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). Pass expectedRevision from get_project. Requires the editor:write scope.",
+        "Apply a batch of ops to an EDITOR (video timeline) project. Ops act on clips: move_item, trim_item, split, ripple_delete, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_item. Each op is an object with an `op` name plus its fields (e.g. { op: 'ripple_delete', itemIds: ['clip-id'] } or { op: 'move_item', itemId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). expectedRevision is OPTIONAL: omit it to apply to the project's current revision (last-write-wins, fine for single-editor and id-targeted ops like set_disabled/ripple_delete), or pass the revision from a prior get_project/get_transcript to fail loudly on a concurrent change instead of clobbering it. You do NOT need to fetch the project just to get the revision. Each successful edit returns the new revision for chaining further edits. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The editor project id.'),
         ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The timeline ops to apply, in order.'),
@@ -2650,7 +2650,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Canvas',
       annotations: WRITE,
       description:
-        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. Each op is an object with an `op` name plus its fields. Pass expectedRevision from get_project. Requires the editor:write scope.",
+        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. Each op is an object with an `op` name plus its fields. expectedRevision is OPTIONAL: omit it to apply to the project's current revision (last-write-wins, fine for a single editor), or pass the revision from a prior get_project to fail loudly on a concurrent change instead of clobbering it. You do NOT need to fetch the project just to get the revision. Each successful edit returns the new revision for chaining further edits. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The canvas project id.'),
         ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The canvas ops to apply, in order.'),
