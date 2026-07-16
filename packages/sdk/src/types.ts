@@ -1375,6 +1375,8 @@ export interface TranscriptSegment {
   disabled: boolean
   /** Why it was disabled ('silence' | 'manual' | 'agent'), when known. */
   disabledReason: string | null
+  /** The freeform note an agent left explaining this cut, when present. */
+  disabledNote: string | null
   /** Start of this clip's slice within its SOURCE media, in milliseconds. */
   sourceStartMs: number
   /** End of this clip's slice within its SOURCE media, in milliseconds (exclusive). */
