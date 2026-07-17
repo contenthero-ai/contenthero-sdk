@@ -84,7 +84,9 @@ export function registerProject(program: Command): void {
     .option('--start <ms>', 'source-media start time in ms (with --end, filters to this window; word mode also clips words to it)', toInt)
     .option('--end <ms>', 'source-media end time in ms', toInt)
     .option('--granularity <level>', "'clip' (default) or 'word' (adds word timing + timeline frames + confidence + speaker, derived silences, audio events)")
-    .option('--silence-threshold <ms>', 'word mode: minimum gap in ms between words to report as a silence (default 500)', toInt)
+    .option('--pace-threshold <ms>', 'word mode: minimum pause (ms) to report as a silence ("Pace"); defaults to the project setting, else 500', toInt)
+    .option('--padding-start <ms>', 'word mode: breathing room (ms) kept after speech at a silence start edge (negative tightens)', toInt)
+    .option('--padding-end <ms>', 'word mode: breathing room (ms) kept before speech at a silence end edge (negative tightens)', toInt)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const granularity = opts.granularity as string | undefined
@@ -96,7 +98,9 @@ export function registerProject(program: Command): void {
         startMs: opts.start as number | undefined,
         endMs: opts.end as number | undefined,
         granularity: granularity as 'clip' | 'word' | undefined,
-        silenceThresholdMs: opts.silenceThreshold as number | undefined,
+        paceThresholdMs: opts.paceThreshold as number | undefined,
+        paddingStartMs: opts.paddingStart as number | undefined,
+        paddingEndMs: opts.paddingEnd as number | undefined,
       })
       emit(r, ctx, () =>
         r.mediaTranscribed

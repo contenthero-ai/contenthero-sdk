@@ -1064,7 +1064,9 @@ export class ContentHero {
    * update_timeline (disable_ranges / set_disabled / delete_ranges). Scope with `search` (substring) or
    * `startMs`/`endMs` (source-media time) to fetch only the part you need. Pass `granularity: 'word'` for
    * word-level timing (with absolute timeline frames), per-word confidence + speaker, derived silence gaps, and
-   * non-speech audio events; `silenceThresholdMs` tunes the silence detection. Requires the `editor:read` scope.
+   * non-speech audio events. `paceThresholdMs` (minimum pause to report as silence) and `paddingStartMs` /
+   * `paddingEndMs` (breathing room kept around speech; negative tightens) tune the silence detection and default
+   * to the project's saved pace/padding. Requires the `editor:read` scope.
    */
   async getTranscript(
     projectId: string,
@@ -1073,7 +1075,9 @@ export class ContentHero {
       startMs?: number
       endMs?: number
       granularity?: 'clip' | 'word'
-      silenceThresholdMs?: number
+      paceThresholdMs?: number
+      paddingStartMs?: number
+      paddingEndMs?: number
     } = {},
   ): Promise<TranscriptResult> {
     const params = new URLSearchParams({ projectId })
@@ -1081,7 +1085,9 @@ export class ContentHero {
     if (options.startMs !== undefined) params.set('startMs', String(options.startMs))
     if (options.endMs !== undefined) params.set('endMs', String(options.endMs))
     if (options.granularity) params.set('granularity', options.granularity)
-    if (options.silenceThresholdMs !== undefined) params.set('silenceThresholdMs', String(options.silenceThresholdMs))
+    if (options.paceThresholdMs !== undefined) params.set('paceThresholdMs', String(options.paceThresholdMs))
+    if (options.paddingStartMs !== undefined) params.set('paddingStartMs', String(options.paddingStartMs))
+    if (options.paddingEndMs !== undefined) params.set('paddingEndMs', String(options.paddingEndMs))
     return this.request<TranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
   }
 
