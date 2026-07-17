@@ -1367,11 +1367,47 @@ export interface TimelineTypeCatalog {
   trackTypes: EditorTrackSpec[]
 }
 
-/** One timeline clip's transcript segment: the words spoken within it plus its current cut/disabled state. */
+/** A spoken word with source-media timing, ABSOLUTE timeline frames, and per-word metadata (granularity 'word'). */
+export interface WordTiming {
+  text: string
+  /** Start within the SOURCE media, in ms. */
+  startMs: number
+  /** End within the SOURCE media, in ms (exclusive). */
+  endMs: number
+  /** Absolute timeline frame this word starts on (feed straight into update_timeline split / range ops). */
+  startFrame: number
+  /** Absolute timeline frame this word ends on. */
+  endFrame: number
+  /** Diarized speaker, when known. */
+  speakerId: string | null
+  /** Normalized 0-1 confidence, when known. */
+  confidence: number | null
+}
+
+/** A derived dead-air gap between words within a clip: source-media range + timeline frames + duration. */
+export interface Silence {
+  startMs: number
+  endMs: number
+  durationMs: number
+  startFrame: number
+  endFrame: number
+}
+
+/** A non-speech audio event (e.g. "[chuckles]", "[sighs]") with source-media timing + timeline frames. */
+export interface AudioEvent {
+  text: string
+  startMs: number
+  endMs: number
+  startFrame: number
+  endFrame: number
+  speakerId: string | null
+}
+
+/** One timeline clip's transcript segment: the words spoken within it plus its current enabled/disabled state. */
 export interface TranscriptSegment {
-  /** The timeline clip id, targetable by update_timeline set_disabled / ripple_delete. */
+  /** The timeline clip id, targetable by update_timeline disable_ranges / set_disabled / delete_ranges. */
   clipId: string
-  /** Whether the clip is currently excluded from the render. */
+  /** Whether the clip is currently excluded from the render (disabled). */
   disabled: boolean
   /** Why it was disabled ('silence' | 'manual' | 'agent'), when known. */
   disabledReason: string | null
@@ -1381,8 +1417,18 @@ export interface TranscriptSegment {
   sourceStartMs: number
   /** End of this clip's slice within its SOURCE media, in milliseconds (exclusive). */
   sourceEndMs: number
+  /** The clip's start position on the TIMELINE, in frames (source range maps onto [fromFrame, fromFrame+durationFrames)). */
+  fromFrame: number
+  /** The clip's length on the TIMELINE, in frames. */
+  durationFrames: number
   /** The words spoken within this clip, space-joined. Empty for a silence gap or untranscribed clip. */
   text: string
+  /** Word-level timing (granularity 'word' only), scoped to the requested window when given. */
+  words?: WordTiming[]
+  /** Derived dead-air gaps within this clip (granularity 'word' only). */
+  silences?: Silence[]
+  /** Non-speech audio events within this clip (granularity 'word' only; empty for pre-token-store media). */
+  audioEvents?: AudioEvent[]
 }
 
 export interface TranscriptResult {
@@ -1398,6 +1444,8 @@ export interface TranscriptResult {
   mediaTranscribed: boolean
   segmentCount: number
   segments: TranscriptSegment[]
+  /** The distinct diarized speakers present across the returned transcript, sorted. */
+  speakers?: string[]
   /** Present only when nothing has been transcribed yet, explaining the empty result. */
   note?: string
 }

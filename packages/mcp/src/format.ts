@@ -995,17 +995,24 @@ export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
   if (!r.mediaTranscribed) {
     return text(r.note ?? 'No transcript available for this project yet.')
   }
-  // A readable, clip-by-clip transcript in timeline order: each line is one clip, marked when it is a cut
-  // (disabled) so the agent sees what is already removed. The full structured data (clipIds, source times)
-  // follows as JSON for exact targeting via update_timeline.
+  // A readable, clip-by-clip transcript in timeline order: each line is one clip, marked [disabled] when it is
+  // cut (excluded from the render) so the agent sees what is already removed. In word mode each line also
+  // summarizes its word / silence / event counts. The full structured data (clipIds, timeline frames, word
+  // timing, silences, audio events) follows as JSON for exact targeting via update_timeline.
   const lines = r.segments.map((s) => {
-    const tag = s.disabled ? `[CUT${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[in]'
+    const tag = s.disabled ? `[disabled${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[enabled]'
     const body = s.text ? s.text : '(no speech)'
-    return `${tag} ${s.clipId}  ${s.sourceStartMs}-${s.sourceEndMs}ms: ${body}`
+    const extra =
+      s.words || s.silences || s.audioEvents
+        ? ` {${s.words?.length ?? 0} words, ${s.silences?.length ?? 0} silences, ${s.audioEvents?.length ?? 0} events}`
+        : ''
+    return `${tag} ${s.clipId}  ${s.sourceStartMs}-${s.sourceEndMs}ms (frames ${s.fromFrame}-${s.fromFrame + s.durationFrames}):${extra} ${body}`
   })
+  const speakerLine = r.speakers && r.speakers.length > 0 ? `Speakers: ${r.speakers.join(', ')}.\n` : ''
   return text(
-    `Transcript for ${r.projectId} (${r.segmentCount} clip segment(s), ${r.fps}fps, revision ${r.revision}). [CUT] = disabled/removed, [in] = kept.\n` +
-      `Target a clipId with update_timeline set_disabled (to cut) or set_disabled disabled:false (to restore).\n` +
+    `Transcript for ${r.projectId} (${r.segmentCount} clip segment(s), ${r.fps}fps, revision ${r.revision}). [disabled] = cut/excluded from the render, [enabled] = kept.\n` +
+      `Cut non-destructively with update_timeline disable_ranges (source-media ranges) or set_disabled (whole clip); restore with set_disabled disabled:false. Word timing + timeline frames + silences + audio events are in the JSON when granularity 'word' was requested.\n` +
+      speakerLine +
       `To edit safely against a concurrent change, pass revision ${r.revision} as expectedRevision; or omit expectedRevision to just apply to the current state.\n\n` +
       `${lines.join('\n')}\n\n` +
       JSON.stringify(r, null, 2),

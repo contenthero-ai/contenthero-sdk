@@ -1059,19 +1059,29 @@ export class ContentHero {
 
   /**
    * Read an editor project's transcript mapped to its timeline clips. Returns one segment per transcribable
-   * primary-track clip, in timeline order, carrying the words spoken within it plus its current disabled
+   * primary-track clip, in timeline order, carrying the words spoken within it plus its current enabled/disabled
    * state, so you can read what is said, see which parts are already cut, and target exact clipIds with
-   * update_timeline (set_disabled / ripple_delete). Scope with `search` (substring) or `startMs`/`endMs`
-   * (source-media time) to fetch only the part you need. Requires the `editor:read` scope.
+   * update_timeline (disable_ranges / set_disabled / delete_ranges). Scope with `search` (substring) or
+   * `startMs`/`endMs` (source-media time) to fetch only the part you need. Pass `granularity: 'word'` for
+   * word-level timing (with absolute timeline frames), per-word confidence + speaker, derived silence gaps, and
+   * non-speech audio events; `silenceThresholdMs` tunes the silence detection. Requires the `editor:read` scope.
    */
   async getTranscript(
     projectId: string,
-    options: { search?: string; startMs?: number; endMs?: number } = {},
+    options: {
+      search?: string
+      startMs?: number
+      endMs?: number
+      granularity?: 'clip' | 'word'
+      silenceThresholdMs?: number
+    } = {},
   ): Promise<TranscriptResult> {
     const params = new URLSearchParams({ projectId })
     if (options.search) params.set('search', options.search)
     if (options.startMs !== undefined) params.set('startMs', String(options.startMs))
     if (options.endMs !== undefined) params.set('endMs', String(options.endMs))
+    if (options.granularity) params.set('granularity', options.granularity)
+    if (options.silenceThresholdMs !== undefined) params.set('silenceThresholdMs', String(options.silenceThresholdMs))
     return this.request<TranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
   }
 
