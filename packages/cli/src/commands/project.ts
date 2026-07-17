@@ -81,20 +81,35 @@ export function registerProject(program: Command): void {
     .description("Read a project's transcript mapped to its timeline clips (requires editor:read)")
     .argument('<projectId>', 'the editor project id')
     .option('--search <text>', 'only clip segments whose text contains this substring')
-    .option('--start <ms>', 'source-media start time in ms (with --end, filters to this window)', toInt)
+    .option('--start <ms>', 'source-media start time in ms (with --end, filters to this window; word mode also clips words to it)', toInt)
     .option('--end <ms>', 'source-media end time in ms', toInt)
+    .option('--granularity <level>', "'clip' (default) or 'word' (adds word timing + timeline frames + confidence + speaker, derived silences, audio events)")
+    .option('--silence-threshold <ms>', 'word mode: minimum gap in ms between words to report as a silence (default 500)', toInt)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
+      const granularity = opts.granularity as string | undefined
+      if (granularity && granularity !== 'clip' && granularity !== 'word') {
+        throw new CliError("--granularity must be 'clip' or 'word'.", EXIT.USAGE)
+      }
       const r = await client.getTranscript(projectId, {
         search: opts.search as string | undefined,
         startMs: opts.start as number | undefined,
         endMs: opts.end as number | undefined,
+        granularity: granularity as 'clip' | 'word' | undefined,
+        silenceThresholdMs: opts.silenceThreshold as number | undefined,
       })
       emit(r, ctx, () =>
         r.mediaTranscribed
-          ? `Transcript for ${r.projectId}: ${r.segmentCount} clip segment(s)\n` +
+          ? `Transcript for ${r.projectId}: ${r.segmentCount} clip segment(s)${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n` +
             r.segments
-              .map((s) => `${s.disabled ? `[CUT${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[in] '} ${s.clipId}: ${s.text || '(no speech)'}`)
+              .map((s) => {
+                const tag = s.disabled ? `[disabled${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[enabled]'
+                const extra =
+                  s.words || s.silences || s.audioEvents
+                    ? ` {${s.words?.length ?? 0}w ${s.silences?.length ?? 0}sil ${s.audioEvents?.length ?? 0}ev}`
+                    : ''
+                return `${tag} ${s.clipId}${extra}: ${s.text || '(no speech)'}`
+              })
               .join('\n')
           : (r.note ?? 'No transcript available yet.'),
       )
