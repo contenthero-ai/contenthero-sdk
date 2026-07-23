@@ -78,6 +78,8 @@ Exit code 4 means a render was accepted but did not finish before the timeout. T
 ## The rest of the surface
 
 ```
+contenthero project      list | get | create | delete | import | export | export-status
+                         | export-formats | layer-types | timeline-types | apply
 contenthero media        list | get <id>
 contenthero post         list | get | create | update | archive | schedule | publish
                          | destination add|update | asset add

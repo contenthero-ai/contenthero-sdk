@@ -1332,6 +1332,14 @@ export interface EditorTypeSpec {
   props: EditorTypeProp[]
   /** Which shared prop groups this type also accepts (keys of `sharedProps`). */
   supports: string[]
+  /** A copy-pasteable minimal item skeleton for creating this type via add_item / insert_prebuilt_track. */
+  example?: Record<string, unknown>
+}
+
+/** How to CREATE clips + tracks (the creation ops of update_timeline), documented alongside the edit ops. */
+export interface EditorCreationSpec {
+  description: string
+  ops: { op: string; shape: string; description: string }[]
 }
 
 /** A timeline track type and the clip types it holds. */
@@ -1365,6 +1373,8 @@ export interface TimelineTypeCatalog {
   sharedProps: EditorSharedProps
   clipTypes: EditorTypeSpec[]
   trackTypes: EditorTrackSpec[]
+  /** How to CREATE clips + tracks (add_item, insert_track, insert_prebuilt_track), using each clipType `example`. */
+  creation?: EditorCreationSpec
 }
 
 /** A spoken word with source-media timing, ABSOLUTE timeline frames, and per-word metadata (granularity 'word'). */
