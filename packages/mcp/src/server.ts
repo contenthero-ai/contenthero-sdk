@@ -2195,10 +2195,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Favorite',
       annotations: WRITE,
       description:
-        "Mark an asset as a favorite. For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent.",
+        "Mark an asset as a favorite. For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery, transition). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent.",
       inputSchema: {
         assetType: z
-          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery'])
+          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
@@ -2231,7 +2231,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         'Remove the favorite flag from an asset. Same target shape as favorite: assetType + id for a top-level asset, or output id + variationIndex (1-based) for a studio media variation. Requires the favorites:write scope. Idempotent.',
       inputSchema: {
         assetType: z
-          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery'])
+          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),

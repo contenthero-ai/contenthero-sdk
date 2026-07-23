@@ -1074,6 +1074,7 @@ export type FavoriteAssetType =
   | 'project'
   | 'inspiration_content'
   | 'gallery'
+  | 'transition'
 
 /** The asset types that can be archived. */
 export type ArchiveAssetType = 'post' | 'brand_kit' | 'brand_kit_section' | 'project'
