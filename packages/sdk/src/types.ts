@@ -549,8 +549,20 @@ export interface MediaItem extends MediaSummary {
   thumbnailUrl: string | null
 }
 
-/** One requested item for `getMediaBatch`: a raw URL, or an output id (+ variation). */
-export type MediaBatchItem = { url: string } | { mediaId: string; variation?: number }
+/**
+ * VIDEO keyframe watch (opt-in): set any of these on a video item to get low-res keyframes across the
+ * [fromSec, toSec] source-time window (whole clip by default), so you can SEE the footage — the fix for
+ * "video returns no frame yet". Frame-based, so cost is decoupled from clip length.
+ */
+export interface MediaClipWindow {
+  fromSec?: number
+  toSec?: number
+  /** How many keyframes (proportional default; service-capped). */
+  frames?: number
+}
+
+/** One requested item for `getMediaBatch`: a raw URL, or an output id (+ variation); videos accept a window. */
+export type MediaBatchItem = ({ url: string } | { mediaId: string; variation?: number }) & MediaClipWindow
 
 /**
  * One resolved item from `getMediaBatch`, uniform across the url and mediaId
@@ -579,6 +591,11 @@ export interface ResolvedMediaBatchItem {
   variation: number | null
   /** Sibling variation numbers not returned here (mediaId-without-variation path). */
   otherVariations: number[]
+  /**
+   * VIDEO keyframes (present only when the item requested a window on a video): low-res frames across the
+   * source-time window, each an inline `data:image/jpeg;base64,...`. The MCP turns each into an image block.
+   */
+  keyframes?: { atSec: number; dataUrl: string }[]
   error?: string
 }
 
@@ -1234,10 +1251,93 @@ export interface GetContextInput {
   projectId?: string
   /**
    * Opt in to vision: also ping the live tab for a fresh viewport screenshot at read time, returned as a
-   * short-lived `snapshotUrl`. Default false = structured-only (fast, never touches the live page). For seeing a
-   * canvas slide or editor frame specifically, a deterministic `exportProject` render is usually the better path.
+   * short-lived `snapshotUrl`. Default false = structured-only (fast, never touches the live page). To see the
+   * COMPOSED OUTPUT (not the user's screen) use `render` instead.
    */
   capture?: boolean
+  /**
+   * Opt in to an inline render (never persisted), returned as image(s), so you can visually verify work while
+   * iterating. `true` renders the current focus point as a still; use `mode` + the params below for a filmstrip.
+   * Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip use `getMedia`
+   * with a video item; for a composed VIDEO of a range use `createPreview` / `getPreview` (a job).
+   */
+  render?: boolean
+  /**
+   * Render tier (inferred from the params when omitted): 'still' (one composed frame/slide) or 'filmstrip' (N
+   * composed frames across an editor range).
+   */
+  mode?: 'still' | 'filmstrip'
+  /** still (editor): which timeline frame. Omit to render the current playhead frame. */
+  frame?: number
+  /** still (canvas): which slide (id). Omit to render the focused slide. */
+  slideId?: string
+  /** still (canvas): which slide (1-based index; alternative to `slideId`). */
+  slideIndex?: number
+  /** filmstrip: start timeline frame of the range (edit space). Omit to start at the beginning. */
+  fromFrame?: number
+  /** filmstrip: end timeline frame of the range. Omit to run to the end. */
+  toFrame?: number
+  /** filmstrip: how many frames to return. Omit for a proportional default. */
+  count?: number
+}
+
+/** Input to `createPreview`: currently a short COMPOSED video of an editor range (ephemeral, job-based). */
+export interface PreviewInput {
+  projectId: string
+  /** Start timeline frame of the range (edit space). Omit to start at the beginning. */
+  fromFrame?: number
+  /** End timeline frame. Omit to run to the end (capped to a short preview length). */
+  toFrame?: number
+}
+
+/** The handle returned by `createPreview`; feed `renderId` + `bucketName` to `getPreview`. */
+export interface PreviewJob {
+  renderId: string
+  bucketName: string
+  fromFrame: number
+  toFrame: number
+  durationSeconds: number
+}
+
+/** The poll result for a preview render. */
+export interface PreviewStatus {
+  status: 'rendering' | 'done' | 'failed'
+  /** 0..1 while rendering. */
+  progress?: number
+  /** Short-lived signed URL to the ephemeral preview output (present when status = 'done'). */
+  url?: string
+  /** Estimated Lambda cost for this render (telemetry). */
+  estimatedCostUsd?: number
+  error?: string
+}
+
+/** A resolved selected editor timeline clip, threaded so you see the selection without a `getProject` hop. */
+export interface EditorSelectedItem {
+  id: string
+  type: string
+  trackId?: string
+  /** Timeline start frame (edit space). */
+  from: number
+  durationInFrames: number
+  /** Resolved media URL for image/video/audio clips, so you can fetch the raw clip directly. */
+  mediaUrl?: string
+}
+
+/** The inline render returned when `getContext` is called with `render`. Shape depends on the tier. */
+export interface LiveContextRender {
+  /** The tier that produced this: 'still' (default) | 'filmstrip'. */
+  mode?: 'still' | 'filmstrip'
+  // still:
+  surface?: 'editor' | 'canvas'
+  frame?: number
+  slideId?: string
+  slideIndex?: number
+  /** still: `data:image/webp;base64,...` of the composed frame/slide. */
+  dataUrl?: string
+  // filmstrip (multiple frames, each with its own dataUrl):
+  fromFrame?: number
+  toFrame?: number
+  frames?: Array<{ frame?: number; dataUrl: string }>
 }
 
 /** Filters for `listProjects`. */

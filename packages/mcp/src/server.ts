@@ -105,6 +105,7 @@ import {
   publishResult,
   statusActionResult,
   editorOpsResult,
+  text,
   projectDetailResult,
   liveContextResult,
   projectListResult,
@@ -1075,13 +1076,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Media',
       annotations: READ,
       description:
-        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, or a layer/asset URL from get_project / get_post) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it (video/audio return metadata + the url, no frame yet). An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, or a layer/asset URL from get_project / get_post) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
             z.union([
               z.object({
                 url: z.string().describe('A media URL on our storage (from get_context / get_project / get_post).'),
+                fromSec: z.number().min(0).optional().describe('Video keyframes: start of the source-time window (seconds). Omit for the whole clip.'),
+                toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
+                frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
               }),
               z.object({
                 mediaId: z.string().describe('A studio output id (full or first-8 characters).'),
@@ -1091,6 +1095,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                   .positive()
                   .optional()
                   .describe('1-based variation to view; omit for the primary variation only.'),
+                fromSec: z.number().min(0).optional().describe('Video keyframes: start of the source-time window (seconds). Omit for the whole clip.'),
+                toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
+                frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
               }),
             ]),
           )
@@ -2375,19 +2382,92 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Live Context',
       annotations: READ,
       description:
-        "Read the live context of what the user is currently viewing in the open app: the active surface, the focused element, the playhead, and the current selection, so you act on what the user is looking at rather than guessing. Read this first. It is fast, structured, and does not disturb the live page, and structured context alone is enough whenever the task does not depend on the exact pixels; it returns no image by default. Acquire vision only when the task genuinely requires seeing, and pick the path by what you need to see. Set capture=true to screenshot the live viewport when you need the screen as the user sees it right now, including transient interface state and unsaved edits; capturing renders the current screen on demand, so its latency and its brief interruption of the page grow with how visually heavy that screen is, so request it deliberately. On the two surfaces backed by a saved composition, the canvas and the editor, you have a second and usually better option for seeing the work itself: call export_project with the focus from this read to reconstruct that exact canvas slide or editor frame deterministically from saved data, without touching the live page and regardless of its visual weight, at the cost of showing saved rather than unsaved state. On any other surface, capture is the only way to see. Returns the most-recent-active session and the live participant set, or nothing when no one is viewing. Optionally scope to one project. Requires the context:read scope.",
+        "Read the live context of what the user is currently viewing in the open app: the active surface, the focused element, the playhead, and the current selection, so you act on what the user is looking at rather than guessing. Read this first. It is fast, structured, and does not disturb the live page, and structured context alone is enough whenever the task does not depend on the exact pixels; it returns no image by default. Acquire vision only when the task genuinely requires seeing, and pick the path by what you need to see. Set render=true to see the composed output itself: the actual rendered editor frame or canvas slide, reconstructed from saved data, so you can visually verify your own edits while iterating. Pass frame (editor) or slideId/slideIndex (canvas) to inspect a specific point, or render=true alone for the point the user is viewing. The render returns inline as an image, is ephemeral, leaves nothing in the user's storage, and does not need a live tab. Set capture=true instead only when you need the user's actual screen as shown right now, including transient interface state and unsaved edits; capturing renders the current screen on demand, so its latency and brief page interruption grow with how visually heavy that screen is. Do not use export_project to check your work: exports are permanent deliverables that count against the user's storage; use render for previews. Returns the most-recent-active session and the live participant set, or nothing when no one is viewing (render still works with an explicit projectId). Optionally scope to one project. Requires the context:read scope.",
       inputSchema: {
-        projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere.'),
-        capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport, captured at read time. Default false returns structured context only, which is fast, leaves the page undisturbed, and is enough for most reads. Capturing renders the current screen on demand, so its latency and its brief interruption of the page grow with the visual weight of what is displayed; request it only when the task depends on seeing the live, as-shown state. On the canvas and editor surfaces, when you need to see the saved composition itself (a slide or a frame) rather than the live screen, prefer export_project, which reconstructs it deterministically from saved data."),
+        projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere. Required for render when no session is live.'),
+        capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport (their SCREEN), captured at read time. Default false returns structured context only. Request it only when the task depends on seeing the live, as-shown state including unsaved UI. To see the composed OUTPUT rather than the screen, use render instead."),
+        render: z.boolean().optional().describe('Also return an inline render (image[s]) of your work, so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as a still. Use mode=filmstrip for several frames across a range. Use this to check your work, not export_project. To watch a RAW source clip use get_media with a video item; for a composed VIDEO of a range use create_preview.'),
+        mode: z.enum(['still', 'filmstrip']).optional().describe("Render tier (inferred from the params if omitted): 'still' = one composed editor frame / canvas slide; 'filmstrip' = several composed frames across an editor range (judge motion / flow / cut placement)."),
+        frame: z.number().int().min(0).optional().describe('still (editor): which timeline frame to render. Omit to render the current playhead frame.'),
+        slideId: z.string().optional().describe('still (canvas): the id of the slide to render. Omit to render the focused slide.'),
+        slideIndex: z.number().int().min(1).optional().describe('still (canvas): the 1-based slide index to render (alternative to slideId).'),
+        fromFrame: z.number().int().min(0).optional().describe('filmstrip: start timeline frame of the range. Omit to start at the beginning.'),
+        toFrame: z.number().int().min(0).optional().describe('filmstrip: end timeline frame of the range. Omit to run to the end.'),
+        count: z.number().int().min(1).optional().describe('filmstrip: how many frames to return. Omit for a proportional default.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const result = await client.getContext({ projectId: args.projectId, capture: args.capture })
+        const result = await client.getContext({
+          projectId: args.projectId,
+          capture: args.capture,
+          render: args.render,
+          mode: args.mode,
+          frame: args.frame,
+          slideId: args.slideId,
+          slideIndex: args.slideIndex,
+          fromFrame: args.fromFrame,
+          toFrame: args.toFrame,
+          count: args.count,
+        })
         const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null
         return liveContextResult(result, snapshot)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'create_preview',
+    {
+      title: 'Create Preview',
+      annotations: READ,
+      description:
+        "Create an async PREVIEW of your work (ephemeral, never stored, not a deliverable). Currently a short low-res COMPOSED VIDEO of an editor range, so you can assess motion, cuts, transitions, and pacing that a still cannot show. This is a JOB: it returns a renderId + bucketName; poll get_preview with those until it is done, then fetch the returned url. To see a single frame or a few frames instead (cheaper, instant), use get_context render. Requires the context:read scope.",
+      inputSchema: {
+        projectId: z.string().describe('The editor project to preview.'),
+        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range. Omit to start at the beginning.'),
+        toFrame: z.number().int().min(0).optional().describe('End timeline frame. Omit to run to the end (capped to a short preview length).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const job = await client.createPreview({ projectId: args.projectId, fromFrame: args.fromFrame, toFrame: args.toFrame })
+        return text(
+          `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
+            `Poll get_preview with renderId="${job.renderId}" and bucketName="${job.bucketName}" until status is "done", then fetch the returned url.`,
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_preview',
+    {
+      title: 'Get Preview',
+      annotations: READ,
+      description:
+        'Poll a preview started with create_preview. While rendering, returns the progress; when done, returns a short-lived url to the ephemeral preview output (plus the estimated cost). Requires the context:read scope.',
+      inputSchema: {
+        renderId: z.string().describe('The renderId returned by create_preview.'),
+        bucketName: z.string().describe('The bucketName returned by create_preview.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const s = await client.getPreview({ renderId: args.renderId, bucketName: args.bucketName })
+        if (s.status === 'done') {
+          return text(`Preview ready. url: ${s.url}${typeof s.estimatedCostUsd === 'number' ? ` (est. cost $${s.estimatedCostUsd.toFixed(4)})` : ''}`)
+        }
+        if (s.status === 'failed') return text(`Preview render failed: ${s.error ?? 'unknown error'}.`, true)
+        return text(`Preview still rendering${typeof s.progress === 'number' ? ` (${Math.round(s.progress * 100)}%)` : ''}. Poll again in a few seconds.`)
       } catch (err) {
         return errorResult(err)
       }
@@ -2523,7 +2603,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Export Project',
       annotations: WRITE,
       description:
-        "Export (render) a project's saved composition to a downloadable file. format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both surfaces too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. For mp4, resolution ('720p' default; 1080p/2k/4k are plan-gated) and watermark (default on; removing it is plan-gated) apply. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
+        "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use get_context with render (ephemeral, stored nowhere). format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both surfaces too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. For mp4, resolution ('720p' default; 1080p/2k/4k are plan-gated) and watermark (default on; removing it is plan-gated) apply. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The project to export.'),
         format: z.enum(['mp4', 'png', 'jpg', 'pdf', 'pptx']).optional().describe("Output format. Defaults to 'mp4'. mp4/png/jpg work for both surfaces (png/jpg on an editor project render one timeline frame); pdf/pptx are canvas-only."),

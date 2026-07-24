@@ -53,6 +53,9 @@ import type {
   ProjectDetail,
   LiveContextResult,
   GetContextInput,
+  PreviewInput,
+  PreviewJob,
+  PreviewStatus,
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectInput,
@@ -924,16 +927,47 @@ export class ContentHero {
    * Read the LIVE context of what the user is currently viewing in the open app: the active surface + focus +
    * selection, so an agent can operate on "what the user is looking at" like the internal assistant does. Fast
    * and structured by default. Pass `capture: true` to also ping the live tab for a fresh viewport screenshot
-   * (returned as a short-lived `snapshotUrl`); for seeing a canvas slide or editor frame specifically, prefer a
-   * deterministic `exportProject` render. Returns the most-recent-active session's context plus the full live
+   * (returned as a short-lived `snapshotUrl`) when you need the user's screen as shown. To see the COMPOSED
+   * OUTPUT itself (the rendered editor frame or canvas slide), pass `render: true` (optionally `frame` for an
+   * editor project, or `slideId` / `slideIndex` for canvas); the render returns inline as a data URL, is
+   * ephemeral, and does not need a live tab. Returns the most-recent-active session's context plus the full live
    * participant set. Optionally scope to one project. Requires the `context:read` scope.
    */
   async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
     const params = new URLSearchParams()
     if (input.projectId) params.set('projectId', input.projectId)
     if (input.capture) params.set('capture', 'true')
-    const qs = params.toString() ? `?${params.toString()}` : ''
+    if (input.render) params.set('render', 'true')
+    if (input.mode) params.set('mode', input.mode)
+    if (typeof input.frame === 'number') params.set('frame', String(input.frame))
+    if (input.slideId) params.set('slideId', input.slideId)
+    if (typeof input.slideIndex === 'number') params.set('slideIndex', String(input.slideIndex))
+    if (typeof input.fromFrame === 'number') params.set('fromFrame', String(input.fromFrame))
+    if (typeof input.toFrame === 'number') params.set('toFrame', String(input.toFrame))
+    if (typeof input.count === 'number') params.set('count', String(input.count))
+    // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the
+    // RFC-3986 query encoding; emit %20 so the URL is canonical (both decode to a space server-side).
+    const query = params.toString().replace(/\+/g, '%20')
+    const qs = query ? `?${query}` : ''
     return this.request<LiveContextResult>('GET', `/api/v1/context${qs}`)
+  }
+
+  /**
+   * Create an async PREVIEW render (ephemeral, never stored). Currently a short low-res COMPOSED VIDEO of an
+   * editor range, so you can assess motion, cuts, transitions, and pacing a still cannot show. Returns a job
+   * handle; poll it with `getPreview`. Requires the `context:read` scope.
+   */
+  async createPreview(input: PreviewInput): Promise<PreviewJob> {
+    return this.request<PreviewJob>('POST', '/api/v1/preview', input)
+  }
+
+  /**
+   * Poll a preview started with `createPreview`. While rendering, returns `progress`; on completion, returns a
+   * short-lived signed `url` to the ephemeral output plus the estimated cost.
+   */
+  async getPreview(job: { renderId: string; bucketName: string }): Promise<PreviewStatus> {
+    const params = new URLSearchParams({ renderId: job.renderId, bucketName: job.bucketName })
+    return this.request<PreviewStatus>('GET', `/api/v1/preview?${params.toString()}`)
   }
 
   /**

@@ -59,7 +59,7 @@ import type {
 } from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
-function text(body: string, isError = false): CallToolResult {
+export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
 }
 
@@ -357,16 +357,27 @@ export function mediaBatchResult(
 ): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
-  const shownImages = images.filter(Boolean).length
+  const keyframeCount = items.reduce((n, it) => n + (it.keyframes?.length ?? 0), 0)
+  const shownImages = images.filter(Boolean).length + keyframeCount
   const summary =
-    `Resolved ${okCount}/${items.length} media item(s); ${shownImages} image(s) attached below.\n\n` +
-    items.map((it, i) => batchItemLine(it, i, Boolean(images[i]))).join('\n')
+    `Resolved ${okCount}/${items.length} media item(s); ${shownImages} image(s) attached below` +
+    (keyframeCount > 0 ? ` (incl. ${keyframeCount} video keyframe(s))` : '') +
+    `.\n\n` +
+    items.map((it, i) => batchItemLine(it, i, Boolean(images[i]) || (it.keyframes?.length ?? 0) > 0)).join('\n')
   const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
-  items.forEach((_, i) => {
+  items.forEach((it, i) => {
     const img = images[i]
     if (img) {
       content.push({ type: 'text', text: `Image for item [${i + 1}]:` })
       content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+    }
+    const keyframes = it.keyframes ?? []
+    if (keyframes.length > 0) {
+      content.push({ type: 'text', text: `${keyframes.length} keyframe(s) for item [${i + 1}] (raw footage, in order):` })
+      for (const kf of keyframes) {
+        const parsed = parseDataUrl(kf.dataUrl)
+        if (parsed) content.push({ type: 'image', data: parsed.data, mimeType: parsed.mimeType })
+      }
     }
   })
   return { content }
@@ -908,10 +919,10 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
 }
 
 /**
- * Live context (get_context). Returns a text summary + the discriminated context JSON, and, when a canvas
- * session provided a focused-slide snapshot, an IMAGE content block so the calling model can actually SEE what
- * the user is looking at (the vision parity with the internal assistant). The caller fetches + base64-encodes
- * the snapshot; this just assembles the result.
+ * Live context (get_context). Returns a text summary + the discriminated context JSON, plus IMAGE content
+ * block(s) so the calling model can actually SEE: the viewport `snapshot` (capture) when the user's screen was
+ * requested, and/or the inline composed-output render (`context.rendered.dataUrl`) when `render` was requested.
+ * The heavy render data URL is stripped from the JSON text (it rides only as the image block).
  */
 export function liveContextResult(
   result: LiveContextResult,
@@ -924,15 +935,68 @@ export function liveContextResult(
         'The user may not have the editor/studio/content open right now.',
     )
   }
+  // Pull the inline render out as image block(s). A still carries `rendered.dataUrl` (one image); a filmstrip /
+  // clip carries `rendered.frames[].dataUrl` (many). Keep the light `rendered` metadata in the JSON but drop the
+  // bulky dataUrl(s) so the text summary stays readable.
+  const rendered = (context.rendered ?? null) as Record<string, unknown> | null
+  const renderImages: { data: string; mimeType: string }[] = []
+  let contextForJson: unknown = context
+  if (rendered) {
+    const still = parseDataUrl(rendered.dataUrl)
+    const frames = Array.isArray(rendered.frames) ? (rendered.frames as Array<Record<string, unknown>>) : null
+    if (still) renderImages.push(still)
+    if (frames) {
+      for (const f of frames) {
+        const img = parseDataUrl(f.dataUrl)
+        if (img) renderImages.push(img)
+      }
+    }
+    if (renderImages.length > 0) {
+      // Strip the base64 payloads from the JSON but keep the frame timing (frame / atSec).
+      const strippedFrames = frames
+        ? frames.map((f) => {
+            const { dataUrl: _drop, ...rest } = f
+            return rest
+          })
+        : undefined
+      contextForJson = {
+        ...context,
+        rendered: {
+          ...rendered,
+          ...(still ? { dataUrl: '[attached as an image below]' } : {}),
+          ...(strippedFrames ? { frames: strippedFrames } : {}),
+        },
+      }
+    }
+  }
+
   const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
+  const renderNote =
+    renderImages.length === 1
+      ? 'A render of your work is attached below.\n'
+      : renderImages.length > 1
+        ? `${renderImages.length} rendered frames are attached below, in order.\n`
+        : ''
   const summary =
     `Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.\n` +
-    (snapshot ? 'An image of what the user is looking at is attached below.\n' : '') +
+    (snapshot ? 'An image of what the user is looking at (their screen) is attached below.\n' : '') +
+    renderNote +
     `\n` +
-    JSON.stringify(context, null, 2)
+    JSON.stringify(contextForJson, null, 2)
   const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
   if (snapshot) content.push({ type: 'image', data: snapshot.data, mimeType: snapshot.mimeType })
+  for (const img of renderImages) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
   return { content }
+}
+
+/** Parse a `data:<mime>;base64,<data>` URL into an image block's parts. Returns null on any non-data-URL. */
+function parseDataUrl(dataUrl: unknown): { data: string; mimeType: string } | null {
+  if (typeof dataUrl !== 'string') return null
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl)
+  const mimeType = m?.[1]
+  const data = m?.[2]
+  if (!mimeType || !data) return null
+  return { mimeType, data }
 }
 
 /** The project list: one line per project (id, kind, title, state flags). */

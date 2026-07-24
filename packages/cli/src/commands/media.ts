@@ -10,11 +10,18 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import type { MediaItem, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
+import type { MediaBatchItem, MediaItem, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt } from '../args.js'
+
+/** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
+function bufferFromDataUrl(dataUrl: string): Buffer | null {
+  const m = /^data:[^;]+;base64,(.+)$/s.exec(dataUrl)
+  const b64 = m?.[1]
+  return b64 ? Buffer.from(b64, 'base64') : null
+}
 
 const MEDIA_TYPES: MediaType[] = ['image', 'video', 'audio', 'transcript']
 const KINDS = ['creation', 'board', 'look', 'upload'] as const
@@ -170,6 +177,51 @@ export function registerMedia(program: Command): void {
           ? `\n\nSaved ${saved.length} file(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
           : ''
         return `${head}\n\n${variations}${savedBlock}`
+      })
+    })
+
+  media
+    .command('watch')
+    .description('Watch a VIDEO as low-res keyframes across a time window (inspect raw footage)')
+    .argument('<idOrUrl>', 'a studio output id (first-8 ok) OR a media URL on our storage')
+    .option('--from <sec>', 'start of the source-time window (seconds)', (v) => parseFloat(v))
+    .option('--to <sec>', 'end of the source-time window (seconds)', (v) => parseFloat(v))
+    .option('--frames <n>', 'how many keyframes (default 8)', (v) => parseInt(v, 10))
+    .option('--save <dir>', 'write the keyframes to <dir>')
+    .action(async (idOrUrl: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const base = /^https?:\/\//.test(idOrUrl) ? { url: idOrUrl } : { mediaId: idOrUrl }
+      const item = {
+        ...base,
+        fromSec: opts.from as number | undefined,
+        toSec: opts.to as number | undefined,
+        frames: (opts.frames as number | undefined) ?? 8,
+      } as MediaBatchItem
+      const result = await client.getMediaBatch([item])
+      const first = result.items[0]
+      const keyframes = first?.keyframes ?? []
+
+      const saved: string[] = []
+      if (opts.save && keyframes.length > 0) {
+        const dir = String(opts.save)
+        await mkdir(dir, { recursive: true })
+        for (let i = 0; i < keyframes.length; i++) {
+          const kf = keyframes[i]
+          const buf = kf ? bufferFromDataUrl(kf.dataUrl) : null
+          if (!buf) continue
+          const file = join(dir, `kf-${String(i + 1).padStart(2, '0')}.jpg`)
+          await writeFile(file, buf)
+          saved.push(file)
+        }
+      }
+
+      emit(result, ctx, () => {
+        if (!first?.ok) return `Could not resolve the media: ${first?.error ?? 'unknown error'}`
+        if (keyframes.length === 0) return 'No keyframes returned (is it a video, and is the ffmpeg service configured?).'
+        const savedBlock = saved.length
+          ? `\nSaved ${saved.length} keyframe(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
+          : ''
+        return `${keyframes.length} keyframe(s) at ${keyframes.map((k) => `${k.atSec}s`).join(', ')}.${savedBlock}`
       })
     })
 

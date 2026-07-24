@@ -407,6 +407,7 @@ test('advertises exactly the v1 tools', async () => {
     'create_element',
     'create_media_upload',
     'create_post',
+    'create_preview',
     'create_project',
     'create_tag',
     'delete_element',
@@ -437,8 +438,10 @@ test('advertises exactly the v1 tools', async () => {
     'get_model',
     'get_platform',
     'get_post',
+    'get_preview',
     'get_project',
     'get_timeline_types',
+    'get_transcript',
     'get_voice',
     'import_media',
     'import_project',
@@ -994,6 +997,43 @@ test('get_media resolves a batch and reports each item with its variation + url'
   assert.match(res.content[0].text, /v2/)
   assert.match(res.content[0].text, /https:\/\/cdn\/2\.png/)
   assert.match(res.content[0].text, /other variations: 1/)
+})
+
+test('get_media returns an image block per video keyframe when a window is requested', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      getMediaBatch: async (items) => {
+        captured = items
+        return {
+          items: [
+            {
+              ok: true,
+              input: items[0],
+              url: 'https://cdn/clip.mp4',
+              imageUrl: null,
+              type: 'video',
+              model: null,
+              prompt: null,
+              mediaId: 'vid-1',
+              variation: 1,
+              otherVariations: [],
+              keyframes: [
+                { atSec: 0, dataUrl: 'data:image/jpeg;base64,AAAA' },
+                { atSec: 5, dataUrl: 'data:image/jpeg;base64,BBBB' },
+              ],
+            },
+          ],
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5 }] } })
+  assert.ok(!res.isError)
+  assert.deepEqual(captured, [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5 }])
+  const images = res.content.filter((c) => c.type === 'image')
+  assert.equal(images.length, 2, 'expected one image block per keyframe')
+  assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB'])
 })
 
 test('list_models surfaces ids, content type, and a capability summary', async () => {
@@ -1798,6 +1838,69 @@ test('get_context returns the context text + a focused-slide image block', async
   } finally {
     globalThis.fetch = origFetch
   }
+})
+
+test('get_context render returns the composed-output as an inline image block', async () => {
+  const rendered = { surface: 'editor', frame: 34, dataUrl: 'data:image/webp;base64,AQIDBA==' }
+  const mcp = await connect(
+    fakeClient({
+      getContext: async () => ({
+        context: { surface: 'editor', playheadFrame: 34, rendered },
+        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' },
+        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, frame: 34 } })
+  const image = res.content.find((c) => c.type === 'image')
+  assert.ok(image, 'expected an inline render image block')
+  assert.equal(image.mimeType, 'image/webp')
+  assert.equal(image.data, 'AQIDBA==')
+  // the bulky base64 dataUrl must be stripped from the JSON text (it rides only as the image block)
+  assert.doesNotMatch((res.content[0]).text, /AQIDBA==/)
+})
+
+test('get_context filmstrip render returns one image block per frame', async () => {
+  const rendered = {
+    mode: 'filmstrip',
+    fromFrame: 0,
+    toFrame: 60,
+    frames: [
+      { frame: 0, dataUrl: 'data:image/webp;base64,AAAA' },
+      { frame: 30, dataUrl: 'data:image/webp;base64,BBBB' },
+      { frame: 60, dataUrl: 'data:image/webp;base64,CCCC' },
+    ],
+  }
+  const mcp = await connect(
+    fakeClient({
+      getContext: async () => ({
+        context: { surface: 'editor', playheadFrame: 0, rendered },
+        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' },
+        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, mode: 'filmstrip', fromFrame: 0, toFrame: 60 } })
+  const images = res.content.filter((c) => c.type === 'image')
+  assert.equal(images.length, 3, 'expected one image block per filmstrip frame')
+  assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB', 'CCCC'])
+  // frame timing is kept in the JSON; the base64 payloads are stripped from the text.
+  assert.match((res.content[0]).text, /"frame": 30/)
+  assert.doesNotMatch((res.content[0]).text, /AAAA/)
+})
+
+test('create_preview returns the renderId handle; get_preview returns the url when done', async () => {
+  const mcp = await connect(
+    fakeClient({
+      createPreview: async (input) => ({ renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2, projectId: input.projectId }),
+      getPreview: async () => ({ status: 'done', url: 'https://x/preview.mp4', estimatedCostUsd: 0.01 }),
+    }),
+  )
+  const start = await mcp.callTool({ name: 'create_preview', arguments: { projectId: 'p1' } })
+  assert.match((start.content[0]).text, /renderId="r1"/)
+  assert.match((start.content[0]).text, /bucketName="b1"/)
+  const poll = await mcp.callTool({ name: 'get_preview', arguments: { renderId: 'r1', bucketName: 'b1' } })
+  assert.match((poll.content[0]).text, /https:\/\/x\/preview\.mp4/)
 })
 
 test('get_layer_types lists canvas layer types + props', async () => {

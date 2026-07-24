@@ -322,6 +322,33 @@ test('getContext with projectId appends the query param', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p%201')
 })
 
+test('getContext with render options appends render/frame/slide query params', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContext({ projectId: 'p1', render: true, frame: 34 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&frame=34')
+  await client.getContext({ projectId: 'p1', render: true, slideIndex: 2 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&slideIndex=2')
+})
+
+test('createPreview POSTs the range and getPreview GETs the handle', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2 } },
+    { status: 200, body: { status: 'done', url: 'https://x/p.mp4', estimatedCostUsd: 0.01 } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const job = await client.createPreview({ projectId: 'p1', fromFrame: 0, toFrame: 60 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/preview')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.equal(job.renderId, 'r1')
+  const status = await client.getPreview({ renderId: 'r1', bucketName: 'b1' })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/preview?renderId=r1&bucketName=b1')
+  assert.equal(status.url, 'https://x/p.mp4')
+})
+
 test('getProject with includeRenderUrl appends the query param', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { project: { id: 'p1', kind: 'editor', title: 'X', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 2, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, renderUrl: 'https://x/p.png' } } },
