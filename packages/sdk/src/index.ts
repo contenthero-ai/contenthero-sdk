@@ -55,6 +55,7 @@ export type {
   AddBrandKnowledgeInput,
   SearchBrandKnowledgeOptions,
   MediaType,
+  MediaSource,
   MediaVariation,
   MediaSummary,
   MediaItem,

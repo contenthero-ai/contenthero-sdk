@@ -508,6 +508,12 @@ export interface UpdateBrandKitSectionInput {
 /** A studio output's media kind. */
 export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
 
+/**
+ * Which library a media read targets. 'creations' = studio generations (with variations);
+ * 'uploads' = the editor Uploads tab (the user-level upload library).
+ */
+export type MediaSource = 'creations' | 'uploads'
+
 /** One variation (slot) of a studio output. */
 export interface MediaVariation {
   /** 1-based variation number (matches the UI and a share link's ?v=N). */
@@ -533,6 +539,12 @@ export interface MediaSummary {
   kind: string | null
   /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
   boardType: string | null
+  /** Which library this item came from ('creations' | 'uploads'); self-describing. */
+  source: MediaSource
+  /** Original file name (uploads); null for studio outputs. */
+  fileName: string | null
+  /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
+  durationSeconds: number | null
 }
 
 /** Full studio output detail as returned by `getMedia`. */
@@ -606,6 +618,8 @@ export interface MediaBatchResult {
 
 /** Options for `listMedia`. */
 export interface ListMediaOptions {
+  /** Which library to read; defaults to 'creations' (studio outputs). 'uploads' = the editor Uploads tab. */
+  source?: MediaSource
   contentType?: MediaType | MediaType[]
   status?: string
   /** Filter by asset class: 'creation', 'board', 'look', or 'upload'. */

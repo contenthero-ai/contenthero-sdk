@@ -10,7 +10,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import type { MediaBatchItem, MediaItem, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
+import type { MediaBatchItem, MediaItem, MediaSource, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -26,6 +26,7 @@ function bufferFromDataUrl(dataUrl: string): Buffer | null {
 const MEDIA_TYPES: MediaType[] = ['image', 'video', 'audio', 'transcript']
 const KINDS = ['creation', 'board', 'look', 'upload'] as const
 type Kind = (typeof KINDS)[number]
+const SOURCES: MediaSource[] = ['creations', 'uploads']
 
 /** Minimal extension -> MIME map for local uploads (defaults to octet-stream). */
 const MIME_BY_EXT: Record<string, string> = {
@@ -75,14 +76,21 @@ export function registerMedia(program: Command): void {
 
   media
     .command('list')
-    .description('List recent studio outputs (newest first)')
+    .description("List recent media (newest first). --source uploads for the editor Uploads tab.")
+    .option('--source <source>', `which library: ${SOURCES.join(', ')} (default creations)`)
     .option('--type <type>', `filter by media type: ${MEDIA_TYPES.join(', ')}`)
-    .option('--kind <kind>', `filter by asset class: ${KINDS.join(', ')}`)
+    .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
     .option('--status <status>', "status filter (defaults to 'completed')")
-    .option('--favorite', 'only outputs with a favorited variation')
-    .option('--archived', 'only outputs with an archived variation')
+    .option('--favorite', 'creations only: only outputs with a favorited variation')
+    .option('--archived', 'creations only: only outputs with an archived variation')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
+      if (opts.source && !SOURCES.includes(opts.source as MediaSource)) {
+        throw new CliError(
+          `Invalid --source "${opts.source}". Expected one of: ${SOURCES.join(', ')}.`,
+          EXIT.USAGE,
+        )
+      }
       if (opts.type && !MEDIA_TYPES.includes(opts.type as MediaType)) {
         throw new CliError(
           `Invalid --type "${opts.type}". Expected one of: ${MEDIA_TYPES.join(', ')}.`,
@@ -97,6 +105,7 @@ export function registerMedia(program: Command): void {
       }
       const { client, ctx } = makeClient(command)
       const items = await client.listMedia({
+        source: opts.source as MediaSource | undefined,
         contentType: opts.type as MediaType | undefined,
         kind: opts.kind as Kind | undefined,
         status: opts.status as string | undefined,
@@ -106,12 +115,12 @@ export function registerMedia(program: Command): void {
       })
       emit(items, ctx, (rows: MediaSummary[]) =>
         table(
-          ['ID', 'TYPE', 'KIND', 'MODEL', 'STATUS', 'PROMPT'],
+          ['ID', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
           rows.map((m) => [
             m.id.slice(0, 8),
             m.type,
             m.kind ?? '',
-            m.model ?? '',
+            m.fileName ?? m.model ?? '',
             m.status,
             clip(m.prompt),
           ]),
@@ -121,15 +130,22 @@ export function registerMedia(program: Command): void {
 
   media
     .command('get')
-    .description('Get one studio output by id, with its variations')
-    .argument('<id>', 'output id (full or first-8), optionally with a "-N" variation suffix')
+    .description('Get one media item by id (studio output or, with --source uploads, an upload)')
+    .argument('<id>', 'media id (full or first-8); creations also accept a "-N" variation suffix')
+    .option('--source <source>', `which library the id belongs to: ${SOURCES.join(', ')} (default creations)`)
     .option(
       '--save <dir>',
       'download each variation to <dir> (materialize the bytes for local viewing or re-ingestion)',
     )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+      if (opts.source && !SOURCES.includes(opts.source as MediaSource)) {
+        throw new CliError(
+          `Invalid --source "${opts.source}". Expected one of: ${SOURCES.join(', ')}.`,
+          EXIT.USAGE,
+        )
+      }
       const { client, ctx } = makeClient(command)
-      const item = await client.getMedia(id)
+      const item = await client.getMedia(id, { source: opts.source as MediaSource | undefined })
 
       // --save materializes bytes to disk: the CLI's vision affordance. A terminal
       // cannot carry a model image block, so we hand back real files any consumer

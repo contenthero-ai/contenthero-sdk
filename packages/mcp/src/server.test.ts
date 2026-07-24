@@ -1997,3 +1997,46 @@ test('update_canvas routes canvas ops through the same endpoint', async () => {
   })
   assert.match((res.content[0]).text, /Applied 1\/1 canvas op\(s\)/)
 })
+
+test('list_media forwards the uploads source', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      listMedia: async (opts) => {
+        captured = opts
+        return []
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'list_media', arguments: { source: 'uploads' } })
+  assert.equal(captured.source, 'uploads')
+})
+
+test('list_media surfaces an upload file name, duration, and url inline', async () => {
+  const mcp = await connect(
+    fakeClient({
+      listMedia: async () => [
+        {
+          id: 'up-uuid-1',
+          type: 'video',
+          model: null,
+          prompt: null,
+          status: 'completed',
+          createdAt: 't',
+          variationCount: 1,
+          urls: ['https://cdn/editor-media-1.mp4'],
+          kind: 'upload',
+          boardType: null,
+          source: 'uploads',
+          fileName: 'C0001.MP4',
+          durationSeconds: 1792,
+        },
+      ],
+    }),
+  )
+  const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'uploads' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /C0001\.MP4/)
+  assert.match(res.content[0].text, /1792s/)
+  assert.match(res.content[0].text, /editor-media-1\.mp4/)
+})

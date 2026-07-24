@@ -290,7 +290,12 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
         : m.kind && m.kind !== 'creation'
           ? ` | ${m.kind}`
           : ''
-    return `- [${m.type}] ${m.model ?? ''} (id ${m.id})${kindTag}${vars} | ${m.status}${promptStr}`
+    const nameStr = m.fileName ? ` | ${m.fileName}` : ''
+    const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
+    // Single-file items (uploads) carry one resolved url; surface it inline so the agent can
+    // reference the media directly (e.g. add it to a timeline) without a get call.
+    const urlStr = m.variationCount === 1 && m.urls.length === 1 ? ` | ${m.urls[0]}` : ''
+    return `- [${m.type}] ${m.model ?? ''} (id ${m.id})${kindTag}${nameStr}${durStr}${vars} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
 }

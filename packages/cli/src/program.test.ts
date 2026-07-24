@@ -100,6 +100,12 @@ test('media and brand-kit list expose the favorite/archived filters', () => {
     .commands.find((c) => c.name() === 'list')!
   const mediaFlags = mediaList.options.map((o) => o.long)
   assert.ok(mediaFlags.includes('--favorite') && mediaFlags.includes('--archived'))
+  assert.ok(mediaFlags.includes('--source'), 'media list exposes --source')
+
+  const mediaGet = program.commands
+    .find((c) => c.name() === 'media')!
+    .commands.find((c) => c.name() === 'get')!
+  assert.ok(mediaGet.options.map((o) => o.long).includes('--source'), 'media get exposes --source')
 
   const kitList = program.commands
     .find((c) => c.name() === 'brand-kit')!

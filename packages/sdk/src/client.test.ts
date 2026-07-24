@@ -442,3 +442,25 @@ test('getTimelineTypes GETs the timeline catalog', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/timeline-types')
   assert.equal(cat.surface, 'timeline')
 })
+
+test('listMedia forwards source=uploads to the query', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { media: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.listMedia({ source: 'uploads' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/media?source=uploads')
+  assert.equal(calls[0]?.init?.method, 'GET')
+})
+
+test('listMedia omits source when defaulting to creations', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { media: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.listMedia({})
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/media')
+})
+
+test('getMedia forwards source=uploads to the query', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { id: 'u1', type: 'video', source: 'uploads' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getMedia('u1', { source: 'uploads' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/media/u1?source=uploads')
+})

@@ -67,6 +67,7 @@ import type {
   TranscriptResult,
   MediaItem,
   MediaSummary,
+  MediaSource,
   MediaBatchItem,
   MediaBatchResult,
   CreateMediaUploadInput,
@@ -394,9 +395,14 @@ export class ContentHero {
     )
   }
 
-  /** List the account's recent studio outputs (the list half of the list+get pair). */
+  /**
+   * List the account's recent media (the list half of the list+get pair). `source`
+   * selects the library: 'creations' (default, studio outputs) or 'uploads' (the
+   * editor Uploads tab).
+   */
   async listMedia(options: ListMediaOptions = {}): Promise<MediaSummary[]> {
     const q = new URLSearchParams()
+    if (options.source) q.set('source', options.source)
     if (options.contentType) {
       const types = Array.isArray(options.contentType) ? options.contentType : [options.contentType]
       q.set('contentType', types.join(','))
@@ -416,12 +422,15 @@ export class ContentHero {
   }
 
   /**
-   * Get one studio output by id token (the get half). The token may be the full
-   * output id, its first 8 characters, or either with a `-N` variation suffix
-   * (1-based). Throws NotFoundError if absent.
+   * Get one media item by id token (the get half). `source` selects the library the
+   * id belongs to: 'creations' (default, a studio output; token may be the full id,
+   * its first 8 characters, or either with a `-N` variation suffix) or 'uploads' (an
+   * editor Uploads-tab file; full id or short id, no variations). Throws
+   * NotFoundError if absent.
    */
-  async getMedia(idToken: string): Promise<MediaItem> {
-    return this.request<MediaItem>('GET', `/api/v1/media/${encodeURIComponent(idToken)}`)
+  async getMedia(idToken: string, options: { source?: MediaSource } = {}): Promise<MediaItem> {
+    const qs = options.source ? `?source=${encodeURIComponent(options.source)}` : ''
+    return this.request<MediaItem>('GET', `/api/v1/media/${encodeURIComponent(idToken)}${qs}`)
   }
 
   /**

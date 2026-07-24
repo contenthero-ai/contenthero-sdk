@@ -1034,8 +1034,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the account's recent studio outputs (generated images, videos, audio, transcripts), newest first. Reference boards are included too; filter with kind='board' (or 'creation'/'look'). Set favorited=true to show only outputs with a favorited variation, or archived=true for outputs with an archived variation. Each item has an id and its variation URLs. Call get_media for one output's full detail and individual variations (incl. per-variation favorite/archive state).",
+        "List the account's media, newest first. `source` selects which library: 'creations' (default) is studio generations, each an output with one or more variations (images, video, or audio); 'uploads' is the editor Uploads tab, the raw video, image, and audio files the user uploaded to edit with. Filter with contentType and page with limit/offset. For creations you can also filter by kind ('board'/'creation'/'look') or favorited/archived. Each item shows its id and, for a single-file item like an upload, its file name, duration, and resolved URL inline, so you can reference it directly (for example, add an upload to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
       inputSchema: {
+        source: z
+          .enum(['creations', 'uploads'])
+          .optional()
+          .describe("Which library to read: 'creations' (default, studio generations) or 'uploads' (the editor Uploads tab)."),
         contentType: z
           .enum(['image', 'video', 'audio', 'transcript'])
           .optional()
@@ -1043,10 +1047,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         kind: z
           .enum(['creation', 'board', 'look'])
           .optional()
-          .describe("Filter by asset class: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all."),
+          .describe("Creations only. Filter by asset class: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all."),
         status: z.string().optional().describe("Status filter; defaults to 'completed'."),
-        favorited: z.boolean().optional().describe('Only outputs that have a favorited variation.'),
-        archived: z.boolean().optional().describe('Only outputs that have an archived variation.'),
+        favorited: z.boolean().optional().describe('Creations only. Only outputs that have a favorited variation.'),
+        archived: z.boolean().optional().describe('Creations only. Only outputs that have an archived variation.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
       },
     },
@@ -1055,6 +1059,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         return mediaListResult(
           await client.listMedia({
+            source: args.source,
             contentType: args.contentType,
             kind: args.kind,
             status: args.status,
@@ -1076,7 +1081,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Media',
       annotations: READ,
       description:
-        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, or a layer/asset URL from get_project / get_post) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_post, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
