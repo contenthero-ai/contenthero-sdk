@@ -1034,12 +1034,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the account's media, newest first. `source` selects which library: 'creations' (default) is studio generations, each an output with one or more variations (images, video, or audio); 'uploads' is the editor Uploads tab, the raw video, image, and audio files the user uploaded to edit with. Filter with contentType and page with limit/offset. For creations you can also filter by kind ('board'/'creation'/'look') or favorited/archived. Each item shows its id and, for a single-file item like an upload, its file name, duration, and resolved URL inline, so you can reference it directly (for example, add an upload to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
+        "List the account's media, newest first. `source` selects which library: 'creations' (default) is studio generations, each an output with one or more variations (images, video, or audio); 'uploads' is the editor Uploads tab, the raw video, image, and audio files the user uploaded to edit with; 'stock' is stock media the user has already used in a project (cached and reusable); 'all' returns every library merged across sources, each item self-describing via its `source`. Filter with contentType and page with limit/offset. For creations you can also filter by kind ('board'/'creation'/'look') or favorited/archived. Each item shows its id and, for a single-file item like an upload, its file name, duration, and resolved URL inline, so you can reference it directly (for example, add an upload to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
       inputSchema: {
         source: z
-          .enum(['creations', 'uploads'])
+          .enum(['creations', 'uploads', 'stock', 'all'])
           .optional()
-          .describe("Which library to read: 'creations' (default, studio generations) or 'uploads' (the editor Uploads tab)."),
+          .describe("Which library to read: 'creations' (default, studio generations), 'uploads' (the editor Uploads tab), 'stock' (used stock media), or 'all' (every library merged newest-first)."),
         contentType: z
           .enum(['image', 'video', 'audio', 'transcript'])
           .optional()

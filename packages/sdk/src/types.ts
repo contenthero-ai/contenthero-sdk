@@ -510,9 +510,11 @@ export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
 
 /**
  * Which library a media read targets. 'creations' = studio generations (with variations);
- * 'uploads' = the editor Uploads tab (the user-level upload library).
+ * 'uploads' = the editor Uploads tab (the user-level upload library); 'stock' = stock media
+ * the user has used (cached and reusable); 'all' = every library merged newest-first, each item
+ * self-describing via its `source` (list only; a `get` uses the item's specific source).
  */
-export type MediaSource = 'creations' | 'uploads'
+export type MediaSource = 'creations' | 'uploads' | 'stock' | 'all'
 
 /** One variation (slot) of a studio output. */
 export interface MediaVariation {

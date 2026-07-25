@@ -26,7 +26,9 @@ function bufferFromDataUrl(dataUrl: string): Buffer | null {
 const MEDIA_TYPES: MediaType[] = ['image', 'video', 'audio', 'transcript']
 const KINDS = ['creation', 'board', 'look', 'upload'] as const
 type Kind = (typeof KINDS)[number]
-const SOURCES: MediaSource[] = ['creations', 'uploads']
+// `list` can read every library (incl. the 'all' union); a single-item `get` needs a specific source.
+const LIST_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock', 'all']
+const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
 
 /** Minimal extension -> MIME map for local uploads (defaults to octet-stream). */
 const MIME_BY_EXT: Record<string, string> = {
@@ -76,8 +78,8 @@ export function registerMedia(program: Command): void {
 
   media
     .command('list')
-    .description("List recent media (newest first). --source uploads for the editor Uploads tab.")
-    .option('--source <source>', `which library: ${SOURCES.join(', ')} (default creations)`)
+    .description("List recent media (newest first). --source uploads|stock|all beyond creations.")
+    .option('--source <source>', `which library: ${LIST_SOURCES.join(', ')} (default creations)`)
     .option('--type <type>', `filter by media type: ${MEDIA_TYPES.join(', ')}`)
     .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
     .option('--status <status>', "status filter (defaults to 'completed')")
@@ -85,9 +87,9 @@ export function registerMedia(program: Command): void {
     .option('--archived', 'creations only: only outputs with an archived variation')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
-      if (opts.source && !SOURCES.includes(opts.source as MediaSource)) {
+      if (opts.source && !LIST_SOURCES.includes(opts.source as MediaSource)) {
         throw new CliError(
-          `Invalid --source "${opts.source}". Expected one of: ${SOURCES.join(', ')}.`,
+          `Invalid --source "${opts.source}". Expected one of: ${LIST_SOURCES.join(', ')}.`,
           EXIT.USAGE,
         )
       }
@@ -130,17 +132,17 @@ export function registerMedia(program: Command): void {
 
   media
     .command('get')
-    .description('Get one media item by id (studio output or, with --source uploads, an upload)')
+    .description('Get one media item by id (studio output, or an upload/stock item with --source)')
     .argument('<id>', 'media id (full or first-8); creations also accept a "-N" variation suffix')
-    .option('--source <source>', `which library the id belongs to: ${SOURCES.join(', ')} (default creations)`)
+    .option('--source <source>', `which library the id belongs to: ${GET_SOURCES.join(', ')} (default creations)`)
     .option(
       '--save <dir>',
       'download each variation to <dir> (materialize the bytes for local viewing or re-ingestion)',
     )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
-      if (opts.source && !SOURCES.includes(opts.source as MediaSource)) {
+      if (opts.source && !GET_SOURCES.includes(opts.source as MediaSource)) {
         throw new CliError(
-          `Invalid --source "${opts.source}". Expected one of: ${SOURCES.join(', ')}.`,
+          `Invalid --source "${opts.source}". Expected one of: ${GET_SOURCES.join(', ')}.`,
           EXIT.USAGE,
         )
       }

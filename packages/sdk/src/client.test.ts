@@ -464,3 +464,22 @@ test('getMedia forwards source=uploads to the query', async () => {
   await client.getMedia('u1', { source: 'uploads' })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/media/u1?source=uploads')
 })
+
+test('listMedia forwards source=all and source=stock to the query (P2e)', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { media: [] } },
+    { status: 200, body: { media: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.listMedia({ source: 'all' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/media?source=all')
+  await client.listMedia({ source: 'stock' })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/media?source=stock')
+})
+
+test('getMedia forwards source=stock to the query (P2e)', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { id: 's1', type: 'video', source: 'stock' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getMedia('s1', { source: 'stock' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/media/s1?source=stock')
+})
