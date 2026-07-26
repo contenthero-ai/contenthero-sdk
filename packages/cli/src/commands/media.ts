@@ -117,11 +117,13 @@ export function registerMedia(program: Command): void {
         archived: opts.archived ? true : undefined,
         limit: opts.limit as number | undefined,
       })
+      // One row per variation (the atomic grain): VAR shows which slot when a generation has siblings.
       emit(items, ctx, (rows: MediaSummary[]) =>
         table(
-          ['ID', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
+          ['ID', 'VAR', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
           rows.map((m) => [
             m.id.slice(0, 8),
+            m.generationSize > 1 ? `${m.variant + 1}/${m.generationSize}${m.isFavorited ? '★' : ''}` : (m.isFavorited ? '★' : ''),
             m.type,
             m.kind ?? '',
             m.fileName ?? m.model ?? '',

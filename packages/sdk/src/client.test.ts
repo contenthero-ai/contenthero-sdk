@@ -129,13 +129,13 @@ test('listBrandKits unwraps { brandKits } and getBrandKit hits the id path', asy
 })
 
 test('listMedia builds the query string and getMedia encodes the token', async () => {
-  const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variationCount: 1, urls: [] }] } }])
+  const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 0, url: null, generationSize: 1, isFavorited: false }] } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: list.fetch, baseUrl: 'https://example.test' })
   const media = await c1.listMedia({ contentType: 'image', limit: 5 })
   assert.equal(media[0].id, 'o1')
   assert.equal(list.calls[0]?.url, 'https://example.test/api/v1/media?contentType=image&limit=5')
 
-  const get = stubFetch([{ status: 200, body: { id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variationCount: 2, urls: [], script: null, aspectRatio: null, resolution: null, duration: null, creditsUsed: null, variations: [], selectedVariation: 2, thumbnailUrl: null } }])
+  const get = stubFetch([{ status: 200, body: { id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 1, url: null, generationSize: 2, isFavorited: false, script: null, aspectRatio: null, resolution: null, duration: null, creditsUsed: null, variations: [], selectedVariation: 2, thumbnailUrl: null } }])
   const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: get.fetch, baseUrl: 'https://example.test' })
   const item = await c2.getMedia('abcd1234-2')
   assert.equal(item.selectedVariation, 2)

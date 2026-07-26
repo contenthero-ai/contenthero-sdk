@@ -526,7 +526,11 @@ export interface MediaVariation {
   isArchived: boolean
 }
 
-/** A studio output as returned by `listMedia` (the list projection). */
+/**
+ * One atomic library asset as returned by `listMedia`. The grain is a VARIATION (an individual media file),
+ * not a whole generation: a studio generation with N variations lists as N items sharing one `id` but with
+ * distinct `variant`. The universal identity is (id, variant).
+ */
 export interface MediaSummary {
   id: string
   type: MediaType
@@ -534,14 +538,22 @@ export interface MediaSummary {
   prompt: string | null
   status: string
   createdAt: string | null
-  variationCount: number
-  /** Resolved (non-null) variation URLs. */
-  urls: string[]
+  /**
+   * 0-based canonical slot of this variation (matches a share link's ?v=N as variant+1, and getMedia's
+   * `<id>-<N>` token as N = variant+1). Single-asset sources (uploads, stock) are always 0.
+   */
+  variant: number
+  /** This variation's resolved URL (null only in a detail view whose slots have no media yet). */
+  url: string | null
+  /** Total variations in the parent generation this variation belongs to (1 for uploads/stock). */
+  generationSize: number
+  /** Whether THIS variation is favorited (studio per-slot; uploads/stock are go-forward, false). */
+  isFavorited: boolean
   /** Asset class: 'creation' (default), 'board' (a reference board), or 'look'. */
   kind: string | null
   /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
   boardType: string | null
-  /** Which library this item came from ('creations' | 'uploads'); self-describing. */
+  /** Which library this item came from ('creations' | 'uploads' | 'stock'); self-describing. */
   source: MediaSource
   /** Original file name (uploads); null for studio outputs. */
   fileName: string | null

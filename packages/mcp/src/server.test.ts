@@ -65,7 +65,8 @@ function fakeClient(overrides = {}) {
       useCase: null,
     }),
     listMedia: async () => [
-      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', variationCount: 2, urls: ['https://cdn/1.png', 'https://cdn/2.png'] },
+      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', variant: 0, url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', variant: 1, url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
     ],
     getMedia: async (id) => ({
       id: 'out-uuid-1',
@@ -74,16 +75,23 @@ function fakeClient(overrides = {}) {
       prompt: 'a cat',
       status: 'completed',
       createdAt: 't',
-      variationCount: 2,
-      urls: ['https://cdn/1.png', 'https://cdn/2.png'],
+      variant: id.includes('-2') ? 1 : 0,
+      url: id.includes('-2') ? 'https://cdn/2.png' : 'https://cdn/1.png',
+      generationSize: 2,
+      isFavorited: id.includes('-2'),
+      kind: null,
+      boardType: null,
+      source: 'creations',
+      fileName: null,
+      durationSeconds: null,
       script: null,
       aspectRatio: '1:1',
       resolution: '2K',
       duration: null,
       creditsUsed: 9,
       variations: [
-        { variation: 1, url: 'https://cdn/1.png', status: 'completed', isFavorited: false },
-        { variation: 2, url: 'https://cdn/2.png', status: 'completed', isFavorited: true },
+        { variation: 1, url: 'https://cdn/1.png', status: 'completed', isFavorited: false, isArchived: false },
+        { variation: 2, url: 'https://cdn/2.png', status: 'completed', isFavorited: true, isArchived: false },
       ],
       selectedVariation: id.includes('-2') ? 2 : null,
       thumbnailUrl: null,
@@ -955,13 +963,17 @@ test('get_voice returns detail and passes the voiceId through', async () => {
   assert.match(res.content[0].text, /en-american/)
 })
 
-test('list_media surfaces id, type, and variation count', async () => {
+test('list_media lists one row per variation with its slot, favorite, and url', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_media', arguments: {} })
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /out-uuid-1/)
   assert.match(res.content[0].text, /image/)
-  assert.match(res.content[0].text, /2 variations/)
+  // Two variations of one generation now render as two rows (v1/2 and v2/2), the favorited one tagged.
+  assert.match(res.content[0].text, /v1\/2/)
+  assert.match(res.content[0].text, /v2\/2/)
+  assert.match(res.content[0].text, /\[favorite\]/)
+  assert.match(res.content[0].text, /cdn\/2\.png/)
 })
 
 test('get_media resolves a batch and reports each item with its variation + url', async () => {
@@ -2024,8 +2036,10 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
           prompt: null,
           status: 'completed',
           createdAt: 't',
-          variationCount: 1,
-          urls: ['https://cdn/editor-media-1.mp4'],
+          variant: 0,
+          url: 'https://cdn/editor-media-1.mp4',
+          generationSize: 1,
+          isFavorited: false,
           kind: 'upload',
           boardType: null,
           source: 'uploads',

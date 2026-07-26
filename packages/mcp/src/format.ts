@@ -279,11 +279,14 @@ export function statusActionResult(
   return text(`${action} ${what}.`)
 }
 
-/** List of studio outputs (media). */
+/** List of library media, one row per VARIATION (the atomic grain). */
 export function mediaListResult(items: MediaSummary[]): CallToolResult {
   if (!items.length) return text('No media found.')
   const rows = items.map((m) => {
-    const vars = m.variationCount > 1 ? ` | ${m.variationCount} variations` : ''
+    // A studio generation lists as one row per variation; show which slot when it has siblings. The
+    // addressable token for this variation is `<id>-<variant+1>`.
+    const varTag = m.generationSize > 1 ? ` | v${m.variant + 1}/${m.generationSize}` : ''
+    const favTag = m.isFavorited ? ' [favorite]' : ''
     const promptStr = m.prompt ? ` | ${m.prompt.slice(0, 80)}${m.prompt.length > 80 ? '...' : ''}` : ''
     const kindTag =
       m.kind === 'board'
@@ -293,10 +296,10 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
           : ''
     const nameStr = m.fileName ? ` | ${m.fileName}` : ''
     const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
-    // Single-file items (uploads) carry one resolved url; surface it inline so the agent can
+    // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
-    const urlStr = m.variationCount === 1 && m.urls.length === 1 ? ` | ${m.urls[0]}` : ''
-    return `- [${m.type}] ${m.model ?? ''} (id ${m.id})${kindTag}${nameStr}${durStr}${vars} | ${m.status}${promptStr}${urlStr}`
+    const urlStr = m.url ? ` | ${m.url}` : ''
+    return `- [${m.type}] ${m.model ?? ''} (id ${m.id})${varTag}${favTag}${kindTag}${nameStr}${durStr} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
 }
@@ -334,7 +337,7 @@ export function mediaResult(m: MediaItem): CallToolResult {
       m.script ? `script: ${m.script}` : null,
       specs || null,
       `status: ${m.status}${m.creditsUsed != null ? ` | ${m.creditsUsed} credits` : ''}`,
-      `variations (${m.variationCount}):`,
+      `variations (${m.generationSize}):`,
       ...m.variations.map(
         (v) => `  ${v.variation}. ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}${v.isArchived ? ' [archived]' : ''}`,
       ),
