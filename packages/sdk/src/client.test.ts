@@ -483,3 +483,26 @@ test('getMedia forwards source=stock to the query (P2e)', async () => {
   await client.getMedia('s1', { source: 'stock' })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/media/s1?source=stock')
 })
+
+test('searchMedia forwards query, kinds, and limit (P5)', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { results: [] } },
+    { status: 200, body: { results: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.searchMedia('a red car at sunset')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/media/search?query=a+red+car+at+sunset')
+  assert.equal(calls[0]?.init?.method, 'GET')
+  await client.searchMedia('waves', { kinds: ['video', 'image'], limit: 5 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/media/search?query=waves&kinds=video%2Cimage&limit=5')
+})
+
+test('searchMedia returns the results array', async () => {
+  const { fetch } = stubFetch([
+    { status: 200, body: { results: [{ id: 'x1', sourceTable: 'studio_outputs', kind: 'video', url: 'u', summary: 's', tags: [], relevance: 0.9, scenes: [] }] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const results = await client.searchMedia('x')
+  assert.equal(results.length, 1)
+  assert.equal(results[0]?.id, 'x1')
+})

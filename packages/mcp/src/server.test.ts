@@ -468,6 +468,7 @@ test('advertises exactly the v1 tools', async () => {
     'reorder_post_assets',
     'schedule_post',
     'search_brand_knowledge',
+    'search_media',
     'transcribe',
     'unarchive',
     'unfavorite',

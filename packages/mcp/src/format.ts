@@ -26,6 +26,7 @@ import type {
   InspirationContent,
   MediaItem,
   MediaSummary,
+  SearchMediaResult,
   MediaBatchResult,
   ResolvedMediaBatchItem,
   CreateMediaUploadResult,
@@ -298,6 +299,22 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
     return `- [${m.type}] ${m.model ?? ''} (id ${m.id})${kindTag}${nameStr}${durStr}${vars} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
+}
+
+/** Semantic library-search matches: assets ranked by relevance, with matched scene timestamps for video. */
+export function mediaSearchResult(results: SearchMediaResult[]): CallToolResult {
+  if (!results.length) return text('No matching media found.')
+  const rows = results.map((r) => {
+    const rel = ` | ${Math.round(r.relevance * 100)}%`
+    const kindTag = r.kind ? `[${r.kind}]` : '[media]'
+    const summaryStr = r.summary ? ` | ${r.summary.slice(0, 90)}${r.summary.length > 90 ? '...' : ''}` : ''
+    const scenesStr = r.scenes.length
+      ? ` | scenes: ${r.scenes.map((s) => `${(s.startMs / 1000).toFixed(1)}-${(s.endMs / 1000).toFixed(1)}s`).join(', ')}`
+      : ''
+    const urlStr = r.url ? ` | ${r.url}` : ''
+    return `- ${kindTag} (id ${r.id})${rel}${summaryStr}${scenesStr}${urlStr}`
+  })
+  return text([`${results.length} match(es) (most relevant first):`, ...rows].join('\n'))
 }
 
 /** One studio output's detail, with its variations. */

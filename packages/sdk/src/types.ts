@@ -634,6 +634,45 @@ export interface ListMediaOptions {
   offset?: number
 }
 
+/** Media kinds that semantic library search can return / filter by. */
+export type MediaKind = 'image' | 'video' | 'audio'
+
+/** A scene within a video asset that matched a media search, with its own relevance. */
+export interface SearchMediaScene {
+  /** Scene start within the asset, in milliseconds. */
+  startMs: number
+  /** Scene end within the asset, in milliseconds. */
+  endMs: number
+  /** Cosine relevance of this scene to the query (0..1). */
+  relevance: number
+}
+
+/** One asset returned by semantic library search. */
+export interface SearchMediaResult {
+  /** The asset's record id (source_record_id), usable to reference the asset. */
+  id: string
+  /** The asset's origin table (studio_outputs, editor_uploads, stock_assets, brand_kits). */
+  sourceTable: string
+  kind: MediaKind | null
+  /** A resolved, usable URL for the asset (a cached edit proxy for stock). */
+  url: string | null
+  /** The vision description of the asset. */
+  summary: string | null
+  tags: string[]
+  /** Best cosine relevance of this asset to the query (0..1). */
+  relevance: number
+  /** For videos, the specific scenes that matched, best first (empty for image/audio). */
+  scenes: SearchMediaScene[]
+}
+
+/** Options for searchMedia. */
+export interface SearchMediaOptions {
+  /** Restrict results to these media kinds. Omit to search all kinds. */
+  kinds?: MediaKind[]
+  /** Maximum number of assets to return (default 12, max 50). */
+  limit?: number
+}
+
 /** Fields to start a presigned media upload (phase 1 of uploadMedia). */
 export interface CreateMediaUploadInput {
   fileName: string

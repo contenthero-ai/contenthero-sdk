@@ -1,6 +1,7 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
  *   media list [--type --kind --status --limit]   recent outputs, newest first
+ *   media search <query> [--kinds --limit]         semantic search of the editable library
  *   media get <id>                                 one output, with its variations
  *
  * Spans creations, reference boards, and looks; filter with --kind. An id may be
@@ -10,7 +11,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import type { MediaBatchItem, MediaItem, MediaSource, MediaSummary, MediaType, UploadedMedia } from '@contenthero/sdk'
+import type { MediaBatchItem, MediaItem, MediaKind, MediaSource, MediaSummary, MediaType, SearchMediaResult, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -29,6 +30,7 @@ type Kind = (typeof KINDS)[number]
 // `list` can read every library (incl. the 'all' union); a single-item `get` needs a specific source.
 const LIST_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock', 'all']
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
+const SEARCH_KINDS: MediaKind[] = ['image', 'video', 'audio']
 
 /** Minimal extension -> MIME map for local uploads (defaults to octet-stream). */
 const MIME_BY_EXT: Record<string, string> = {
@@ -125,6 +127,45 @@ export function registerMedia(program: Command): void {
             m.fileName ?? m.model ?? '',
             m.status,
             clip(m.prompt),
+          ]),
+        ),
+      )
+    })
+
+  media
+    .command('search')
+    .description('Semantically search your library (creations, uploads, stock, brand) by describing the content')
+    .argument('<query>', 'natural-language description of the media to find')
+    .option('--kinds <kinds>', `restrict to media kinds (comma-separated): ${SEARCH_KINDS.join(', ')}`)
+    .option('--limit <n>', 'max assets to return (default 12, max 50)', toInt)
+    .action(async (query: string, opts: Record<string, unknown>, command: Command) => {
+      const kinds =
+        typeof opts.kinds === 'string'
+          ? opts.kinds.split(',').map((k) => k.trim()).filter(Boolean)
+          : undefined
+      if (kinds) {
+        for (const k of kinds) {
+          if (!SEARCH_KINDS.includes(k as MediaKind)) {
+            throw new CliError(`Invalid --kinds value "${k}". Expected: ${SEARCH_KINDS.join(', ')}.`, EXIT.USAGE)
+          }
+        }
+      }
+      const { client, ctx } = makeClient(command)
+      const results = await client.searchMedia(query, {
+        kinds: kinds as MediaKind[] | undefined,
+        limit: opts.limit as number | undefined,
+      })
+      emit(results, ctx, (rows: SearchMediaResult[]) =>
+        table(
+          ['ID', 'KIND', 'REL', 'SCENES', 'SUMMARY'],
+          rows.map((r) => [
+            r.id.slice(0, 8),
+            r.kind ?? '',
+            `${Math.round(r.relevance * 100)}%`,
+            r.scenes.length
+              ? r.scenes.map((s) => `${(s.startMs / 1000).toFixed(0)}-${(s.endMs / 1000).toFixed(0)}s`).join(' ')
+              : '',
+            clip(r.summary),
           ]),
         ),
       )

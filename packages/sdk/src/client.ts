@@ -68,6 +68,8 @@ import type {
   MediaItem,
   MediaSummary,
   MediaSource,
+  SearchMediaResult,
+  SearchMediaOptions,
   MediaBatchItem,
   MediaBatchResult,
   CreateMediaUploadInput,
@@ -432,6 +434,23 @@ export class ContentHero {
   async getMedia(idToken: string, options: { source?: MediaSource } = {}): Promise<MediaItem> {
     const qs = options.source ? `?source=${encodeURIComponent(options.source)}` : ''
     return this.request<MediaItem>('GET', `/api/v1/media/${encodeURIComponent(idToken)}${qs}`)
+  }
+
+  /**
+   * Semantically search the account's editable media library (creations, uploads, licensed stock, brand assets)
+   * by describing the content in natural language. Returns matching assets ranked by relevance, each with a
+   * description, tags, and, for videos, the timestamps of the scenes that matched, so a precise moment can be
+   * located. Searches only the account's own usable library, never inspiration, published posts, or knowledge.
+   */
+  async searchMedia(query: string, options: SearchMediaOptions = {}): Promise<SearchMediaResult[]> {
+    const q = new URLSearchParams({ query })
+    if (options.kinds && options.kinds.length > 0) q.set('kinds', options.kinds.join(','))
+    if (options.limit != null) q.set('limit', String(options.limit))
+    const data = await this.request<{ results: SearchMediaResult[] }>(
+      'GET',
+      `/api/v1/media/search?${q.toString()}`,
+    )
+    return data.results
   }
 
   /**

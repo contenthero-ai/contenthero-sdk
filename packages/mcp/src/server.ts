@@ -12,6 +12,7 @@
  *   list_voices  / get_voice  - the account's saved voices
  *   list_brand_kits / get_brand_kit - the account's brand kits (full brand context)
  *   list_media / get_media    - the account's studio outputs (+ per-variation ids)
+ *   search_media              - semantic search of the editable media library (with scene timestamps)
  *   get_generation_status - poll an image/video outputId to its final URLs
  *   wait_for_generation - block until one or more outputIds finish (batch)
  *   get_balance       - credit balance + tier
@@ -77,6 +78,7 @@ import {
   inspirationAccountResult,
   inspirationContentResult,
   mediaListResult,
+  mediaSearchResult,
   mediaBatchResult,
   mediaUploadResult,
   uploadedMediaResult,
@@ -1067,6 +1069,37 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             archived: args.archived,
             limit: args.limit,
           }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- search_media ---------------------------------------------------------
+  server.registerTool(
+    'search_media',
+    {
+      title: 'Search Media',
+      annotations: READ,
+      description:
+        "Semantically search the account's editable media library (their generated creations, uploads, licensed stock, and brand assets) by describing the content in natural language. Returns matching assets ranked by relevance, each with its media kind, a description, tags, and, for videos, the timestamps of the specific scenes that matched, so a precise moment can be located. Use this to find existing material to place, reference, or build with, rather than generating new media, whenever the user refers to footage, images, audio, or clips they already have. Optionally restrict results to specific media kinds. This searches only the account's own usable library, never inspiration, published posts, or knowledge. Call get_media to SEE a match (image blocks / video keyframes).",
+      inputSchema: {
+        query: z
+          .string()
+          .describe('A natural-language description of the media to find, describing its visible or audible content.'),
+        kinds: z
+          .array(z.enum(['image', 'video', 'audio']))
+          .optional()
+          .describe('Restrict results to these media kinds. Omit to search all kinds.'),
+        limit: z.number().int().min(1).max(50).optional().describe('Maximum number of assets to return (default 12, max 50).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return mediaSearchResult(
+          await client.searchMedia(args.query, { kinds: args.kinds, limit: args.limit }),
         )
       } catch (err) {
         return errorResult(err)
