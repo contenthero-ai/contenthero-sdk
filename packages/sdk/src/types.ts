@@ -647,10 +647,12 @@ export interface SearchMediaScene {
   relevance: number
 }
 
-/** One asset returned by semantic library search. */
+/** One asset (a single variation) returned by semantic library search. */
 export interface SearchMediaResult {
-  /** The asset's record id (source_record_id), usable to reference the asset. */
+  /** The asset's record id (source_record_id). With `variant`, uniquely identifies the atomic asset. */
   id: string
+  /** The variation index within the record (studio generation output index; 0 for single-asset sources). */
+  variant: number
   /** The asset's origin table (studio_outputs, editor_uploads, stock_assets, brand_kits). */
   sourceTable: string
   kind: MediaKind | null
