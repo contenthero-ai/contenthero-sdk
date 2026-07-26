@@ -79,6 +79,8 @@ import {
   inspirationContentResult,
   mediaListResult,
   mediaSearchResult,
+  folderListResult,
+  folderContentsResult,
   mediaBatchResult,
   mediaUploadResult,
   uploadedMediaResult,
@@ -1104,6 +1106,148 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       } catch (err) {
         return errorResult(err)
       }
+    },
+  )
+
+  // -- library folder tools (Phase D) ---------------------------------------
+  const smartQuerySchema = z
+    .object({
+      text: z.string().optional().describe('Natural-language description to match semantically.'),
+      kinds: z.array(z.enum(['image', 'video', 'audio'])).optional(),
+      sources: z.array(z.enum(['creations', 'uploads', 'stock'])).optional(),
+      tags: z.array(z.string()).optional().describe('Require all of these tags.'),
+      favoritedOnly: z.boolean().optional(),
+      sort: z.enum(['relevance', 'recent', 'name']).optional(),
+    })
+    .optional()
+    .describe('For a smart folder: the live query that defines its membership (the same filters as the library search bar).')
+
+  server.registerTool(
+    'list_folders',
+    {
+      title: 'List Folders',
+      annotations: READ,
+      description:
+        "List the account's library folders (their own manual and smart folders, as a flat list with parent links for nesting) together with the built-in derived folders (recents, favorites, edits, canvas, posts). Use this to see how the library is organized before browsing or filing items.",
+      inputSchema: {},
+    },
+    async (_args, extra) => {
+      try { return folderListResult(await (await getClient(extra)).listFolders()) } catch (err) { return errorResult(err) }
+    },
+  )
+
+  server.registerTool(
+    'get_folder',
+    {
+      title: 'Get Folder',
+      annotations: READ,
+      description:
+        "Return the contents of one folder. The folder id is either one of the account's own folder ids or a built-in derived-folder key. A manual folder returns exactly the items filed in it; a smart folder computes its members live from its saved query; a derived folder returns its built-in set. Items are media (with kind and a description) and, in manual folders, entities such as projects or posts.",
+      inputSchema: {
+        folder_id: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, posts).'),
+      },
+    },
+    async (args, extra) => {
+      try { const r = await (await getClient(extra)).getFolder(args.folder_id); return folderContentsResult(r.folder, r.items) } catch (err) { return errorResult(err) }
+    },
+  )
+
+  server.registerTool(
+    'create_folder',
+    {
+      title: 'Create Folder',
+      annotations: WRITE,
+      description:
+        'Create a new library folder. A manual folder is an initially-empty collection you then file items into. A smart folder saves a query and stays live, always showing whatever currently matches. Optionally nest it under a parent folder. Create a folder only when the user wants to organize or save a view, not to hold a single transient result.',
+      inputSchema: {
+        name: z.string().describe('The folder name.'),
+        type: z.enum(['manual', 'smart']).optional().describe("'manual' (a collection you file items into) or 'smart' (a saved live query). Defaults to manual."),
+        query: smartQuerySchema,
+        parent_id: z.string().optional().describe('Nest the new folder under this parent folder id.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const f = await (await getClient(extra)).createFolder({ name: args.name, type: args.type, query: args.query, parentId: args.parent_id })
+        return text(`Created ${f.type} folder "${f.name}" (id ${f.id}).`)
+      } catch (err) { return errorResult(err) }
+    },
+  )
+
+  server.registerTool(
+    'update_folder',
+    {
+      title: 'Update Folder',
+      annotations: WRITE,
+      description:
+        "Update one of the account's own folders: rename it, move it under a different parent (or to the top level with a null parent), or change a smart folder's saved query. Only the provided fields change.",
+      inputSchema: {
+        folder_id: z.string().describe('The folder id to update.'),
+        name: z.string().optional().describe('A new name.'),
+        parent_id: z.string().nullable().optional().describe('A new parent folder id, or null to move to the top level.'),
+        query: smartQuerySchema,
+      },
+    },
+    async (args, extra) => {
+      try {
+        const f = await (await getClient(extra)).updateFolder(args.folder_id, { name: args.name, parentId: args.parent_id, query: args.query })
+        return text(`Updated folder "${f.name}" (id ${f.id}).`)
+      } catch (err) { return errorResult(err) }
+    },
+  )
+
+  server.registerTool(
+    'delete_folder',
+    {
+      title: 'Delete Folder',
+      annotations: WRITE,
+      description:
+        "Delete one of the account's own folders and everything nested under it. This removes the folder structure only; the media and entities inside are pointers, so the underlying assets are never deleted. Confirm intent before deleting a folder that contains items.",
+      inputSchema: { folder_id: z.string().describe('The folder id to delete.') },
+    },
+    async (args, extra) => {
+      try { await (await getClient(extra)).deleteFolder(args.folder_id); return text(`Deleted folder ${args.folder_id}.`) } catch (err) { return errorResult(err) }
+    },
+  )
+
+  const itemRefSchema = {
+    folder_id: z.string().describe('The folder id.'),
+    source_table: z.string().describe("The item's source table (e.g. as returned by search_media)."),
+    source_record_id: z.string().describe("The item's source record id."),
+    variant: z.number().int().optional().describe('The variation index (default 0 for single-asset items).'),
+  }
+
+  server.registerTool(
+    'add_to_folder',
+    {
+      title: 'Add to Folder',
+      annotations: WRITE,
+      description:
+        'File an item into a manual folder by its universal identity (source_table, source_record_id, and variant, as returned by search_media). Filing never moves or copies the asset; it adds a pointer, so the same item can live in several folders. Only manual folders accept items (a smart folder computes its own membership).',
+      inputSchema: itemRefSchema,
+    },
+    async (args, extra) => {
+      try {
+        await (await getClient(extra)).addToFolder(args.folder_id, { sourceTable: args.source_table, sourceRecordId: args.source_record_id, variant: args.variant })
+        return text('Filed into the folder.')
+      } catch (err) { return errorResult(err) }
+    },
+  )
+
+  server.registerTool(
+    'remove_from_folder',
+    {
+      title: 'Remove from Folder',
+      annotations: WRITE,
+      description:
+        'Remove an item from a manual folder by its universal identity. This unfiles the pointer only; the underlying asset is never deleted.',
+      inputSchema: itemRefSchema,
+    },
+    async (args, extra) => {
+      try {
+        await (await getClient(extra)).removeFromFolder(args.folder_id, { sourceTable: args.source_table, sourceRecordId: args.source_record_id, variant: args.variant })
+        return text('Removed from the folder.')
+      } catch (err) { return errorResult(err) }
     },
   )
 

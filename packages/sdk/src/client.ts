@@ -9,6 +9,12 @@
 
 import { errorFromResponse, GenerationFailedError, GenerationTimeoutError } from './errors.js'
 import type {
+  Folder,
+  DerivedFolder,
+  FolderItem,
+  FolderItemRef,
+  CreateFolderInput,
+  UpdateFolderInput,
   AddAssetInput,
   AddBrandKitSectionInput,
   AddBrandKnowledgeInput,
@@ -451,6 +457,45 @@ export class ContentHero {
       `/api/v1/media/search?${q.toString()}`,
     )
     return data.results
+  }
+
+  // ─── Library folders (Unified Content Library, Phase D) ────────────────────
+
+  /** List the account's folders (manual + smart, with parent links) plus the built-in derived folders. */
+  async listFolders(): Promise<{ folders: Folder[]; derived: DerivedFolder[] }> {
+    return this.request<{ folders: Folder[]; derived: DerivedFolder[] }>('GET', '/api/v1/library/folders')
+  }
+
+  /** A folder's contents. `folderId` is a folder id or a derived key (recents|favorites|edits|canvas|posts). */
+  async getFolder(folderId: string): Promise<{ folder: Folder | null; items: FolderItem[] }> {
+    const data = await this.request<{ folder: Folder | null; items: FolderItem[] }>(
+      'GET',
+      `/api/v1/library/folders/${encodeURIComponent(folderId)}`,
+    )
+    return { folder: data.folder, items: data.items }
+  }
+
+  async createFolder(input: CreateFolderInput): Promise<Folder> {
+    const data = await this.request<{ folder: Folder }>('POST', '/api/v1/library/folders', input)
+    return data.folder
+  }
+
+  async updateFolder(folderId: string, patch: UpdateFolderInput): Promise<Folder> {
+    const data = await this.request<{ folder: Folder }>('PATCH', `/api/v1/library/folders/${encodeURIComponent(folderId)}`, patch)
+    return data.folder
+  }
+
+  async deleteFolder(folderId: string): Promise<void> {
+    await this.request<{ ok: boolean }>('DELETE', `/api/v1/library/folders/${encodeURIComponent(folderId)}`)
+  }
+
+  /** File an item into a manual folder (a pointer; no bytes move). */
+  async addToFolder(folderId: string, ref: FolderItemRef): Promise<void> {
+    await this.request<{ ok: boolean }>('POST', `/api/v1/library/folders/${encodeURIComponent(folderId)}/items`, ref)
+  }
+
+  async removeFromFolder(folderId: string, ref: FolderItemRef): Promise<void> {
+    await this.request<{ ok: boolean }>('DELETE', `/api/v1/library/folders/${encodeURIComponent(folderId)}/items`, ref)
   }
 
   /**

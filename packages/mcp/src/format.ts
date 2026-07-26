@@ -27,6 +27,9 @@ import type {
   MediaItem,
   MediaSummary,
   SearchMediaResult,
+  Folder,
+  DerivedFolder,
+  FolderItem,
   MediaBatchResult,
   ResolvedMediaBatchItem,
   CreateMediaUploadResult,
@@ -318,6 +321,35 @@ export function mediaSearchResult(results: SearchMediaResult[]): CallToolResult 
     return `- ${kindTag} (id ${r.id})${rel}${summaryStr}${scenesStr}${urlStr}`
   })
   return text([`${results.length} match(es) (most relevant first):`, ...rows].join('\n'))
+}
+
+/** The user's folders (their own + the built-in derived folders). */
+export function folderListResult(data: { folders: Folder[]; derived: DerivedFolder[] }): CallToolResult {
+  const own = data.folders.map((f) => `- ${f.name} [${f.type}] (id ${f.id})${f.parentId ? ` | in ${f.parentId}` : ''}`)
+  const derived = data.derived.map((d) => `- ${d.name} (key ${d.key})`)
+  return text([
+    own.length ? `Your folders (${own.length}):` : 'You have no folders yet.',
+    ...own,
+    '',
+    'Built-in folders:',
+    ...derived,
+  ].join('\n'))
+}
+
+/** One folder's contents (media items + entities). */
+export function folderContentsResult(folder: { name: string } | null, items: FolderItem[]): CallToolResult {
+  const header = folder ? `"${folder.name}" - ${items.length} item(s):` : `${items.length} item(s):`
+  if (!items.length) return text(`${header}\n(empty)`)
+  const rows = items.map((i) => {
+    if (i.type === 'media') {
+      const rel = i.relevance != null ? ` | ${Math.round(i.relevance * 100)}%` : ''
+      const fav = i.isFavorited ? ' [favorite]' : ''
+      const summ = i.summary ? ` | ${i.summary.slice(0, 80)}${i.summary.length > 80 ? '...' : ''}` : ''
+      return `- [${i.kind ?? 'media'}] (${i.sourceTable} ${i.sourceRecordId} v${i.variant})${rel}${fav}${summ}${i.url ? ` | ${i.url}` : ''}`
+    }
+    return `- [${i.type}] ${i.name} (id ${i.id})${i.subtype ? ` | ${i.subtype}` : ''}`
+  })
+  return text([header, ...rows].join('\n'))
 }
 
 /** One studio output's detail, with its variations. */

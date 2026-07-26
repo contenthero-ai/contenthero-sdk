@@ -687,6 +687,65 @@ export interface SearchMediaOptions {
   limit?: number
 }
 
+// ─── Library folders (Unified Content Library, Phase D) ──────────────────────
+
+export type FolderType = 'manual' | 'smart'
+
+/** The smart-folder query spec = the same filters the library search bar produces. */
+export interface SmartFolderQuery {
+  text?: string
+  kinds?: MediaKind[]
+  sources?: Array<'creations' | 'uploads' | 'stock'>
+  facets?: Record<string, string>
+  tags?: string[]
+  favoritedOnly?: boolean
+  sort?: 'relevance' | 'recent' | 'name'
+}
+
+export interface Folder {
+  id: string
+  name: string
+  type: FolderType
+  query: SmartFolderQuery | null
+  parentId: string | null
+  icon: string | null
+  color: string | null
+  position: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** A built-in derived folder (recents, favorites, edits, canvas, posts). */
+export interface DerivedFolder {
+  key: string
+  name: string
+}
+
+/** One item inside a folder: media (variation-atomic) or an entity (project/post, manual folders only). */
+export type FolderItem =
+  | { type: 'media'; kind: MediaKind | null; sourceTable: string; sourceRecordId: string; variant: number; url: string | null; summary: string | null; isFavorited: boolean; relevance?: number }
+  | { type: 'project' | 'post'; id: string; name: string; subtype: string | null }
+
+export interface CreateFolderInput {
+  name: string
+  type?: FolderType
+  query?: SmartFolderQuery
+  parentId?: string | null
+}
+
+export interface UpdateFolderInput {
+  name?: string
+  parentId?: string | null
+  query?: SmartFolderQuery | null
+}
+
+/** A pointer into a manual folder, by the universal variation-atomic identity. */
+export interface FolderItemRef {
+  sourceTable: string
+  sourceRecordId: string
+  variant?: number
+}
+
 /** Fields to start a presigned media upload (phase 1 of uploadMedia). */
 export interface CreateMediaUploadInput {
   fileName: string

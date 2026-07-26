@@ -23,6 +23,7 @@ import { registerUpscale } from './commands/upscale.js'
 import { registerTranscribe } from './commands/transcribe.js'
 import { registerGeneration } from './commands/generation.js'
 import { registerMedia } from './commands/media.js'
+import { registerFolder } from './commands/folder.js'
 import { registerPost } from './commands/post.js'
 import { registerPipeline } from './commands/pipeline.js'
 import { registerBrandKit } from './commands/brandkit.js'
@@ -74,6 +75,7 @@ export function buildProgram(): Command {
   registerTranscribe(program)
   registerGeneration(program)
   registerMedia(program)
+  registerFolder(program)
   registerPost(program)
   registerTag(program)
   registerPipeline(program)
