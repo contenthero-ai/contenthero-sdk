@@ -16,7 +16,8 @@
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
  * both CREATES and EDITS: CREATE ops (add_item, insert_track, insert_prebuilt_track, create_transition) add
  * new clips/tracks/transitions; EDIT ops (move_item, trim_item, update_item, ripple_delete, disable_ranges,
- * update_transition, delete_transition, ...) act on existing clips + transitions.
+ * update_transition, delete_transition, ...) act on existing clips + transitions. CAPTION ops (add_captions,
+ * update_captions, remove_captions) generate / restyle / remove transcript-driven captions.
  * Run `project timeline-types` (or `layer-types`) first: each clip type carries a copy-pasteable `example`
  * item skeleton and the catalog carries a `creation` section with the exact op shapes, so you know both what
  * to create and the item shape to pass. Then read `project get` for the current state + revision, and pass
