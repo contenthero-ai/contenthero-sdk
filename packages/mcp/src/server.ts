@@ -531,14 +531,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Edit Audio',
       annotations: WRITE,
       description:
-        'Transform an existing audio file into a new one with an audio-processing model. Voice isolation removes background noise and music, leaving clean speech. Provide the source audio URL; returns the processed audio URL directly. The result is saved to your library.',
+        'Transform an existing audio file into a new one with an audio-processing model. Voice isolation removes background noise and music; audio enhancement levels loudness and cleans up background noise. Isolation returns the processed audio URL directly; enhancement is asynchronous and returns an outputId to poll with get_generation_status. The result is saved to your library.',
       inputSchema: {
         modelId: z.enum(models.editAudio).describe(EDIT_AUDIO_MODEL_GUIDANCE),
         sourceUrl: z.string().describe('The audio file to process: a URL or a previous output id.'),
         durationSeconds: z
           .number()
           .optional()
-          .describe('Source audio length in seconds. Required for getCost; on a real run it refines the estimate.'),
+          .describe('Source audio length in seconds. Required for getCost, and for enhancement pricing when the source is not a stored ContentHero asset.'),
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of running (nothing runs, nothing is charged).'),
       },
     },
@@ -552,6 +552,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateEditAudioCost(request))
         const result = await client.editAudio(request)
+        // Enhancement is async (status 'processing'); isolation returns URLs inline.
+        if (result.status === 'processing') return pendingResult(result.outputId)
         return audioResult(result)
       } catch (err) {
         return errorResult(err)

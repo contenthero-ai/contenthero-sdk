@@ -54,7 +54,7 @@ export const AUDIO_MODELS_FALLBACK = [
 ] as const
 
 /** Fallback edit-audio models (audio input -> audio output; used only if discovery is unreachable). */
-export const EDIT_AUDIO_MODELS_FALLBACK = ['elevenlabs-voice-isolator'] as const
+export const EDIT_AUDIO_MODELS_FALLBACK = ['elevenlabs-voice-isolator', 'auphonic-enhance'] as const
 
 /** Fallback upscale models (used only if discovery is unreachable). */
 export const UPSCALE_MODELS_FALLBACK = ['topaz-image-upscale', 'topaz-video-upscale'] as const
@@ -200,7 +200,7 @@ export const AUDIO_MODEL_GUIDANCE =
   'elevenlabs-tts = text to speech (needs text + voiceId). elevenlabs-music = music from a prompt. elevenlabs-sound-effects = a sound effect from a prompt.'
 
 export const EDIT_AUDIO_MODEL_GUIDANCE =
-  'The audio-processing model. Each transforms audio input into audio output. elevenlabs-voice-isolator = remove background noise and music, leaving clean speech.'
+  'The audio-processing model. Each transforms audio input into audio output. elevenlabs-voice-isolator = remove background noise and music, leaving clean speech (synchronous). auphonic-enhance = level loudness and clean up background noise (asynchronous; poll get_generation_status).'
 
 export const UPSCALE_MODEL_GUIDANCE =
   'topaz-image-upscale = upscale an image (source must be an image URL). topaz-video-upscale = upscale a video (source must be a video URL; also pass durationSeconds).'
