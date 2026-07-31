@@ -53,6 +53,9 @@ export const AUDIO_MODELS_FALLBACK = [
   'elevenlabs-sound-effects',
 ] as const
 
+/** Fallback edit-audio models (audio input -> audio output; used only if discovery is unreachable). */
+export const EDIT_AUDIO_MODELS_FALLBACK = ['elevenlabs-voice-isolator'] as const
+
 /** Fallback upscale models (used only if discovery is unreachable). */
 export const UPSCALE_MODELS_FALLBACK = ['topaz-image-upscale', 'topaz-video-upscale'] as const
 
@@ -72,6 +75,8 @@ export interface ResolvedModelEnums {
   image: ModelEnum
   video: ModelEnum
   audio: ModelEnum
+  /** Audio input -> audio output models (voice isolation now; enhancement once enabled). */
+  editAudio: ModelEnum
   upscale: ModelEnum
   lipSync: ModelEnum
   /** Maps each upscale modelId to its source media kind (image vs video). */
@@ -93,6 +98,7 @@ export function fallbackModelEnums(): ResolvedModelEnums {
     image: [...IMAGE_MODELS_FALLBACK],
     video: [...VIDEO_MODELS_FALLBACK],
     audio: [...AUDIO_MODELS_FALLBACK],
+    editAudio: [...EDIT_AUDIO_MODELS_FALLBACK],
     upscale: [...UPSCALE_MODELS_FALLBACK],
     lipSync: [...LIP_SYNC_MODELS_FALLBACK],
     upscaleContentType: { ...UPSCALE_CONTENT_TYPE_FALLBACK },
@@ -121,6 +127,16 @@ export async function resolveModelEnums(getClient: () => ContentHero): Promise<R
           m.capabilities?.outputType === 'audio',
       )
       .map((m) => m.modelId)
+    // Edit-audio = a model whose ONLY input is a single audio file and whose
+    // output is audio (isolation, enhancement). The single-input test excludes
+    // voice-changer, which also needs a voiceId, without hardcoding model ids.
+    const editAudio = models
+      .filter((m) => {
+        if (m.contentType !== 'audio' || m.capabilities?.outputType !== 'audio') return false
+        const inputTypes = m.capabilities?.inputTypes
+        return Array.isArray(inputTypes) && inputTypes.length === 1 && inputTypes[0] === 'singleAudio'
+      })
+      .map((m) => m.modelId)
     const upscaleModels = models.filter((m) => m.kind === 'upscale')
     const upscale = upscaleModels.map((m) => m.modelId)
     const upscaleContentType: Record<string, 'image' | 'video'> = {}
@@ -132,6 +148,7 @@ export async function resolveModelEnums(getClient: () => ContentHero): Promise<R
       image: nonEmpty(image, IMAGE_MODELS_FALLBACK),
       video: nonEmpty(video, VIDEO_MODELS_FALLBACK),
       audio: nonEmpty(audio, AUDIO_MODELS_FALLBACK),
+      editAudio: nonEmpty(editAudio, EDIT_AUDIO_MODELS_FALLBACK),
       upscale: nonEmpty(upscale, UPSCALE_MODELS_FALLBACK),
       lipSync: nonEmpty(lipSync, LIP_SYNC_MODELS_FALLBACK),
       upscaleContentType:
@@ -142,6 +159,7 @@ export async function resolveModelEnums(getClient: () => ContentHero): Promise<R
       image: [...IMAGE_MODELS_FALLBACK],
       video: [...VIDEO_MODELS_FALLBACK],
       audio: [...AUDIO_MODELS_FALLBACK],
+      editAudio: [...EDIT_AUDIO_MODELS_FALLBACK],
       upscale: [...UPSCALE_MODELS_FALLBACK],
       lipSync: [...LIP_SYNC_MODELS_FALLBACK],
       upscaleContentType: { ...UPSCALE_CONTENT_TYPE_FALLBACK },
@@ -180,6 +198,9 @@ export const VIDEO_MODEL_GUIDANCE =
 
 export const AUDIO_MODEL_GUIDANCE =
   'elevenlabs-tts = text to speech (needs text + voiceId). elevenlabs-music = music from a prompt. elevenlabs-sound-effects = a sound effect from a prompt.'
+
+export const EDIT_AUDIO_MODEL_GUIDANCE =
+  'The audio-processing model. Each transforms audio input into audio output. elevenlabs-voice-isolator = remove background noise and music, leaving clean speech.'
 
 export const UPSCALE_MODEL_GUIDANCE =
   'topaz-image-upscale = upscale an image (source must be an image URL). topaz-video-upscale = upscale a video (source must be a video URL; also pass durationSeconds).'

@@ -11,6 +11,7 @@ export type {
   References,
   GenerateRequest,
   GenerateResult,
+  EditAudioRequest,
   CostEstimate,
   GenerateBoardRequest,
   BoardType,

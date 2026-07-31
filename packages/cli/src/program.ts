@@ -20,6 +20,7 @@ import { registerTag } from './commands/tag.js'
 import { registerElement } from './commands/element.js'
 import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
+import { registerAudio } from './commands/audio.js'
 import { registerTranscribe } from './commands/transcribe.js'
 import { registerGeneration } from './commands/generation.js'
 import { registerMedia } from './commands/media.js'
@@ -72,6 +73,7 @@ export function buildProgram(): Command {
   registerElement(program)
   registerGenerate(program)
   registerUpscale(program)
+  registerAudio(program)
   registerTranscribe(program)
   registerGeneration(program)
   registerMedia(program)

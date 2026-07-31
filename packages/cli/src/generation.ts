@@ -13,6 +13,7 @@ import {
   ContentHero,
   GenerationTimeoutError,
   type CostEstimate,
+  type EditAudioRequest,
   type GenerateBoardRequest,
   type GenerateRequest,
   type GenerateResult,
@@ -104,6 +105,25 @@ export async function runGeneration(
 ): Promise<void> {
   if (opts.cost) return emitCost(client, ctx, request, false)
   const submitted = await client.generate(request)
+  await renderSubmission(client, ctx, submitted, opts)
+}
+
+/**
+ * Same as runGeneration, for the edit_audio pipeline (existing audio -> audio).
+ * Isolation returns `completed` inline; --cost previews without running.
+ */
+export async function runEditAudio(
+  client: ContentHero,
+  ctx: Context,
+  request: EditAudioRequest,
+  opts: RunOptions,
+): Promise<void> {
+  if (opts.cost) {
+    const est = await client.estimateEditAudioCost(request)
+    emit(est, ctx, costHuman)
+    return
+  }
+  const submitted = await client.editAudio(request)
   await renderSubmission(client, ctx, submitted, opts)
 }
 

@@ -41,6 +41,7 @@ import {
   GenerationTimeoutError,
   type GenerateRequest,
   type GenerateBoardRequest,
+  type EditAudioRequest,
   type References,
   type EditorOp,
 } from '@contenthero/sdk'
@@ -53,6 +54,7 @@ import {
   IMAGE_MODEL_GUIDANCE,
   VIDEO_MODEL_GUIDANCE,
   AUDIO_MODEL_GUIDANCE,
+  EDIT_AUDIO_MODEL_GUIDANCE,
   UPSCALE_MODEL_GUIDANCE,
   LIP_SYNC_MODEL_GUIDANCE,
 } from './models.js'
@@ -515,6 +517,41 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const result = await client.generate(request)
+        return audioResult(result)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- edit_audio (existing audio -> audio) ---------------------------------
+  server.registerTool(
+    'edit_audio',
+    {
+      title: 'Edit Audio',
+      annotations: WRITE,
+      description:
+        'Transform an existing audio file into a new one with an audio-processing model. Voice isolation removes background noise and music, leaving clean speech. Provide the source audio URL; returns the processed audio URL directly. The result is saved to your library.',
+      inputSchema: {
+        modelId: z.enum(models.editAudio).describe(EDIT_AUDIO_MODEL_GUIDANCE),
+        sourceUrl: z.string().describe('The audio file to process: a URL or a previous output id.'),
+        durationSeconds: z
+          .number()
+          .optional()
+          .describe('Source audio length in seconds. Required for getCost; on a real run it refines the estimate.'),
+        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of running (nothing runs, nothing is charged).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const request = compact<EditAudioRequest>({
+          modelId: args.modelId,
+          sourceUrl: args.sourceUrl,
+          durationSeconds: args.durationSeconds,
+        })
+        if (args.getCost) return costResult(await client.estimateEditAudioCost(request))
+        const result = await client.editAudio(request)
         return audioResult(result)
       } catch (err) {
         return errorResult(err)

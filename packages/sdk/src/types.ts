@@ -213,6 +213,21 @@ export interface CostEstimate {
   contentType?: 'image' | 'video' | 'audio'
 }
 
+/**
+ * Request for `editAudio`: transform an existing audio file into a new one with
+ * an audio-processing model (audio input -> audio output), e.g. voice isolation.
+ * The sibling of `generate` for the existing-audio -> audio shape.
+ */
+export interface EditAudioRequest {
+  /** The audio-processing model to run. */
+  modelId: string
+  /** Public URL of the source audio to process. */
+  sourceUrl: string
+  /** Source audio length in seconds. Required for a cost estimate; on a real run
+   *  it refines the estimate (the authoritative charge is the processed duration). */
+  durationSeconds?: number
+}
+
 /** A generation record as returned by `getGeneration` and `generateAndWait`. */
 export interface Generation {
   outputId: string

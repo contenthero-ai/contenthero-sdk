@@ -47,6 +47,7 @@ import type {
   GenerateRequest,
   GenerateResult,
   Generation,
+  EditAudioRequest,
   ListMediaOptions,
   ListVoicesOptions,
   ListBrandKitsOptions,
@@ -260,6 +261,21 @@ export class ContentHero {
    */
   async transcribe(request: TranscribeRequest): Promise<Transcription> {
     return this.request<Transcription>('POST', '/api/v1/studio/transcribe', request)
+  }
+
+  /**
+   * Transform an existing audio file into a new one with an audio-processing
+   * model (audio input -> audio output), e.g. voice isolation. The sibling of
+   * `generate` for the existing-audio -> audio shape. Isolation is synchronous:
+   * the processed URL comes back inline on `outputUrls`.
+   */
+  async editAudio(request: EditAudioRequest): Promise<GenerateResult> {
+    return this.request<GenerateResult>('POST', '/api/v1/studio/audio/edit', request)
+  }
+
+  /** Cost preview for `editAudio` (nothing runs, nothing is charged). */
+  async estimateEditAudioCost(request: EditAudioRequest): Promise<CostEstimate> {
+    return this.request<CostEstimate>('POST', '/api/v1/studio/audio/edit', { ...request, getCost: true })
   }
 
   /** List the account's avatars (the list half of the list+get pair). */
