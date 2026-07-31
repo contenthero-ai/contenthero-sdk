@@ -268,7 +268,7 @@ export function registerProject(program: Command): void {
   project
     .command('apply')
     .description(
-      'Apply a batch of ops to a project composition. Ops both CREATE (add_item, insert_track, insert_prebuilt_track, create_transition) and EDIT (move_item, trim_item, update_item, ripple_delete, disable_ranges, update_transition, delete_transition, ...). Build items from the `example` skeletons in `project timeline-types` / `layer-types`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
+      'Apply a batch of ops to a project composition. Ops both CREATE (add_item, insert_track, insert_prebuilt_track, create_transition) and EDIT (move_item, trim_item, update_item, ripple_delete, disable_ranges, update_transition, delete_transition, ...). One-shot cleanups: remove_silence, remove_filler_words, extract_audio (see `project timeline-types` for shapes). Build items from the `example` skeletons in `project timeline-types` / `layer-types`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
     )
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')
