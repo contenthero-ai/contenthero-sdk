@@ -12,6 +12,7 @@ import { CommanderError } from 'commander'
 import pc from 'picocolors'
 import { buildProgram } from './program.js'
 import { EXIT, exitCodeForError, messageForError } from './errors.js'
+import { releaseCliPresence } from './context.js'
 
 async function main(): Promise<void> {
   const program = buildProgram()
@@ -22,24 +23,29 @@ async function main(): Promise<void> {
     process.exit(EXIT.OK)
   }
 
+  // Compute the exit code, then release editor presence BEFORE exiting (process.exit would skip a finally), so
+  // an open editor's "Editing via CLI" badge clears immediately rather than lingering on the sliding TTL.
+  let exitCode: number = EXIT.OK
   try {
     await program.parseAsync(process.argv)
   } catch (err) {
     // Help and version display, and parse errors, come through as CommanderError.
     // Commander already wrote the message; we only set the exit code.
     if (err instanceof CommanderError) {
-      process.exit(err.exitCode === 0 ? EXIT.OK : EXIT.USAGE)
-    }
-
-    const code = exitCodeForError(err)
-    const message = messageForError(err)
-    if (process.argv.includes('--human')) {
-      process.stderr.write(pc.red(`Error: ${message}`) + '\n')
+      exitCode = err.exitCode === 0 ? EXIT.OK : EXIT.USAGE
     } else {
-      process.stderr.write(JSON.stringify({ error: message, exitCode: code }, null, 2) + '\n')
+      exitCode = exitCodeForError(err)
+      const message = messageForError(err)
+      if (process.argv.includes('--human')) {
+        process.stderr.write(pc.red(`Error: ${message}`) + '\n')
+      } else {
+        process.stderr.write(JSON.stringify({ error: message, exitCode: exitCode }, null, 2) + '\n')
+      }
     }
-    process.exit(code)
   }
+
+  await releaseCliPresence().catch(() => {})
+  process.exit(exitCode)
 }
 
 void main()

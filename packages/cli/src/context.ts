@@ -79,6 +79,15 @@ export function resolveContext(command: Command): Context {
  * Build an authenticated SDK client for this command, or throw a CliError with
  * the auth exit code when no key is configured anywhere in the ladder.
  */
+/** Clients created during this CLI invocation, so `releaseCliPresence()` can clear their editor badges on exit. */
+const activeClients: ContentHero[] = []
+
+/** Await a presence RELEASE for every client this CLI invocation created (called once before the process exits,
+ *  so an open editor's "Editing via CLI" badge clears immediately rather than lingering on the TTL). */
+export async function releaseCliPresence(): Promise<void> {
+  await Promise.all(activeClients.map((c) => c.flushRelease().catch(() => {})))
+}
+
 export function makeClient(command: Command): { client: ContentHero; ctx: Context } {
   const ctx = resolveContext(command)
   if (!ctx.apiKey) {
@@ -101,5 +110,6 @@ export function makeClient(command: Command): { client: ContentHero; ctx: Contex
         },
       }),
   })
+  activeClients.push(client)
   return { client, ctx }
 }

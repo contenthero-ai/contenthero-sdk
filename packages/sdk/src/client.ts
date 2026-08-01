@@ -131,6 +131,10 @@ export class ContentHero {
   private readonly apiKey: string
   private readonly baseUrl: string
   private readonly fetchImpl: FetchLike
+  /** Per-project last activity-ping timestamp (ms), for the presence debounce. */
+  private readonly activityPingedAt = new Map<string, number>()
+  /** Min gap between presence pings for the same project, so a burst of tool calls does not spam. */
+  private static readonly ACTIVITY_DEBOUNCE_MS = 10_000
 
   constructor(options: ContentHeroOptions = {}) {
     const apiKey = options.apiKey ?? readEnv('CONTENTHERO_API_KEY')
@@ -154,11 +158,51 @@ export class ContentHero {
   }
 
   /**
+   * Fire a PRESENCE ping so an open editor/canvas shows "Editing via MCP/CLI" while this SDK consumer is active
+   * on the project. Debounced per project + fire-and-forget: never throws, never blocks the caller, no-op when
+   * no projectId is given. Called from every project-scoped operation, so both MCP and CLI get the badge.
+   */
+  touchProjectActivity(projectId?: string | null): void {
+    if (!projectId) return
+    const now = Date.now()
+    const last = this.activityPingedAt.get(projectId) ?? 0
+    if (now - last < ContentHero.ACTIVITY_DEBOUNCE_MS) return
+    this.activityPingedAt.set(projectId, now)
+    void this.request('POST', '/api/v1/editor/activity', { projectId }).catch(() => {})
+  }
+
+  /**
+   * Explicitly RELEASE presence so the badge clears promptly (no TTL lingering). Use in a `finally` when a
+   * short-lived consumer (the CLI) finishes a command. Fire-and-forget.
+   */
+  releaseProjectActivity(projectId?: string | null): void {
+    if (!projectId) return
+    this.activityPingedAt.delete(projectId)
+    void this.request('POST', '/api/v1/editor/activity', { projectId, release: true }).catch(() => {})
+  }
+
+  /**
+   * AWAIT a presence release for every project this client pinged. The CLI calls this before the process exits
+   * so the badge clears immediately (a short-lived process cannot rely on the sliding TTL). Best-effort:
+   * resolves even if the releases fail.
+   */
+  async flushRelease(): Promise<void> {
+    const ids = [...this.activityPingedAt.keys()]
+    this.activityPingedAt.clear()
+    await Promise.all(
+      ids.map((projectId) =>
+        this.request('POST', '/api/v1/editor/activity', { projectId, release: true }).catch(() => {}),
+      ),
+    )
+  }
+
+  /**
    * Submit a generation. Returns immediately. For image/video the result is
    * `status: 'processing'` (poll with `getGeneration` or use `generateAndWait`);
    * audio returns `status: 'completed'` with `outputUrls` populated.
    */
   async generate(request: GenerateRequest): Promise<GenerateResult> {
+    this.touchProjectActivity(request.projectId)
     return this.request<GenerateResult>('POST', '/api/v1/studio/generate', request)
   }
 
@@ -270,6 +314,7 @@ export class ContentHero {
    * the processed URL comes back inline on `outputUrls`.
    */
   async editAudio(request: EditAudioRequest): Promise<GenerateResult> {
+    this.touchProjectActivity(request.projectId)
     return this.request<GenerateResult>('POST', '/api/v1/studio/audio/edit', request)
   }
 
@@ -1005,6 +1050,7 @@ export class ContentHero {
    * Pass the returned `revision` back as `applyEditorOps`'s `expectedRevision`. Requires the `editor:read` scope.
    */
   async getProject(projectId: string, options: { includeRenderUrl?: boolean } = {}): Promise<ProjectDetail> {
+    this.touchProjectActivity(projectId)
     const qs = options.includeRenderUrl ? '?includeRenderUrl=true' : ''
     const { project } = await this.request<{ project: ProjectDetail }>(
       'GET',
@@ -1024,6 +1070,7 @@ export class ContentHero {
    * participant set. Optionally scope to one project. Requires the `context:read` scope.
    */
   async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
+    this.touchProjectActivity(input.projectId)
     const params = new URLSearchParams()
     if (input.projectId) params.set('projectId', input.projectId)
     if (input.capture) params.set('capture', 'true')
@@ -1048,6 +1095,7 @@ export class ContentHero {
    * handle; poll it with `getPreview`. Requires the `context:read` scope.
    */
   async createPreview(input: PreviewInput): Promise<PreviewJob> {
+    this.touchProjectActivity(input.projectId)
     return this.request<PreviewJob>('POST', '/api/v1/preview', input)
   }
 
@@ -1088,6 +1136,7 @@ export class ContentHero {
    * the `editor:write` scope.
    */
   async deleteProject(projectId: string): Promise<void> {
+    this.touchProjectActivity(projectId)
     await this.request<{ success: boolean }>(
       'DELETE',
       `/api/v1/projects/${encodeURIComponent(projectId)}?confirm=true`,
@@ -1109,6 +1158,7 @@ export class ContentHero {
    * assigned id is echoed back on each result's `opId`.
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
+    this.touchProjectActivity(input.projectId)
     const ops = input.ops.map((op) =>
       typeof op.op_id === 'string' && op.op_id ? op : { ...op, op_id: globalThis.crypto.randomUUID() },
     )
@@ -1144,6 +1194,7 @@ export class ContentHero {
     input: StartExportInput = {},
     options: WaitOptions = {},
   ): Promise<ExportJob> {
+    this.touchProjectActivity(projectId)
     const job = await this.startExport(projectId, input)
     if (job.status === 'completed' || job.status === 'failed') {
       if (job.status === 'failed') throw new GenerationFailedError(job.exportId, job.errorMessage ?? 'Export failed')
@@ -1204,6 +1255,7 @@ export class ContentHero {
       paddingEndMs?: number
     } = {},
   ): Promise<TranscriptResult> {
+    this.touchProjectActivity(projectId)
     const params = new URLSearchParams({ projectId })
     if (options.search) params.set('search', options.search)
     if (options.startMs !== undefined) params.set('startMs', String(options.startMs))
