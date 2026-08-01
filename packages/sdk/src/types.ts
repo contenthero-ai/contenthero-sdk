@@ -136,6 +136,15 @@ export interface GenerateRequest {
    * also know the id up front and can poll `getGeneration` immediately.
    */
   outputId?: string
+
+  /** Optional: place the generated asset onto this editor project's timeline in the same call. Omit for a
+   *  standalone library output. Sync models (audio) place immediately; async models (image/video) place when
+   *  the output finalizes. */
+  projectId?: string
+  /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
+  placement?: PlacementIntent
+  /** Optional interactive-fallback playhead frame (echo one from get_context for playhead-relative placement). */
+  playheadFrame?: number
 }
 
 /** The nine Reference Board types. */
@@ -218,6 +227,24 @@ export interface CostEstimate {
  * an audio-processing model (audio input -> audio output), e.g. voice isolation.
  * The sibling of `generate` for the existing-audio -> audio shape.
  */
+/**
+ * Where a generated/processed clip lands on an editor project's timeline. All positional fields are in
+ * SECONDS (resolved to frames server-side via the project fps). Omitted intent = the playhead when a
+ * `playheadFrame` is supplied, else append at the end of the timeline.
+ */
+export type PlacementIntent =
+  /** Land after the last clip on the best track of the clip's kind, or on a freshly spawned lane. */
+  | { mode: 'append' }
+  /** Land at an explicit time. `track` optionally pins a lane by id; omitted = gravity toward the primary. */
+  | { mode: 'at'; startSeconds?: number; track?: string }
+  /** Land at the current playhead (the interactive fallback). */
+  | { mode: 'atPlayhead' }
+  /** Swap in place for an existing clip; the new clip inherits its track + start. `duration` keeps the new
+   *  clip's own length and ripples ('natural', default) or trims it to the replaced slot ('match'). */
+  | { mode: 'replace'; itemId: string; duration?: 'natural' | 'match' }
+  /** Fill or cover a time span on a track. */
+  | { mode: 'range'; startSeconds?: number; endSeconds?: number; track?: string; fit?: 'cover' | 'trim' | 'overwrite' }
+
 export interface EditAudioRequest {
   /** The audio-processing model to run. */
   modelId: string
@@ -226,6 +253,13 @@ export interface EditAudioRequest {
   /** Source audio length in seconds. Required for a cost estimate; on a real run
    *  it refines the estimate (the authoritative charge is the processed duration). */
   durationSeconds?: number
+  /** Optional: place the processed audio onto this editor project's timeline in the same call. Omit for a
+   *  standalone library output (today's behavior). */
+  projectId?: string
+  /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
+  placement?: PlacementIntent
+  /** Optional interactive-fallback playhead frame (echo one from get_context for playhead-relative placement). */
+  playheadFrame?: number
 }
 
 /** A generation record as returned by `getGeneration` and `generateAndWait`. */

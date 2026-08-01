@@ -12,6 +12,7 @@ export type {
   GenerateRequest,
   GenerateResult,
   EditAudioRequest,
+  PlacementIntent,
   CostEstimate,
   GenerateBoardRequest,
   BoardType,

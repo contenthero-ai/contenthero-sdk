@@ -11,7 +11,7 @@ import type { Command } from 'commander'
 import type { EditAudioRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { compact, runEditAudio } from '../generation.js'
-import { toFloat, toInt } from '../args.js'
+import { toFloat, toInt, toJson } from '../args.js'
 
 const VOICE_ISOLATION_MODEL_ID = 'elevenlabs-voice-isolator'
 const AUDIO_ENHANCE_MODEL_ID = 'auphonic-enhance'
@@ -25,6 +25,9 @@ export function registerAudio(program: Command): void {
     .description('Isolate vocals from an audio file (remove background noise and music)')
     .argument('<source>', 'source audio (URL or output id) to isolate')
     .option('--duration <seconds>', 'source audio length in seconds (required for --cost)', toFloat)
+    .option('--project <id>', 'editor project to place the result on (omit for a standalone library output)')
+    .option('--placement <json>', 'placement intent as JSON, e.g. {"mode":"atPlayhead"} (omit to place at the playhead when known, else append)', toJson)
+    .option('--playhead <frame>', 'current playhead frame, for playhead-relative placement', toInt)
     .option('--cost', 'estimate the credit cost instead of running')
     .option('--no-wait', 'return the outputId immediately instead of waiting')
     .option('--timeout <seconds>', 'how long to wait before handing back the outputId', toInt, DEFAULT_TIMEOUT_SEC)
@@ -34,6 +37,9 @@ export function registerAudio(program: Command): void {
         modelId: VOICE_ISOLATION_MODEL_ID,
         sourceUrl: source,
         durationSeconds: opts.duration as number | undefined,
+        projectId: opts.project as string | undefined,
+        placement: opts.placement as EditAudioRequest['placement'],
+        playheadFrame: opts.playhead as number | undefined,
       })
       await runEditAudio(client, ctx, request, {
         cost: opts.cost === true,

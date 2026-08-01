@@ -49,13 +49,30 @@ function runOptions(opts: { cost?: boolean; wait?: boolean; timeout?: number }):
   }
 }
 
+/** Add the optional one-call timeline-placement flags to a generate command. */
+function addPlacementFlags(cmd: Command): Command {
+  return cmd
+    .option('--project <id>', 'editor project to place the result on (omit for a standalone library output)')
+    .option('--placement <json>', 'placement intent as JSON, e.g. {"mode":"atPlayhead"} (omit to place at the playhead when known, else append)', toJson)
+    .option('--playhead <frame>', 'current playhead frame, for playhead-relative placement', toInt)
+}
+
+/** Build the placement request fields from a command's parsed options. */
+function placementFields(opts: Record<string, unknown>): Pick<GenerateRequest, 'projectId' | 'placement' | 'playheadFrame'> {
+  return {
+    projectId: opts.project as string | undefined,
+    placement: opts.placement as GenerateRequest['placement'],
+    playheadFrame: opts.playhead as number | undefined,
+  }
+}
+
 export function registerGenerate(program: Command): void {
   const generate = program
     .command('generate')
     .description('Generate media: image, video, audio, board, or lip-sync')
 
   // -- generate image -------------------------------------------------------
-  addRunFlags(
+  addPlacementFlags(addRunFlags(
     generate
       .command('image')
       .description('Generate one or more images from a prompt (optionally image-to-image)')
@@ -67,7 +84,7 @@ export function registerGenerate(program: Command): void {
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
       .option('--seed <seed>', 'seed for reproducibility', toInt)
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect),
-  ).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
+  )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
     const request = compact<GenerateRequest>({
       contentType: 'image',
@@ -79,12 +96,13 @@ export function registerGenerate(program: Command): void {
       seed: opts.seed as number | undefined,
       references: references({ images: opts.ref as string[] | undefined }),
       parameters: opts.mode ? { mode: opts.mode } : undefined,
+      ...placementFields(opts),
     })
     await runGeneration(client, ctx, request, runOptions(opts))
   })
 
   // -- generate video -------------------------------------------------------
-  addRunFlags(
+  addPlacementFlags(addRunFlags(
     generate
       .command('video')
       .description('Generate a video from a prompt (optionally with frames / references)')
@@ -105,7 +123,7 @@ export function registerGenerate(program: Command): void {
       .option('--element <id>', 'saved reference element id (Kling 3.0, @name in prompt); repeatable', collect)
       .option('--multi-shot', 'enable multi-shot mode (e.g. WAN 2.6)')
       .option('--shots <json>', 'Kling 3.0 multi-shot: JSON array of { prompt, duration } objects', toJson),
-  ).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
+  )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
     const shots = opts.shots as Array<{ prompt: string; duration: number }> | undefined
     const klingMultiShot = Array.isArray(shots) && shots.length > 0
@@ -135,22 +153,25 @@ export function registerGenerate(program: Command): void {
         audio: opts.refAudio as string[] | undefined,
         elements: (opts.element as string[] | undefined)?.map((elementId) => ({ elementId })),
       }),
+      ...placementFields(opts),
     })
     await runGeneration(client, ctx, request, runOptions(opts))
   })
 
   // -- generate audio (synchronous) -----------------------------------------
-  generate
-    .command('audio')
-    .description('Generate audio with ElevenLabs: speech (TTS), music, or a sound effect')
-    .requiredOption('-m, --model <id>', 'audio model id (see `contenthero model list --type audio`)')
-    .option('--prompt <text>', 'for music / sfx: what to generate')
-    .option('--text <text>', 'for TTS: the words to speak')
-    .option('--voice <id>', 'for TTS: the ElevenLabs voice id')
-    .option('--voice-name <name>', 'for TTS: human-readable voice name (display only)')
-    .option('--duration <seconds>', 'for music / sfx: length in seconds', toFloat)
-    .option('--prompt-influence <0-1>', 'for sfx: how literally to follow the prompt', toFloat)
-    .option('--cost', 'estimate the credit cost instead of generating')
+  addPlacementFlags(
+    generate
+      .command('audio')
+      .description('Generate audio with ElevenLabs: speech (TTS), music, or a sound effect')
+      .requiredOption('-m, --model <id>', 'audio model id (see `contenthero model list --type audio`)')
+      .option('--prompt <text>', 'for music / sfx: what to generate')
+      .option('--text <text>', 'for TTS: the words to speak')
+      .option('--voice <id>', 'for TTS: the ElevenLabs voice id')
+      .option('--voice-name <name>', 'for TTS: human-readable voice name (display only)')
+      .option('--duration <seconds>', 'for music / sfx: length in seconds', toFloat)
+      .option('--prompt-influence <0-1>', 'for sfx: how literally to follow the prompt', toFloat)
+      .option('--cost', 'estimate the credit cost instead of generating'),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const request = compact<GenerateRequest>({
@@ -162,6 +183,7 @@ export function registerGenerate(program: Command): void {
         voiceName: opts.voiceName as string | undefined,
         durationSeconds: opts.duration as number | undefined,
         promptInfluence: opts.promptInfluence as number | undefined,
+        ...placementFields(opts),
       })
       // Audio is synchronous: no waiting, so wait is irrelevant.
       await runGeneration(client, ctx, request, {

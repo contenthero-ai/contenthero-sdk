@@ -159,6 +159,26 @@ const WRITE = { readOnlyHint: false } as const
 const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
 
 /**
+ * Placement intent for the generative tools' optional one-call timeline placement. Mirrors the SDK
+ * `PlacementIntent` union. All positional fields are in SECONDS (resolved to frames server-side via the
+ * project fps). Shared across the generative tools as they gain `projectId` placement.
+ */
+const PLACEMENT_SCHEMA = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('append') }).describe('Land after the last clip on the best track of the clip\'s kind, or a new lane.'),
+  z.object({ mode: z.literal('at'), startSeconds: z.number().optional(), track: z.string().optional() }).describe('Land at an explicit time; track optionally pins a lane by id.'),
+  z.object({ mode: z.literal('atPlayhead') }).describe('Land at the current playhead.'),
+  z.object({ mode: z.literal('replace'), itemId: z.string(), duration: z.enum(['natural', 'match']).optional() }).describe('Swap in place for an existing clip; the new clip inherits its track + start.'),
+  z.object({ mode: z.literal('range'), startSeconds: z.number().optional(), endSeconds: z.number().optional(), track: z.string().optional(), fit: z.enum(['cover', 'trim', 'overwrite']).optional() }).describe('Fill or cover a time span on a track.'),
+])
+
+/** The optional one-call placement input fields, shared across the generative tools that gain projectId. */
+const PLACEMENT_INPUT_FIELDS = {
+  projectId: z.string().optional().describe('The editor project to place the result on. Omit for a standalone library output.'),
+  placement: PLACEMENT_SCHEMA.optional().describe('Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends.'),
+  playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative placement.'),
+} as const
+
+/**
  * Fetch a get_context snapshot signed URL and base64-encode it, so get_context can return an IMAGE content
  * block the calling model actually sees. Best-effort: any failure returns null and the tool still returns the
  * textual context. The signed URL is self-authorizing (no secret needed here).
@@ -283,7 +303,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Image',
       annotations: WRITE,
       description:
-        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs.',
+        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
       inputSchema: {
         modelId: z.enum(models.image).describe(IMAGE_MODEL_GUIDANCE),
         prompt: z
@@ -302,6 +322,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('References for image-to-image / editing. Each may be a URL or a previous output id (e.g. "<id>" or "<id>-2") to chain from an earlier generation.'),
+        ...PLACEMENT_INPUT_FIELDS,
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
@@ -318,6 +339,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           seed: args.seed,
           references: buildReferences({ images: args.referenceImages }),
           parameters: args.mode ? { mode: args.mode } : undefined,
+          projectId: args.projectId,
+          placement: args.placement as GenerateRequest['placement'],
+          playheadFrame: args.playheadFrame,
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
@@ -389,7 +413,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Video',
       annotations: WRITE,
       description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode.',
+        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
       inputSchema: {
         modelId: z.enum(models.video).describe(VIDEO_MODEL_GUIDANCE),
         prompt: z
@@ -436,6 +460,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.object({ prompt: z.string(), duration: z.number() }))
           .optional()
           .describe('Kling 3.0 multi-shot mode: an ordered list of shots, each with its own prompt and duration in seconds (1-12 each, total <=15). When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only. Audio is always on in multi-shot.'),
+        ...PLACEMENT_INPUT_FIELDS,
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
@@ -467,6 +492,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             audio: args.referenceAudio,
             elements: args.elements,
           }),
+          projectId: args.projectId,
+          placement: args.placement as GenerateRequest['placement'],
+          playheadFrame: args.playheadFrame,
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
@@ -485,7 +513,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Audio',
       annotations: WRITE,
       description:
-        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling).',
+        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
       inputSchema: {
         modelId: z.enum(models.audio).describe(AUDIO_MODEL_GUIDANCE),
         prompt: z.string().optional().describe('For music / sfx: what to generate.'),
@@ -499,6 +527,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .max(1)
           .optional()
           .describe('For sfx: how literally to follow the prompt (0 to 1).'),
+        ...PLACEMENT_INPUT_FIELDS,
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
@@ -514,6 +543,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           voiceName: args.voiceName,
           durationSeconds: args.durationSeconds,
           promptInfluence: args.promptInfluence,
+          projectId: args.projectId,
+          placement: args.placement as GenerateRequest['placement'],
+          playheadFrame: args.playheadFrame,
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const result = await client.generate(request)
@@ -531,7 +563,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Edit Audio',
       annotations: WRITE,
       description:
-        'Transform an existing audio file into a new one with an audio-processing model. Voice isolation removes background noise and music; audio enhancement levels loudness and cleans up background noise. Isolation returns the processed audio URL directly; enhancement is asynchronous and returns an outputId to poll with get_generation_status. The result is saved to your library.',
+        'Transform an existing audio file into a new one with an audio-processing model. Voice isolation removes background noise and music; audio enhancement levels loudness and cleans up background noise. Isolation returns the processed audio URL directly; enhancement is asynchronous and returns an outputId to poll with get_generation_status. The result is saved to your library. Optionally pass projectId to place the processed audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
       inputSchema: {
         modelId: z.enum(models.editAudio).describe(EDIT_AUDIO_MODEL_GUIDANCE),
         sourceUrl: z.string().describe('The audio file to process: a URL or a previous output id.'),
@@ -539,6 +571,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .optional()
           .describe('Source audio length in seconds. Required for getCost, and for enhancement pricing when the source is not a stored ContentHero asset.'),
+        projectId: z.string().optional().describe('The editor project to place the result on. Omit for a standalone library output.'),
+        placement: PLACEMENT_SCHEMA.optional().describe('Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends.'),
+        playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative placement.'),
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of running (nothing runs, nothing is charged).'),
       },
     },
@@ -549,6 +584,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           modelId: args.modelId,
           sourceUrl: args.sourceUrl,
           durationSeconds: args.durationSeconds,
+          projectId: args.projectId,
+          placement: args.placement as EditAudioRequest['placement'],
+          playheadFrame: args.playheadFrame,
         })
         if (args.getCost) return costResult(await client.estimateEditAudioCost(request))
         const result = await client.editAudio(request)
