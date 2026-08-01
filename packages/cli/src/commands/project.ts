@@ -15,8 +15,8 @@
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
  * both CREATES and EDITS: CREATE ops (create_clip, insert_track, insert_prebuilt_track, add_transition) add
- * new clips/tracks/transitions; EDIT ops (move_clip, trim_clip, update_clip, delete_clip, disable_ranges,
- * update_transition, remove_transition, ...) act on existing clips + transitions. CAPTION ops (add_captions,
+ * new clips/tracks/transitions; EDIT ops (move_clip, trim_clip, update_clip, delete_clip, remove_background,
+ * disable_ranges, update_transition, remove_transition, ...) act on existing clips + transitions. CAPTION ops (add_captions,
  * update_captions, remove_captions) generate / restyle / remove transcript-driven captions.
  * Run `project timeline-types` (or `layer-types`) first: each clip type carries a copy-pasteable `example`
  * clip skeleton and the catalog carries a `creation` section with the exact op shapes, so you know both what
@@ -277,7 +277,7 @@ export function registerProject(program: Command): void {
   project
     .command('apply')
     .description(
-      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, disable_ranges, update_transition, remove_transition, ...). One-shot cleanups: remove_silence, remove_filler_words, extract_audio (see `project timeline-types` for shapes). Build items from the `example` skeletons in `project timeline-types` / `layer-types`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
+      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...). One-shot cleanups: remove_silence, remove_filler_words, extract_audio (see `project timeline-types` for shapes). Build items from the `example` skeletons in `project timeline-types` / `layer-types`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
     )
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')
