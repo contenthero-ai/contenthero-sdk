@@ -74,11 +74,20 @@ export function registerProject(program: Command): void {
 
   project
     .command('get')
-    .description("Read a project's full detail + revision (requires editor:read)")
+    .description("Read a project's composition + revision (summary by default; requires editor:read)")
     .argument('<projectId>', 'the project id')
-    .action(async (projectId: string, _opts: Record<string, unknown>, command: Command) => {
+    .option('--detail <detail>', "'summary' (default) or 'full' (the complete composition)")
+    .option('--from <frame>', 'timeline only: start frame of a window (clips overlapping [from, to])')
+    .option('--to <frame>', 'timeline only: end frame of the window')
+    .option('--track <trackId>', 'timeline only: scope to one track by id')
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const p = await client.getProject(projectId)
+      const p = await client.getProject(projectId, {
+        detail: opts.detail === 'full' ? 'full' : undefined,
+        fromFrame: opts.from != null ? Number(opts.from) : undefined,
+        toFrame: opts.to != null ? Number(opts.to) : undefined,
+        trackId: typeof opts.track === 'string' ? opts.track : undefined,
+      })
       emit(p, ctx, () => `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}`)
     })
 

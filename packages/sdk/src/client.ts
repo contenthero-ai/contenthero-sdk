@@ -1049,12 +1049,24 @@ export class ContentHero {
   }
 
   /**
-   * Read a single project's full detail (metadata + composition `state` + `revision`), to read-before-write.
-   * Pass the returned `revision` back as `applyEditorOps`'s `expectedRevision`. Requires the `editor:read` scope.
+   * Read a single project (metadata + composition `state` + `revision`), to read-before-write. Pass the returned
+   * `revision` back as `applyEditorOps`'s `expectedRevision`. By DEFAULT `state` is a lightweight SUMMARY (per-clip
+   * / per-layer structure, heavy payloads dropped); pass `detail:'full'` for the complete composition. For a
+   * timeline, `fromFrame`/`toFrame` (+ `trackId`) scope the read to the clips overlapping that frame window.
+   * Requires the `editor:read` scope.
    */
-  async getProject(projectId: string, options: { includeRenderUrl?: boolean } = {}): Promise<ProjectDetail> {
+  async getProject(
+    projectId: string,
+    options: { includeRenderUrl?: boolean; detail?: 'summary' | 'full'; fromFrame?: number; toFrame?: number; trackId?: string } = {},
+  ): Promise<ProjectDetail> {
     this.touchProjectActivity(projectId)
-    const qs = options.includeRenderUrl ? '?includeRenderUrl=true' : ''
+    const params = new URLSearchParams()
+    if (options.includeRenderUrl) params.set('includeRenderUrl', 'true')
+    if (options.detail === 'full') params.set('detail', 'full')
+    if (typeof options.fromFrame === 'number') params.set('fromFrame', String(options.fromFrame))
+    if (typeof options.toFrame === 'number') params.set('toFrame', String(options.toFrame))
+    if (options.trackId) params.set('trackId', options.trackId)
+    const qs = params.toString() ? `?${params.toString()}` : ''
     const { project } = await this.request<{ project: ProjectDetail }>(
       'GET',
       `/api/v1/projects/${encodeURIComponent(projectId)}${qs}`,

@@ -2640,16 +2640,26 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Project',
       annotations: READ,
       description:
-        "Read a single project's full detail: its metadata plus the current composition (canvas slides or editor timeline) and revision. Read this before editing when you need to see the full current composition; you can then pass its revision back as expectedRevision for a concurrency-safe edit. Note editing does NOT require this call: update_timeline/update_canvas' expectedRevision is optional (omit to apply to the current revision), and for content-aware editor edits get_transcript already returns the revision. Requires the editor:read scope.",
+        "Read a project's composition + revision. By DEFAULT returns a SUMMARY: metadata + revision + a lightweight per-clip view, dropping heavy payloads (media URLs, transcripts, graphic code, caption words) so a structural read stays small. For a TIMELINE the summary is each clip's { id, type, from, durationInFrames, speed, trackId, disabled }; for a CANVAS it is each slide with its layers' { id, type }. Pass detail:'full' for the complete composition (every prop, for a faithful round-trip or a deep edit). Scope a timeline read to a window with fromFrame/toFrame (and optionally trackId) to get just the clips overlapping that range, the same convention as get_transcript's startMs/endMs. Pass the returned revision back as expectedRevision for a concurrency-safe edit. Editing does NOT require this call: update_timeline/update_canvas' expectedRevision is optional, and get_transcript already returns the revision. Requires the editor:read scope.",
       inputSchema: {
         projectId: z.string().describe('The project id to read.'),
+        detail: z.enum(['summary', 'full']).optional().describe("'summary' (default) returns the lightweight per-clip/per-layer structure; 'full' returns the complete composition with every property."),
+        fromFrame: z.number().int().min(0).optional().describe('Timeline only: start of a frame window; returns clips overlapping [fromFrame, toFrame].'),
+        toFrame: z.number().int().min(0).optional().describe('Timeline only: end of the frame window (see fromFrame).'),
+        trackId: z.string().optional().describe('Timeline only: scope the read to a single track by id.'),
         includeRenderUrl: z.boolean().optional().describe('Also return a preview still URL of the current composition (renders one only if it changed).'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return projectDetailResult(await client.getProject(args.projectId, { includeRenderUrl: args.includeRenderUrl }))
+        return projectDetailResult(await client.getProject(args.projectId, {
+          includeRenderUrl: args.includeRenderUrl,
+          detail: args.detail,
+          fromFrame: args.fromFrame,
+          toFrame: args.toFrame,
+          trackId: args.trackId,
+        }))
       } catch (err) {
         return errorResult(err)
       }
