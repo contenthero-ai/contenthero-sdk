@@ -2003,7 +2003,7 @@ test('update_timeline applies ops and reports the new revision', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
     name: 'update_timeline',
-    arguments: { projectId: 'p1', ops: [{ op: 'ripple_delete', itemIds: ['a'] }], userIntent: 'cut' },
+    arguments: { projectId: 'p1', ops: [{ op: 'delete_clip', clipIds: ['a'] }], userIntent: 'cut' },
   })
   assert.ok(!res.isError)
   assert.match((res.content[0]).text, /Applied 1\/1 timeline op\(s\)\. New revision: 5\./)

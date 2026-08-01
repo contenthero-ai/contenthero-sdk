@@ -254,12 +254,12 @@ test('list filters append favorited and archived query params', async () => {
 
 test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'ripple_delete', ok: true }] } },
+    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'delete_clip', ok: true }] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const out = await client.applyEditorOps({
     projectId: 'p1',
-    ops: [{ op: 'ripple_delete', itemIds: ['a'] }],
+    ops: [{ op: 'delete_clip', clipIds: ['a'] }],
     userIntent: 'remove intro',
     expectedRevision: 3,
   })
@@ -270,8 +270,8 @@ test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', as
   assert.equal(sent.userIntent, 'remove intro')
   assert.equal(sent.expectedRevision, 3)
   assert.equal(sent.ops.length, 1)
-  assert.equal(sent.ops[0].op, 'ripple_delete')
-  assert.deepEqual(sent.ops[0].itemIds, ['a'])
+  assert.equal(sent.ops[0].op, 'delete_clip')
+  assert.deepEqual(sent.ops[0].clipIds, ['a'])
   // A client op_id (uuid) is generated for the op when the caller does not supply one.
   assert.match(sent.ops[0].op_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
   assert.equal(out.surface, 'timeline')
@@ -281,10 +281,10 @@ test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', as
 
 test('applyEditorOps preserves a caller-supplied op_id (idempotency key)', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'ripple_delete', opId: 'mine-1', ok: true }] } },
+    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'delete_clip', opId: 'mine-1', ok: true }] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.applyEditorOps({ projectId: 'p1', ops: [{ op: 'ripple_delete', op_id: 'mine-1', itemIds: ['a'] }] })
+  await client.applyEditorOps({ projectId: 'p1', ops: [{ op: 'delete_clip', op_id: 'mine-1', clipIds: ['a'] }] })
   const sent = JSON.parse(calls[0]?.init?.body as string)
   assert.equal(sent.ops[0].op_id, 'mine-1')
 })
