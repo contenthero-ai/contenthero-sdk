@@ -233,16 +233,17 @@ export interface CostEstimate {
  * `playheadFrame` is supplied, else append at the end of the timeline.
  */
 export type PlacementIntent =
-  /** Land after the last clip on the best track of the clip's kind, or on a freshly spawned lane. */
+  /** Land after the last clip on the best track of the clip's kind, or on a freshly spawned track. */
   | { mode: 'append' }
-  /** Land at an explicit time. `track` optionally pins a lane by id; omitted = gravity toward the primary. */
+  /** Land at an explicit time. `track` selects the track: a track id, 'overlay' (a non-primary track, reused
+   *  or spawned), or 'primary' (the main track, media only); omitted uses the default track. */
   | { mode: 'at'; startSeconds?: number; track?: string }
   /** Land at the current playhead (the interactive fallback). */
   | { mode: 'atPlayhead' }
   /** Swap in place for an existing clip; the new clip inherits its track + start. `duration` keeps the new
    *  clip's own length and ripples ('natural', default) or trims it to the replaced slot ('match'). */
   | { mode: 'replace'; itemId: string; duration?: 'natural' | 'match' }
-  /** Fill or cover a time span on a track. */
+  /** Fill or cover a time span. `track` selects the track (id / 'overlay' / 'primary'); omitted uses the default. */
   | { mode: 'range'; startSeconds?: number; endSeconds?: number; track?: string; fit?: 'cover' | 'trim' | 'overwrite' }
 
 export interface EditAudioRequest {

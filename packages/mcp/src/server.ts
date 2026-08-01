@@ -163,12 +163,14 @@ const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
  * `PlacementIntent` union. All positional fields are in SECONDS (resolved to frames server-side via the
  * project fps). Shared across the generative tools as they gain `projectId` placement.
  */
+const TRACK_SELECTOR_DESC =
+  "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track."
 const PLACEMENT_SCHEMA = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('append') }).describe('Land after the last clip on the best track of the clip\'s kind, or a new lane.'),
-  z.object({ mode: z.literal('at'), startSeconds: z.number().optional(), track: z.string().optional() }).describe('Land at an explicit time; track optionally pins a lane by id.'),
+  z.object({ mode: z.literal('append') }).describe('Land after the last clip on the best track of the clip\'s kind, or a new track.'),
+  z.object({ mode: z.literal('at'), startSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC) }).describe('Land at an explicit time; optionally choose the track.'),
   z.object({ mode: z.literal('atPlayhead') }).describe('Land at the current playhead.'),
   z.object({ mode: z.literal('replace'), itemId: z.string(), duration: z.enum(['natural', 'match']).optional() }).describe('Swap in place for an existing clip; the new clip inherits its track + start.'),
-  z.object({ mode: z.literal('range'), startSeconds: z.number().optional(), endSeconds: z.number().optional(), track: z.string().optional(), fit: z.enum(['cover', 'trim', 'overwrite']).optional() }).describe('Fill or cover a time span on a track.'),
+  z.object({ mode: z.literal('range'), startSeconds: z.number().optional(), endSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC), fit: z.enum(['cover', 'trim', 'overwrite']).optional() }).describe('Fill or cover a time span; optionally choose the track.'),
 ])
 
 /** The optional one-call placement input fields, shared across the generative tools that gain projectId. */
