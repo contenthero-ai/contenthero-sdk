@@ -222,7 +222,10 @@ export class ContentHero {
    */
   async generateAndWait(request: GenerateRequest, options: WaitOptions = {}): Promise<Generation> {
     const submitted = await this.generate(request)
-    return this.waitForGeneration(submitted.outputId, options)
+    const gen = await this.waitForGeneration(submitted.outputId, options)
+    // Carry the placement outcome (known at submit time) through to the completed record so the caller learns
+    // where the asset landed + its id for chaining, without a separate lookup.
+    return submitted.placement ? { ...gen, placement: submitted.placement } : gen
   }
 
   /**

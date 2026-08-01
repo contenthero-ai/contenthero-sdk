@@ -207,6 +207,26 @@ export interface GenerateResult {
   outputUrls?: string[]
   /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
   idempotentReplay?: boolean
+  /** Where the asset is being placed (present only when `projectId` was supplied). Lets a caller chain further
+   *  ops onto the placed clip/layer without a get_context hop, and see any placement warnings. */
+  placement?: PlacementResult
+}
+
+/** The outcome of a one-call placement (present on a generate result when `projectId` was supplied). The ids are
+ *  known at submit time (deterministic), so they are usable for chaining before the async asset finishes. */
+export interface PlacementResult {
+  /** True while the async placement completes at finalize (image/video); absent for a synchronous audio place. */
+  pending?: boolean
+  projectId: string
+  /** The placed clip / layer id (deterministic). Chain further ops (animate, reposition, reorder) onto it. */
+  itemId?: string
+  /** 'canvas' when placed as a layer on a slide, 'timeline' when placed as a clip on a track. */
+  surface?: 'canvas' | 'timeline'
+  /** Canvas only: the placed layer id (same as itemId) and the resolved target slide. */
+  layerId?: string
+  slideId?: string
+  /** Non-fatal placement notes (e.g. an ambiguous slide fallback). */
+  warnings?: string[]
 }
 
 /**
@@ -261,6 +281,9 @@ export interface CanvasPlacementIntent {
   y?: number
   width?: number
   height?: number
+  /** Make the generated asset the slide's background rather than a free layer (placed full-bleed, promoted into
+   *  the background slot once it lands). Ignores anchor / x / y / width / height. */
+  asBackground?: boolean
 }
 
 export interface EditAudioRequest {
@@ -292,6 +315,9 @@ export interface Generation {
   error: string | null
   createdAt: string
   completedAt: string | null
+  /** Where the asset was placed (present only when `projectId` was supplied to generate). Carried from the submit
+   *  response through `generateAndWait` so a caller gets the placement outcome alongside the finished asset. */
+  placement?: PlacementResult
 }
 
 /** Subscription tiers the API normalizes balances against. */

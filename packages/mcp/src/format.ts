@@ -67,12 +67,26 @@ export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
 }
 
-/** A finished image/video generation: list the asset URLs. */
+/** A finished image/video generation: list the asset URLs, plus the placement outcome when placed on a project. */
 export function completedResult(gen: Generation): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
   const header = `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}):`
-  return text([header, ...urls.map((u, i) => `${i + 1}. ${u}`)].join('\n'))
+  const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
+  const p = gen.placement
+  if (p) {
+    if (p.surface === 'canvas') {
+      lines.push(
+        `Placed as a canvas layer (id ${p.layerId ?? p.itemId ?? 'resolved'}) on slide ${p.slideId ?? 'resolved'}. Use that layer id to chain further ops (animate, reposition, reorder, set as background).`,
+      )
+    } else {
+      lines.push(
+        `Placed on the timeline (clip id ${p.itemId ?? 'resolved'}). Use that clip id to chain further ops.`,
+      )
+    }
+    if (p.warnings?.length) lines.push(`Placement notes: ${p.warnings.join('; ')}`)
+  }
+  return text(lines.join('\n'))
 }
 
 /** Suggested seconds to wait before re-polling a job, by content type. */

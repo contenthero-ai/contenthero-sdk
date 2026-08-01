@@ -187,7 +187,8 @@ const CANVAS_PLACEMENT_SCHEMA = z.object({
   y: z.number().optional().describe('Fine position offset in design pixels from the anchor.'),
   width: z.number().optional().describe('Explicit layer width in design pixels; the precise escape hatch that overrides fit.'),
   height: z.number().optional().describe('Explicit layer height in design pixels; overrides fit.'),
-}).describe('Canvas placement: place the asset as a layer on a slide.')
+  asBackground: z.boolean().optional().describe("Make the generated asset the slide's BACKGROUND rather than a free layer: placed full-bleed and promoted into the background slot once it lands. Ignores anchor / x / y / width / height (a background fills the slide)."),
+}).describe('Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).')
 
 const PLACEMENT_SCHEMA = z.union([TIMELINE_PLACEMENT_SCHEMA, CANVAS_PLACEMENT_SCHEMA])
 
