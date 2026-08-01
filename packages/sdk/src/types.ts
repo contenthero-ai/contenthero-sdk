@@ -232,19 +232,36 @@ export interface CostEstimate {
  * SECONDS (resolved to frames server-side via the project fps). Omitted intent = the playhead when a
  * `playheadFrame` is supplied, else append at the end of the timeline.
  */
-export type PlacementIntent =
+export type PlacementIntent = TimelinePlacementIntent | CanvasPlacementIntent
+
+/** Placement onto a VIDEO timeline: a clip on a track at a time. */
+export type TimelinePlacementIntent =
   /** Land after the last clip on the best track of the clip's kind, or on a freshly spawned track. */
   | { mode: 'append' }
   /** Land at an explicit time. `track` selects the track: a track id, 'overlay' (a non-primary track, reused
-   *  or spawned), or 'primary' (the main track, media only); omitted uses the default track. */
-  | { mode: 'at'; startSeconds?: number; track?: string }
-  /** Land at the current playhead (the interactive fallback). */
-  | { mode: 'atPlayhead' }
+   *  or spawned), or 'primary' (the main track, media only); omitted uses the default track. `durationSeconds`
+   *  sets an IMAGE point clip's length (ignored for video/audio). */
+  | { mode: 'at'; startSeconds?: number; track?: string; durationSeconds?: number }
+  /** Land at the current playhead (the interactive fallback). `durationSeconds` sets an IMAGE point clip's length. */
+  | { mode: 'atPlayhead'; durationSeconds?: number }
   /** Swap in place for an existing clip; the new clip inherits its track + start. `duration` keeps the new
    *  clip's own length and ripples ('natural', default) or trims it to the replaced slot ('match'). */
   | { mode: 'replace'; itemId: string; duration?: 'natural' | 'match' }
   /** Fill or cover a time span. `track` selects the track (id / 'overlay' / 'primary'); omitted uses the default. */
   | { mode: 'range'; startSeconds?: number; endSeconds?: number; track?: string; fit?: 'cover' | 'trim' | 'overwrite' }
+
+/** Placement onto a CANVAS design: a layer on a slide at a position + size (6A A8). Flat (no `mode`); all fields
+ *  optional. Positions/sizes are design pixels. Omitting `slideId`/`slideIndex` targets the focused slide. */
+export interface CanvasPlacementIntent {
+  slideId?: string
+  slideIndex?: number
+  fit?: 'contain' | 'cover' | 'none'
+  anchor?: 'center' | 'top-left' | 'top' | 'top-right' | 'left' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right'
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+}
 
 export interface EditAudioRequest {
   /** The audio-processing model to run. */

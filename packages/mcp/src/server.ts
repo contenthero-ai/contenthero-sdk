@@ -165,19 +165,37 @@ const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
  */
 const TRACK_SELECTOR_DESC =
   "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track."
-const PLACEMENT_SCHEMA = z.discriminatedUnion('mode', [
+const TIMELINE_PLACEMENT_SCHEMA = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('append') }).describe('Land after the last clip on the best track of the clip\'s kind, or a new track.'),
-  z.object({ mode: z.literal('at'), startSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC) }).describe('Land at an explicit time; optionally choose the track.'),
-  z.object({ mode: z.literal('atPlayhead') }).describe('Land at the current playhead.'),
+  z.object({ mode: z.literal('at'), startSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC), durationSeconds: z.number().optional().describe('For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio, whose length is the asset\'s own.') }).describe('Land at an explicit time; optionally choose the track.'),
+  z.object({ mode: z.literal('atPlayhead'), durationSeconds: z.number().optional().describe('For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio.') }).describe('Land at the current playhead.'),
   z.object({ mode: z.literal('replace'), itemId: z.string(), duration: z.enum(['natural', 'match']).optional() }).describe('Swap in place for an existing clip; the new clip inherits its track + start.'),
   z.object({ mode: z.literal('range'), startSeconds: z.number().optional(), endSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC), fit: z.enum(['cover', 'trim', 'overwrite']).optional() }).describe('Fill or cover a time span; optionally choose the track.'),
 ])
 
+/**
+ * CANVAS placement (6A A8): places the generated asset as a LAYER on a slide. Flat (no mode); the server reads it
+ * only for a canvas-design project. All fields optional. Positions/sizes are design pixels; the response returns
+ * the created layerId + resolvedSlideId so you can chain further ops (animate / reposition / reorder).
+ */
+const CANVAS_PLACEMENT_SCHEMA = z.object({
+  slideId: z.string().optional().describe('The target slide. Omitted, the asset is placed on the slide the user is currently focused on (the one centered in their viewport, the same focused slide get_context reports), falling back to the first slide when no view is active.'),
+  slideIndex: z.number().int().min(1).optional().describe('1-based slide number, an alternative to slideId.'),
+  fit: z.enum(['contain', 'cover', 'none']).optional().describe("How the asset is sized to the slide: 'contain' (default) scales to fit inside it, 'cover' fills it edge to edge, 'none' uses a default box. Overridden by explicit width/height."),
+  anchor: z.enum(['center', 'top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']).optional().describe('A nine-point anchor positioning the layer relative to the slide (default center).'),
+  x: z.number().optional().describe('Fine position offset in design pixels from the anchor (from slide center when no anchor is given).'),
+  y: z.number().optional().describe('Fine position offset in design pixels from the anchor.'),
+  width: z.number().optional().describe('Explicit layer width in design pixels; the precise escape hatch that overrides fit.'),
+  height: z.number().optional().describe('Explicit layer height in design pixels; overrides fit.'),
+}).describe('Canvas placement: place the asset as a layer on a slide.')
+
+const PLACEMENT_SCHEMA = z.union([TIMELINE_PLACEMENT_SCHEMA, CANVAS_PLACEMENT_SCHEMA])
+
 /** The optional one-call placement input fields, shared across the generative tools that gain projectId. */
 const PLACEMENT_INPUT_FIELDS = {
-  projectId: z.string().optional().describe('The editor project to place the result on. Omit for a standalone library output.'),
-  placement: PLACEMENT_SCHEMA.optional().describe('Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends.'),
-  playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative placement.'),
+  projectId: z.string().optional().describe('The project to place the result on. Omit for a standalone library output. The server interprets placement against the project\'s surface (video timeline or canvas design).'),
+  placement: PLACEMENT_SCHEMA.optional().describe('Where the asset lands, interpreted against the project\'s surface. VIDEO TIMELINE: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range (omitted places it at the playhead when known, else appends). CANVAS DESIGN: a layer on a slide (slideId / slideIndex, default the focused slide; fit contain|cover|none; a nine-point anchor; and design-pixel x/y/width/height).'),
+  playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative timeline placement.'),
 } as const
 
 /**
@@ -305,7 +323,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Image',
       annotations: WRITE,
       description:
-        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
+        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output.',
       inputSchema: {
         modelId: z.enum(models.image).describe(IMAGE_MODEL_GUIDANCE),
         prompt: z
@@ -415,7 +433,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Video',
       annotations: WRITE,
       description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
+        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output.',
       inputSchema: {
         modelId: z.enum(models.video).describe(VIDEO_MODEL_GUIDANCE),
         prompt: z
