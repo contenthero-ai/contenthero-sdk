@@ -1389,6 +1389,9 @@ export interface EditorOpResult {
   error?: string
   warnings?: string[]
   createdIds?: string[]
+  /** For an async effect op (remove_background): the studio_outputs id of the dispatched job, so the caller can
+   *  wait_for_generation on it. Present only on a successfully-dispatched async op. */
+  generatingOutputId?: string
 }
 
 /** Result of `applyEditorOps`: the new revision + per-op results. */

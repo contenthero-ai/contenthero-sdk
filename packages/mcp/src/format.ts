@@ -967,6 +967,11 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
     `Applied ${okCount}/${r.results.length} ${r.surface} op(s). New revision: ${r.revision}.`,
   ]
   if (created.length) lines.push(`Created: ${created.join(', ')}.`)
+  // Async effect ops (remove_background) dispatch a job and return its outputId; surface it so the agent can poll.
+  const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)
+  if (generating.length) {
+    lines.push(`Dispatched ${generating.length} async job(s); wait_for_generation on: ${generating.join(', ')}.`)
+  }
   if (r.renderUrl) lines.push(`Preview: ${r.renderUrl}`)
   if (failures.length) {
     lines.push('Failed ops:')
