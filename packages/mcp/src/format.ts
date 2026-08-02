@@ -1101,8 +1101,11 @@ export function projectDeletedResult(projectId: string): CallToolResult {
 /** The canvas layer-type catalog (types + editable props) as readable text + the JSON. */
 export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
   const lines = cat.layerTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')}; supports: ${t.supports.join(', ')})`)
+  const ops = cat.ops ? cat.ops.ops.map((o) => `- ${o.shape}  ${o.description}`) : []
   return text(
-    `Canvas layer types (edit via update_canvas ops):\n${lines.join('\n')}\n\nShared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
+    `Canvas layer types (edit via update_canvas ops):\n${lines.join('\n')}\n\n` +
+      (ops.length ? `update_canvas ops (${cat.ops!.description}):\n${ops.join('\n')}\n\n` : '') +
+      `Shared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
       JSON.stringify(cat, null, 2),
   )
 }
@@ -1162,8 +1165,11 @@ export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
 export function timelineTypesResult(cat: TimelineTypeCatalog): CallToolResult {
   const clips = cat.clipTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')})`)
   const tracks = cat.trackTypes.map((t) => `- ${t.trackType}: holds ${t.holds.join(', ')}`)
+  const editOps = cat.editOps ? cat.editOps.ops.map((o) => `- ${o.shape}  ${o.description}`) : []
   return text(
-    `Editor timeline clip types (edit via update_timeline ops):\n${clips.join('\n')}\n\nTrack types:\n${tracks.join('\n')}\n\nShared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
+    `Editor timeline clip types (edit via update_timeline ops):\n${clips.join('\n')}\n\nTrack types:\n${tracks.join('\n')}\n\n` +
+      (editOps.length ? `update_timeline edit ops (${cat.editOps!.description}):\n${editOps.join('\n')}\n\n` : '') +
+      `Shared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
       JSON.stringify(cat, null, 2),
   )
 }

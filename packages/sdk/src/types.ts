@@ -315,6 +315,13 @@ export interface Generation {
   error: string | null
   createdAt: string
   completedAt: string | null
+  /** The terminal signal to await when a generation carries a project PLACEMENT (a fresh asset placed on a canvas
+   *  / timeline, or an in-place background removal): true once the output exists AND its placement side-effect
+   *  (the placeholder->asset swap, the cutout, a background promotion) has been applied to the project. `status`
+   *  flips to 'completed' when the asset exists and billing settles, which can precede the swap; `waitForGeneration`
+   *  keys on `settled` so "done" always implies the visible composition change is in. Absent (older servers) is
+   *  treated as settled. Outputs with no placement are settled as soon as they complete. */
+  settled?: boolean
   /** Where the asset was placed (present only when `projectId` was supplied to generate). Carried from the submit
    *  response through `generateAndWait` so a caller gets the placement outcome alongside the finished asset. */
   placement?: PlacementResult
@@ -1688,6 +1695,8 @@ export interface LayerTypeCatalog {
   description: string
   sharedProps: EditorSharedProps
   layerTypes: EditorTypeSpec[]
+  /** The update_canvas op vocabulary: every layer + slide op an agent can emit, with its field signature. */
+  ops?: EditorCreationSpec
 }
 
 /** The editor timeline clip + track-type catalog, from `getTimelineTypes`. Makes `update_timeline`
@@ -1700,6 +1709,8 @@ export interface TimelineTypeCatalog {
   trackTypes: EditorTrackSpec[]
   /** How to CREATE clips + tracks (add_item, insert_track, insert_prebuilt_track), using each clipType `example`. */
   creation?: EditorCreationSpec
+  /** The EDIT ops of update_timeline (move_clip, trim_clip, disable_ranges, ...), with each field signature. */
+  editOps?: EditorCreationSpec
 }
 
 /** A spoken word with source-media timing, ABSOLUTE timeline frames, and per-word metadata (granularity 'word'). */

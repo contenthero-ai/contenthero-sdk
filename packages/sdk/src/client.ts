@@ -131,9 +131,12 @@ export class ContentHero {
   private readonly apiKey: string
   private readonly baseUrl: string
   private readonly fetchImpl: FetchLike
-  /** Per-project last activity-ping timestamp (ms), for the presence debounce. */
+  /** Per-project last-touched timestamp (ms). Presence is lit SERVER-SIDE (every project-scoped route broadcasts
+   *  the badge), so this no longer drives per-call pings; it records which projects this client operated on so
+   *  releaseProjectActivity / flushRelease can clear their badges promptly on exit, and debounces any explicit
+   *  touchProjectActivity ping. */
   private readonly activityPingedAt = new Map<string, number>()
-  /** Min gap between presence pings for the same project, so a burst of tool calls does not spam. */
+  /** Min gap between explicit presence pings for the same project, so a burst does not spam. */
   private static readonly ACTIVITY_DEBOUNCE_MS = 10_000
 
   constructor(options: ContentHeroOptions = {}) {
@@ -158,9 +161,11 @@ export class ContentHero {
   }
 
   /**
-   * Fire a PRESENCE ping so an open editor/canvas shows "Editing via MCP/CLI" while this SDK consumer is active
-   * on the project. Debounced per project + fire-and-forget: never throws, never blocks the caller, no-op when
-   * no projectId is given. Called from every project-scoped operation, so both MCP and CLI get the badge.
+   * Explicitly signal PRESENCE for a project. Presence is normally lit SERVER-SIDE now (every project-scoped API
+   * route broadcasts the "Editing via MCP/CLI" badge for the resolved project), so the SDK's own methods no longer
+   * each call this. It remains for an external consumer that wants to signal presence ahead of working on a
+   * project, and it records the project for prompt release on exit. Debounced + fire-and-forget: never throws,
+   * never blocks, no-op without a projectId.
    */
   touchProjectActivity(projectId?: string | null): void {
     if (!projectId) return
@@ -202,7 +207,6 @@ export class ContentHero {
    * audio returns `status: 'completed'` with `outputUrls` populated.
    */
   async generate(request: GenerateRequest): Promise<GenerateResult> {
-    this.touchProjectActivity(request.projectId)
     return this.request<GenerateResult>('POST', '/api/v1/studio/generate', request)
   }
 
@@ -283,7 +287,10 @@ export class ContentHero {
 
     while (true) {
       const generation = await this.getGeneration(outputId)
-      if (generation.status === 'completed') return generation
+      // Terminal only when SETTLED: a placement-bearing generation is not "done" for a caller until its swap /
+      // cutout side-effect has landed (see Generation.settled). `settled !== false` keeps older servers (which
+      // omit the field) working as before, and a no-placement output is settled the moment it completes.
+      if (generation.status === 'completed' && generation.settled !== false) return generation
       if (generation.status === 'failed') {
         throw new GenerationFailedError(
           generation.outputId,
@@ -317,7 +324,6 @@ export class ContentHero {
    * the processed URL comes back inline on `outputUrls`.
    */
   async editAudio(request: EditAudioRequest): Promise<GenerateResult> {
-    this.touchProjectActivity(request.projectId)
     return this.request<GenerateResult>('POST', '/api/v1/studio/audio/edit', request)
   }
 
@@ -1059,7 +1065,6 @@ export class ContentHero {
     projectId: string,
     options: { includeRenderUrl?: boolean; detail?: 'summary' | 'full'; fromFrame?: number; toFrame?: number; trackId?: string } = {},
   ): Promise<ProjectDetail> {
-    this.touchProjectActivity(projectId)
     const params = new URLSearchParams()
     if (options.includeRenderUrl) params.set('includeRenderUrl', 'true')
     if (options.detail === 'full') params.set('detail', 'full')
@@ -1085,7 +1090,6 @@ export class ContentHero {
    * participant set. Optionally scope to one project. Requires the `context:read` scope.
    */
   async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
-    this.touchProjectActivity(input.projectId)
     const params = new URLSearchParams()
     if (input.projectId) params.set('projectId', input.projectId)
     if (input.capture) params.set('capture', 'true')
@@ -1110,7 +1114,6 @@ export class ContentHero {
    * handle; poll it with `getPreview`. Requires the `context:read` scope.
    */
   async createPreview(input: PreviewInput): Promise<PreviewJob> {
-    this.touchProjectActivity(input.projectId)
     return this.request<PreviewJob>('POST', '/api/v1/preview', input)
   }
 
@@ -1151,7 +1154,6 @@ export class ContentHero {
    * the `editor:write` scope.
    */
   async deleteProject(projectId: string): Promise<void> {
-    this.touchProjectActivity(projectId)
     await this.request<{ success: boolean }>(
       'DELETE',
       `/api/v1/projects/${encodeURIComponent(projectId)}?confirm=true`,
@@ -1173,7 +1175,6 @@ export class ContentHero {
    * assigned id is echoed back on each result's `opId`.
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
-    this.touchProjectActivity(input.projectId)
     const ops = input.ops.map((op) =>
       typeof op.op_id === 'string' && op.op_id ? op : { ...op, op_id: globalThis.crypto.randomUUID() },
     )
@@ -1209,7 +1210,6 @@ export class ContentHero {
     input: StartExportInput = {},
     options: WaitOptions = {},
   ): Promise<ExportJob> {
-    this.touchProjectActivity(projectId)
     const job = await this.startExport(projectId, input)
     if (job.status === 'completed' || job.status === 'failed') {
       if (job.status === 'failed') throw new GenerationFailedError(job.exportId, job.errorMessage ?? 'Export failed')
@@ -1270,7 +1270,6 @@ export class ContentHero {
       paddingEndMs?: number
     } = {},
   ): Promise<TranscriptResult> {
-    this.touchProjectActivity(projectId)
     const params = new URLSearchParams({ projectId })
     if (options.search) params.set('search', options.search)
     if (options.startMs !== undefined) params.set('startMs', String(options.startMs))
@@ -1289,6 +1288,14 @@ export class ContentHero {
       Accept: 'application/json',
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
+
+    // Release tracking (NOT a presence ping): presence is lit server-side, but the CLI still needs to clear its
+    // badge promptly on exit, so record any project this client mutates by id. Local only, no extra request; the
+    // activity endpoint manages its own lease and is skipped.
+    if (body && typeof body === 'object' && !Array.isArray(body) && path !== '/api/v1/editor/activity') {
+      const pid = (body as { projectId?: unknown }).projectId
+      if (typeof pid === 'string' && pid) this.activityPingedAt.set(pid, Date.now())
+    }
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
