@@ -1433,11 +1433,25 @@ export interface ProjectSummary {
  * the summary with the composition `state` + `revision` (pass the revision back as `applyEditorOps`'s
  * `expectedRevision`) plus the link fields.
  */
+/** One clip group on the timeline: its members share a groupId, and the ordinal/name are stamped on each.
+ *  Rolled up by get_project so you can list groups + resolve members without scanning every clip. */
+export interface GroupSummary {
+  id: string
+  /** Stable "Group N" number, assigned at creation and never renumbered. */
+  ordinal: number | null
+  /** Optional user/agent-set name (via update_group); null means show "Group {ordinal}". */
+  name: string | null
+  memberClipIds: string[]
+}
+
 export interface ProjectDetail extends ProjectSummary {
   surface: EditorSurface
   revision: number
   /** The full composition state (`{ slides }` for canvas, `{ tracks }` for the editor timeline). */
   state: unknown
+  /** Timeline clip groups rolled up from the clips. Empty for canvas. Use to list/target groups
+   *  (update_group to rename, update_clips with `groupId` to bulk-edit a whole group). */
+  groups: GroupSummary[]
   assetReferences: unknown
   brandKitId: string | null
   exportedPostId: string | null

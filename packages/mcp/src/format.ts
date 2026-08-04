@@ -989,6 +989,12 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
     `Project ${p.id}: "${p.title}" (${p.kind}, surface: ${p.surface}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
       (p.renderUrl ? `Preview: ${p.renderUrl}\n` : '') +
+      (p.groups?.length
+        ? `Groups: ${p.groups
+            .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)
+            .join('; ')}\n` +
+          `  Rename with update_group; bulk-edit a whole group with update_clips { groupId }.\n`
+        : '') +
       `\n` +
       JSON.stringify(p.state, null, 2),
   )
