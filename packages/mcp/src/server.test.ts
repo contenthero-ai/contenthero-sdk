@@ -424,6 +424,7 @@ test('advertises exactly the v1 tools', async () => {
     'delete_folder',
     'delete_project',
     'delete_tag',
+    'edit_audio',
     'export_project',
     'favorite',
     'generate_audio',
