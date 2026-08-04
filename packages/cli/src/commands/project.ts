@@ -88,7 +88,14 @@ export function registerProject(program: Command): void {
         toFrame: opts.to != null ? Number(opts.to) : undefined,
         trackId: typeof opts.track === 'string' ? opts.track : undefined,
       })
-      emit(p, ctx, () => `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}`)
+      emit(p, ctx, () =>
+        `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}` +
+        (p.groups?.length
+          ? `\nGroups: ${p.groups
+              .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)
+              .join('; ')}` +
+            `\n  Rename: project apply <id> --ops '[{"op":"update_group","groupId":"...","patch":{"name":"..."}}]'`
+          : ''))
     })
 
   project
