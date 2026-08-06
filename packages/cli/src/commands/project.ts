@@ -90,6 +90,13 @@ export function registerProject(program: Command): void {
       })
       emit(p, ctx, () =>
         `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}` +
+        // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
+        // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
+        // printed no dimensions at all, so there was nowhere to learn it short of reading app source.
+        (p.compositionSpace
+          ? `\nLayer geometry space: ${p.compositionSpace.width}x${p.compositionSpace.height} (center-relative px; output resolution is ${p.width}x${p.height})` +
+            `\n  Full-frame layer: layerWidth ${p.compositionSpace.width}, layerHeight ${p.compositionSpace.height}`
+          : '') +
         (p.groups?.length
           ? `\nGroups: ${p.groups
               .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)

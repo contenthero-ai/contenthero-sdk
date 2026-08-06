@@ -983,12 +983,66 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
   return text(lines.join('\n'), failures.length > 0)
 }
 
+/**
+ * EXPOSURE GUARD for ProjectDetail.
+ *
+ * The MCP answers in TEXT, so a field this formatter does not print is INVISIBLE to the calling agent even
+ * though the SDK fetched it. That makes silent drift the default: the app can add a field, the SDK type can
+ * carry it, every build and test stays green, and no agent can ever see it. `compositionSpace` sat in
+ * exactly that state, and the cost was an agent sizing every layer 2.26x wrong with no error.
+ *
+ * `satisfies Record<keyof ProjectDetail, ...>` makes the omission a DECISION rather than an accident: add a
+ * field to ProjectDetail and this stops compiling until someone classifies it. Omitting is fine; omitting
+ * silently is not.
+ */
+const PROJECT_DETAIL_EXPOSURE = {
+  // Rendered in the summary line or the JSON body below.
+  id: 'rendered',
+  title: 'rendered',
+  kind: 'rendered',
+  surface: 'rendered',
+  orientation: 'rendered',
+  width: 'rendered',
+  height: 'rendered',
+  revision: 'rendered',
+  compositionSpace: 'rendered',
+  groups: 'rendered',
+  state: 'rendered',
+  renderUrl: 'rendered (opt-in)',
+  brandKitId: 'rendered',
+  // Deliberately omitted, with the reason. Each of these is reachable through a dedicated tool, or is
+  // list-view metadata that tells a single-project reader nothing it did not already know by fetching it.
+  assetReferences: 'omitted: large payload; the composition state already names what is in use',
+  thumbnailUrl: 'omitted: presentation metadata, not an editing input',
+  isArchived: 'omitted: lifecycle state, surfaced by list_projects',
+  isFavorited: 'omitted: lifecycle state, surfaced by list_projects',
+  archivedAt: 'omitted: lifecycle state, surfaced by list_projects',
+  favoritedAt: 'omitted: lifecycle state, surfaced by list_projects',
+  createdAt: 'omitted: list metadata',
+  updatedAt: 'omitted: superseded by revision, which is the token that actually matters here',
+  exportedPostId: 'omitted: publishing workflow, owned by the post tools',
+  exportedUrl: 'omitted: publishing workflow, owned by the post tools',
+  shareId: 'omitted: sharing workflow, no editing effect',
+} satisfies Record<keyof ProjectDetail, string>
+void PROJECT_DETAIL_EXPOSURE
+
 /** A single project's full detail (read-before-write): metadata, surface, revision, and the state JSON. */
 export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
     `Project ${p.id}: "${p.title}" (${p.kind}, surface: ${p.surface}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
+      // The output resolution above is NOT the coordinate space layer geometry uses. Stating both, adjacent
+      // and labelled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large
+      // and got no error for it, because an oversized box is valid input.
+      (p.compositionSpace
+        ? `Layer geometry is in composition space ${p.compositionSpace.width}x${p.compositionSpace.height} ` +
+          `(center-relative px), NOT the ${p.width}x${p.height} output resolution. ` +
+          `Use ${p.compositionSpace.width}x${p.compositionSpace.height} as layerWidth/layerHeight for a full-frame layer.\n`
+        : '') +
       (p.renderUrl ? `Preview: ${p.renderUrl}\n` : '') +
+      // An agent asked to keep a design on-brand otherwise has no way to know WHICH kit this project is
+      // linked to: it can list kits, but not resolve the association.
+      (p.brandKitId ? `Brand kit: ${p.brandKitId} (read it with get_brand_kit).\n` : '') +
       (p.groups?.length
         ? `Groups: ${p.groups
             .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)

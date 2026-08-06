@@ -1462,6 +1462,18 @@ export interface ProjectDetail extends ProjectSummary {
   /** A fingerprint-validated preview still URL. Present only when getProject is called with
    *  `includeRenderUrl` (opt-in, since it may render). */
   renderUrl?: string | null
+  /**
+   * The coordinate space LAYER GEOMETRY is expressed in. This is NOT `width`/`height`.
+   *
+   * `width`/`height` are the project's OUTPUT resolution (what a render produces). Layer boxes and
+   * positions are in PREVIEW dims, the project scaled to a 960px longest edge, so a 2168x1152 project has
+   * a 960x510 layer space. The two differ by 2.26x there, and nothing in the response previously said so,
+   * which meant an external caller sizing a layer from `width`/`height` was silently wrong: an oversized
+   * box is valid input, so no error was ever raised.
+   *
+   * Use it for any absolute geometry, and pass it as layerWidth/layerHeight for a FULL-FRAME layer.
+   */
+  compositionSpace?: { width: number; height: number }
 }
 
 /** One live participant in `getContext`: who is present and on what surface/scope. */
