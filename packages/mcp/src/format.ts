@@ -412,7 +412,22 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
     else if (it.type === 'video') note = '\n    (video: no still available for this view; use the url)'
     else if (it.type === 'transcript') note = '\n    (transcript: text only)'
   }
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${prompt}${note}`
+  // MEASURED GEOMETRY, when the spine has it. Without these numbers a caller cannot compute an asset's true
+  // aspect (so it stretches it on placement) and cannot align to the VISIBLE artwork of a padded logo at all.
+  // `content` is the artwork's bounds inside the file; when it is smaller than the file, say so explicitly,
+  // because that difference is the whole reason to read it.
+  let geom = ''
+  if (it.geometry) {
+    const { width, height, content } = it.geometry
+    geom = `\n    dimensions: ${width}x${height}`
+    if (content) {
+      const trimmed = content.width < width || content.height < height
+      geom += trimmed
+        ? ` | artwork: ${content.width}x${content.height} at (${content.x}, ${content.y}) -- the rest is transparent margin, so place and align by THIS box, not the file`
+        : ' | artwork fills the frame'
+    }
+  }
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${prompt}${note}`
 }
 
 /**

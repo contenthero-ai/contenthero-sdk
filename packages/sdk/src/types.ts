@@ -722,6 +722,20 @@ export interface ResolvedMediaBatchItem {
    * source-time window, each an inline `data:image/jpeg;base64,...`. The MCP turns each into an image block.
    */
   keyframes?: { atSec: number; dataUrl: string }[]
+  /**
+   * MEASURED PIXEL GEOMETRY from the storage spine. Absent for an asset that is not ours or not yet measured.
+   *
+   * `content` is the ARTWORK's bounds within the file (its alpha bounds). For a padded logo these differ
+   * sharply from the file rectangle, and using the file rectangle is what makes a placed logo look wrong:
+   * the true aspect is the artwork's, and aligning the file edge leaves a visible gap the width of the
+   * transparent margin. This is the same measurement the editor's selection, snapping and align-to-page use.
+   */
+  geometry?: {
+    width: number
+    height: number
+    /** Alpha bounds in SOURCE pixels. Equals the full frame for an image with no transparent margin. */
+    content?: { x: number; y: number; width: number; height: number }
+  }
   error?: string
 }
 
