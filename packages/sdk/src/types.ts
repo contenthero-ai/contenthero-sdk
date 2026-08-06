@@ -624,6 +624,17 @@ export interface MediaVariation {
   status: string
   isFavorited: boolean
   isArchived: boolean
+  /**
+   * MEASURED PIXEL GEOMETRY of this slot's image. `content` is the ARTWORK's bounds within the file (its
+   * alpha bounds), so a padded logo can be placed and aligned by what is VISIBLE rather than by its file
+   * rectangle. Absent until the asset has been measured. The same field appears on a media-batch item, so
+   * the CLI and the MCP report identical facts.
+   */
+  geometry?: {
+    width: number
+    height: number
+    content?: { x: number; y: number; width: number; height: number }
+  }
 }
 
 /**

@@ -225,12 +225,21 @@ export function registerMedia(program: Command): void {
           ...(m.creditsUsed != null ? [['Credits used', m.creditsUsed] as [string, number]] : []),
         ])
         const variations = table(
-          ['VAR', 'STATUS', 'FAV', 'ARCH', 'URL'],
+          ['VAR', 'STATUS', 'FAV', 'ARCH', 'SIZE', 'URL'],
           m.variations.map((v) => [
             v.variation,
             v.status,
             v.isFavorited ? 'yes' : '',
             v.isArchived ? 'yes' : '',
+            // Dimensions, and the ARTWORK's size when it is smaller than the file. A caller placing this
+            // asset needs the artwork box to get the aspect right and to align by the visible edge; the
+            // MCP reports the same, so neither surface knows more than the other.
+            v.geometry
+              ? v.geometry.content &&
+                (v.geometry.content.width < v.geometry.width || v.geometry.content.height < v.geometry.height)
+                ? `${v.geometry.width}x${v.geometry.height} (art ${v.geometry.content.width}x${v.geometry.content.height} @${v.geometry.content.x},${v.geometry.content.y})`
+                : `${v.geometry.width}x${v.geometry.height}`
+              : '',
             v.url ?? '',
           ]),
         )
