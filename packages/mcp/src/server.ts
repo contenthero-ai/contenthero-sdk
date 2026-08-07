@@ -2684,6 +2684,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         fromFrame: z.number().int().min(0).optional().describe('filmstrip: start timeline frame of the range. Omit to start at the beginning.'),
         toFrame: z.number().int().min(0).optional().describe('filmstrip: end timeline frame of the range. Omit to run to the end.'),
         count: z.number().int().min(1).optional().describe('filmstrip: how many frames to return. Omit for a proportional default.'),
+        width: z.number().int().min(48).max(1440).optional().describe('still: render at an explicit DISPLAY width in pixels, to judge legibility at the size the output will actually be seen (a course tile, a thumbnail, a feed card) rather than at full resolution, where small type always looks fine. Height follows the composition aspect ratio and is not settable. Clamped; the size produced is reported back on rendered.'),
       },
     },
     async (args, extra) => {
@@ -2700,6 +2701,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           fromFrame: args.fromFrame,
           toFrame: args.toFrame,
           count: args.count,
+          width: args.width,
         })
         const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null

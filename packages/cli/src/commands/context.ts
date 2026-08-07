@@ -1,13 +1,16 @@
 /**
  * `contenthero context` - read the LIVE context of what the user is currently viewing in the open app.
  *
- *   context [--project <id>] [--capture] [--render] [--frame <n>] [--slide <id>] [--slide-index <n>] [--save <path>]
+ *   context [--project <id>] [--capture] [--render] [--frame <n>] [--slide <id>] [--slide-index <n>]
+ *           [--width <n>] [--save <path>]
  *
  * Returns the most-recent-active session's surface + focus + selection, plus the live participant set.
  * Structured by default. `--capture` pings the live tab for a fresh viewport screenshot (the user's SCREEN).
  * `--render` returns a server-side render of the COMPOSED OUTPUT (the editor frame / canvas slide) inline,
- * ephemeral and stored nowhere; `--frame` / `--slide` / `--slide-index` target a specific point. `--save`
- * writes whichever image was produced (render preferred over snapshot) to a file.
+ * ephemeral and stored nowhere; `--frame` / `--slide` / `--slide-index` target a specific point. `--width`
+ * renders at an explicit DISPLAY width so legibility can be judged at the size the output will actually be
+ * seen (height follows the aspect ratio). `--save` writes whichever image was produced (render preferred
+ * over snapshot) to a file.
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
@@ -43,12 +46,13 @@ export function registerContext(program: Command): void {
     .option('--from-frame <n>', 'filmstrip: start timeline frame of the range', (v) => parseInt(v, 10))
     .option('--to-frame <n>', 'filmstrip: end timeline frame of the range', (v) => parseInt(v, 10))
     .option('--count <n>', 'filmstrip: how many frames', (v) => parseInt(v, 10))
+    .option('--width <n>', 'still: render at this DISPLAY width in px, to judge legibility at real size (height follows the aspect ratio)', (v) => parseInt(v, 10))
     .option('--save <path>', 'write the produced image(s) to this file (filmstrip appends -1, -2, ...)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const render =
         Boolean(opts.render) || opts.mode != null || opts.frame != null || opts.slide != null || opts.slideIndex != null ||
-        opts.fromFrame != null || opts.toFrame != null
+        opts.fromFrame != null || opts.toFrame != null || opts.width != null
       // --save needs an image; imply --capture only when the user did not ask for a render.
       const capture = Boolean(opts.capture) || (Boolean(opts.save) && !render)
       const result = await client.getContext({
@@ -62,6 +66,7 @@ export function registerContext(program: Command): void {
         fromFrame: opts.fromFrame as number | undefined,
         toFrame: opts.toFrame as number | undefined,
         count: opts.count as number | undefined,
+        width: opts.width as number | undefined,
       })
 
       let savedCount = 0

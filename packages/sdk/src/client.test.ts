@@ -334,6 +334,13 @@ test('getContext with render options appends render/frame/slide query params', a
   assert.equal(calls[1]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&slideIndex=2')
 })
 
+test('getContext forwards an explicit render width', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { context: null, participant: null, participants: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContext({ projectId: 'p1', render: true, slideIndex: 1, width: 273 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&slideIndex=1&width=273')
+})
+
 test('createPreview POSTs the range and getPreview GETs the handle', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2 } },

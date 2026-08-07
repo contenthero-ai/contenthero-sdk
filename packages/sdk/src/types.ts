@@ -1561,6 +1561,13 @@ export interface GetContextInput {
   toFrame?: number
   /** filmstrip: how many frames to return. Omit for a proportional default. */
   count?: number
+  /**
+   * still: render at an explicit DISPLAY width in pixels, so you can judge legibility at the size the output
+   * will actually be seen (a classroom tile, a thumbnail, a feed card) rather than at full resolution, where
+   * small type always looks fine. Height is derived from the composition's aspect ratio and is deliberately
+   * not a parameter. Clamped to a sane range; the size actually produced comes back on `rendered`.
+   */
+  width?: number
 }
 
 /** Input to `createPreview`: currently a short COMPOSED video of an editor range (ephemeral, job-based). */
@@ -1614,6 +1621,10 @@ export interface LiveContextRender {
   frame?: number
   slideId?: string
   slideIndex?: number
+  /** still: the pixel size of the returned image. Confirms what an explicit `width` request actually produced
+   *  (it is clamped), and reports the derived height. */
+  width?: number
+  height?: number
   /** still: `data:image/webp;base64,...` of the composed frame/slide. */
   dataUrl?: string
   // filmstrip (multiple frames, each with its own dataUrl):
