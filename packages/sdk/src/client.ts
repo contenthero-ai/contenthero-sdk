@@ -1058,12 +1058,21 @@ export class ContentHero {
    * Read a single project (metadata + composition `state` + `revision`), to read-before-write. Pass the returned
    * `revision` back as `applyEditorOps`'s `expectedRevision`. By DEFAULT `state` is a lightweight SUMMARY (per-clip
    * / per-layer structure, heavy payloads dropped); pass `detail:'full'` for the complete composition. For a
-   * timeline, `fromFrame`/`toFrame` (+ `trackId`) scope the read to the clips overlapping that frame window.
-   * Requires the `editor:read` scope.
+   * timeline, `fromFrame`/`toFrame` (+ `trackId`) scope the read to the clips overlapping that frame window; for a
+   * canvas, `slideId` scopes it to a single slide, and applies to `detail:'full'` too so asking for one slide's
+   * detail does not pay for the whole deck. A canvas summary echoes each text layer's `text` (truncated), which is
+   * what identifies it. Requires the `editor:read` scope.
    */
   async getProject(
     projectId: string,
-    options: { includeRenderUrl?: boolean; detail?: 'summary' | 'full'; fromFrame?: number; toFrame?: number; trackId?: string } = {},
+    options: {
+      includeRenderUrl?: boolean
+      detail?: 'summary' | 'full'
+      fromFrame?: number
+      toFrame?: number
+      trackId?: string
+      slideId?: string
+    } = {},
   ): Promise<ProjectDetail> {
     const params = new URLSearchParams()
     if (options.includeRenderUrl) params.set('includeRenderUrl', 'true')
@@ -1071,6 +1080,7 @@ export class ContentHero {
     if (typeof options.fromFrame === 'number') params.set('fromFrame', String(options.fromFrame))
     if (typeof options.toFrame === 'number') params.set('toFrame', String(options.toFrame))
     if (options.trackId) params.set('trackId', options.trackId)
+    if (options.slideId) params.set('slideId', options.slideId)
     const qs = params.toString() ? `?${params.toString()}` : ''
     const { project } = await this.request<{ project: ProjectDetail }>(
       'GET',

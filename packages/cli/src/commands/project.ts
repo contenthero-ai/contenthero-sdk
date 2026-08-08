@@ -80,6 +80,7 @@ export function registerProject(program: Command): void {
     .option('--from <frame>', 'timeline only: start frame of a window (clips overlapping [from, to])')
     .option('--to <frame>', 'timeline only: end frame of the window')
     .option('--track <trackId>', 'timeline only: scope to one track by id')
+    .option('--slide <slideId>', "canvas only: scope to one slide by id (applies to --detail full too)")
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.getProject(projectId, {
@@ -87,6 +88,7 @@ export function registerProject(program: Command): void {
         fromFrame: opts.from != null ? Number(opts.from) : undefined,
         toFrame: opts.to != null ? Number(opts.to) : undefined,
         trackId: typeof opts.track === 'string' ? opts.track : undefined,
+        slideId: typeof opts.slide === 'string' ? opts.slide : undefined,
       })
       emit(p, ctx, () =>
         `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}` +
