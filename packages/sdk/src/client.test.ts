@@ -7,6 +7,8 @@ import {
   ValidationError,
   GenerationFailedError,
   GenerationTimeoutError,
+  GenerationInterruptedError,
+  pendingOutputId,
 } from './errors.js'
 import type { FetchLike } from './client.js'
 
@@ -512,4 +514,58 @@ test('searchMedia returns the results array', async () => {
   const results = await client.searchMedia('x')
   assert.equal(results.length, 1)
   assert.equal(results[0]?.id, 'x1')
+})
+
+// --- A submitted generation must never lose its outputId -------------------------
+// Once the POST succeeds the job is running and CHARGED. If a poll then fails, dropping
+// the id leaves the caller no way to resume, and the natural retry pays for the same
+// generation twice. This is what turned a transient dev-server 404 into a "failed"
+// board that had in fact rendered.
+
+test('generateAndWait surfaces the outputId when polling fails transiently', async () => {
+  const { fetch } = stubFetch([
+    { status: 200, body: { outputId: 'out_1', status: 'processing' } }, // submit OK
+    { status: 500, body: { error: 'upstream blip' } },                  // poll blows up
+  ])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  await assert.rejects(
+    () => client.generateAndWait({ modelId: 'gpt-image-2', prompt: 'x' }, { timeoutMs: 5_000 }),
+    (err: unknown) => {
+      assert.ok(err instanceof GenerationInterruptedError)
+      assert.equal(err.outputId, 'out_1')
+      return true
+    },
+  )
+})
+
+test('generateBoardAndWait surfaces the outputId too', async () => {
+  const { fetch } = stubFetch([
+    { status: 200, body: { outputId: 'board_1', status: 'processing' } },
+    { status: 404, body: { error: 'not found' } },
+  ])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  await assert.rejects(
+    () => client.generateBoardAndWait({ boardType: 'object', prompt: 'mug' }, { timeoutMs: 5_000 }),
+    (err: unknown) => err instanceof GenerationInterruptedError && err.outputId === 'board_1',
+  )
+})
+
+test('a genuinely FAILED generation stays terminal, not interrupted', async () => {
+  const { fetch } = stubFetch([
+    { status: 200, body: { outputId: 'out_2', status: 'processing' } },
+    { status: 200, body: { outputId: 'out_2', status: 'failed', error: 'model rejected it' } },
+  ])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  await assert.rejects(
+    () => client.generateAndWait({ modelId: 'gpt-image-2', prompt: 'x' }, { timeoutMs: 5_000 }),
+    (err: unknown) => err instanceof GenerationFailedError,
+  )
+})
+
+test('pendingOutputId marks resumable errors and only those', () => {
+  assert.equal(pendingOutputId(new GenerationTimeoutError('a')), 'a')
+  assert.equal(pendingOutputId(new GenerationInterruptedError('b', new Error('blip'))), 'b')
+  // Terminal: the generation failed, so resuming is wrong and retrying is the caller's call.
+  assert.equal(pendingOutputId(new GenerationFailedError('c', 'nope')), undefined)
+  assert.equal(pendingOutputId(new Error('unrelated')), undefined)
 })

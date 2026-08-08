@@ -149,5 +149,7 @@ export {
   RateLimitError,
   GenerationFailedError,
   GenerationTimeoutError,
+  GenerationInterruptedError,
+  pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions } from './errors.js'

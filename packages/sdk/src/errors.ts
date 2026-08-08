@@ -128,6 +128,46 @@ export class GenerationTimeoutError extends ContentHeroError {
   }
 }
 
+/**
+ * A generation was SUBMITTED (accepted, running, and charged) but the client could not
+ * follow it to a terminal state: a poll returned a transient error, the network dropped,
+ * the process lost connectivity.
+ *
+ * The distinction that matters: this is NOT a failed generation. Discarding the outputId
+ * here turns a recoverable blip into a lost job, and the caller's natural response is to
+ * retry, which submits a SECOND generation and charges for it again. The id lets the
+ * caller resume with `getGeneration` instead.
+ */
+export class GenerationInterruptedError extends ContentHeroError {
+  readonly outputId: string
+
+  /** What actually went wrong while polling, kept for diagnosis. */
+  readonly reason: unknown
+
+  constructor(outputId: string, reason: unknown, message?: string) {
+    super(
+      message ??
+        `Submitted, but polling was interrupted: ${reason instanceof Error ? reason.message : String(reason)}. ` +
+          `The generation may still be running; poll outputId ${outputId}.`,
+    )
+    this.name = 'GenerationInterruptedError'
+    this.outputId = outputId
+    this.reason = reason
+  }
+}
+
+/**
+ * The outputId of a generation that is still RUNNING despite the error, so the caller
+ * can resume rather than resubmit. Undefined when the error is terminal (the generation
+ * genuinely failed) or unrelated to a submitted job.
+ */
+export function pendingOutputId(err: unknown): string | undefined {
+  if (err instanceof GenerationFailedError) return undefined
+  if (err instanceof GenerationTimeoutError) return err.outputId
+  if (err instanceof GenerationInterruptedError) return err.outputId
+  return undefined
+}
+
 /** Map an HTTP status + parsed body onto the right typed error. */
 export function errorFromResponse(status: number, body: unknown): ContentHeroError {
   const record = (body && typeof body === 'object' ? (body as Record<string, unknown>) : undefined)

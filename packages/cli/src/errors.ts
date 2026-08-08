@@ -19,6 +19,7 @@ import {
   PermissionError,
   ValidationError,
   GenerationTimeoutError,
+  GenerationInterruptedError,
 } from '@contenthero/sdk'
 
 export const EXIT = {
@@ -44,7 +45,10 @@ export function exitCodeForError(err: unknown): number {
   if (err instanceof CliError) return err.exitCode
   if (err instanceof AuthenticationError || err instanceof PermissionError) return EXIT.AUTH
   if (err instanceof ValidationError) return EXIT.USAGE
+  // Both mean the same thing to a caller: the job is SUBMITTED and still running, so
+  // the correct response is to poll its outputId, never to resubmit.
   if (err instanceof GenerationTimeoutError) return EXIT.TIMEOUT
+  if (err instanceof GenerationInterruptedError) return EXIT.TIMEOUT
   return EXIT.GENERAL
 }
 

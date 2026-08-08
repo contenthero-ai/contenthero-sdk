@@ -132,3 +132,78 @@ test('runGeneration wait-to-complete emits the finished generation, exit unchang
   assert.match(out, /"status": "completed"/)
   assert.match(out, /x\.jpg/)
 })
+
+/** Like fakeClient, but lets a route return an HTTP status other than 200. */
+function flakyClient(routes: (path: string, method: string) => { status: number; body: unknown }): ContentHero {
+  const fetchImpl: FetchLike = async (url, init) => {
+    const path = url.replace(/^https?:\/\/[^/]+/, '')
+    const method = (init?.method ?? 'GET').toUpperCase()
+    const { status, body } = routes(path, method)
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+  return new ContentHero({ apiKey: 'ch_live_test', baseUrl: 'https://app.contenthero.ai', fetch: fetchImpl })
+}
+
+// A submitted generation is running and CHARGED. If polling breaks, the CLI must still
+// hand back the outputId: throwing would report a failure for a live job and invite a
+// re-run that pays for it twice. This is the class of bug that made a rendered board
+// look like an error.
+test('runGeneration emits the outputId and exit 4 when polling breaks, rather than throwing', async () => {
+  let polled = false
+  const client = flakyClient((path, method) => {
+    if (method === 'POST') return { status: 200, body: { outputId: 'abc', status: 'processing' } }
+    if (!polled) {
+      polled = true
+      return { status: 500, body: { error: 'transient upstream blip' } }
+    }
+    // The recovery snapshot the CLI falls back to.
+    return {
+      status: 200,
+      body: {
+        outputId: 'abc',
+        status: 'processing',
+        contentType: 'image',
+        modelId: 'm',
+        outputUrls: [],
+        error: null,
+        createdAt: 'now',
+        completedAt: null,
+      },
+    }
+  })
+  const prevExit = process.exitCode
+  process.exitCode = 0
+  try {
+    const out = await capture(() =>
+      runGeneration(client, jsonCtx, { modelId: 'm', contentType: 'image' }, { cost: false, wait: true, timeoutSec: 30 }),
+    )
+    assert.equal(process.exitCode, EXIT.TIMEOUT)
+    assert.match(out, /"outputId": "abc"/)
+  } finally {
+    process.exitCode = prevExit
+  }
+})
+
+test('a genuinely FAILED generation still propagates as an error', async () => {
+  const client = fakeClient((path, method) => {
+    if (method === 'POST') return { outputId: 'abc', status: 'processing' }
+    return {
+      outputId: 'abc',
+      status: 'failed',
+      contentType: 'image',
+      modelId: 'm',
+      outputUrls: [],
+      error: 'the model rejected it',
+      createdAt: 'now',
+      completedAt: null,
+    }
+  })
+  await assert.rejects(() =>
+    capture(() =>
+      runGeneration(client, jsonCtx, { modelId: 'm', contentType: 'image' }, { cost: false, wait: true, timeoutSec: 30 }),
+    ),
+  )
+})

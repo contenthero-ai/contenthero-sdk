@@ -39,6 +39,7 @@ import { z } from 'zod'
 import {
   ContentHero,
   GenerationTimeoutError,
+  pendingOutputId,
   type GenerateRequest,
   type GenerateBoardRequest,
   type EditAudioRequest,
@@ -368,7 +369,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
-        if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
+        // A SUBMITTED generation is running and charged. Whether the wait timed out or a
+        // poll hit a transient error, returning the outputId lets the caller resume;
+        // dropping it invites a retry that generates and charges a second time.
+        const pending = pendingOutputId(err)
+        if (pending) return pendingResult(pending)
         return errorResult(err)
       }
     },
@@ -421,7 +426,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
-        if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
+        // A SUBMITTED generation is running and charged. Whether the wait timed out or a
+        // poll hit a transient error, returning the outputId lets the caller resume;
+        // dropping it invites a retry that generates and charges a second time.
+        const pending = pendingOutputId(err)
+        if (pending) return pendingResult(pending)
         return errorResult(err)
       }
     },
@@ -521,7 +530,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
-        if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
+        // A SUBMITTED generation is running and charged. Whether the wait timed out or a
+        // poll hit a transient error, returning the outputId lets the caller resume;
+        // dropping it invites a retry that generates and charges a second time.
+        const pending = pendingOutputId(err)
+        if (pending) return pendingResult(pending)
         return errorResult(err)
       }
     },
@@ -654,7 +667,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
-        if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
+        // A SUBMITTED generation is running and charged. Whether the wait timed out or a
+        // poll hit a transient error, returning the outputId lets the caller resume;
+        // dropping it invites a retry that generates and charges a second time.
+        const pending = pendingOutputId(err)
+        if (pending) return pendingResult(pending)
         return errorResult(err)
       }
     },
@@ -714,7 +731,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
         return completedResult(gen)
       } catch (err) {
-        if (err instanceof GenerationTimeoutError) return pendingResult(err.outputId)
+        // A SUBMITTED generation is running and charged. Whether the wait timed out or a
+        // poll hit a transient error, returning the outputId lets the caller resume;
+        // dropping it invites a retry that generates and charges a second time.
+        const pending = pendingOutputId(err)
+        if (pending) return pendingResult(pending)
         return errorResult(err)
       }
     },
@@ -1756,8 +1777,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             try {
               return await client.waitForGeneration(id, { timeoutMs: SMART_WAIT_MS })
             } catch (err) {
+              // Timeout is expected for a slow render. A transient poll error is not, but
+              // it must not fail the whole BATCH either: fall back to a status snapshot so
+              // the other ids still report, and only surface the error if even that fails.
               if (err instanceof GenerationTimeoutError) return client.getGeneration(id)
-              throw err
+              try {
+                return await client.getGeneration(id)
+              } catch {
+                throw err
+              }
             }
           }),
         )

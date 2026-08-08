@@ -11,7 +11,7 @@
 
 import {
   ContentHero,
-  GenerationTimeoutError,
+  GenerationFailedError,
   type CostEstimate,
   type EditAudioRequest,
   type GenerateBoardRequest,
@@ -164,13 +164,21 @@ export async function waitAndRender(
     const gen = await client.waitForGeneration(outputId, { timeoutMs: timeoutSec * 1000 })
     emit(gen, ctx, generationHuman)
   } catch (err) {
-    if (err instanceof GenerationTimeoutError) {
+    // A generation that reached this function was SUBMITTED: it is running and charged.
+    // Whether we timed out or a poll hit a transient error, the job is not lost, so emit
+    // what we know (with its outputId) and exit TIMEOUT rather than throwing. Throwing
+    // would print an error for a live generation and invite the user to run it again,
+    // paying twice. A GenerationFailedError is terminal and still propagates.
+    if (err instanceof GenerationFailedError) throw err
+    try {
       const snapshot = await client.getGeneration(outputId)
       emit(snapshot, ctx, generationHuman)
-      process.exitCode = EXIT.TIMEOUT
-      return
+    } catch {
+      // Even the snapshot failed. Surface the id itself so the run is still resumable.
+      emit({ outputId, status: 'processing' } as unknown as Generation, ctx, generationHuman)
     }
-    throw err
+    process.exitCode = EXIT.TIMEOUT
+    return
   }
 }
 

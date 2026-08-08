@@ -7,7 +7,12 @@
  * polls to a terminal state for you.
  */
 
-import { errorFromResponse, GenerationFailedError, GenerationTimeoutError } from './errors.js'
+import {
+  errorFromResponse,
+  GenerationFailedError,
+  GenerationInterruptedError,
+  GenerationTimeoutError,
+} from './errors.js'
 import type {
   Folder,
   DerivedFolder,
@@ -226,7 +231,7 @@ export class ContentHero {
    */
   async generateAndWait(request: GenerateRequest, options: WaitOptions = {}): Promise<Generation> {
     const submitted = await this.generate(request)
-    const gen = await this.waitForGeneration(submitted.outputId, options)
+    const gen = await this.#waitAfterSubmit(submitted.outputId, options)
     // Carry the placement outcome (known at submit time) through to the completed record so the caller learns
     // where the asset landed + its id for chaining, without a separate lookup.
     return submitted.placement ? { ...gen, placement: submitted.placement } : gen
@@ -253,7 +258,25 @@ export class ContentHero {
     options: WaitOptions = {},
   ): Promise<Generation> {
     const submitted = await this.generateBoard(request)
-    return this.waitForGeneration(submitted.outputId, options)
+    return this.#waitAfterSubmit(submitted.outputId, options)
+  }
+
+  /**
+   * Poll a job that has ALREADY been submitted, converting any non-terminal failure into
+   * an error that still carries the outputId.
+   *
+   * Once the POST succeeds the job is running and charged, so the outputId is the only
+   * thing standing between a transient poll failure and a duplicate generation: a caller
+   * that loses it has no way to resume and will almost certainly resubmit. A genuine
+   * `GenerationFailedError` is terminal and passes through untouched.
+   */
+  async #waitAfterSubmit(outputId: string, options: WaitOptions): Promise<Generation> {
+    try {
+      return await this.waitForGeneration(outputId, options)
+    } catch (err) {
+      if (err instanceof GenerationFailedError || err instanceof GenerationTimeoutError) throw err
+      throw new GenerationInterruptedError(outputId, err)
+    }
   }
 
   /**
