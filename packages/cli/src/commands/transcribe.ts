@@ -1,9 +1,10 @@
 /**
  * `contenthero transcribe <audioUrl>` - speech-to-text for an audio URL.
  *
- * Synchronous (no polling) and free. Returns the transcript plus its language and
- * word count; the result is also saved as a studio output, referenceable by its
- * outputId (see `contenthero media`).
+ * Synchronous (no polling). Returns the transcript plus its language, word count and
+ * the credits it cost; the result is also saved as a studio output, referenceable by
+ * its outputId (see `contenthero media`). It is NOT free: transcription is metered per
+ * minute, and only a user on their own ElevenLabs key is charged nothing.
  */
 
 import type { Command } from 'commander'
@@ -33,6 +34,7 @@ export function registerTranscribe(program: Command): void {
           ...(r.durationSeconds != null
             ? [['Duration (s)', r.durationSeconds] as [string, number]]
             : []),
+          ['Credits used', r.creditsUsed],
           ['Transcript', r.transcript],
         ]),
       )

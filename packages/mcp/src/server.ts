@@ -748,7 +748,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Transcribe Audio',
       annotations: READ,
       description:
-        'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, free, no polling).',
+        'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, no polling). Metered per minute of audio, so the result reports the credits it cost.',
       inputSchema: {
         audioUrl: z.string().describe('Public URL of the audio file to transcribe.'),
         languageCode: z

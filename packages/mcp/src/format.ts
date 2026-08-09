@@ -147,7 +147,8 @@ export function generationBatchResult(gens: Generation[]): CallToolResult {
 /** A finished transcription: header line plus the transcript body. */
 export function transcriptResult(t: Transcription): CallToolResult {
   const lang = t.language ? ` (${t.language})` : ''
-  const header = `Transcript${lang}, ${t.wordCount} words (outputId ${t.outputId}):`
+  const cost = t.creditsUsed > 0 ? `, ${t.creditsUsed} credits` : ''
+  const header = `Transcript${lang}, ${t.wordCount} words${cost} (outputId ${t.outputId}):`
   return text([header, '', t.transcript].join('\n'))
 }
 

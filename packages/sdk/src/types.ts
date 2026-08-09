@@ -365,6 +365,11 @@ export interface Transcription {
   wordCount: number
   /** Source audio length in seconds, when known. */
   durationSeconds: number | null
+  /**
+   * ContentHero credits charged for the run. Zero only when the user's own ElevenLabs
+   * key covered it, in which case the provider billed them directly.
+   */
+  creditsUsed: number
 }
 
 /** An avatar as returned by `listAvatars` (the list projection). */
