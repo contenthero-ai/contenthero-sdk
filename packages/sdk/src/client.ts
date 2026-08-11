@@ -647,11 +647,23 @@ export class ContentHero {
       contentType: opts.contentType,
       sizeBytes,
     })
-    // The PUT goes to Supabase storage (not our API), so it uses a bare fetch
-    // with only the file's Content-Type, none of our auth headers.
+    // The PUT goes straight to object storage (not our API), so it uses a bare
+    // fetch with none of our auth headers.
+    //
+    // The headers come from the SERVER rather than being assumed here. Storage
+    // used to be Supabase, where Content-Type alone is enough; it is moving to
+    // R2, where the presigned URL signs the owner in as `x-amz-meta-user_id` and
+    // a PUT missing it is rejected with SignatureDoesNotMatch (verified: 403
+    // with Content-Type alone, 200 with both). Letting the server say what to
+    // send means this client never has to know which store it is talking to,
+    // and the migration needs no coordinated release of it.
+    //
+    // Falls back to Content-Type so an older API that does not return
+    // uploadHeaders keeps working, which is what makes the two deployable in
+    // either order.
     const put = await this.fetchImpl(created.uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': opts.contentType },
+      headers: created.uploadHeaders ?? { 'Content-Type': opts.contentType },
       body: data as BodyInit,
     })
     if (!put.ok) {

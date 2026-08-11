@@ -472,11 +472,19 @@ export function mediaBatchResult(
 
 /** Phase 1 of an upload: the signed URL + the PUT-then-complete instructions. */
 export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
+  // The headers are listed EXPLICITLY rather than described, because this instruction is executed by an agent
+  // and "with the file's Content-Type" was about to become wrong. Object storage is moving to R2, where the
+  // presigned URL signs the owner in as `x-amz-meta-user_id`; a PUT missing it is refused with
+  // SignatureDoesNotMatch (verified: 403 with Content-Type alone, 200 with both). Telling the caller which
+  // headers to send, from the server's own answer, means the migration needs no change here at all.
+  const headers = r.uploadHeaders ?? { 'Content-Type': 'the file MIME type' }
   return text(
     lines([
       `Upload created (id ${r.outputId}). Two steps remain:`,
-      `1. PUT the file bytes to this URL with the file's Content-Type (expires ${r.expiresAt}):`,
+      `1. PUT the file bytes to this URL (expires ${r.expiresAt}):`,
       `   ${r.uploadUrl}`,
+      '   Send EXACTLY these headers, unchanged:',
+      ...Object.entries(headers).map(([k, v]) => `     ${k}: ${v}`),
       `2. Call complete_media_upload(outputId: "${r.outputId}") to finalize.`,
       'Once complete, reference the media by its outputId in generations or post assets.',
     ]),

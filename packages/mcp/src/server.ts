@@ -1433,7 +1433,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Media Upload',
       annotations: WRITE,
       description:
-        "Upload a local file as first-class media (phase 1 of 2). Returns a signed uploadUrl; PUT the file bytes to it with the file's Content-Type, then call complete_media_upload with the returned outputId. The finished media is referenceable by outputId in generate_* and add_post_asset. For a file already on a public URL, use import_media instead. Requires the assets:write scope.",
+        'Upload a local file as first-class media (phase 1 of 2). Returns a signed uploadUrl and the exact headers to send; PUT the file bytes to that URL with those headers unchanged, then call complete_media_upload with the returned outputId. The finished media is referenceable by outputId in generate_* and add_post_asset. For a file already on a public URL, use import_media instead. Requires the assets:write scope.',
       inputSchema: {
         fileName: z.string().describe('The file name (used for its extension), e.g. "cover.png".'),
         contentType: z.string().describe('The file MIME type, e.g. "image/png" or "video/mp4".'),

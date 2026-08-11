@@ -887,6 +887,16 @@ export interface CreateMediaUploadInput {
 export interface CreateMediaUploadResult {
   outputId: string
   uploadUrl: string
+  /**
+   * Headers to send with the PUT, exactly as given.
+   *
+   * Optional because an older API deployment does not return it; when absent, send
+   * `Content-Type` alone. Once storage is R2 the presigned URL signs the owner in as
+   * `x-amz-meta-user_id` and a PUT without it is refused, so a client that hardcodes
+   * `Content-Type` breaks. Taking the headers from the server keeps this client
+   * store-agnostic and lets the API and the SDK deploy in either order.
+   */
+  uploadHeaders?: Record<string, string>
   storagePath: string
   expiresAt: string
 }

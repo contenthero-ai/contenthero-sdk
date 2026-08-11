@@ -569,3 +569,59 @@ test('pendingOutputId marks resumable errors and only those', () => {
   assert.equal(pendingOutputId(new GenerationFailedError('c', 'nope')), undefined)
   assert.equal(pendingOutputId(new Error('unrelated')), undefined)
 })
+
+// ── uploadMedia sends the headers the SERVER dictates ─────────────────────────────────────────────────
+//
+// The PUT goes straight to object storage. While that was Supabase, `Content-Type` alone sufficed. R2 signs
+// the owner into the presigned URL as `x-amz-meta-user_id`, and a PUT missing it is refused with
+// SignatureDoesNotMatch (verified against real R2: 403 with Content-Type alone, 200 with both). So the client
+// must send what it is told rather than what it assumes, or every CLI and MCP upload breaks at the cutover.
+
+test('uploadMedia sends the uploadHeaders the API returned', async () => {
+  const { fetch, calls } = stubFetch([
+    {
+      status: 201,
+      body: {
+        outputId: 'out_1',
+        uploadUrl: 'https://store.example/put',
+        uploadHeaders: { 'Content-Type': 'image/png', 'x-amz-meta-user_id': 'user_9' },
+        storagePath: 'asset_1/original.png',
+        expiresAt: '2026-01-01T00:00:00Z',
+      },
+    },
+    { status: 200, body: {} },
+    { status: 200, body: { outputId: 'out_1', url: 'https://media.example/asset_1/original.png' } },
+  ])
+  const ch = new ContentHero({ apiKey: 'k', fetch })
+  await ch.uploadMedia(new Blob([new Uint8Array([1, 2, 3])]), {
+    fileName: 'a.png',
+    contentType: 'image/png',
+  })
+
+  const put = calls.find((c) => c.url === 'https://store.example/put')
+  assert.ok(put, 'the PUT went to the URL the server gave')
+  assert.deepEqual(put?.init?.headers, { 'Content-Type': 'image/png', 'x-amz-meta-user_id': 'user_9' })
+})
+
+test('uploadMedia falls back to Content-Type when the API omits uploadHeaders', async () => {
+  // An older API deployment returns no uploadHeaders. The two must be deployable in either order, so the
+  // client keeps working rather than sending `undefined` headers and failing on a store that needs none.
+  const { fetch, calls } = stubFetch([
+    {
+      status: 201,
+      body: {
+        outputId: 'out_2',
+        uploadUrl: 'https://store.example/put2',
+        storagePath: 'legacy/path.png',
+        expiresAt: '2026-01-01T00:00:00Z',
+      },
+    },
+    { status: 200, body: {} },
+    { status: 200, body: { outputId: 'out_2', url: 'https://media.example/legacy/path.png' } },
+  ])
+  const ch = new ContentHero({ apiKey: 'k', fetch })
+  await ch.uploadMedia(new Blob([new Uint8Array([1])]), { fileName: 'b.png', contentType: 'image/png' })
+
+  const put = calls.find((c) => c.url === 'https://store.example/put2')
+  assert.deepEqual(put?.init?.headers, { 'Content-Type': 'image/png' })
+})
