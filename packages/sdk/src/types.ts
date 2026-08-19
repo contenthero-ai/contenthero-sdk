@@ -1452,7 +1452,8 @@ export interface EditorOpResult {
 
 /** Result of `applyEditorOps`: the new revision + per-op results. */
 export interface ApplyEditorOpsResult {
-  surface: EditorSurface
+  // No `surface`: it equalled the project's `kind` once the vocabularies converged, and returning the same
+  // value under two names is what this change removed.
   revision: number
   results: EditorOpResult[]
   /** Present only when `includeRenderUrl` was set: a preview still URL of the resulting composition. */
@@ -1494,7 +1495,6 @@ export interface GroupSummary {
 }
 
 export interface ProjectDetail extends ProjectSummary {
-  surface: EditorSurface
   revision: number
   /** The full composition state (`{ slides }` for canvas, `{ tracks }` for the editor timeline). */
   state: unknown

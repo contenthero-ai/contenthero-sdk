@@ -1840,7 +1840,6 @@ test('get_project reads the full detail + revision', async () => {
   const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
   const body = (res.content[0]).text
   assert.match(body, /revision 4/)
-  assert.match(body, /surface: editor/)
   assert.match(body, /My Edit/)
 })
 

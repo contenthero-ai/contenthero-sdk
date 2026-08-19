@@ -1059,7 +1059,7 @@ void PROJECT_DETAIL_EXPOSURE
 /** A single project's full detail (read-before-write): metadata, surface, revision, and the state JSON. */
 export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
-    `Project ${p.id}: "${p.title}" (${p.kind}, surface: ${p.surface}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Project ${p.id}: "${p.title}" (${p.kind}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
       // The output resolution above is NOT the coordinate space layer geometry uses. Stating both, adjacent
       // and labelled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large

@@ -91,7 +91,7 @@ export function registerProject(program: Command): void {
         slideId: typeof opts.slide === 'string' ? opts.slide : undefined,
       })
       emit(p, ctx, () =>
-        `Project ${p.id} "${p.title}" (${p.kind}, ${p.surface}), revision ${p.revision}` +
+        `Project ${p.id} "${p.title}" (${p.kind}), revision ${p.revision}` +
         // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
         // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
         // printed no dimensions at all, so there was nowhere to learn it short of reading app source.
@@ -313,7 +313,7 @@ export function registerProject(program: Command): void {
       })
       emit(result, ctx, () => {
         const ok = result.results.filter((r) => r.ok).length
-        return `Applied ${ok}/${result.results.length} ${result.surface} op(s). New revision: ${result.revision}.`
+        return `Applied ${ok}/${result.results.length} op(s). New revision: ${result.revision}.`
       })
     })
 }
