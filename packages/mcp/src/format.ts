@@ -1030,7 +1030,6 @@ const PROJECT_DETAIL_EXPOSURE = {
   id: 'rendered',
   title: 'rendered',
   kind: 'rendered',
-  surface: 'rendered',
   orientation: 'rendered',
   width: 'rendered',
   height: 'rendered',
@@ -1179,7 +1178,8 @@ export function projectListResult(projects: ProjectSummary[]): CallToolResult {
 export function projectCreatedResult(p: ProjectDetail): CallToolResult {
   return text(
     `Created ${p.kind} project ${p.id}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
-      `Use this id with update_${p.surface === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
+      // The TOOL is still called update_timeline; `kind` is what says which one applies.
+      `Use this id with update_${p.kind === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
   )
 }
 
