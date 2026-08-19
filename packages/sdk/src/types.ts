@@ -752,6 +752,14 @@ export interface ResolvedMediaBatchItem {
     /** Alpha bounds in SOURCE pixels. Equals the full frame for an image with no transparent margin. */
     content?: { x: number; y: number; width: number; height: number }
   }
+  /**
+   * MEASURED LENGTH in seconds, for anything time-based: video, audio, and whatever comes later.
+   *
+   * Absent for an asset that is not ours or not yet measured. This was missing entirely for audio, which made
+   * `editAudio` uncallable without downloading the file first, because it REQUIRES a `durationSeconds` to
+   * price the job and no read returned one.
+   */
+  durationSeconds?: number
   error?: string
 }
 

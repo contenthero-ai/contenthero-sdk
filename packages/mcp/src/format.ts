@@ -428,7 +428,11 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
         : ' | artwork fills the frame'
     }
   }
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${prompt}${note}`
+  // MEASURED DURATION, for anything time-based. Reported for AUDIO too, which is the point: audio has no
+  // dimensions, so it carried no measured facts at all, and `edit_audio` requires a durationSeconds to price
+  // the job. The only way to call it correctly was to download the file and probe it.
+  const dur = it.durationSeconds != null ? `\n    duration: ${it.durationSeconds.toFixed(2)}s` : ''
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${prompt}${note}`
 }
 
 /**
