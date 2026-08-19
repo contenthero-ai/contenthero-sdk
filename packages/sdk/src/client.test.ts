@@ -256,7 +256,7 @@ test('list filters append favorited and archived query params', async () => {
 
 test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'delete_clip', ok: true }] } },
+    { status: 200, body: { surface: 'editor', revision: 4, results: [{ op: 'delete_clip', ok: true }] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const out = await client.applyEditorOps({
@@ -276,14 +276,14 @@ test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', as
   assert.deepEqual(sent.ops[0].clipIds, ['a'])
   // A client op_id (uuid) is generated for the op when the caller does not supply one.
   assert.match(sent.ops[0].op_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-  assert.equal(out.surface, 'timeline')
+  assert.equal(out.surface, 'editor')
   assert.equal(out.revision, 4)
   assert.equal(out.results[0]?.ok, true)
 })
 
 test('applyEditorOps preserves a caller-supplied op_id (idempotency key)', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { surface: 'timeline', revision: 4, results: [{ op: 'delete_clip', opId: 'mine-1', ok: true }] } },
+    { status: 200, body: { surface: 'editor', revision: 4, results: [{ op: 'delete_clip', opId: 'mine-1', ok: true }] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   await client.applyEditorOps({ projectId: 'p1', ops: [{ op: 'delete_clip', op_id: 'mine-1', clipIds: ['a'] }] })
@@ -360,7 +360,7 @@ test('createPreview POSTs the range and getPreview GETs the handle', async () =>
 
 test('getProject with includeRenderUrl appends the query param', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { project: { id: 'p1', kind: 'editor', title: 'X', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 2, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, renderUrl: 'https://x/p.png' } } },
+    { status: 200, body: { project: { id: 'p1', kind: 'editor', title: 'X', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 2, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, renderUrl: 'https://x/p.png' } } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const p = await client.getProject('p1', { includeRenderUrl: true })
@@ -378,7 +378,7 @@ test('listProjects GETs /api/v1/projects with filters and unwraps { projects }',
 })
 
 test('createProject POSTs to /api/v1/projects and unwraps { project }', async () => {
-  const { fetch, calls } = stubFetch([{ status: 201, body: { project: { id: 'new1', kind: 'editor', title: 'Untitled', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } }])
+  const { fetch, calls } = stubFetch([{ status: 201, body: { project: { id: 'new1', kind: 'editor', title: 'Untitled', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const p = await client.createProject({ kind: 'editor' })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects')
@@ -445,11 +445,11 @@ test('getLayerTypes GETs the canvas catalog', async () => {
 })
 
 test('getTimelineTypes GETs the timeline catalog', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'timeline', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [] } }])
+  const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const cat = await client.getTimelineTypes()
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/timeline-types')
-  assert.equal(cat.surface, 'timeline')
+  assert.equal(cat.surface, 'editor')
 })
 
 test('listMedia forwards source=uploads to the query', async () => {

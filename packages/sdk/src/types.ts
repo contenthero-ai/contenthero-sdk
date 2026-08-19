@@ -220,8 +220,9 @@ export interface PlacementResult {
   projectId: string
   /** The placed clip / layer id (deterministic). Chain further ops (animate, reposition, reorder) onto it. */
   itemId?: string
-  /** 'canvas' when placed as a layer on a slide, 'timeline' when placed as a clip on a track. */
-  surface?: 'canvas' | 'timeline'
+  /** 'canvas' when placed as a layer on a slide, 'editor' when placed as a clip on a track. Mirrors
+   *  `project.kind` exactly, rather than renaming it. */
+  surface?: 'canvas' | 'editor'
   /** Canvas only: the placed layer id (same as itemId) and the resolved target slide. */
   layerId?: string
   slideId?: string
@@ -1405,7 +1406,7 @@ export interface ArchiveInput {
 // ---------------------------------------------------------------------------
 
 /** Which write model a project's composition uses: 2D canvas layers or a 1D editor timeline. */
-export type EditorSurface = 'canvas' | 'timeline'
+export type EditorSurface = 'canvas' | 'editor'
 
 /** One op in the shared editor/canvas op vocabulary. Opaque here: shaped by the reducer for the
  *  project's surface (canvas layer/slide ops, or timeline clip ops). Every op has an `op` name. */
@@ -1787,7 +1788,7 @@ export interface LayerTypeCatalog {
 /** The editor timeline clip + track-type catalog, from `getTimelineTypes`. Makes `update_timeline`
  *  self-describing. */
 export interface TimelineTypeCatalog {
-  surface: 'timeline'
+  surface: 'editor'
   description: string
   sharedProps: EditorSharedProps
   clipTypes: EditorTypeSpec[]

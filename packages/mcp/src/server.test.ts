@@ -373,17 +373,17 @@ function fakeClient(overrides = {}) {
     unfavorite: async () => {},
     archive: async () => {},
     unarchive: async () => {},
-    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'timeline', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
+    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
     listProjects: async () => [
       { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],
-    getProject: async (projectId, options) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'timeline', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
+    getProject: async (projectId, options) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
     getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
-    createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'timeline'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
+    createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'editor'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getLayerTypes: async () => ({ surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
-    getTimelineTypes: async () => ({ surface: 'timeline', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
+    getTimelineTypes: async () => ({ surface: 'editor', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
     exportProjectAndWait: async (_projectId, input) => (input?.format && input.format !== 'mp4'
       ? { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.zip', progress: 1 }
       : { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.mp4', progress: 1 }),
@@ -1840,7 +1840,7 @@ test('get_project reads the full detail + revision', async () => {
   const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
   const body = (res.content[0]).text
   assert.match(body, /revision 4/)
-  assert.match(body, /surface: timeline/)
+  assert.match(body, /surface: editor/)
   assert.match(body, /My Edit/)
 })
 
@@ -2007,7 +2007,7 @@ test('update_timeline applies ops and reports the new revision', async () => {
     arguments: { projectId: 'p1', ops: [{ op: 'delete_clip', clipIds: ['a'] }], userIntent: 'cut' },
   })
   assert.ok(!res.isError)
-  assert.match((res.content[0]).text, /Applied 1\/1 timeline op\(s\)\. New revision: 5\./)
+  assert.match((res.content[0]).text, /Applied 1\/1 op\(s\)\. New revision: 5\./)
 })
 
 test('update_canvas routes canvas ops through the same endpoint', async () => {
@@ -2016,7 +2016,7 @@ test('update_canvas routes canvas ops through the same endpoint', async () => {
     name: 'update_canvas',
     arguments: { projectId: 'canvas1', ops: [{ op: 'create_slide' }], userIntent: 'add slide' },
   })
-  assert.match((res.content[0]).text, /Applied 1\/1 canvas op\(s\)/)
+  assert.match((res.content[0]).text, /Applied 1\/1 op\(s\)/)
 })
 
 test('list_media forwards the uploads source', async () => {

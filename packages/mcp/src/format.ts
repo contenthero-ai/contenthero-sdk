@@ -992,7 +992,9 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
   const failures = r.results.filter((x) => !x.ok)
   const created = r.results.flatMap((x) => x.createdIds ?? [])
   const lines = [
-    `Applied ${okCount}/${r.results.length} ${r.surface} op(s). New revision: ${r.revision}.`,
+    // The surface no longer names the ops: it says `editor` or `canvas`, and "editor op(s)" reads worse than
+    // saying nothing, since the caller already knows which tool they invoked.
+    `Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`,
   ]
   if (created.length) lines.push(`Created: ${created.join(', ')}.`)
   // Async effect ops (remove_background) dispatch a job and return its outputId; surface it so the agent can poll.
