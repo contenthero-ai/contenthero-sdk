@@ -104,6 +104,7 @@ import {
   generationBatchResult,
   generationStatusResult,
   outlierListResult,
+  enhanceClipsResult,
   pendingResult,
   pipelineStageListResult,
   postListResult,
@@ -597,15 +598,26 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Edit Audio',
       annotations: WRITE,
       description:
-        'Transform an existing audio file into a new one with an audio-processing model. Voice isolation removes background noise and music; audio enhancement levels loudness and cleans up background noise. Isolation returns the processed audio URL directly; enhancement is asynchronous and returns an outputId to poll with get_generation_status. The result is saved to your library. Optionally pass projectId to place the processed audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
+        'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST on outputs, one job per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl.',
       inputSchema: {
         modelId: z.enum(models.editAudio).describe(EDIT_AUDIO_MODEL_GUIDANCE),
-        sourceUrl: z.string().describe('The audio file to process: a URL or a previous output id.'),
+        sourceUrl: z
+          .string()
+          .optional()
+          .describe('FILE mode: the audio file to process, as a URL or a previous output id. Omit in in-place mode, where the sources come from the clips.'),
         durationSeconds: z
           .number()
           .optional()
           .describe('Source audio length in seconds. Required for getCost, and for enhancement pricing when the source is not a stored ContentHero asset.'),
-        projectId: z.string().optional().describe('The editor project to place the result on. Omit for a standalone library output.'),
+        projectId: z.string().optional().describe('The editor project: where to PLACE the result in file mode, or which timeline to enhance in in-place mode. Omit for a standalone library output.'),
+        clipIds: z
+          .array(z.string())
+          .optional()
+          .describe('IN-PLACE mode: enhance the audio of these clips on projectId. Omit with enhanceClips:true to enhance every audible clip on the timeline.'),
+        enhanceClips: z
+          .boolean()
+          .optional()
+          .describe('IN-PLACE mode for the whole timeline, without naming clips. Implied when clipIds is given.'),
         placement: PLACEMENT_SCHEMA.optional().describe('Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends.'),
         playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative placement.'),
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of running (nothing runs, nothing is charged).'),
@@ -621,9 +633,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           projectId: args.projectId,
           placement: args.placement as EditAudioRequest['placement'],
           playheadFrame: args.playheadFrame,
+          clipIds: args.clipIds,
+          enhanceClips: args.enhanceClips,
         })
         if (args.getCost) return costResult(await client.estimateEditAudioCost(request))
         const result = await client.editAudio(request)
+        // IN-PLACE mode returns one job per SOURCE, so the agent is handed every outputId rather than just the
+        // first: polling only `outputId` would report the whole edit as done when one recording had finished.
+        if (result.outputs) return enhanceClipsResult(result)
         // Enhancement is async (status 'processing'); isolation returns URLs inline.
         if (result.status === 'processing') return pendingResult(result.outputId)
         return audioResult(result)

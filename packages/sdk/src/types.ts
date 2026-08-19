@@ -290,8 +290,13 @@ export interface CanvasPlacementIntent {
 export interface EditAudioRequest {
   /** The audio-processing model to run. */
   modelId: string
-  /** Public URL of the source audio to process. */
-  sourceUrl: string
+  /**
+   * Public URL (or a previous output id) of the source audio to process.
+   *
+   * Required in FILE mode and must be OMITTED in in-place mode, where the sources come from the clips
+   * themselves. The two are mutually exclusive: one produces a new library asset, the other edits a timeline.
+   */
+  sourceUrl?: string
   /** Source audio length in seconds. Required for a cost estimate; on a real run
    *  it refines the estimate (the authoritative charge is the processed duration). */
   durationSeconds?: number
@@ -302,6 +307,51 @@ export interface EditAudioRequest {
   placement?: PlacementIntent
   /** Optional interactive-fallback playhead frame (echo one from get_context for playhead-relative placement). */
   playheadFrame?: number
+  /**
+   * IN-PLACE mode: enhance the audio OF EXISTING CLIPS on `projectId`, rather than processing a standalone file.
+   *
+   * Requires `projectId` and `modelId: 'auphonic-enhance'`. Omitting `clipIds` while passing
+   * `enhanceClips: true` means every audible clip on the timeline, the same whole-timeline default the sibling
+   * timeline ops use. Silenced clips are excluded automatically; enhancing audio nobody can hear would spend
+   * credits and then overwrite something the user deliberately muted.
+   *
+   * ⚠️ RETURNS A LIST on `outputs`. Auphonic estimates a noise profile and picks a loudness target per
+   * PRODUCTION, so one source's clips are concatenated and enhanced as a SINGLE job. Grouping stops at the
+   * source because a profile spanning two recordings is an average of two rooms and fits neither, so a
+   * selection covering three recordings is three jobs and three outputIds.
+   */
+  clipIds?: string[]
+  /** Opt in to in-place mode without naming clips (whole timeline). Implied when `clipIds` is present. */
+  enhanceClips?: boolean
+}
+
+/** One in-place enhancement job: the clips of a single source, concatenated and enhanced together. */
+export interface EnhanceClipsJob {
+  outputId: string
+  creditsEstimate?: number
+  /** Every clip this job's pieces will be applied to. */
+  clipIds: string[]
+  /** How many distinct windows were concatenated into this job. */
+  windows: number
+}
+
+/**
+ * The result of `editAudio`, which serves two shapes.
+ *
+ * FILE mode returns the `GenerateResult` fields. IN-PLACE mode returns `outputs`, one per source, and echoes
+ * the first on `outputId` so a single-source project can be awaited without unpacking the list. `status` is
+ * `'noop'` when the selection contained no audible audio, which is deliberately distinguishable from a failure.
+ */
+export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
+  status: 'processing' | 'completed' | 'noop'
+  /** In-place mode only: one job per source. */
+  outputs?: EnhanceClipsJob[]
+  /** In-place mode only: the project the pieces are applied to. */
+  projectId?: string
+  /** In-place mode only: selected clips skipped because they are silenced. */
+  silencedClipsExcluded?: number
+  /** Present with `status: 'noop'`, explaining why nothing ran. */
+  note?: string
 }
 
 /** A generation record as returned by `getGeneration` and `generateAndWait`. */

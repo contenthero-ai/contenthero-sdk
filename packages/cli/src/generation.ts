@@ -14,6 +14,7 @@ import {
   GenerationFailedError,
   type CostEstimate,
   type EditAudioRequest,
+  type EditAudioResult,
   type GenerateBoardRequest,
   type GenerateRequest,
   type GenerateResult,
@@ -143,7 +144,7 @@ export async function runBoard(
 async function renderSubmission(
   client: ContentHero,
   ctx: Context,
-  submitted: GenerateResult,
+  submitted: GenerateResult | EditAudioResult,
   opts: RunOptions,
 ): Promise<void> {
   if (submitted.status === 'completed' || !opts.wait) {
@@ -151,6 +152,51 @@ async function renderSubmission(
     return
   }
   await waitAndRender(client, ctx, submitted.outputId, opts.timeoutSec)
+}
+
+/**
+ * Render an in-place clip enhancement, which is one job per SOURCE rather than one job.
+ *
+ * Waits on EVERY outputId, not just the first. Waiting on one would report the whole edit as finished when a
+ * single recording had landed, while the others were still running and their clips still untouched.
+ *
+ * A `noop` is emitted as-is rather than treated as an error: a selection with no audible audio is a real,
+ * correct answer, and the server explains which case it was.
+ */
+export async function renderEnhanceClips(
+  client: ContentHero,
+  ctx: Context,
+  result: EditAudioResult,
+  opts: { wait: boolean; timeoutSec: number },
+): Promise<void> {
+  const jobs = result.outputs ?? []
+  if (jobs.length === 0 || !opts.wait) {
+    emit(result, ctx, enhanceClipsHuman)
+    return
+  }
+  emit(result, ctx, enhanceClipsHuman)
+  for (const job of jobs) {
+    await waitAndRender(client, ctx, job.outputId, opts.timeoutSec)
+  }
+}
+
+/** Human rendering for an in-place enhancement submission. */
+function enhanceClipsHuman(result: EditAudioResult): string {
+  const jobs = result.outputs ?? []
+  if (jobs.length === 0) return result.note ?? 'Nothing to enhance: no audible clips in that selection.'
+  const lines = jobs.map(
+    (j, i) =>
+      `  ${i + 1}. ${j.outputId}  ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}, ` +
+      `${j.windows} window${j.windows === 1 ? '' : 's'}`,
+  )
+  const head =
+    jobs.length === 1
+      ? 'Enhancing 1 source:'
+      : `Enhancing ${jobs.length} sources as separate jobs (a noise profile is estimated per recording):`
+  const tail = result.silencedClipsExcluded
+    ? `\n${result.silencedClipsExcluded} silenced clip${result.silencedClipsExcluded === 1 ? '' : 's'} skipped.`
+    : ''
+  return `${head}\n${lines.join('\n')}\nThe enhanced audio is applied to the clips automatically as each job lands.${tail}`
 }
 
 /** Block on one outputId to a terminal state and render it; exit 4 on timeout. */

@@ -53,6 +53,7 @@ import type {
   GenerateResult,
   Generation,
   EditAudioRequest,
+  EditAudioResult,
   ListMediaOptions,
   ListVoicesOptions,
   ListBrandKitsOptions,
@@ -341,13 +342,19 @@ export class ContentHero {
   }
 
   /**
-   * Transform an existing audio file into a new one with an audio-processing
-   * model (audio input -> audio output), e.g. voice isolation. The sibling of
-   * `generate` for the existing-audio -> audio shape. Isolation is synchronous:
-   * the processed URL comes back inline on `outputUrls`.
+   * Transform existing audio with an audio-processing model. Two shapes:
+   *
+   * FILE mode (`sourceUrl`): process a standalone file into a new library asset. Voice isolation is
+   * synchronous and the processed URL comes back inline on `outputUrls`; enhancement is asynchronous and
+   * returns an `outputId` to poll.
+   *
+   * IN-PLACE mode (`projectId` + `clipIds` / `enhanceClips`): enhance the audio OF EXISTING CLIPS on a
+   * timeline. Returns one job per SOURCE on `outputs`, because the vendor estimates a noise profile per
+   * production, so a source's clips are concatenated and enhanced together while separate recordings stay
+   * separate jobs.
    */
-  async editAudio(request: EditAudioRequest): Promise<GenerateResult> {
-    return this.request<GenerateResult>('POST', '/api/v1/studio/audio/edit', request)
+  async editAudio(request: EditAudioRequest): Promise<EditAudioResult> {
+    return this.request<EditAudioResult>('POST', '/api/v1/studio/audio/edit', request)
   }
 
   /** Cost preview for `editAudio` (nothing runs, nothing is charged). */

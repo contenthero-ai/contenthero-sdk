@@ -22,6 +22,7 @@ import type {
   Element,
   Generation,
   GenerateResult,
+  EditAudioResult,
   InspirationAccountDetail,
   InspirationContent,
   MediaItem,
@@ -102,10 +103,40 @@ export function pendingResult(outputId: string, pollAfterSeconds = 15): CallTool
 }
 
 /** Synchronous audio result (already complete on submit). */
-export function audioResult(result: GenerateResult): CallToolResult {
+export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
   const urls = result.outputUrls ?? []
   const header = `Done. Audio generated (outputId ${result.outputId}):`
   return text([header, ...urls.map((u, i) => `${i + 1}. ${u}`)].join('\n'))
+}
+
+/**
+ * In-place clip enhancement: ONE JOB PER SOURCE, so the agent gets every outputId.
+ *
+ * Reporting only the first would let an agent see one recording finish and call the whole edit done, while the
+ * other recordings were still running. The applied-automatically note matters too: unlike every other async
+ * tool here, the caller does NOT place the result, so without saying so an agent would reasonably try to.
+ */
+export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
+  const jobs = result.outputs ?? []
+  if (jobs.length === 0) {
+    return text(result.note ?? 'Nothing to enhance: no audible clips in that selection.')
+  }
+  const lines = jobs.map(
+    (j, i) =>
+      `${i + 1}. outputId ${j.outputId} covers ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}` +
+      ` from one source (${j.windows} window${j.windows === 1 ? '' : 's'})`,
+  )
+  const header =
+    jobs.length === 1
+      ? 'Enhancing 1 source. Poll its outputId with get_generation_status (or wait_for_generation):'
+      : `Enhancing ${jobs.length} sources as separate jobs, because a noise profile is estimated per recording. Poll EVERY outputId:`
+  const footer = [
+    'The enhanced audio is applied to the clips automatically when each job lands, so no placement call is needed.',
+    result.silencedClipsExcluded
+      ? `${result.silencedClipsExcluded} silenced clip${result.silencedClipsExcluded === 1 ? ' was' : 's were'} skipped.`
+      : null,
+  ].filter(Boolean) as string[]
+  return text([header, ...lines, ...footer].join('\n'))
 }
 
 /** Result of a get_cost preflight: the estimate, with nothing generated or charged. */

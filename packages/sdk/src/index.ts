@@ -12,6 +12,8 @@ export type {
   GenerateRequest,
   GenerateResult,
   EditAudioRequest,
+  EditAudioResult,
+  EnhanceClipsJob,
   PlacementIntent,
   CostEstimate,
   GenerateBoardRequest,

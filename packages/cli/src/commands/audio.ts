@@ -10,7 +10,7 @@
 import type { Command } from 'commander'
 import type { EditAudioRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { compact, runEditAudio } from '../generation.js'
+import { compact, runEditAudio, renderEnhanceClips } from '../generation.js'
 import { toFloat, toInt, toJson } from '../args.js'
 
 const VOICE_ISOLATION_MODEL_ID = 'elevenlabs-voice-isolator'
@@ -65,6 +65,33 @@ export function registerAudio(program: Command): void {
       })
       await runEditAudio(client, ctx, request, {
         cost: opts.cost === true,
+        wait: opts.wait !== false,
+        timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
+      })
+    })
+
+  audio
+    .command('enhance-clips')
+    .description(
+      'Enhance the audio OF EXISTING CLIPS on an editor timeline, in place. One job per SOURCE: a recording\'s clips are enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs.',
+    )
+    .argument('<projectId>', 'the editor project whose clips to enhance')
+    .option('--clips <ids...>', 'clip ids to enhance (omit for every audible clip on the timeline)')
+    .option('--no-wait', 'return the outputIds immediately instead of waiting')
+    .option('--timeout <seconds>', 'how long to wait before handing back the outputIds', toInt, DEFAULT_TIMEOUT_SEC)
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const result = await client.editAudio(
+        compact<EditAudioRequest>({
+          modelId: AUDIO_ENHANCE_MODEL_ID,
+          projectId,
+          clipIds: opts.clips as string[] | undefined,
+          // Explicit even when clip ids are given, so the request states its MODE rather than leaving the
+          // server to infer it from which optional fields happen to be present.
+          enhanceClips: true,
+        }),
+      )
+      await renderEnhanceClips(client, ctx, result, {
         wait: opts.wait !== false,
         timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
       })
