@@ -1474,7 +1474,7 @@ export interface EditorOp {
 
 /** Input to `applyEditorOps`. */
 export interface ApplyEditorOpsInput {
-  /** The project to edit. Its `kind` selects the surface (canvas vs timeline). */
+  /** The project to edit. Its `surface` selects the op vocabulary (canvas layers vs timeline clips). */
   projectId: string
   /** The ops to apply, in order. */
   ops: EditorOp[]
@@ -1511,11 +1511,21 @@ export interface ApplyEditorOpsResult {
 }
 
 /** Which surface a project is: an editor (video timeline) or a canvas (slides/layers). */
+/**
+ * Which surface a project lives on.
+ *
+ * Named `ProjectKind` for source compatibility; the field it describes is now `surface`. The API column was
+ * renamed because `canvas` and `editor` are two of the product's eleven surfaces, while `kind` now means the
+ * document shape (`tracks` | `slides`) on a project version.
+ */
 export type ProjectKind = 'editor' | 'canvas'
+export type ProjectSurface = ProjectKind
 
 /** Lightweight project list item (spans both surfaces), from `listProjects`. */
 export interface ProjectSummary {
   id: string
+  surface: string
+  /** @deprecated Alias for `surface`, still emitted for one release window. Prefer `surface`. */
   kind: string
   title: string
   orientation: string
@@ -1712,6 +1722,8 @@ export interface ListProjectsInput {
   /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */
   filter?: 'archived' | 'favorited'
   /** Restrict to one surface. Omitted returns both. */
+  surface?: ProjectSurface
+  /** @deprecated Alias for `surface`, accepted for one release window. `surface` wins if both are set. */
   kind?: ProjectKind
   /** Case-insensitive title search. */
   search?: string
@@ -1720,6 +1732,8 @@ export interface ListProjectsInput {
 /** Input to `createProject`. All optional; the server applies the same defaults as the in-app new-project
  *  flow (16:9 landscape, `editor` kind, an empty composition the app lazy-inits). */
 export interface CreateProjectInput {
+  surface?: ProjectSurface
+  /** @deprecated Alias for `surface`, accepted for one release window. */
   kind?: ProjectKind
   title?: string
   orientation?: string

@@ -1,9 +1,9 @@
 /**
  * `contenthero project` - manage projects (canvas slides or editor timeline) and edit them via ops.
  *
- *   project list  [--filter <state>] [--kind <kind>] [--search <text>]   (requires editor:read)
+ *   project list  [--filter <state>] [--surface <s>] [--search <text>]   (requires editor:read)
  *   project get   <projectId>                                            (requires editor:read)
- *   project create [--kind <kind>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
+ *   project create [--surface <s>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--wait]
@@ -56,19 +56,19 @@ export function registerProject(program: Command): void {
     .command('list')
     .description('List projects, both editor + canvas (requires editor:read)')
     .option('--filter <state>', 'archived | favorited (omitted = active)')
-    .option('--kind <kind>', 'editor | canvas (omitted = both)')
+    .option('--surface <surface>', 'editor | canvas (omitted = both)')
     .option('--search <text>', 'case-insensitive title search')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const projects = await client.listProjects({
         filter: opts.filter as 'archived' | 'favorited' | undefined,
-        kind: opts.kind as 'editor' | 'canvas' | undefined,
+        surface: opts.surface as 'editor' | 'canvas' | undefined,
         search: opts.search as string | undefined,
       })
       emit(projects, ctx, () =>
         projects.length === 0
           ? 'No projects found.'
-          : projects.map((p) => `${p.id}  [${p.kind}]  ${p.title}  ${p.orientation}`).join('\n'),
+          : projects.map((p) => `${p.id}  [${p.surface}]  ${p.title}  ${p.orientation}`).join('\n'),
       )
     })
 
@@ -91,7 +91,7 @@ export function registerProject(program: Command): void {
         slideId: typeof opts.slide === 'string' ? opts.slide : undefined,
       })
       emit(p, ctx, () =>
-        `Project ${p.id} "${p.title}" (${p.kind}), revision ${p.revision}` +
+        `Project ${p.id} "${p.title}" (${p.surface}), revision ${p.revision}` +
         // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
         // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
         // printed no dimensions at all, so there was nowhere to learn it short of reading app source.
@@ -153,7 +153,7 @@ export function registerProject(program: Command): void {
   project
     .command('create')
     .description('Create a project (requires editor:write)')
-    .option('--kind <kind>', "editor | canvas (default: editor)")
+    .option('--surface <surface>', "editor | canvas (default: editor)")
     .option('--title <text>', "project title (default: Untitled)")
     .option('--orientation <ratio>', "e.g. 16:9, 9:16, 1:1 (default: 16:9)")
     .option('--width <n>', 'pixel width (default: from orientation)', toInt)
@@ -161,13 +161,13 @@ export function registerProject(program: Command): void {
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.createProject({
-        kind: opts.kind as 'editor' | 'canvas' | undefined,
+        surface: opts.surface as 'editor' | 'canvas' | undefined,
         title: opts.title as string | undefined,
         orientation: opts.orientation as string | undefined,
         width: opts.width as number | undefined,
         height: opts.height as number | undefined,
       })
-      emit(p, ctx, () => `Created ${p.kind} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
+      emit(p, ctx, () => `Created ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
     })
 
   project
@@ -208,7 +208,7 @@ export function registerProject(program: Command): void {
       }
       const { client, ctx } = makeClient(command)
       const p = await client.importProject({ source, title: opts.title as string | undefined })
-      emit(p, ctx, () => `Imported ${p.kind} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
+      emit(p, ctx, () => `Imported ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
     })
 
   project

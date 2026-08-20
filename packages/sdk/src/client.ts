@@ -1215,7 +1215,7 @@ export class ContentHero {
 
   /**
    * Apply a batch of ops to a project's composition (canvas slides or editor timeline) and persist
-   * atomically. The project `kind` selects the surface; the ops run through the same reducers the manual
+   * atomically. The project's `surface` selects the op vocabulary; the ops run through the same reducers the manual
    * UI and in-app agent use. Requires the `editor:write` scope.
    *
    * Optimistic concurrency: pass `expectedRevision` (from `getProject`) to fail with a 409 ConflictError if

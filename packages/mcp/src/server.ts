@@ -2662,10 +2662,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Projects',
       annotations: READ,
       description:
-        "List the account's editor (video timeline) and canvas (slides/layers) projects. Filter by state (archived / favorited), by kind (editor / canvas), or by a title search. Returns lightweight summaries; call get_project for a single project's full composition. Requires the editor:read scope.",
+        "List the account's editor (video timeline) and canvas (slides/layers) projects. Filter by state (archived / favorited), by surface (editor / canvas), or by a title search. Returns lightweight summaries; call get_project for a single project's full composition. Requires the editor:read scope.",
       inputSchema: {
         filter: z.enum(['archived', 'favorited']).optional().describe('archived -> only archived; favorited -> favorited and not archived; omitted -> active (not archived).'),
-        kind: z.enum(['editor', 'canvas']).optional().describe('Restrict to one surface; omitted returns both.'),
+        surface: z.enum(['editor', 'canvas']).optional().describe('Restrict to one surface; omitted returns both.'),
+        kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `surface`. Prefer `surface`; this is accepted for one release window.'),
         search: z.string().optional().describe('Case-insensitive title search.'),
       },
     },
@@ -2886,9 +2887,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Project',
       annotations: WRITE,
       description:
-        "Create a new project. `kind` picks the surface: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor kind). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. Returns the new project id + revision. Requires the editor:write scope.",
+        "Create a new project. `surface` picks where it lives: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor surface). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. Returns the new project id + revision. Requires the editor:write scope.",
       inputSchema: {
-        kind: z.enum(['editor', 'canvas']).optional().describe("The surface. Defaults to 'editor'."),
+        surface: z.enum(['editor', 'canvas']).optional().describe("The surface. Defaults to 'editor'."),
+        kind: z.enum(['editor', 'canvas']).optional().describe("Deprecated alias for `surface`. Prefer `surface`; accepted for one release window."),
         title: z.string().optional().describe("Project title. Defaults to 'Untitled'."),
         orientation: z.string().optional().describe("Aspect ratio, e.g. '16:9', '9:16', '1:1'. Defaults to '16:9'."),
         width: z.number().optional().describe('Pixel width. Defaults from the orientation.'),
