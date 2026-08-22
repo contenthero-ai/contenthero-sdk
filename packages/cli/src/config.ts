@@ -1,73 +1,31 @@
 /**
- * On-disk config + credential storage for the CLI.
+ * Credential and config WRITES for the CLI (`contenthero login` / `logout`).
  *
- * Two files under the config dir (default `~/.contenthero`, override with
- * CONTENTHERO_CONFIG_DIR):
- *   - `credentials`  : the stored API key (written by `contenthero login`).
- *                      Mode 0600; it is the only secret on disk.
- *   - `config.json`  : non-secret preferences (e.g. baseUrl).
- *
- * Reads tolerate a missing or malformed file by returning empty, so a fresh
- * machine just falls through the auth ladder to env / flag. Writes create the
- * dir at 0700 first.
+ * ⚠️ THE READ HALF MOVED TO `@contenthero/sdk/credentials`. It is shared with the MCP server, which
+ * previously could not see a key written here at all and so read only the environment. Two implementations of
+ * "where does the key live" agree right up until one of them learns about a new location, so paths, shapes and
+ * the resolution order now have exactly one definition and this file re-exports it.
  */
 
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+  configDir,
+  configPath,
+  credentialsPath,
+  readConfig,
+  readCredential,
+  type StoredConfig,
+  type StoredCredential,
+} from '@contenthero/sdk/credentials'
 
-/** A stored credential. JSON so we can grow it (label, createdAt) without a format break. */
-export interface StoredCredential {
-  apiKey: string
-  /** The key's display label, when minted via the browser flow (e.g. "CLI (host)"). */
-  label?: string
-  /** ISO timestamp the credential was stored. */
-  createdAt?: string
-}
+// Re-exported so every existing CLI import keeps working and there is still one obvious place to look.
+export { configDir, configPath, credentialsPath, readConfig, readCredential }
+export type { StoredConfig, StoredCredential }
 
-/** Non-secret CLI preferences. */
-export interface StoredConfig {
-  /** Override API base URL (e.g. a preview deployment). */
-  baseUrl?: string
-}
-
-export function configDir(): string {
-  return process.env.CONTENTHERO_CONFIG_DIR || join(homedir(), '.contenthero')
-}
-
-export function credentialsPath(): string {
-  return join(configDir(), 'credentials')
-}
-
-export function configPath(): string {
-  return join(configDir(), 'config.json')
-}
-
+/** The write half needs the directory to exist; reads tolerate its absence. */
 function ensureDir(): void {
   const dir = configDir()
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
-}
-
-function readJson<T>(path: string): T | undefined {
-  try {
-    if (!existsSync(path)) return undefined
-    const raw = readFileSync(path, 'utf8').trim()
-    if (!raw) return undefined
-    return JSON.parse(raw) as T
-  } catch {
-    return undefined
-  }
-}
-
-export function readCredential(): StoredCredential | undefined {
-  return readJson<StoredCredential>(credentialsPath())
 }
 
 export function writeCredential(cred: StoredCredential): void {
@@ -83,10 +41,6 @@ export function clearCredential(): boolean {
   if (!existsSync(path)) return false
   rmSync(path)
   return true
-}
-
-export function readConfig(): StoredConfig {
-  return readJson<StoredConfig>(configPath()) ?? {}
 }
 
 export function writeConfig(config: StoredConfig): void {

@@ -1061,6 +1061,10 @@ const PROJECT_DETAIL_EXPOSURE = {
   id: 'rendered',
   title: 'rendered',
   kind: 'rendered',
+  // Added when `surface` joined ProjectDetail (8aecfd0). It went unnoticed because `dist/` is gitignored
+  // and this file typechecks against the BUILT SDK, so a stale dist hid the missing key until the next
+  // rebuild. Same value as `kind`, which is the name it used to have.
+  surface: 'rendered',
   orientation: 'rendered',
   width: 'rendered',
   height: 'rendered',
