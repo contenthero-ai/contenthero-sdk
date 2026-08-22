@@ -41,6 +41,8 @@ import type {
   CostEstimate,
   CreatePostInput,
   UpdateBrandKitInput,
+  CreateBrandKitInput,
+  ExtractionOutcome,
   UpdateBrandKitSectionInput,
   InspirationAccountDetail,
   InspirationContent,
@@ -400,6 +402,58 @@ export class ContentHero {
       'GET',
       `/api/v1/brand-kits${qs ? `?${qs}` : ''}`,
     )
+    return data.brandKits
+  }
+
+  /**
+   * Create a brand kit. Requires the `brandkit:write` scope.
+   *
+   * Three sources, and the input decides which: EMPTY (just a name), FROM A WEBSITE
+   * (`websiteUrl` + `extract: true`), or A COPY (`duplicateFrom`).
+   *
+   * ⚠️ WITH `extract` IT RETURNS IMMEDIATELY, before the kit has any content. That empty kit is the HANDLE:
+   * the thing to poll and the row the UI renders at once. Poll `extractionStatus` via `getBrandKit`.
+   */
+  async createBrandKit(
+    input: CreateBrandKitInput & { duplicateFrom?: string },
+  ): Promise<{ brandKit: BrandKit; extraction?: ExtractionOutcome }> {
+    // A copy is a create with a source, so it shares this method rather than owning a verb of its own.
+    if (input.duplicateFrom) {
+      const { duplicateFrom, name } = input
+      const data = await this.request<{ brandKit: BrandKit }>(
+        'POST',
+        `/api/v1/brand-kits/${encodeURIComponent(duplicateFrom)}/duplicate`,
+        name ? { name } : {},
+      )
+      return { brandKit: data.brandKit }
+    }
+    return this.request<{ brandKit: BrandKit; extraction?: ExtractionOutcome }>(
+      'POST',
+      '/api/v1/brand-kits',
+      input,
+    )
+  }
+
+  /**
+   * Re-run website extraction for an existing kit. Returns at once; poll `extractionStatus`.
+   * Requires the kit to already have a `websiteUrl`, and the `brandkit:write` scope.
+   */
+  async extractBrandKit(brandKitId: string): Promise<ExtractionOutcome> {
+    const data = await this.request<{ extraction: ExtractionOutcome }>(
+      'POST',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/extract`,
+    )
+    return data.extraction
+  }
+
+  /**
+   * Reorder the account's brand kits. Collection-level because ordering is a property of the SET: a per-kit
+   * position would let two kits claim one slot. Pass every id, in the order you want.
+   */
+  async reorderBrandKits(orderedIds: string[]): Promise<BrandKitSummary[]> {
+    const data = await this.request<{ brandKits: BrandKitSummary[] }>('PATCH', '/api/v1/brand-kits', {
+      orderedIds,
+    })
     return data.brandKits
   }
 

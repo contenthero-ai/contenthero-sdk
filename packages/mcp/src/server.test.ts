@@ -413,6 +413,7 @@ test('advertises exactly the v1 tools', async () => {
     'add_to_folder',
     'archive',
     'complete_media_upload',
+    'create_brand_kit',
     'create_element',
     'create_folder',
     'create_media_upload',

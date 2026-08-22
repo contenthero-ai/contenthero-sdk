@@ -48,6 +48,8 @@ export type {
   BrandKitKnowledge,
   BrandKit,
   UpdateBrandKitInput,
+  CreateBrandKitInput,
+  ExtractionOutcome,
   BrandKitSectionRecord,
   AddBrandKitSectionInput,
   UpdateBrandKitSectionInput,

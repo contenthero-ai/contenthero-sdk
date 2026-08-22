@@ -921,6 +921,50 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- create_brand_kit -----------------------------------------------------
+  server.registerTool(
+    'create_brand_kit',
+    {
+      title: 'Create Brand Kit',
+      annotations: WRITE,
+      description:
+        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; (2) FROM A WEBSITE, pass websiteUrl + extract:true and ContentHero scrapes that site and fills in business name, positioning, voice, colours, typography, logos and assets by itself, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the fields fill in over the next minute or two, so poll extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrl is given (it defaults to the site's hostname until extraction finds the real business name). Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brandkit:write scope.",
+      inputSchema: {
+        name: z.string().optional().describe("The kit's name. Optional when websiteUrl is given."),
+        websiteUrl: z.string().optional().describe('The business website. Required to use extract.'),
+        extract: z
+          .boolean()
+          .optional()
+          .describe('Scrape websiteUrl and fill the kit in automatically. Returns at once; poll extractionStatus.'),
+        duplicateFrom: z.string().optional().describe('Copy an existing brand kit id instead of starting empty.'),
+        businessName: z.string().optional(),
+        primaryOffer: z.string().optional(),
+        nicheDefinition: z.string().optional(),
+        positioning: z.record(z.string(), z.unknown()).optional().describe('Positioning object (free-form).'),
+        audience: z.record(z.string(), z.unknown()).optional().describe('Audience object (free-form).'),
+        voiceProfile: z.record(z.string(), z.unknown()).optional().describe('Voice profile object (tone, style, ...).'),
+        visualStyle: z.string().optional(),
+        designPrinciples: z.array(z.string()).optional(),
+        contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        if (!args.name && !args.websiteUrl && !args.duplicateFrom) {
+          return errorResult(new Error('create_brand_kit needs a name, a websiteUrl, or duplicateFrom.'))
+        }
+        if (args.extract && !args.websiteUrl) {
+          return errorResult(new Error('create_brand_kit: extract requires a websiteUrl to scrape.'))
+        }
+        const { brandKit, extraction } = await client.createBrandKit(args)
+        return brandKitResult(brandKit, extraction)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // -- update_brand_kit -----------------------------------------------------
   server.registerTool(
     'update_brand_kit',
@@ -928,9 +972,28 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit's identity fields: business name, positioning, audience, voice profile, visual style, content strategy, etc. Only the fields you pass change. Requires a key with the brandkit:write scope. Get the current kit first with get_brand_kit.",
+        "Update a brand kit: identity fields (business name, positioning, audience, voice profile, visual style, content strategy), its brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/brandAccountIds/inspirationAccountIds are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. brandAccountIds are the account owner's OWN profiles (performance), inspirationAccountIds are competitors and creators they watch; they are separate lists because they mean opposite things. isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
+        brandKitId: z.string().optional().describe('The brand kit id. Omit ONLY when reordering with orderedIds.'),
+        orderedIds: z
+          .array(z.string())
+          .optional()
+          .describe('Reorder mode: every brand kit id, in the order you want them. Pass this alone.'),
+        extract: z
+          .boolean()
+          .optional()
+          .describe('Re-run website extraction for this kit. Returns immediately; poll extractionStatus.'),
+        logos: z.array(z.unknown()).optional().describe('The kit\'s logos. REPLACES the list; [] clears it.'),
+        assets: z.array(z.unknown()).optional().describe('The kit\'s brand assets. REPLACES the list; [] clears it.'),
+        isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
+        brandAccountIds: z
+          .array(z.string())
+          .optional()
+          .describe("The account owner's OWN tracked accounts to link. REPLACES the list; [] clears it."),
+        inspirationAccountIds: z
+          .array(z.string())
+          .optional()
+          .describe('Tracked competitor/creator accounts to link. REPLACES the list; [] clears it.'),
         name: z.string().optional(),
         businessName: z.string().optional(),
         websiteUrl: z.string().optional(),
@@ -947,8 +1010,30 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { brandKitId, ...input } = args
-        return brandKitResult(await client.updateBrandKit(brandKitId, input))
+        const { brandKitId, orderedIds, extract, ...input } = args
+
+        // Reorder is the collection-level mode and takes no kit id at all.
+        if (orderedIds && !brandKitId) {
+          return brandKitListResult(await client.reorderBrandKits(orderedIds as string[]))
+        }
+        if (!brandKitId) {
+          return errorResult(new Error('update_brand_kit needs either brandKitId, or orderedIds to reorder.'))
+        }
+
+        // A patch and an extract compose: correct the url and re-extract in one call. The patch lands first so
+        // the extraction reads the url the caller just set, not the one it replaced.
+        const patched =
+          Object.keys(input).length > 0
+            ? await client.updateBrandKit(brandKitId as string, input)
+            : null
+        if (extract) {
+          const extraction = await client.extractBrandKit(brandKitId as string)
+          return brandKitResult(patched ?? (await client.getBrandKit(brandKitId as string)), extraction)
+        }
+        if (!patched) {
+          return errorResult(new Error('update_brand_kit: nothing to change. Pass a field, extract, or orderedIds.'))
+        }
+        return brandKitResult(patched)
       } catch (err) {
         return errorResult(err)
       }

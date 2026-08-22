@@ -601,6 +601,13 @@ export interface SearchBrandKnowledgeOptions {
 /** Full brand kit as returned by `getBrandKit` (the whole document). */
 export interface BrandKit extends BrandKitSummary {
   websiteUrl: string | null
+  /**
+   * Where website extraction has got to: 'idle', 'extracting', 'reviewing', 'complete', 'failed'.
+   * This is the polling surface after `createBrandKit({ extract: true })` or `extractBrandKit`.
+   */
+  extractionStatus?: string | null
+  /** The user-facing reason the last extraction failed, when it did. */
+  extractionError?: string | null
   sourceType: string | null
   primaryOffer: string | null
   positioning: Record<string, unknown> | null
@@ -635,6 +642,48 @@ export interface UpdateBrandKitInput {
   brandColors?: unknown[]
   typography?: Record<string, unknown> | null
   contentStrategy?: Record<string, unknown> | null
+  /**
+   * Brand media. A patch REPLACES the list, so pass the whole set; `[]` clears it. These are reconciled into
+   * `brand_kit_assets` rather than written as columns, which is why they are not simple fields.
+   */
+  logos?: unknown[]
+  assets?: unknown[]
+  /**
+   * Only `true` is meaningful: it makes this the default kit and un-defaults every other one. Passing `false`
+   * would leave the account with no default at all, which the brand switcher cannot resolve, so to MOVE the
+   * default you name the kit that should hold it.
+   */
+  isDefault?: boolean
+  /**
+   * Linked tracked accounts, declarative: pass the whole set and what is absent is unlinked. Undefined leaves
+   * a list untouched, `[]` clears it.
+   *
+   * The two lists mean opposite things and stay separate: `brandAccountIds` are the user's OWN profiles,
+   * `inspirationAccountIds` are competitors and creators they watch.
+   */
+  brandAccountIds?: string[]
+  inspirationAccountIds?: string[]
+  /** Re-run website extraction after applying this patch. Requires the kit to have a `websiteUrl`. */
+  extract?: boolean
+}
+
+/** Fields accepted when creating a brand kit. */
+export interface CreateBrandKitInput extends UpdateBrandKitInput {
+  /** Optional when `websiteUrl` is given: it then defaults to the site's hostname until extraction supplies a real one. */
+  name?: string
+  /** Caller-minted id, so a create can be made idempotent. Must be a UUID. */
+  id?: string
+  /** Free-text provenance ('manual', 'wizard', 'mcp', ...). Defaults to 'manual'. */
+  sourceType?: string
+  /** Start filling the kit from `websiteUrl` immediately. Returns at once; poll `extractionStatus`. */
+  extract?: boolean
+}
+
+/** What happened to an extraction request. `deduped` means an identical job was already running, not a failure. */
+export interface ExtractionOutcome {
+  status: 'enqueued' | 'deduped' | 'unconfigured' | 'skipped'
+  msgId?: number
+  reason?: string
 }
 
 /** A brand-kit section record (returned by the section write methods). */

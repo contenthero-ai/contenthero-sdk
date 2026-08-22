@@ -61,7 +61,7 @@ import type {
   TranscriptResult,
   ExportJob,
   ExportFormatCatalog,
-} from '@contenthero/sdk'
+  ExtractionOutcome,} from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
@@ -260,9 +260,19 @@ export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
  * curated sections, linked accounts, knowledge), so return a short header plus
  * the whole object as JSON: faithful and complete, and an agent reads it cleanly.
  */
-export function brandKitResult(kit: BrandKit): CallToolResult {
+export function brandKitResult(kit: BrandKit, extraction?: ExtractionOutcome): CallToolResult {
   const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (id ${kit.id}):`
-  return text([header, '', JSON.stringify(kit, null, 2)].join('\n'))
+  // Stated in words, not just left in the JSON, because the caller has to know the kit it just got back is
+  // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes extraction failed.
+  const note =
+    extraction && extraction.status !== 'unconfigured'
+      ? extraction.status === 'deduped'
+        ? 'Extraction was ALREADY RUNNING for this kit, so nothing new was queued. Poll extractionStatus with get_brand_kit.'
+        : 'Extraction STARTED and is still running. The fields below will fill in. Poll extractionStatus with get_brand_kit.'
+      : extraction?.status === 'unconfigured'
+        ? 'Extraction is NOT CONFIGURED on this deployment, so nothing was queued.'
+        : null
+  return text([header, ...(note ? ['', note] : []), '', JSON.stringify(kit, null, 2)].join('\n'))
 }
 
 /** A created/updated/archived brand-kit section. */

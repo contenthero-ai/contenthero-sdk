@@ -90,6 +90,80 @@ export function registerBrandKit(program: Command): void {
     })
 
   brandKit
+    .command('create')
+    .description('Create a brand kit: empty, from a website, or as a copy (requires brandkit:write)')
+    .option('--name <text>', "the kit's name; optional when --website-url is given")
+    .option('--website-url <url>', 'the business website')
+    .option('--extract', 'scrape --website-url and fill the kit in automatically (returns immediately)')
+    .option('--duplicate-from <id>', 'copy an existing brand kit instead of starting empty')
+    .option('--business-name <text>')
+    .option('--primary-offer <text>')
+    .option('--niche <text>', 'niche definition')
+    .option('--visual-style <text>')
+    .action(async (opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      if (!opts.name && !opts.websiteUrl && !opts.duplicateFrom) {
+        throw new CliError('Pass --name, --website-url, or --duplicate-from', EXIT.USAGE)
+      }
+      if (opts.extract && !opts.websiteUrl) {
+        throw new CliError('--extract needs --website-url to scrape', EXIT.USAGE)
+      }
+      const { brandKit, extraction } = await client.createBrandKit(
+        compact({
+          name: opts.name as string | undefined,
+          websiteUrl: opts.websiteUrl as string | undefined,
+          extract: opts.extract ? true : undefined,
+          duplicateFrom: opts.duplicateFrom as string | undefined,
+          businessName: opts.businessName as string | undefined,
+          primaryOffer: opts.primaryOffer as string | undefined,
+          nicheDefinition: opts.niche as string | undefined,
+          visualStyle: opts.visualStyle as string | undefined,
+        }),
+      )
+      emit({ brandKit, extraction }, ctx, () =>
+        keyValues([
+          ['Created', brandKit.name],
+          ['Id', brandKit.id],
+          // Said plainly, because a kit that is still filling in otherwise reads as a kit that came back empty.
+          ...(extraction
+            ? ([['Extraction', extraction.status === 'deduped' ? 'already running' : extraction.status]] as [string, string][])
+            : []),
+          ...(extraction && extraction.status !== 'unconfigured'
+            ? ([['Next', `poll with: contenthero brand-kit get ${brandKit.id}`]] as [string, string][])
+            : []),
+        ]),
+      )
+    })
+
+  brandKit
+    .command('extract')
+    .description('Re-run website extraction for an existing kit (returns immediately)')
+    .argument('<id>', 'the brand kit id')
+    .action(async (id: string, _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const extraction = await client.extractBrandKit(id)
+      emit(extraction, ctx, () =>
+        keyValues([
+          ['Extraction', extraction.status === 'deduped' ? 'already running' : extraction.status],
+          ['Brand kit', id],
+          ['Next', `poll with: contenthero brand-kit get ${id}`],
+        ]),
+      )
+    })
+
+  brandKit
+    .command('reorder')
+    .description('Reorder every brand kit. Pass ALL ids, in the order you want them')
+    .argument('<ids...>', 'brand kit ids, in order')
+    .action(async (ids: string[], _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const kits = await client.reorderBrandKits(ids)
+      emit(kits, ctx, (rows: BrandKitSummary[]) =>
+        table(['#', 'ID', 'NAME'], rows.map((k, i) => [String(i + 1), k.id.slice(0, 8), k.name])),
+      )
+    })
+
+  brandKit
     .command('update')
     .description('Update a brand kit\'s identity fields (requires brandkit:write)')
     .argument('<id>', 'the brand kit id')
@@ -104,6 +178,9 @@ export function registerBrandKit(program: Command): void {
     .option('--voice-profile <json>', 'voice profile object (JSON)', toJson)
     .option('--content-strategy <json>', 'content strategy object (JSON)', toJson)
     .option('--design-principle <text>', 'a design principle; repeatable', collect)
+    .option('--default', 'make this the default brand kit, un-defaulting every other')
+    .option('--brand-account <id>', "link one of the account owner's OWN tracked accounts; repeatable. REPLACES the list", collect)
+    .option('--inspiration-account <id>', 'link a tracked competitor/creator account; repeatable. REPLACES the list', collect)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const input = compact<UpdateBrandKitInput>({
         name: opts.name as string | undefined,
@@ -117,6 +194,9 @@ export function registerBrandKit(program: Command): void {
         voiceProfile: opts.voiceProfile as Record<string, unknown> | undefined,
         contentStrategy: opts.contentStrategy as Record<string, unknown> | undefined,
         designPrinciples: opts.designPrinciple as string[] | undefined,
+        isDefault: opts.default ? true : undefined,
+        brandAccountIds: opts.brandAccount as string[] | undefined,
+        inspirationAccountIds: opts.inspirationAccount as string[] | undefined,
       })
       if (Object.keys(input).length === 0) {
         throw new CliError('Nothing to update. Pass at least one field to change.', EXIT.USAGE)

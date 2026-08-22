@@ -69,7 +69,7 @@ test('post exposes its verbs and nested destination/asset groups', () => {
 
 test('brand-kit exposes its verbs and the section group', () => {
   const subs = subcommands('brand-kit')
-  for (const n of ['list', 'get', 'update', 'section']) {
+  for (const n of ['list', 'get', 'create', 'extract', 'reorder', 'update', 'section']) {
     assert.ok(subs.includes(n), `brand-kit is missing: ${n}`)
   }
   // Archiving moved to the universal top-level `archive` command.
