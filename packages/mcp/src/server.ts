@@ -72,13 +72,12 @@ import {
   brandKnowledgeDetailResult,
   brandKnowledgeSearchResult,
   brandKnowledgeItemResult,
-  brandPerformanceResult,
   completedResult,
   connectedAccountListResult,
   connectedAccountResult,
   costResult,
   destinationResult,
-  inspirationAccountResult,
+  accountDetailResult,
   inspirationContentResult,
   mediaListResult,
   mediaSearchResult,
@@ -928,7 +927,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Brand Kit',
       annotations: WRITE,
       description:
-        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; (2) FROM A WEBSITE, pass websiteUrl + extract:true and ContentHero scrapes that site and fills in business name, positioning, voice, colours, typography, logos and assets by itself, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the fields fill in over the next minute or two, so poll extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrl is given (it defaults to the site's hostname until extraction finds the real business name). Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brandkit:write scope.",
+        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; (2) FROM A WEBSITE, pass websiteUrl + extract:true and ContentHero scrapes that site and fills in business name, positioning, voice, colours, typography, logos and assets by itself, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). A brand with NO WEBSITE (so nothing to extract) is built by passing its fields directly, including logos, whose entries may name outputId to bring in a generation you just made rather than a url. With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the fields fill in over the next minute or two, so poll extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrl is given (it defaults to the site's hostname until extraction finds the real business name). Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brandkit:write scope.",
       inputSchema: {
         name: z.string().optional().describe("The kit's name. Optional when websiteUrl is given."),
         websiteUrl: z.string().optional().describe('The business website. Required to use extract.'),
@@ -946,6 +945,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         visualStyle: z.string().optional(),
         designPrinciples: z.array(z.string()).optional(),
         contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
+        logos: z.array(z.unknown()).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
+        assets: z.array(z.unknown()).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
       },
     },
     async (args, extra) => {
@@ -972,7 +973,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit: identity fields (business name, positioning, audience, voice profile, visual style, content strategy), its brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/brandAccountIds/inspirationAccountIds are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. brandAccountIds are the account owner's OWN profiles (performance), inspirationAccountIds are competitors and creators they watch; they are separate lists because they mean opposite things. isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
+        "Update a brand kit: identity fields (business name, positioning, audience, voice profile, visual style, content strategy), its brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/brandAccountIds/inspirationAccountIds are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccountIds are the account owner's OWN profiles (performance), inspirationAccountIds are competitors and creators they watch; they are separate lists because they mean opposite things. isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
         brandKitId: z.string().optional().describe('The brand kit id. Omit ONLY when reordering with orderedIds.'),
         orderedIds: z
@@ -983,8 +984,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .boolean()
           .optional()
           .describe('Re-run website extraction for this kit. Returns immediately; poll extractionStatus.'),
-        logos: z.array(z.unknown()).optional().describe('The kit\'s logos. REPLACES the list; [] clears it.'),
-        assets: z.array(z.unknown()).optional().describe('The kit\'s brand assets. REPLACES the list; [] clears it.'),
+        logos: z.array(z.unknown()).optional().describe('The kit\'s logos, each { url | outputId, name?, is_primary?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
+        assets: z.array(z.unknown()).optional().describe('The kit\'s brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.'),
         isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
         brandAccountIds: z
           .array(z.string())
@@ -2384,68 +2385,90 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- list_inspiration_accounts --------------------------------------------
+  // -- list_accounts --------------------------------------------------------
   server.registerTool(
-    'list_inspiration_accounts',
+    'list_accounts',
     {
-      title: 'List Inspiration Accounts',
+      title: 'List Tracked Accounts',
       annotations: READ,
       description:
-        "List the creators/competitors the account tracks for inspiration. Use these as grounding for research; call list_outliers for their top content or get_inspiration_account for one account's detail. Pass brandKitId to scope to the inspiration accounts linked to a specific brand kit.",
+        "List the social accounts this ContentHero account tracks. TWO KINDS, in one list: accountType 'inspiration' is the creators and competitors they watch for research, 'brand' is their OWN profiles (distinct from list_brand_kits, which are the brand identity documents). Every row reports its own accountType, so omit the filter to see both. Call get_account for one account's performance, or list_content for the posts. Pass brandKitId to scope to the accounts linked to a specific brand kit.",
       inputSchema: {
-        brandKitId: z.string().optional().describe('Scope to the inspiration accounts linked to this brand kit (from get_brand_kit).'),
+        accountType: z
+          .enum(['inspiration', 'brand'])
+          .optional()
+          .describe("Narrow to one kind. Omitted, both come back."),
+        brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit (from get_brand_kit).'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return trackedAccountListResult(
-          await client.listInspirationAccounts({ brandKitId: args.brandKitId }),
-          'inspiration account(s)',
-        )
+        return trackedAccountListResult(await client.listAccounts(args))
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- get_inspiration_account ----------------------------------------------
+  // -- get_account ----------------------------------------------------------
   server.registerTool(
-    'get_inspiration_account',
+    'get_account',
     {
-      title: 'Get Inspiration Account',
+      title: 'Get Tracked Account',
       annotations: READ,
       description:
-        "Get one tracked inspiration account with its content count and a few top outliers (by score). Use it to study a specific creator.",
+        "Get one tracked account with how its content actually performs: post count, total and average views/likes/comments, average engagement and outlier score, plus its top posts by outlier score and its most recent ones. Works for either kind of account: use it on one of the owner's OWN accounts to ground decisions in their real numbers, or on a creator they watch to study what works for that creator.",
       inputSchema: {
-        accountId: z.string().describe('The account id from list_inspiration_accounts.'),
+        accountId: z.string().describe('The account id from list_accounts.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return inspirationAccountResult(await client.getInspirationAccount(args.accountId))
+        const detail = await client.getAccount(args.accountId)
+        return accountDetailResult(detail)
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- list_outliers --------------------------------------------------------
+  // -- list_content ---------------------------------------------------------
   server.registerTool(
-    'list_outliers',
+    'list_content',
     {
-      title: 'List Outliers',
+      title: 'List Tracked Content',
       annotations: READ,
       description:
-        "List top-performing content (outliers) from the creators the account tracks, ranked by outlier score (how far a post overperformed its creator's baseline). Filter by platform, content type, minimum score, or a text search. Set favorited=true to show only content the account has favorited. Call get_inspiration_content for one item's full detail incl. transcript. This is the core research read for finding what's working.",
+        "The core research read: social posts this account tracks, ranked by OUTLIER SCORE (how far a post overperformed its own creator's baseline, so a small account's hit still surfaces). SPANS BOTH the creators they watch and their OWN posts by default; set scope to narrow, and every row carries isOwn either way. This is how you answer both \"what is working for the people I watch\" and \"how did my own posts do\" without picking a subsystem first. Filter by platform, content type, a published window (publicationDate like 'week' or 'month', or exact publishedAfter/publishedBefore), and ranges over score, views, duration and follower count. Call get_content for one post in full, including its transcript.",
       inputSchema: {
+        scope: z
+          .enum(['all', 'inspiration', 'brand'])
+          .optional()
+          .describe("'inspiration' = creators they watch, 'brand' = their own accounts, 'all' = both (default)."),
         platform: z.enum(['youtube', 'instagram']).optional().describe('Filter to one platform.'),
         contentType: z.string().optional().describe("Filter by content type, e.g. 'video', 'short', 'reel'."),
-        minOutlierScore: z.number().optional().describe('Only content at or above this outlier score.'),
+        outlierScoreMin: z.number().optional().describe('Only content at or above this outlier score.'),
+        outlierScoreMax: z.number().optional().describe('Only content at or below this outlier score.'),
+        viewsMin: z.number().optional(),
+        viewsMax: z.number().optional(),
+        durationMin: z.number().optional().describe('Minimum duration in seconds.'),
+        durationMax: z.number().optional().describe('Maximum duration in seconds.'),
+        subscribersMin: z.number().optional().describe("Minimum follower count of the post's account."),
+        subscribersMax: z.number().optional().describe("Maximum follower count of the post's account."),
+        publicationDate: z
+          .enum(['week', 'month', '3months', '6months', 'year', '2years'])
+          .optional()
+          .describe('Published within this window. Use publishedAfter for an exact date instead.'),
+        publishedAfter: z.string().optional().describe('ISO timestamp. Wins over publicationDate.'),
+        publishedBefore: z.string().optional().describe('ISO timestamp.'),
         search: z.string().optional().describe('Text search across title, creator, handle, and description.'),
-        sortBy: z.enum(['score', 'date', 'views']).optional().describe("Sort order (default 'score')."),
-        brandKitId: z.string().optional().describe('Scope to the inspiration accounts linked to this brand kit (from get_brand_kit).'),
+        sortBy: z.enum(['score', 'date', 'views', 'engagement']).optional().describe("Sort field (default 'score')."),
+        sortOrder: z.enum(['asc', 'desc']).optional().describe("Sort direction (default 'desc')."),
+        accountIds: z.array(z.string()).optional().describe('Limit to these tracked account ids (from list_accounts).'),
+        addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),
+        brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit.'),
         favorited: z.boolean().optional().describe('Only content the account has favorited.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
@@ -2454,88 +2477,40 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return outlierListResult(
-          await client.listOutliers({
-            platform: args.platform,
-            contentType: args.contentType,
-            minOutlierScore: args.minOutlierScore,
-            search: args.search,
-            sortBy: args.sortBy,
-            brandKitId: args.brandKitId,
-            favorited: args.favorited,
-            limit: args.limit,
-            offset: args.offset,
-          }),
-        )
+        return outlierListResult(await client.listContent(args))
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- get_inspiration_content ----------------------------------------------
+  // -- get_content ----------------------------------------------------------
   server.registerTool(
-    'get_inspiration_content',
+    'get_content',
     {
-      title: 'Get Inspiration Content',
+      title: 'Get Tracked Content',
       annotations: READ,
       description:
-        "Get one tracked-content item in full: engagement stats, outlier score, hashtags, and the transcript when available. Use it to study exactly what a high-performing post says and does.",
+        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous.",
       inputSchema: {
-        contentId: z.string().describe('The content id from list_outliers or get_inspiration_account.'),
+        contentId: z.string().describe('The content id from list_content or get_account.'),
+        transcript: z
+          .enum(['none', 'text', 'segments'])
+          .optional()
+          .describe("How much transcript to include. Default 'none'."),
+        startMs: z.number().optional().describe('Window start, ms from the start of the media. Implies segments.'),
+        endMs: z.number().optional().describe('Window end, ms from the start of the media. Implies segments.'),
+        transcriptSearch: z
+          .string()
+          .optional()
+          .describe('Return only the segments containing this phrase. Implies segments.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return inspirationContentResult(await client.getInspirationContent(args.contentId))
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- list_brand_accounts --------------------------------------------------
-  server.registerTool(
-    'list_brand_accounts',
-    {
-      title: 'List Brand Accounts',
-      annotations: READ,
-      description:
-        "List the account owner's OWN connected social accounts that ContentHero tracks for performance (distinct from list_brand_kits, which are the brand identity documents). Call get_brand_account_performance for one account's stats. Pass brandKitId to scope to the brand accounts linked to a specific brand kit.",
-      inputSchema: {
-        brandKitId: z.string().optional().describe('Scope to the brand accounts linked to this brand kit (from get_brand_kit).'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return trackedAccountListResult(
-          await client.listBrandAccounts({ brandKitId: args.brandKitId }),
-          'brand account(s)',
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- get_brand_account_performance ----------------------------------------
-  server.registerTool(
-    'get_brand_account_performance',
-    {
-      title: 'Get Brand Account Performance',
-      annotations: READ,
-      description:
-        "Get the performance summary for one of the owner's brand accounts: content count, total and average views/likes/comments, average engagement and outlier score, plus top and recent content. Use it to ground decisions in how the owner's own content actually performs.",
-      inputSchema: {
-        accountId: z.string().describe('The account id from list_brand_accounts.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return brandPerformanceResult(await client.getBrandAccountPerformance(args.accountId))
+        const { contentId, ...options } = args
+        return inspirationContentResult(await client.getContent(contentId, options))
       } catch (err) {
         return errorResult(err)
       }

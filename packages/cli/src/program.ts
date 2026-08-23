@@ -29,8 +29,8 @@ import { registerPost } from './commands/post.js'
 import { registerPipeline } from './commands/pipeline.js'
 import { registerBrandKit } from './commands/brandkit.js'
 import { registerIdentity } from './commands/identity.js'
-import { registerInspiration } from './commands/inspiration.js'
-import { registerBrandAccount, registerConnectedAccount } from './commands/connected.js'
+import { registerContent, registerTrackedAccount } from './commands/content.js'
+import { registerConnectedAccount } from './commands/connected.js'
 import { registerSchema } from './commands/schema.js'
 import { registerFavorites } from './commands/favorites.js'
 import { registerProject } from './commands/project.js'
@@ -83,8 +83,8 @@ export function buildProgram(): Command {
   registerPipeline(program)
   registerBrandKit(program)
   registerIdentity(program)
-  registerInspiration(program)
-  registerBrandAccount(program)
+  registerContent(program)
+  registerTrackedAccount(program)
   registerConnectedAccount(program)
   registerSchema(program)
   registerFavorites(program)

@@ -1,61 +1,19 @@
 /**
- * `contenthero brand-account` / `connected-account` - the account's own accounts.
- *   brand-account list                 the owner's tracked brand social accounts
- *   brand-account performance <id>     one brand account's performance summary
+ * `contenthero connected-account` - the publish targets this account has connected.
  *   connected-account list             connected publish targets (default first)
  *   connected-account get <id>         one connected account's detail
  *
- * Reads only. Connected-account responses never include tokens (safe projection).
+ * DISTINCT from `tracked-account`, which is what ContentHero WATCHES for performance and research. A
+ * connected account is an OAuth grant we can publish through; the two overlap in the real world and are
+ * different records here. The old `brand-account` group lived in this file and belonged with the other one.
+ *
+ * Reads only. Responses never include tokens (safe projection).
  */
 
 import type { Command } from 'commander'
-import type { BrandAccountPerformance, ConnectedAccount } from '@contenthero/sdk'
+import type { ConnectedAccount } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
-import { outliersTable, trackedAccountsTable } from './inspiration.js'
-
-export function registerBrandAccount(program: Command): void {
-  const brandAccount = program
-    .command('brand-account')
-    .description("The owner's own tracked brand social accounts")
-
-  brandAccount
-    .command('list')
-    .description("List the owner's brand social accounts")
-    .option('--brand-kit <id>', 'scope to the brand accounts linked to this brand kit')
-    .action(async (opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      emit(
-        await client.listBrandAccounts({ brandKitId: opts.brandKit as string | undefined }),
-        ctx,
-        trackedAccountsTable,
-      )
-    })
-
-  brandAccount
-    .command('performance')
-    .description('Get the performance summary for one brand account')
-    .argument('<id>', 'the brand account id')
-    .action(async (id: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const perf = await client.getBrandAccountPerformance(id)
-      emit(perf, ctx, (p: BrandAccountPerformance) => {
-        const head = keyValues([
-          ['Account', p.account.name ?? p.account.handle ?? ''],
-          ['Platform', p.account.platform ?? ''],
-          ['Tracked items', p.contentCount],
-          ['Total views', p.totals.views],
-          ['Total likes', p.totals.likes],
-          ['Total comments', p.totals.comments],
-          ['Avg views', p.averages.views ?? ''],
-          ['Avg engagement', p.averages.engagementRate ?? ''],
-          ['Avg outlier score', p.averages.outlierScore ?? ''],
-        ])
-        const top = p.topContent.length ? '\n\nTop content:\n' + outliersTable(p.topContent) : ''
-        return head + top
-      })
-    })
-}
 
 export function registerConnectedAccount(program: Command): void {
   const connected = program

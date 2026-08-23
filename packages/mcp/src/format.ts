@@ -11,7 +11,6 @@ import type {
   Balance,
   BrandKit,
   BrandKitSummary,
-  BrandAccountPerformance,
   BrandKitSectionRecord,
   BrandKnowledgeItem,
   BrandKnowledgeDetail,
@@ -23,8 +22,6 @@ import type {
   Generation,
   GenerateResult,
   EditAudioResult,
-  InspirationAccountDetail,
-  InspirationContent,
   MediaItem,
   MediaSummary,
   SearchMediaResult,
@@ -38,8 +35,6 @@ import type {
   ModelInfo,
   PlatformSummary,
   PlatformSchema,
-  Outlier,
-  OutliersResult,
   PipelineStage,
   PostAsset,
   PostDestination,
@@ -49,6 +44,10 @@ import type {
   Tag,
   PublishPostResult,
   TrackedAccount,
+  ContentSummary,
+  ContentDetail,
+  ContentListResult,
+  AccountDetail,
   Transcription,
   Voice,
   VoiceSummary,
@@ -896,26 +895,31 @@ function compactNum(n: number | null): string {
 /** One line summarizing a tracked account. */
 function accountLine(a: TrackedAccount): string {
   const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
-  return `- ${handle} (id ${a.id}) | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`
+  // The kind is on every line because the list is MIXED by default: without it a reader cannot tell the
+  // owner's own profile from a competitor they watch, and those mean opposite things.
+  const kind = a.accountType === 'brand' ? ' [yours]' : a.accountType === 'inspiration' ? ' [watching]' : ''
+  return `- ${handle} (id ${a.id})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`
 }
 
-/** List of tracked accounts (inspiration or brand). */
-export function trackedAccountListResult(accounts: TrackedAccount[], noun: string): CallToolResult {
+/** List of tracked accounts, either kind. */
+export function trackedAccountListResult(accounts: TrackedAccount[], noun = 'tracked account(s)'): CallToolResult {
   if (!accounts.length) return text(`No ${noun} found. Add one in the ContentHero app first.`)
   return text([`${accounts.length} ${noun}:`, ...accounts.map(accountLine)].join('\n'))
 }
 
 /** One line summarizing an outlier / content item. */
-function outlierLine(o: Outlier): string {
+function outlierLine(o: ContentSummary): string {
   const score = o.outlierScore != null ? `${o.outlierScore.toFixed(1)}x` : 'n/a'
   const creator = o.sourceCreator || (o.accountHandle ? `@${o.accountHandle}` : '')
-  return `- [${score}] ${o.title ?? '(untitled)'}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (id ${o.id})`
+  // One list spans the owner's posts and the creators they watch, so each line has to say which it is.
+  const own = o.isOwn ? ' [yours]' : ''
+  return `- [${score}] ${o.title ?? '(untitled)'}${own}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (id ${o.id})`
 }
 
 /** A page of outliers. */
-export function outlierListResult(result: OutliersResult): CallToolResult {
+export function outlierListResult(result: ContentListResult): CallToolResult {
   if (!result.outliers.length) {
-    return text('No outliers found. Track some creators in the ContentHero app, or widen the filters.')
+    return text('No content found. Track some creators in the ContentHero app, or widen the filters.')
   }
   const more = result.hasMore ? ` (showing ${result.outliers.length} of ${result.total})` : ''
   return text(
@@ -923,34 +927,61 @@ export function outlierListResult(result: OutliersResult): CallToolResult {
   )
 }
 
-/** One inspiration account with its top content. */
-export function inspirationAccountResult(d: InspirationAccountDetail): CallToolResult {
+/**
+ * One tracked account with its performance.
+ *
+ * Merged from two formatters that printed the same account from the same table and differed only in how
+ * much they showed: the inspiration one omitted totals, averages and recent content for no reason other
+ * than which function you happened to call.
+ */
+export function accountDetailResult(d: AccountDetail): CallToolResult {
   const a = d.account
   const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
+  const kind = a.accountType === 'brand' ? ' [yours]' : a.accountType === 'inspiration' ? ' [watching]' : ''
+  const avgEng = d.averages.engagementRate != null ? `${(d.averages.engagementRate * 100).toFixed(1)}%` : 'n/a'
+  const avgScore = d.averages.outlierScore != null ? `${d.averages.outlierScore.toFixed(2)}x` : 'n/a'
   return text(
     lines([
-      `${handle} (id ${a.id}) | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
-      `tracked content: ${d.contentCount}`,
-      d.topContent.length ? `top outliers:` : 'top outliers: none yet',
+      `${handle} (id ${a.id})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
+      `content tracked: ${d.contentCount}`,
+      `totals: ${compactNum(d.totals.views)} views, ${compactNum(d.totals.likes)} likes, ${compactNum(d.totals.comments)} comments`,
+      `averages: ${compactNum(d.averages.views)} views/post, ${avgEng} engagement, ${avgScore} outlier score`,
+      d.topContent.length ? 'top content by outlier score:' : 'top content: none yet',
       ...d.topContent.map(outlierLine),
+      d.recentContent.length ? 'most recent:' : null,
+      ...d.recentContent.map(outlierLine),
     ]),
   )
 }
 
-/** One tracked-content item in full, including transcript. */
-export function inspirationContentResult(c: InspirationContent): CallToolResult {
+/** The transcript block, at whatever grain was asked for. */
+function transcriptLines(t: NonNullable<ContentDetail['transcript']>): string[] {
+  // The status is printed even when there is text, because 'failed' and 'absent' are the difference between
+  // "there is nothing to read" and "ask again later", and a reader cannot infer that from an empty body.
+  const head = `transcript [${t.status}]${t.language ? ` (${t.language})` : ''}${t.windowed ? ' (windowed)' : ''}:`
+  if (t.segments) {
+    if (!t.segments.length) {
+      return [head, t.windowed ? '  (no segments in that window)' : '  (none stored)']
+    }
+    return [head, ...t.segments.map((sg) => `  [${(sg.startMs / 1000).toFixed(1)}s] ${sg.text}`)]
+  }
+  return [head, t.text ? t.text : '  (none stored)']
+}
+
+/** One tracked post in full, with its transcript when it was asked for. */
+export function inspirationContentResult(c: ContentDetail): CallToolResult {
   const stats = `${compactNum(c.viewCount)} views, ${compactNum(c.likeCount)} likes, ${compactNum(c.commentCount)} comments`
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
   return text(
     lines([
-      `${c.title ?? '(untitled)'} (id ${c.id})`,
+      `${c.title ?? '(untitled)'} (id ${c.id})${c.isOwn ? ' [yours]' : ''}`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
       `${stats}${score ? ` | ${score}` : ''}`,
       c.url ? `url: ${c.url}` : null,
       c.publishedAt ? `published: ${c.publishedAt}` : null,
       c.hashtags.length ? `hashtags: ${c.hashtags.join(' ')}` : null,
       c.description ? `description: ${c.description}` : null,
-      c.transcript ? `transcript:\n${c.transcript}` : 'transcript: none',
+      ...(c.transcript ? transcriptLines(c.transcript) : []),
     ]),
   )
 }
@@ -984,24 +1015,6 @@ export function connectedAccountResult(a: ConnectedAccount): CallToolResult {
       caps.length ? `capabilities: ${caps.join(', ')}` : null,
       a.lastValidatedAt ? `last validated: ${a.lastValidatedAt}` : null,
       `Use this id as connectedAccountId on add_post_destination to publish here.`,
-    ]),
-  )
-}
-
-/** Performance summary for a brand account. */
-export function brandPerformanceResult(p: BrandAccountPerformance): CallToolResult {
-  const a = p.account
-  const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
-  const avgEng = p.averages.engagementRate != null ? `${(p.averages.engagementRate * 100).toFixed(1)}%` : 'n/a'
-  const avgScore = p.averages.outlierScore != null ? `${p.averages.outlierScore.toFixed(2)}x` : 'n/a'
-  return text(
-    lines([
-      `${handle} (id ${a.id}) | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
-      `content tracked: ${p.contentCount}`,
-      `totals: ${compactNum(p.totals.views)} views, ${compactNum(p.totals.likes)} likes, ${compactNum(p.totals.comments)} comments`,
-      `averages: ${compactNum(p.averages.views)} views/post, ${avgEng} engagement, ${avgScore} outlier score`,
-      p.topContent.length ? `top content:` : null,
-      ...p.topContent.map(outlierLine),
     ]),
   )
 }

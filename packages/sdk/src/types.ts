@@ -645,6 +645,15 @@ export interface UpdateBrandKitInput {
   /**
    * Brand media. A patch REPLACES the list, so pass the whole set; `[]` clears it. These are reconciled into
    * `brand_kit_assets` rather than written as columns, which is why they are not simple fields.
+   *
+   * An entry names its media by `url`, OR by `outputId` to bring in something not in the kit yet: a
+   * generation token (`"<id>"`, or `"<id>-2"` for variation 2 of a batch) whose bytes the server COPIES into
+   * the kit's own storage. Copied rather than referenced, so trashing the generation later cannot empty the
+   * kit. An `outputId` entry is not idempotent (it means "bring this in"), which does not bite in the
+   * read-modify-write flow this contract implies, because reads hand back stored urls.
+   *
+   * Logos also carry `name`, `is_primary`, `layout` and `colorMode`. Exactly one logo ends up primary: it is
+   * the kit's cover, so if a list names none, the first wins.
    */
   logos?: unknown[]
   assets?: unknown[]
@@ -1311,8 +1320,8 @@ export interface TrackedAccount {
   accountType: string | null
 }
 
-/** A piece of tracked content (the list projection used for outliers). */
-export interface Outlier {
+/** A piece of tracked content: the list projection. */
+export interface ContentSummary {
   id: string
   platform: string | null
   contentType: string | null
@@ -1330,64 +1339,122 @@ export interface Outlier {
   publishedAt: string | null
   sourceCreator: string | null
   accountHandle: string | null
+  /** True when the post is on one of the caller's OWN accounts rather than a creator they watch. */
+  isOwn?: boolean
 }
 
-/** Full tracked-content detail as returned by `getInspirationContent`. */
-export interface InspirationContent extends Outlier {
+/** One timed slice of a transcript. */
+export interface ContentTranscriptSegment {
+  startMs: number
+  endMs: number
+  text: string
+  speaker: string | null
+}
+
+/**
+ * A post's transcript, at the grain that was asked for.
+ *
+ * `status` distinguishes outcomes that used to collapse into an empty string: `complete`, `not_applicable`
+ * (asked, and there is nothing to transcribe), `failed` (asked, and it broke, so it will be retried),
+ * `processing`, and `absent` (never asked).
+ */
+export interface ContentTranscript {
+  status: string
+  language: string | null
+  /** Present at the `text` grain. */
+  text?: string | null
+  /** Present at the `segments` grain. */
+  segments?: ContentTranscriptSegment[]
+  /** True when a window or a search narrowed what came back, so an empty list is not "nothing exists". */
+  windowed?: boolean
+}
+
+/** Full detail for one tracked post. */
+export interface ContentDetail extends ContentSummary {
   description: string | null
-  transcript: string | null
   hashtags: string[]
   keywords: string[]
   mentions: string[]
   audioInfo: Record<string, unknown> | null
   followerCountSnapshot: number | null
+  /** Present only when a transcript grain was requested. */
+  transcript?: ContentTranscript
 }
 
-/** One inspiration account with its content count and top outliers. */
-export interface InspirationAccountDetail {
+/** One tracked account with its performance. */
+export interface AccountDetail {
   account: TrackedAccount
   contentCount: number
-  topContent: Outlier[]
+  totals: { views: number; likes: number; comments: number }
+  averages: { views: number | null; engagementRate: number | null; outlierScore: number | null }
+  topContent: ContentSummary[]
+  recentContent: ContentSummary[]
 }
 
-/** Options for `listOutliers`. */
-export interface ListOutliersOptions {
+/** Which ownership tiers a content read spans. */
+export type ContentScope = 'all' | 'inspiration' | 'brand'
+
+/** Options for `listContent`. */
+export interface ListContentOptions {
+  /**
+   * `inspiration` = creators they watch, `brand` = their own accounts, `all` = both (the default).
+   * Each row carries `isOwn`, so one list can answer both questions.
+   */
+  scope?: ContentScope
   platform?: string
+  /** A specific content type, or `posts` for the Instagram feed-post group (image, carousel, video). */
   contentType?: string
-  /** Only content scoring at or above this outlier score. */
-  minOutlierScore?: number
+  outlierScoreMin?: number
+  outlierScoreMax?: number
+  viewsMin?: number
+  viewsMax?: number
+  durationMin?: number
+  durationMax?: number
+  subscribersMin?: number
+  subscribersMax?: number
+  /** ISO timestamps. More specific than `publicationDate` and wins over it. */
+  publishedAfter?: string
+  publishedBefore?: string
+  /** A window keyword: week, month, 3months, 6months, year, 2years. */
+  publicationDate?: string
   search?: string
-  /** 'score' (default), 'date', or 'views'. */
-  sortBy?: 'score' | 'date' | 'views'
-  /** Scope to the inspiration accounts linked to this brand kit. */
+  sortBy?: 'score' | 'date' | 'views' | 'engagement'
+  sortOrder?: 'asc' | 'desc'
+  /** Tracked-account ids. Ids the caller does not own resolve to nothing rather than widening the query. */
+  accountIds?: string[]
+  /** Only the one-off posts the caller saved by url. */
+  addedByYou?: boolean
+  /** Scope to the accounts linked to this brand kit. */
   brandKitId?: string
-  /** When true, return only content the caller has favorited. */
   favorited?: boolean
   limit?: number
   offset?: number
 }
 
-/** Options for `listInspirationAccounts` / `listBrandAccounts`. */
-export interface ListTrackedAccountsOptions {
+/** Options for `getContent`. */
+export interface GetContentOptions {
+  /** `none` (default), `text` for the flat transcript, or `segments` for the timed form. */
+  transcript?: 'none' | 'text' | 'segments'
+  /** Segment window, in milliseconds from the start of the media. Implies the `segments` grain. */
+  startMs?: number
+  endMs?: number
+  /** Case-insensitive substring; returns only the segments containing it. Implies the `segments` grain. */
+  transcriptSearch?: string
+}
+
+/** Options for `listAccounts`. */
+export interface ListAccountsOptions {
+  /** Narrow to one tier. Omitted, both come back. */
+  accountType?: 'inspiration' | 'brand'
   /** Scope to the accounts linked to this brand kit. */
   brandKitId?: string
 }
 
-/** Result of `listOutliers`: a page of outliers plus pagination metadata. */
-export interface OutliersResult {
-  outliers: Outlier[]
+/** Result of `listContent`: a page of content plus pagination metadata. */
+export interface ContentListResult {
+  outliers: ContentSummary[]
   total: number
   hasMore: boolean
-}
-
-/** Performance summary for one of the caller's brand accounts. */
-export interface BrandAccountPerformance {
-  account: TrackedAccount
-  contentCount: number
-  totals: { views: number; likes: number; comments: number }
-  averages: { views: number | null; engagementRate: number | null; outlierScore: number | null }
-  topContent: Outlier[]
-  recentContent: Outlier[]
 }
 
 // ---------------------------------------------------------------------------

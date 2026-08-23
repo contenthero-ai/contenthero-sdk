@@ -312,37 +312,35 @@ function fakeClient(overrides = {}) {
     addPostAsset: async (_postId, input) => ({ id: 'as-new', assetType: input.assetType ?? (input.outputId ? 'image' : null), assetId: input.outputId ?? null, assetUrl: input.assetUrl ?? (input.outputId ? 'https://cloud/resolved.png' : null), displayName: input.displayName ?? null, sortOrder: 1 }),
     schedulePost: async (id) => ({ id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, folderId: null, scheduledAt: '2026-07-01T00:00:00Z', publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     publishPost: async (postId) => ({ postId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
-    listInspirationAccounts: async () => [
-      { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
-    ],
-    getInspirationAccount: async (id) => ({
-      account: { id, platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
-      contentCount: 42,
-      topContent: [{ id: 'c1', platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast' }],
-    }),
-    listOutliers: async () => ({
-      outliers: [{ id: 'c1', platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast' }],
-      total: 1,
-      hasMore: false,
-    }),
-    getInspirationContent: async (id) => ({
-      id, platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast',
-      description: 'a video', transcript: 'today I gave away an island', hashtags: ['#mrbeast'], keywords: ['island'], mentions: [], audioInfo: null, followerCountSnapshot: 300_000_000,
-    }),
-    listBrandAccounts: async () => [
-      { id: 'ba1', platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
-    ],
-    getBrandAccountPerformance: async (id) => ({
+    listAccounts: async (options) => {
+      const all = [
+        { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
+        { id: 'ba1', platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
+      ]
+      return options?.accountType ? all.filter((a) => a.accountType === options.accountType) : all
+    },
+    getAccount: async (id) => ({
       account: { id, platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
       contentCount: 50,
       totals: { views: 1_000_000, likes: 50_000, comments: 5_000 },
       averages: { views: 20_000, engagementRate: 0.055, outlierScore: 1.2 },
-      topContent: [{ id: 'bc1', platform: 'instagram', contentType: 'reel', title: 'best reel', url: 'https://ig/bc1', thumbnailUrl: null, viewCount: 200_000, likeCount: 12_000, commentCount: 800, shareCount: 400, durationSeconds: 30, outlierScore: 2.1, engagementRate: 0.07, viewsPerFollower: 16, publishedAt: 't', sourceCreator: null, accountHandle: 'contenthero' }],
+      topContent: [{ id: 'bc1', platform: 'instagram', contentType: 'reel', title: 'best reel', url: 'https://ig/bc1', thumbnailUrl: null, viewCount: 200_000, likeCount: 12_000, commentCount: 800, shareCount: 400, durationSeconds: 30, outlierScore: 2.1, engagementRate: 0.07, viewsPerFollower: 16, publishedAt: 't', sourceCreator: null, accountHandle: 'contenthero', isOwn: true }],
       recentContent: [],
     }),
-    updateBrandKit: async (id, input) => ({ id, name: input.name ?? 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }),
-    addBrandKitSection: async (_id, input) => ({ id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: input.sortOrder ?? 99, fields: input.fields ?? [] }),
-    updateBrandKitSection: async (_id, sectionId, input) => ({ id: sectionId, tab: 'voice', sectionName: input.sectionName ?? 'Brand Voice', sortOrder: input.sortOrder ?? 0, fields: input.fields ?? [] }),
+    listContent: async () => ({
+      outliers: [{ id: 'c1', platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast' }],
+      total: 1,
+      hasMore: false,
+    }),
+    getContent: async (id, options) => ({
+      id, platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast',
+      description: 'a video', hashtags: ['#mrbeast'], keywords: ['island'], mentions: [], audioInfo: null, followerCountSnapshot: 300_000_000,
+      ...(options?.transcript && options.transcript !== 'none'
+        ? { transcript: options.transcript === 'segments'
+            ? { status: 'complete', language: 'en', segments: [{ startMs: 0, endMs: 2000, text: 'today I gave away an island', speaker: null }] }
+            : { status: 'complete', language: 'en', text: 'today I gave away an island' } }
+        : {}),
+    }),
     listBrandKnowledge: async () => ({
       items: [{ id: 'kn1', title: 'Launch playbook', sourceType: 'text', sourceUrl: null, createdAt: 't', updatedAt: 't' }],
       total: 1,
@@ -433,20 +431,19 @@ test('advertises exactly the v1 tools', async () => {
     'generate_image',
     'generate_lip_sync',
     'generate_video',
+    'get_account',
     'get_avatar',
     'get_balance',
-    'get_brand_account_performance',
     'get_brand_kit',
     'get_brand_knowledge',
     'get_connected_account',
+    'get_content',
     'get_context',
     'get_element',
     'get_export',
     'get_export_formats',
     'get_folder',
     'get_generation_status',
-    'get_inspiration_account',
-    'get_inspiration_content',
     'get_layer_types',
     'get_media',
     'get_model',
@@ -459,17 +456,16 @@ test('advertises exactly the v1 tools', async () => {
     'get_voice',
     'import_media',
     'import_project',
+    'list_accounts',
     'list_avatars',
-    'list_brand_accounts',
     'list_brand_kits',
     'list_brand_knowledge',
     'list_connected_accounts',
+    'list_content',
     'list_elements',
     'list_folders',
-    'list_inspiration_accounts',
     'list_media',
     'list_models',
-    'list_outliers',
     'list_pipeline_stages',
     'list_platforms',
     'list_posts',
@@ -1619,52 +1615,95 @@ test('publish_post flags a total failure as an error result', async () => {
 
 // -- inspiration / research ---------------------------------------------------
 
-test('list_inspiration_accounts surfaces handle, platform, and followers', async () => {
+test('list_accounts returns BOTH kinds, each labelled', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_inspiration_accounts', arguments: {} })
-  assert.match(res.content[0].text, /@mrbeast \(id ia1\)/)
-  assert.match(res.content[0].text, /300\.0M followers/)
+  const res = await mcp.callTool({ name: 'list_accounts', arguments: {} })
+  // The whole point of merging the two list tools: one call answers both questions, and a reader can still
+  // tell the owner's own profile from a creator they watch.
+  assert.match(res.content[0].text, /@mrbeast \(id ia1\) \[watching\]/)
+  assert.match(res.content[0].text, /@contenthero \(id ba1\) \[yours\]/)
 })
 
-test('list_outliers ranks content by score with views', async () => {
+test('list_accounts narrows to one kind when asked', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_outliers', arguments: { minOutlierScore: 2 } })
+  const res = await mcp.callTool({ name: 'list_accounts', arguments: { accountType: 'brand' } })
+  assert.match(res.content[0].text, /@contenthero/)
+  assert.ok(!/@mrbeast/.test(res.content[0].text))
+})
+
+test('list_content ranks content by score with views', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_content', arguments: { outlierScoreMin: 2 } })
   assert.match(res.content[0].text, /\[3\.4x\] I gave away an island/)
   assert.match(res.content[0].text, /120\.0M views/)
 })
 
-test('list_outliers passes filters through to the client', async () => {
+test('list_content passes filters through to the client', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      listOutliers: async (options) => {
+      listContent: async (options) => {
         captured = options
         return { outliers: [], total: 0, hasMore: false }
       },
     }),
   )
-  await mcp.callTool({ name: 'list_outliers', arguments: { platform: 'youtube', sortBy: 'views', limit: 5 } })
+  await mcp.callTool({
+    name: 'list_content',
+    arguments: { platform: 'youtube', sortBy: 'views', limit: 5, scope: 'brand', publicationDate: 'month' },
+  })
   assert.equal(captured.platform, 'youtube')
   assert.equal(captured.sortBy, 'views')
   assert.equal(captured.limit, 5)
+  // scope and the published window are the two things the API could not express at all before.
+  assert.equal(captured.scope, 'brand')
+  assert.equal(captured.publicationDate, 'month')
 })
 
-test('get_inspiration_content includes the transcript', async () => {
+test('get_content omits the transcript unless it is asked for', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_inspiration_content', arguments: { contentId: 'c1' } })
-  assert.match(res.content[0].text, /transcript:/)
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.ok(!/transcript/.test(res.content[0].text))
+})
+
+test('get_content returns the flat transcript at the text grain', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', transcript: 'text' } })
+  assert.match(res.content[0].text, /transcript \[complete\]/)
   assert.match(res.content[0].text, /today I gave away an island/)
 })
 
-test('list_brand_accounts lists the owner own accounts', async () => {
+test('get_content returns timed slices at the segments grain', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_brand_accounts', arguments: {} })
-  assert.match(res.content[0].text, /@contenthero \(id ba1\)/)
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', transcript: 'segments' } })
+  // The timestamp is the point: it is what makes "the part about pricing" addressable.
+  assert.match(res.content[0].text, /\[0\.0s\] today I gave away an island/)
 })
 
-test('get_brand_account_performance reports totals and averages', async () => {
+test('get_content forwards a transcript window to the client', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      getContent: async (id, options) => {
+        captured = { id, options }
+        return { id, platform: 'youtube', contentType: 'video', title: 't', url: null, thumbnailUrl: null, viewCount: 0, likeCount: 0, commentCount: 0, shareCount: null, durationSeconds: null, outlierScore: null, engagementRate: null, viewsPerFollower: null, publishedAt: null, sourceCreator: null, accountHandle: null, description: null, hashtags: [], keywords: [], mentions: [], audioInfo: null, followerCountSnapshot: null }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'get_content',
+    arguments: { contentId: 'c1', transcript: 'segments', startMs: 5000, endMs: 15000, transcriptSearch: 'island' },
+  })
+  assert.equal(captured.options.startMs, 5000)
+  assert.equal(captured.options.endMs, 15000)
+  assert.equal(captured.options.transcriptSearch, 'island')
+  // contentId is a positional argument, not part of the options bag.
+  assert.equal(captured.options.contentId, undefined)
+})
+
+test('get_account reports totals and averages for either kind of account', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_brand_account_performance', arguments: { accountId: 'ba1' } })
+  const res = await mcp.callTool({ name: 'get_account', arguments: { accountId: 'ba1' } })
   assert.match(res.content[0].text, /content tracked: 50/)
   assert.match(res.content[0].text, /1\.0M views/)
   assert.match(res.content[0].text, /5\.5% engagement/)
@@ -1794,17 +1833,17 @@ test('remove_brand_knowledge removes by id', async () => {
   assert.match(res.content[0].text, /Removed knowledge item: .* \(id kn9\)/)
 })
 
-test('list_outliers forwards brandKitId for brand-scoped reads', async () => {
+test('list_content forwards brandKitId for brand-scoped reads', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      listOutliers: async (options) => {
+      listContent: async (options) => {
         captured = options
         return { outliers: [], total: 0, hasMore: false }
       },
     }),
   )
-  await mcp.callTool({ name: 'list_outliers', arguments: { brandKitId: 'bk1' } })
+  await mcp.callTool({ name: 'list_content', arguments: { brandKitId: 'bk1' } })
   assert.equal(captured.brandKitId, 'bk1')
 })
 

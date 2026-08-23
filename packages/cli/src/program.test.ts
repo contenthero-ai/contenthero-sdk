@@ -31,8 +31,8 @@ test('every top-level command group is registered', () => {
     'brand-kit',
     'avatar',
     'voice',
-    'inspiration',
-    'brand-account',
+    'content',
+    'tracked-account',
     'connected-account',
     'schema',
     'favorite',
@@ -119,11 +119,17 @@ test('model and platform expose list + get', () => {
   assert.deepEqual(subcommands('platform').sort(), ['get', 'list'])
 })
 
-test('inspiration exposes accounts/account/outliers/content', () => {
-  const subs = subcommands('inspiration')
-  for (const n of ['accounts', 'account', 'outliers', 'content']) {
-    assert.ok(subs.includes(n), `inspiration is missing: ${n}`)
+test('content and tracked-account each expose list + get', () => {
+  // The research surface used to be `inspiration accounts|account|outliers|content` plus a separate
+  // `brand-account list|performance`: two command groups over one table, split by account_type.
+  for (const group of ['content', 'tracked-account']) {
+    const subs = subcommands(group)
+    for (const n of ['list', 'get']) {
+      assert.ok(subs.includes(n), `${group} is missing: ${n}`)
+    }
   }
+  assert.ok(!buildProgram().commands.map((c) => c.name()).includes('inspiration'))
+  assert.ok(!buildProgram().commands.map((c) => c.name()).includes('brand-account'))
 })
 
 test('schema dumps a scoped command with its options, needing no key', async () => {

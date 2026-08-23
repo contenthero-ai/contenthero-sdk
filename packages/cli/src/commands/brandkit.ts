@@ -28,6 +28,25 @@ import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, toInt, toJson } from '../args.js'
 
+/**
+ * Turn repeated `--logo` / `--asset` refs into the declarative media list the API takes.
+ *
+ * A ref is either a url or a generation token, told apart by PARSING the scheme rather than guessing: a
+ * token is not a url and never will be, so `http(s):` is the whole test. An `outputId` entry tells the
+ * server to copy that generation's bytes into the kit, which is how media gets in without a website to
+ * extract from.
+ *
+ * The FIRST logo is the primary one (the kit's cover) because a list has to name one and position is the
+ * only signal a flat flag carries. Anything richer (layout, colour mode, moving primary without reordering)
+ * is a JSON body through the API.
+ */
+function mediaRefs(refs: string[] | undefined): Array<Record<string, unknown>> | undefined {
+  if (!refs || refs.length === 0) return undefined
+  return refs.map((ref, i) =>
+    /^https?:\/\//i.test(ref) ? { url: ref, ...(i === 0 ? { is_primary: true } : {}) } : { outputId: ref, ...(i === 0 ? { is_primary: true } : {}) },
+  )
+}
+
 function recordHuman(s: BrandKitSectionRecord, action: string): string {
   return keyValues([
     [action, s.sectionName],
@@ -100,6 +119,8 @@ export function registerBrandKit(program: Command): void {
     .option('--primary-offer <text>')
     .option('--niche <text>', 'niche definition')
     .option('--visual-style <text>')
+    .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary', collect)
+    .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable', collect)
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       if (!opts.name && !opts.websiteUrl && !opts.duplicateFrom) {
@@ -118,6 +139,8 @@ export function registerBrandKit(program: Command): void {
           primaryOffer: opts.primaryOffer as string | undefined,
           nicheDefinition: opts.niche as string | undefined,
           visualStyle: opts.visualStyle as string | undefined,
+          logos: mediaRefs(opts.logo as string[] | undefined),
+          assets: mediaRefs(opts.asset as string[] | undefined),
         }),
       )
       emit({ brandKit, extraction }, ctx, () =>
@@ -181,6 +204,8 @@ export function registerBrandKit(program: Command): void {
     .option('--default', 'make this the default brand kit, un-defaulting every other')
     .option('--brand-account <id>', "link one of the account owner's OWN tracked accounts; repeatable. REPLACES the list", collect)
     .option('--inspiration-account <id>', 'link a tracked competitor/creator account; repeatable. REPLACES the list', collect)
+    .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary. REPLACES the list', collect)
+    .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable. REPLACES the list', collect)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const input = compact<UpdateBrandKitInput>({
         name: opts.name as string | undefined,
@@ -197,6 +222,8 @@ export function registerBrandKit(program: Command): void {
         isDefault: opts.default ? true : undefined,
         brandAccountIds: opts.brandAccount as string[] | undefined,
         inspirationAccountIds: opts.inspirationAccount as string[] | undefined,
+        logos: mediaRefs(opts.logo as string[] | undefined),
+        assets: mediaRefs(opts.asset as string[] | undefined),
       })
       if (Object.keys(input).length === 0) {
         throw new CliError('Nothing to update. Pass at least one field to change.', EXIT.USAGE)

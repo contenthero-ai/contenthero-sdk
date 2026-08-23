@@ -27,7 +27,6 @@ import type {
   Avatar,
   AvatarSummary,
   Balance,
-  BrandAccountPerformance,
   BrandKit,
   BrandKitSectionRecord,
   BrandKitSummary,
@@ -36,7 +35,12 @@ import type {
   BrandKnowledgeListResult,
   BrandKnowledgeMatch,
   ConnectedAccount,
-  ListTrackedAccountsOptions,
+  ListAccountsOptions,
+  ListContentOptions,
+  GetContentOptions,
+  ContentListResult,
+  ContentDetail,
+  AccountDetail,
   SearchBrandKnowledgeOptions,
   CostEstimate,
   CreatePostInput,
@@ -44,11 +48,6 @@ import type {
   CreateBrandKitInput,
   ExtractionOutcome,
   UpdateBrandKitSectionInput,
-  InspirationAccountDetail,
-  InspirationContent,
-  ListOutliersOptions,
-  Outlier,
-  OutliersResult,
   TrackedAccount,
   GenerateBoardRequest,
   GenerateRequest,
@@ -1011,58 +1010,83 @@ export class ContentHero {
   // Inspiration / research reads
   // -------------------------------------------------------------------------
 
-  /** List the account's tracked inspiration accounts (creators/competitors). */
-  async listInspirationAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccount[]> {
-    const qs = options.brandKitId ? `?brand_kit_id=${encodeURIComponent(options.brandKitId)}` : ''
-    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', `/api/v1/inspiration/accounts${qs}`)
+  /**
+   * The social accounts the caller tracks, both tiers by default.
+   *
+   * `accountType` narrows to `inspiration` (creators and competitors they learn from) or `brand` (their own
+   * profiles). Every row reports its own `accountType`, so one list answers both questions. This replaces
+   * `listInspirationAccounts` and `listBrandAccounts`, which were one query with a different literal.
+   */
+  async listAccounts(options: ListAccountsOptions = {}): Promise<TrackedAccount[]> {
+    const q = new URLSearchParams()
+    if (options.accountType) q.set('account_type', options.accountType)
+    if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
+    const qs = q.toString()
+    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', `/api/v1/accounts${qs ? `?${qs}` : ''}`)
     return data.accounts
   }
 
-  /** Get one inspiration account with its content count and top outliers. */
-  async getInspirationAccount(accountId: string): Promise<InspirationAccountDetail> {
-    return this.request<InspirationAccountDetail>(
-      'GET',
-      `/api/v1/inspiration/accounts/${encodeURIComponent(accountId)}`,
-    )
+  /**
+   * One tracked account with its performance: content count, totals, averages, top and recent content.
+   * Works for either tier; the tier is reported, not required.
+   */
+  async getAccount(accountId: string): Promise<AccountDetail> {
+    return this.request<AccountDetail>('GET', `/api/v1/accounts/${encodeURIComponent(accountId)}`)
   }
 
-  /** List top-performing content from the creators the account tracks, by outlier score. */
-  async listOutliers(options: ListOutliersOptions = {}): Promise<OutliersResult> {
+  /**
+   * The social content the caller tracks, ranked by outlier score by default.
+   *
+   * Spans the creators they watch AND their own posts (`scope`, default `all`); each row carries `isOwn`.
+   * Filter by platform, content type, a published window, and ranges over score, views, duration and
+   * follower count.
+   */
+  async listContent(options: ListContentOptions = {}): Promise<ContentListResult> {
     const q = new URLSearchParams()
+    if (options.scope) q.set('scope', options.scope)
     if (options.platform) q.set('platform', options.platform)
     if (options.contentType) q.set('content_type', options.contentType)
-    if (options.minOutlierScore != null) q.set('min_outlier_score', String(options.minOutlierScore))
+    if (options.outlierScoreMin != null) q.set('outlier_score_min', String(options.outlierScoreMin))
+    if (options.outlierScoreMax != null) q.set('outlier_score_max', String(options.outlierScoreMax))
+    if (options.viewsMin != null) q.set('views_min', String(options.viewsMin))
+    if (options.viewsMax != null) q.set('views_max', String(options.viewsMax))
+    if (options.durationMin != null) q.set('duration_min', String(options.durationMin))
+    if (options.durationMax != null) q.set('duration_max', String(options.durationMax))
+    if (options.subscribersMin != null) q.set('subscribers_min', String(options.subscribersMin))
+    if (options.subscribersMax != null) q.set('subscribers_max', String(options.subscribersMax))
+    if (options.publishedAfter) q.set('published_after', options.publishedAfter)
+    if (options.publishedBefore) q.set('published_before', options.publishedBefore)
+    if (options.publicationDate) q.set('publication_date', options.publicationDate)
     if (options.search) q.set('search', options.search)
     if (options.sortBy) q.set('sort_by', options.sortBy)
+    if (options.sortOrder) q.set('sort_order', options.sortOrder)
+    if (options.accountIds?.length) q.set('account_ids', options.accountIds.join(','))
+    if (options.addedByYou) q.set('added_by_you', 'true')
     if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
     if (options.favorited) q.set('favorited', 'true')
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
     const qs = q.toString()
-    return this.request<OutliersResult>('GET', `/api/v1/inspiration/outliers${qs ? `?${qs}` : ''}`)
+    return this.request<ContentListResult>('GET', `/api/v1/content${qs ? `?${qs}` : ''}`)
   }
 
-  /** Get one tracked-content item in full (incl. transcript, engagement, hashtags). */
-  async getInspirationContent(contentId: string): Promise<InspirationContent> {
-    const data = await this.request<{ content: InspirationContent }>(
+  /**
+   * One tracked post in full: engagement, outlier score, hashtags, keywords, mentions, audio info.
+   *
+   * The transcript is OPT-IN and windowable, because a sixty-minute video is a large document: ask for
+   * `text` or `segments`, and narrow segments with `startMs`/`endMs` or `transcriptSearch`. Throws
+   * NotFoundError both when the post does not exist and when the caller has no relationship to it.
+   */
+  async getContent(contentId: string, options: GetContentOptions = {}): Promise<ContentDetail> {
+    const q = new URLSearchParams()
+    if (options.transcript) q.set('transcript', options.transcript)
+    if (options.startMs != null) q.set('start_ms', String(options.startMs))
+    if (options.endMs != null) q.set('end_ms', String(options.endMs))
+    if (options.transcriptSearch) q.set('transcript_search', options.transcriptSearch)
+    const qs = q.toString()
+    return this.request<ContentDetail>(
       'GET',
-      `/api/v1/inspiration/content/${encodeURIComponent(contentId)}`,
-    )
-    return data.content
-  }
-
-  /** List the account's own brand social accounts (the basis for own-performance reads). */
-  async listBrandAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccount[]> {
-    const qs = options.brandKitId ? `?brand_kit_id=${encodeURIComponent(options.brandKitId)}` : ''
-    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', `/api/v1/brand-accounts${qs}`)
-    return data.accounts
-  }
-
-  /** Get the performance summary for one of the account's brand accounts. */
-  async getBrandAccountPerformance(accountId: string): Promise<BrandAccountPerformance> {
-    return this.request<BrandAccountPerformance>(
-      'GET',
-      `/api/v1/brand-accounts/${encodeURIComponent(accountId)}/performance`,
+      `/api/v1/content/${encodeURIComponent(contentId)}${qs ? `?${qs}` : ''}`,
     )
   }
 
