@@ -74,11 +74,16 @@ test('post exposes its verbs, with destinations and assets folded into update', 
   assert.ok(subs.includes('publish'))
 })
 
-test('brand-kit exposes its verbs and the section group', () => {
+test('brand-kit exposes its verbs, with sections folded into update', () => {
   const subs = subcommands('brand-kit')
-  for (const n of ['list', 'get', 'create', 'extract', 'reorder', 'update', 'section']) {
+  for (const n of ['list', 'get', 'create', 'extract', 'reorder', 'update']) {
     assert.ok(subs.includes(n), `brand-kit is missing: ${n}`)
   }
+  // Sections are a declarative field on create/update now, keyed by (tab, sectionName).
+  assert.ok(!subs.includes('section'), 'brand-kit should no longer have a section subcommand')
+  // Knowledge STAYS its own group: an ingest-and-embed corpus read by similarity is not a property of
+  // the document, so declaring the set would mean re-embedding to add one note.
+  assert.ok(subs.includes('knowledge'))
   // Archiving moved to the universal top-level `archive` command.
   assert.ok(!subs.includes('archive'), 'brand-kit should no longer have its own archive subcommand')
 })

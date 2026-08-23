@@ -46,6 +46,7 @@ import {
   type References,
   type EditorOp,
   type PostDestinationInput,
+  type BrandKitSectionInput,
   type PostAssetInput,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
@@ -949,6 +950,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
         logos: z.array(z.unknown()).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
         assets: z.array(z.unknown()).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
+        sections: z
+          .array(z.unknown())
+          .optional()
+          .describe("The kit's curated sections, each { tab, sectionName, sortOrder?, fields? }. Array position is the default order."),
       },
     },
     async (args, extra) => {
@@ -960,7 +965,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (args.extract && !args.websiteUrl) {
           return errorResult(new Error('create_brand_kit: extract requires a websiteUrl to scrape.'))
         }
-        const { brandKit, extraction } = await client.createBrandKit(args)
+        const { logos, assets, sections, ...rest } = args
+        const { brandKit, extraction } = await client.createBrandKit({
+          ...rest,
+          ...(logos !== undefined ? { logos } : {}),
+          ...(assets !== undefined ? { assets } : {}),
+          ...(sections !== undefined ? { sections: sections as BrandKitSectionInput[] } : {}),
+        })
         return brandKitResult(brandKit, extraction)
       } catch (err) {
         return errorResult(err)
@@ -975,7 +986,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit: identity fields (business name, positioning, audience, voice profile, visual style, content strategy), its brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/brandAccountIds/inspirationAccountIds are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccountIds are the account owner's OWN profiles (performance), inspirationAccountIds are competitors and creators they watch; they are separate lists because they mean opposite things. isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
+        "Update a brand kit: identity fields (business name, positioning, audience, voice profile, visual style, content strategy), its brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/sections/brandAccountIds/inspirationAccountIds are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccountIds are the account owner's OWN profiles (performance), inspirationAccountIds are competitors and creators they watch; they are separate lists because they mean opposite things. isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
         brandKitId: z.string().optional().describe('The brand kit id. Omit ONLY when reordering with orderedIds.'),
         orderedIds: z
@@ -988,6 +999,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe('Re-run website extraction for this kit. Returns immediately; poll extractionStatus.'),
         logos: z.array(z.unknown()).optional().describe('The kit\'s logos, each { url | outputId, name?, is_primary?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
         assets: z.array(z.unknown()).optional().describe('The kit\'s brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.'),
+        sections: z
+          .array(z.unknown())
+          .optional()
+          .describe("The kit's curated sections, each { tab, sectionName, sortOrder?, fields? }. REPLACES the set, keyed by (tab, sectionName); a section left out is ARCHIVED, never deleted. Array position is the default order."),
         isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
         brandAccountIds: z
           .array(z.string())
@@ -1013,7 +1028,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { brandKitId, orderedIds, extract, ...input } = args
+        const { brandKitId, orderedIds, extract, logos, assets, sections, ...rest } = args
+        // The declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
+        // server validates), so they are cast at this one boundary rather than restating the shape in zod.
+        const input = {
+          ...rest,
+          ...(logos !== undefined ? { logos } : {}),
+          ...(assets !== undefined ? { assets } : {}),
+          ...(sections !== undefined ? { sections: sections as BrandKitSectionInput[] } : {}),
+        }
 
         // Reorder is the collection-level mode and takes no kit id at all.
         if (orderedIds && !brandKitId) {
@@ -1044,72 +1067,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- add_brand_kit_section ------------------------------------------------
-  server.registerTool(
-    'add_brand_kit_section',
-    {
-      title: 'Add Brand Kit Section',
-      annotations: WRITE,
-      description:
-        "Add a curated section to a brand kit (a tab + name + a list of fields). Fields are objects like { key, label, type, value }. Requires the brandkit:write scope.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        tab: z.string().describe('The tab the section belongs to (e.g. "voice", "overview").'),
-        sectionName: z.string().describe('The section title.'),
-        sortOrder: z.number().int().optional().describe('Order within the tab (default 99 = end).'),
-        fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Field objects: { key, label, type, value }.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return brandKitSectionResult(
-          await client.addBrandKitSection(args.brandKitId, {
-            tab: args.tab,
-            sectionName: args.sectionName,
-            sortOrder: args.sortOrder,
-            fields: args.fields,
-          }),
-          'Added section',
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
   // -- update_brand_kit_section ---------------------------------------------
-  server.registerTool(
-    'update_brand_kit_section',
-    {
-      title: 'Update Brand Kit Section',
-      annotations: WRITE,
-      description:
-        "Update a brand-kit section's name, order, or fields. Pass the full fields array to replace it. Requires the brandkit:write scope.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        sectionId: z.string().describe('The section id (from get_brand_kit).'),
-        sectionName: z.string().optional(),
-        sortOrder: z.number().int().optional(),
-        fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Replacement field objects.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return brandKitSectionResult(
-          await client.updateBrandKitSection(args.brandKitId, args.sectionId, {
-            sectionName: args.sectionName,
-            sortOrder: args.sortOrder,
-            fields: args.fields,
-          }),
-          'Updated section',
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
   // -- search_brand_knowledge -----------------------------------------------
   server.registerTool(
     'search_brand_knowledge',

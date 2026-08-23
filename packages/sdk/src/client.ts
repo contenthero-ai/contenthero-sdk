@@ -20,13 +20,12 @@ import type {
   FolderItemRef,
   CreateFolderInput,
   UpdateFolderInput,
-  AddBrandKitSectionInput,
+  BrandKitSectionInput,
   AddBrandKnowledgeInput,
   Avatar,
   AvatarSummary,
   Balance,
   BrandKit,
-  BrandKitSectionRecord,
   BrandKitSummary,
   BrandKnowledgeDetail,
   BrandKnowledgeItem,
@@ -45,7 +44,6 @@ import type {
   UpdateBrandKitInput,
   CreateBrandKitInput,
   ExtractionOutcome,
-  UpdateBrandKitSectionInput,
   TrackedAccount,
   GenerateBoardRequest,
   GenerateRequest,
@@ -467,30 +465,6 @@ export class ContentHero {
    */
   async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput): Promise<BrandKit> {
     return this.request<BrandKit>('PATCH', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`, input)
-  }
-
-  /** Add a curated section to a brand kit. Requires the `brandkit:write` scope. */
-  async addBrandKitSection(brandKitId: string, input: AddBrandKitSectionInput): Promise<BrandKitSectionRecord> {
-    const data = await this.request<{ section: BrandKitSectionRecord }>(
-      'POST',
-      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections`,
-      input,
-    )
-    return data.section
-  }
-
-  /** Update a brand-kit section. Requires the `brandkit:write` scope. */
-  async updateBrandKitSection(
-    brandKitId: string,
-    sectionId: string,
-    input: UpdateBrandKitSectionInput,
-  ): Promise<BrandKitSectionRecord> {
-    const data = await this.request<{ section: BrandKitSectionRecord }>(
-      'PATCH',
-      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/sections/${encodeURIComponent(sectionId)}`,
-      input,
-    )
-    return data.section
   }
 
   // -------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import type {
   BrandKnowledgeItem,
   BrandKnowledgeListResult,
   BrandKnowledgeMatch,
+  CreateBrandKitInput,
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -121,6 +122,7 @@ export function registerBrandKit(program: Command): void {
     .option('--visual-style <text>')
     .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary', collect)
     .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable', collect)
+    .option('--sections <json>', 'curated sections as JSON: [{ tab, sectionName, sortOrder?, fields? }]', toJson)
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       if (!opts.name && !opts.websiteUrl && !opts.duplicateFrom) {
@@ -141,6 +143,7 @@ export function registerBrandKit(program: Command): void {
           visualStyle: opts.visualStyle as string | undefined,
           logos: mediaRefs(opts.logo as string[] | undefined),
           assets: mediaRefs(opts.asset as string[] | undefined),
+          sections: opts.sections as CreateBrandKitInput['sections'],
         }),
       )
       emit({ brandKit, extraction }, ctx, () =>
@@ -206,6 +209,7 @@ export function registerBrandKit(program: Command): void {
     .option('--inspiration-account <id>', 'link a tracked competitor/creator account; repeatable. REPLACES the list', collect)
     .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary. REPLACES the list', collect)
     .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable. REPLACES the list', collect)
+    .option('--sections <json>', 'curated sections as JSON. REPLACES the set, keyed by (tab, sectionName); one left out is ARCHIVED', toJson)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const input = compact<UpdateBrandKitInput>({
         name: opts.name as string | undefined,
@@ -224,6 +228,7 @@ export function registerBrandKit(program: Command): void {
         inspirationAccountIds: opts.inspirationAccount as string[] | undefined,
         logos: mediaRefs(opts.logo as string[] | undefined),
         assets: mediaRefs(opts.asset as string[] | undefined),
+        sections: opts.sections as UpdateBrandKitInput['sections'],
       })
       if (Object.keys(input).length === 0) {
         throw new CliError('Nothing to update. Pass at least one field to change.', EXIT.USAGE)
@@ -239,46 +244,6 @@ export function registerBrandKit(program: Command): void {
     })
 
   // -- brand-kit section ----------------------------------------------------
-  const section = brandKit.command('section').description('Manage a brand kit\'s curated sections')
-
-  section
-    .command('add')
-    .description('Add a curated section to a brand kit (requires brandkit:write)')
-    .argument('<brandKitId>', 'the brand kit id')
-    .requiredOption('--tab <tab>', 'the tab the section belongs to (e.g. voice, overview)')
-    .requiredOption('--name <name>', 'the section title')
-    .option('--sort-order <n>', 'order within the tab (default end)', toInt)
-    .option('--fields <json>', 'field objects as a JSON array: [{ key, label, type, value }]', toJson)
-    .action(async (brandKitId: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const s = await client.addBrandKitSection(brandKitId, {
-        tab: opts.tab as string,
-        sectionName: opts.name as string,
-        sortOrder: opts.sortOrder as number | undefined,
-        fields: opts.fields as unknown[] | undefined,
-      })
-      emit(s, ctx, (rec: BrandKitSectionRecord) => recordHuman(rec, 'Added section'))
-    })
-
-  section
-    .command('update')
-    .description('Update a brand-kit section (requires brandkit:write)')
-    .argument('<brandKitId>', 'the brand kit id')
-    .argument('<sectionId>', 'the section id (from `brand-kit get`)')
-    .option('--name <name>', 'new section title')
-    .option('--sort-order <n>', 'new order within the tab', toInt)
-    .option('--fields <json>', 'replacement field objects as a JSON array', toJson)
-    .action(async (brandKitId: string, sectionId: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const s = await client.updateBrandKitSection(brandKitId, sectionId, {
-        sectionName: opts.name as string | undefined,
-        sortOrder: opts.sortOrder as number | undefined,
-        fields: opts.fields as unknown[] | undefined,
-      })
-      emit(s, ctx, (rec: BrandKitSectionRecord) => recordHuman(rec, 'Updated section'))
-    })
-
-  // -- brand-kit knowledge --------------------------------------------------
   const knowledge = brandKit
     .command('knowledge')
     .description('A brand kit\'s knowledge base: list, get, semantic search, add, remove')

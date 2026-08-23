@@ -658,6 +658,11 @@ export interface UpdateBrandKitInput {
   logos?: unknown[]
   assets?: unknown[]
   /**
+   * The kit's curated sections. DECLARATIVE and keyed by (tab, sectionName): pass the whole set, and a
+   * section no longer present is ARCHIVED (never deleted). Array position is the default sort order.
+   */
+  sections?: BrandKitSectionInput[]
+  /**
    * Only `true` is meaningful: it makes this the default kit and un-defaults every other one. Passing `false`
    * would leave the account with no default at all, which the brand switcher cannot resolve, so to MOVE the
    * default you name the kit that should hold it.
@@ -704,18 +709,12 @@ export interface BrandKitSectionRecord {
   fields: unknown[]
 }
 
-/** Fields to add a brand-kit section. */
-export interface AddBrandKitSectionInput {
+/** One curated section on a brand kit. Keyed by (tab, sectionName). */
+export interface BrandKitSectionInput {
   tab: string
   sectionName: string
   sortOrder?: number
-  fields?: unknown[]
-}
-
-/** Fields to update a brand-kit section. */
-export interface UpdateBrandKitSectionInput {
-  sectionName?: string
-  sortOrder?: number
+  /** Curated field objects: { key, label, type, value }. */
   fields?: unknown[]
 }
 

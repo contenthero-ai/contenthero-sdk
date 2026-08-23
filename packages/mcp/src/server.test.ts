@@ -398,7 +398,6 @@ test('advertises exactly the v1 tools', async () => {
   const { tools } = await mcp.listTools()
   const names = tools.map((t) => t.name).sort()
   assert.deepEqual(names, [
-    'add_brand_kit_section',
     'add_brand_knowledge',
     'add_to_folder',
     'archive',
@@ -473,7 +472,6 @@ test('advertises exactly the v1 tools', async () => {
     'unarchive',
     'unfavorite',
     'update_brand_kit',
-    'update_brand_kit_section',
     'update_canvas',
     'update_element',
     'update_folder',
@@ -1690,24 +1688,32 @@ test('archive confirms a brand kit via the universal tool', async () => {
   assert.match(res.content[0].text, /Archived brand_kit bk1/)
 })
 
-test('add_brand_kit_section creates a section with tab + name', async () => {
+test('update_brand_kit sets sections declaratively, keyed by tab and name', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      addBrandKitSection: async (id, input) => {
-        captured = { id, input }
-        return { id: 'sec-new', tab: input.tab, sectionName: input.sectionName, sortOrder: 99, fields: input.fields ?? [] }
+      updateBrandKit: async (id, input) => {
+        captured = input
+        return { id, name: 'ContentHero', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
       },
     }),
   )
-  const res = await mcp.callTool({
-    name: 'add_brand_kit_section',
-    arguments: { brandKitId: 'bk1', tab: 'voice', sectionName: 'Catchphrases', fields: [{ key: 'a', value: 'b' }] },
+  await mcp.callTool({
+    name: 'update_brand_kit',
+    arguments: {
+      brandKitId: 'bk1',
+      sections: [
+        { tab: 'voice', sectionName: 'Tone', fields: [{ key: 'tone', value: 'warm' }] },
+        { tab: 'overview', sectionName: 'Positioning' },
+      ],
+    },
   })
-  assert.equal(captured.input.tab, 'voice')
-  assert.equal(captured.input.sectionName, 'Catchphrases')
-  assert.match(res.content[0].text, /Added section: "Catchphrases" in tab "voice" \(id sec-new\)/)
-  assert.match(res.content[0].text, /1 field/)
+  // (tab, sectionName) is the key, and it is what an agent can name without looking up an id first:
+  // getBrandKit returns sections with no id at all.
+  assert.equal(captured.sections.length, 2)
+  assert.equal(captured.sections[0].tab, 'voice')
+  assert.equal(captured.sections[0].sectionName, 'Tone')
+  assert.deepEqual(captured.sections[0].fields, [{ key: 'tone', value: 'warm' }])
 })
 
 test('archive a brand_kit_section by section id via the universal tool', async () => {
