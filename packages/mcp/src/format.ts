@@ -97,7 +97,7 @@ export function pollAfterSecondsFor(contentType: string): number {
 /** A slow job that did not finish within the smart-wait window. */
 export function pendingResult(outputId: string, pollAfterSeconds = 15): CallToolResult {
   return text(
-    `Still rendering (outputId ${outputId}). This is normal for video. Call get_generation_status (or wait_for_generation) with this outputId in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`,
+    `Still rendering (outputId ${outputId}). This is normal for video. Call get_generation_status with this outputId in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`,
   )
 }
 
@@ -127,7 +127,7 @@ export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
   )
   const header =
     jobs.length === 1
-      ? 'Enhancing 1 source. Poll its outputId with get_generation_status (or wait_for_generation):'
+      ? 'Enhancing 1 source. Poll its outputId with get_generation_status:'
       : `Enhancing ${jobs.length} sources as separate jobs, because a noise profile is estimated per recording. Poll EVERY outputId:`
   const footer = [
     'The enhanced audio is applied to the clips automatically when each job lands, so no placement call is needed.',
@@ -145,7 +145,7 @@ export function costResult(est: CostEstimate): CallToolResult {
   return text(`Estimated cost: ${credits} for ${what}. No generation ran and nothing was charged.`)
 }
 
-/** Result of polling a generation via get_generation_status. */
+/** One generation's status. Used directly for a single id, and per-row by the batch form below. */
 export function generationStatusResult(gen: Generation): CallToolResult {
   if (gen.status === 'completed') return completedResult(gen)
   if (gen.status === 'failed') {
@@ -153,11 +153,11 @@ export function generationStatusResult(gen: Generation): CallToolResult {
   }
   const secs = pollAfterSecondsFor(gen.contentType)
   return text(
-    `Generation ${gen.outputId} is still ${gen.status}. Call get_generation_status (or wait_for_generation) again in ~${secs}s [poll_after_seconds: ${secs}].`,
+    `Generation ${gen.outputId} is still ${gen.status}. Call get_generation_status again in ~${secs}s [poll_after_seconds: ${secs}].`,
   )
 }
 
-/** Result of wait_for_generation: one or more generations (snapshot or post-wait). */
+/** One or more generations (snapshot or post-wait). Falls through to the single form for one id. */
 export function generationBatchResult(gens: Generation[]): CallToolResult {
   if (gens.length === 1) return generationStatusResult(gens[0]!)
   const rows = gens.map((gen) => {
@@ -1057,7 +1057,7 @@ export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
   // Async effect ops (remove_background) dispatch a job and return its outputId; surface it so the agent can poll.
   const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)
   if (generating.length) {
-    lines.push(`Dispatched ${generating.length} async job(s); wait_for_generation on: ${generating.join(', ')}.`)
+    lines.push(`Dispatched ${generating.length} async job(s); get_generation_status on: ${generating.join(', ')}.`)
   }
   if (r.renderUrl) lines.push(`Preview: ${r.renderUrl}`)
   if (failures.length) {

@@ -21,26 +21,18 @@ const DEFAULT_TIMEOUT_SEC = 600
 export function registerGeneration(program: Command): void {
   const generation = program
     .command('generation')
-    .description('Poll in-flight generations (status / wait)')
+    .description('Check in-flight generations')
 
   generation
     .command('status')
-    .description('Show the current status and URLs of a generation by its outputId')
-    .argument('<id>', 'the outputId from a generate / upscale command')
-    .action(async (id: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const gen = await client.getGeneration(id)
-      emit(gen, ctx, generationHuman)
-    })
-
-  generation
-    .command('wait')
-    .description('Wait for one or more generations to finish, then show their URLs')
-    .argument('<id...>', 'one or more outputIds to wait on')
+    .description('Show one or more generations; blocks until they finish unless --no-wait')
+    .argument('<id...>', 'one or more outputIds from a generate / upscale command')
     .option('--no-wait', 'take an instant snapshot instead of blocking')
     .option('--timeout <seconds>', 'how long to block before handing back', toInt, DEFAULT_TIMEOUT_SEC)
     .action(async (ids: string[], opts: { wait?: boolean; timeout?: number }, command: Command) => {
       const { client, ctx } = makeClient(command)
+      // `generation wait` used to be a separate command. It was `status` over an array with blocking on, so
+      // the two differed by a default rather than by what they did.
       const blocking = opts.wait !== false
       const timeoutSec = opts.timeout ?? DEFAULT_TIMEOUT_SEC
 

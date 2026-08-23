@@ -49,6 +49,17 @@ test('project exposes get + apply', () => {
   assert.ok(subs.includes('apply'), 'project should have an apply subcommand')
 })
 
+test('generation exposes status only, with wait folded into a flag', () => {
+  const subs = subcommands('generation')
+  assert.ok(subs.includes('status'))
+  // `generation wait` was `status` over an array with blocking on: the two differed by a default, not by
+  // what they did. The direction is --no-wait now.
+  assert.ok(!subs.includes('wait'), 'generation should no longer have a separate wait subcommand')
+  const cmd = buildProgram().commands.find((c) => c.name() === 'generation')!
+  const status = cmd.commands.find((c) => c.name() === 'status')!
+  assert.ok(status.options.some((o) => o.long === '--no-wait'))
+})
+
 test('generate exposes the five generation subcommands', () => {
   const subs = subcommands('generate')
   for (const n of ['image', 'video', 'audio', 'board', 'lip-sync']) {

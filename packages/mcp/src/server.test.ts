@@ -473,7 +473,6 @@ test('advertises exactly the v1 tools', async () => {
     'update_tag',
     'update_timeline',
     'upscale',
-    'wait_for_generation',
   ])
 })
 
@@ -667,26 +666,32 @@ test('rejects an unknown model at the schema boundary', async () => {
   assert.ok(blocked, 'expected an invalid modelId to be blocked before the handler')
 })
 
-test('get_generation_status reports completed URLs', async () => {
+test('get_generation_status blocks by default and returns the final URLs', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputId: 'gen1' } })
-  assert.match(res.content[0].text, /https:\/\/cdn\/v\.mp4/)
-})
-
-test('wait_for_generation returns completed URLs (blocking, default)', async () => {
-  const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'wait_for_generation', arguments: { outputIds: ['gen1'] } })
+  const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1'] } })
   assert.match(res.content[0].text, /https:\/\/cdn\/v\.mp4/)
   assert.ok(!res.isError)
 })
 
-test('wait_for_generation snapshots without blocking when wait=false', async () => {
+test('get_generation_status takes wait:false for an instant snapshot', async () => {
+  let waited = false
+  const mcp = await connect(
+    fakeClient({
+      waitForGeneration: async (id) => {
+        waited = true
+        return { outputId: id, status: 'completed', contentType: 'video', outputUrls: ['https://cdn/v.mp4'], error: null }
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1'], wait: false } })
+  // The direction that used to live in the tool NAME is an argument now, so this must not block.
+  assert.equal(waited, false)
+})
+
+test('get_generation_status checks several outputIds in one call', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({
-    name: 'wait_for_generation',
-    arguments: { outputIds: ['gen1'], wait: false },
-  })
-  assert.match(res.content[0].text, /https:\/\/cdn\/v\.mp4/)
+  const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1', 'gen2'] } })
+  assert.match(res.content[0].text, /2 generation\(s\)/)
 })
 
 test('generate_image get_cost returns an estimate without generating', async () => {

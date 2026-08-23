@@ -219,22 +219,27 @@ test('favorite targets a studio variation slot via variationIndex', async () => 
   assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { id: 'output-uuid', variationIndex: 2 })
 })
 
-test('unfavorite, archive, and unarchive hit their routes', async () => {
+test('favorite and archive carry their direction in the body, not the route', async () => {
+  // /api/v1/unfavorite and /api/v1/unarchive are gone. They were their positive twins with one boolean
+  // flipped, so the direction lived in the URL and every layer carried two of everything for one operation.
   const unfav = stubFetch([{ status: 200, body: { favorited: false } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: unfav.fetch, baseUrl: 'https://example.test' })
-  await c1.unfavorite({ assetType: 'post', id: 'p1' })
-  assert.equal(unfav.calls[0]?.url, 'https://example.test/api/v1/unfavorite')
+  await c1.favorite({ assetType: 'post', id: 'p1', favorited: false })
+  assert.equal(unfav.calls[0]?.url, 'https://example.test/api/v1/favorite')
+  assert.deepEqual(JSON.parse(unfav.calls[0]?.init?.body as string), { assetType: 'post', id: 'p1', favorited: false })
 
   const arch = stubFetch([{ status: 200, body: { archived: true } }])
   const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: arch.fetch, baseUrl: 'https://example.test' })
   await c2.archive({ assetType: 'brand_kit_section', id: 's1' })
   assert.equal(arch.calls[0]?.url, 'https://example.test/api/v1/archive')
+  // No `archived` in the body: the server defaults it to true, so omitting it still archives.
   assert.deepEqual(JSON.parse(arch.calls[0]?.init?.body as string), { assetType: 'brand_kit_section', id: 's1' })
 
   const unarch = stubFetch([{ status: 200, body: { archived: false } }])
   const c3 = new ContentHero({ apiKey: 'ch_live_test', fetch: unarch.fetch, baseUrl: 'https://example.test' })
-  await c3.unarchive({ assetType: 'project', id: 'pr1' })
-  assert.equal(unarch.calls[0]?.url, 'https://example.test/api/v1/unarchive')
+  await c3.archive({ assetType: 'project', id: 'pr1', archived: false })
+  assert.equal(unarch.calls[0]?.url, 'https://example.test/api/v1/archive')
+  assert.deepEqual(JSON.parse(unarch.calls[0]?.init?.body as string), { assetType: 'project', id: 'pr1', archived: false })
 })
 
 test('list filters append favorited and archived query params', async () => {
