@@ -320,6 +320,68 @@ function buildReferences(parts: References): References | undefined {
 export function registerTools(server: McpServer, opts: RegisterToolsOptions): void {
   const { getClient, models } = opts
 
+  /**
+   * ⚠️ THESE SHAPES ARE DECLARED, NOT LEFT AS `z.unknown()`. An array of unknown serialises to
+   * `{"type":"array","items":{}}`, which tells a client NOTHING about what may go inside it. The server
+   * accepted every shape when called directly, and Claude Desktop rejected all of them before they left,
+   * because a validator cannot check a value against an empty schema and a model cannot pattern an argument
+   * on one either. Measured 2026-08-23: 12 fields across 4 tools were advertised that way.
+   *
+   * Every entry below stays permissive at the EDGES (optional fields, free-form payload objects) because the
+   * server does the real validation. The point is to describe the shape, not to duplicate the rules.
+   */
+  const logoEntrySchema = z.object({
+    url: z.string().optional().describe('A url the kit already has.'),
+    outputId: z.string().optional().describe('A generation to copy in: "<id>", or "<id>-2" for variation 2.'),
+    name: z.string().optional(),
+    is_primary: z.boolean().optional().describe("Make this the kit's cover. Exactly one logo ends up primary."),
+    layout: z.enum(['horizontal', 'stacked', 'icon', 'wordmark']).optional(),
+    colorMode: z.enum(['full_color', 'light', 'dark', 'grayscale']).optional(),
+  })
+
+  const assetEntrySchema = z.object({
+    url: z.string().optional().describe('A url the kit already has.'),
+    outputId: z.string().optional().describe('A generation to copy in.'),
+    name: z.string().optional(),
+  })
+
+  const sectionEntrySchema = z.object({
+    tab: z.string().describe('The tab this section belongs to, e.g. "voice", "overview". Part of the key.'),
+    sectionName: z.string().describe('The section title. Part of the key.'),
+    sortOrder: z.number().int().optional(),
+    fields: z.array(z.record(z.string(), z.unknown())).optional().describe('Field objects: { key, label, type, value }.'),
+  })
+
+  /** An existing tracked-account id, OR a profile to add by handle/url. */
+  const accountEntrySchema = z.union([
+    z.string().describe('A tracked-account id, or a full profile url.'),
+    z.object({
+      platform: z
+        .enum(['youtube', 'instagram', 'facebook', 'tiktok', 'x', 'threads', 'linkedin'])
+        .optional()
+        .describe('Only needed for a bare handle; a full profile url carries its own platform.'),
+      handleOrUrl: z.string().describe('A profile url, or a handle when platform is given.'),
+    }),
+  ])
+
+  const postDestinationSchema = z.object({
+    platform: z.enum(POST_PLATFORMS).describe('The platform. This is the KEY: one destination per platform.'),
+    format: z.string().optional(),
+    connectedAccountId: z.string().nullable().optional(),
+    scheduledAt: z.string().nullable().optional().describe("Per-destination override of the post's schedule."),
+    platformSpecificData: z.record(z.string(), z.unknown()).optional().describe('The publish payload for this platform.'),
+    status: z.string().optional(),
+  })
+
+  const postAssetSchema = z.object({
+    id: z.string().optional().describe('Keep an existing asset, at this position in the order.'),
+    assetUrl: z.string().optional().describe('A public url for a NEW asset.'),
+    outputId: z.string().optional().describe('A generation for a NEW asset.'),
+    assetType: z.string().optional().describe('Required with assetUrl; inferred from outputId.'),
+    displayName: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+
   // -- generate_image -------------------------------------------------------
   server.registerTool(
     'generate_image',
@@ -947,18 +1009,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         visualStyle: z.string().optional(),
         designPrinciples: z.array(z.string()).optional(),
         contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
-        logos: z.array(z.unknown()).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
-        assets: z.array(z.unknown()).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
+        logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
+        assets: z.array(assetEntrySchema).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
         sections: z
-          .array(z.unknown())
+          .array(sectionEntrySchema)
           .optional()
           .describe("The kit's curated sections, each { tab, sectionName, sortOrder?, fields? }. Array position is the default order."),
         brandAccounts: z
-          .array(z.unknown())
+          .array(accountEntrySchema)
           .optional()
           .describe("The account owner's OWN profiles. A tracked-account id, or { platform?, handleOrUrl } to ADD one and start ingesting it."),
         inspirationAccounts: z
-          .array(z.unknown())
+          .array(accountEntrySchema)
           .optional()
           .describe('Competitor/creator profiles they watch. Same entry shape as brandAccounts.'),
       },
@@ -1009,19 +1071,19 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .boolean()
           .optional()
           .describe('Re-run website extraction for this kit. Returns immediately; poll extractionStatus.'),
-        logos: z.array(z.unknown()).optional().describe('The kit\'s logos, each { url | outputId, name?, is_primary?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
-        assets: z.array(z.unknown()).optional().describe('The kit\'s brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.'),
+        logos: z.array(logoEntrySchema).optional().describe('The kit\'s logos, each { url | outputId, name?, is_primary?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
+        assets: z.array(assetEntrySchema).optional().describe('The kit\'s brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.'),
         sections: z
-          .array(z.unknown())
+          .array(sectionEntrySchema)
           .optional()
           .describe("The kit's curated sections, each { tab, sectionName, sortOrder?, fields? }. REPLACES the set, keyed by (tab, sectionName); a section left out is ARCHIVED, never deleted. Array position is the default order."),
         isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
         brandAccounts: z
-          .array(z.unknown())
+          .array(accountEntrySchema)
           .optional()
           .describe("The account owner's OWN profiles. Each entry is a tracked-account id, or { platform?, handleOrUrl } to ADD one and start ingesting it. REPLACES the list; [] clears it."),
         inspirationAccounts: z
-          .array(z.unknown())
+          .array(accountEntrySchema)
           .optional()
           .describe('Competitor/creator profiles they watch. Same entry shape as brandAccounts. REPLACES the list; [] clears it.'),
         name: z.string().optional(),
@@ -2008,11 +2070,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('ISO time to publish. Sets the post AND every destination. null clears the schedule.'),
         destinations: z
-          .array(z.unknown())
+          .array(postDestinationSchema)
           .optional()
           .describe("The post's destinations, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
         assets: z
-          .array(z.unknown())
+          .array(postAssetSchema)
           .optional()
           .describe("The post's assets IN ORDER, each { id } to keep an existing one or { assetUrl | outputId, assetType?, displayName? } to add. REPLACES the list; [] clears it."),
       },

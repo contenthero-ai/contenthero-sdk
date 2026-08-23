@@ -391,6 +391,28 @@ async function connect(client) {
   return mcp
 }
 
+test('no tool advertises an array without an item schema', async () => {
+  // ⚠️ THE BUG THIS EXISTS FOR. `z.array(z.unknown())` serialises to {"type":"array","items":{}}, which tells
+  // a client NOTHING about what may go inside. The server accepted every shape when called directly, and
+  // Claude Desktop rejected all of them before they left, because a validator cannot check a value against
+  // an empty schema and a model cannot pattern an argument on one either.
+  //
+  // Measured 2026-08-23: 12 fields across 4 tools were advertised that way, and every one was a field added
+  // during the tool consolidation. An untyped array is a defect on its own, regardless of which client
+  // notices first, so this asserts the whole surface rather than the four tools that happened to break.
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const offenders = []
+  for (const t of tools) {
+    for (const [field, schema] of Object.entries(t.inputSchema.properties ?? {})) {
+      if (schema.type === 'array' && (!schema.items || Object.keys(schema.items).length === 0)) {
+        offenders.push(`${t.name}.${field}`)
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `declare the item shape for: ${offenders.join(', ')}`)
+})
+
 test('advertises exactly the v1 tools', async () => {
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
