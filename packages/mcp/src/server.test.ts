@@ -1689,6 +1689,78 @@ test('archive confirms a brand kit via the universal tool', async () => {
   assert.match(res.content[0].text, /Archived brand_kit bk1/)
 })
 
+test('update_brand_kit forwards brandAccounts, including a url that adds a NEW account', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      updateBrandKit: async (id, input) => {
+        captured = input
+        return { id, name: 'ContentHero', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'update_brand_kit',
+    arguments: { brandKitId: 'bk1', brandAccounts: ['https://www.youtube.com/@taylanalpan'] },
+  })
+  // THE REGRESSION: brandAccounts was destructured out of args and never put back, so a patch naming only
+  // accounts reached the client empty and the tool answered "nothing to change".
+  assert.ok(!res.isError, `expected success, got: ${res.content[0].text}`)
+  assert.deepEqual(captured.brandAccounts, ['https://www.youtube.com/@taylanalpan'])
+})
+
+test('update_brand_kit forwards inspirationAccounts too', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      updateBrandKit: async (id, input) => {
+        captured = input
+        return { id, name: 'x', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'update_brand_kit',
+    arguments: { brandKitId: 'bk1', inspirationAccounts: [{ platform: 'youtube', handleOrUrl: 'somecreator' }] },
+  })
+  assert.deepEqual(captured.inspirationAccounts, [{ platform: 'youtube', handleOrUrl: 'somecreator' }])
+})
+
+test('every declared field on update_brand_kit actually reaches the client', async () => {
+  // A CLASS GUARD, not one more case. The bug was a field named in the schema, pulled out of `args` by the
+  // handler, and never re-added, which `...rest` cannot catch. This walks the advertised schema and asserts
+  // each optional field survives the handler, so the next field added this way fails here instead of in
+  // production.
+  const SAMPLES = {
+    name: 'n', businessName: 'b', websiteUrl: 'https://x.test', primaryOffer: 'o', nicheDefinition: 'nd',
+    visualStyle: 'vs', positioning: { a: 1 }, audience: { a: 1 }, voiceProfile: { a: 1 },
+    contentStrategy: { a: 1 }, designPrinciples: ['p'], logos: [{ url: 'https://x/1.png' }],
+    assets: [{ url: 'https://x/2.png' }], sections: [{ tab: 't', sectionName: 's' }],
+    brandAccounts: ['https://youtube.com/@a'], inspirationAccounts: ['https://youtube.com/@b'],
+  }
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      updateBrandKit: async (id, input) => {
+        captured = input
+        return { id, name: 'x', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+      },
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  const declared = Object.keys(tools.find((t) => t.name === 'update_brand_kit').inputSchema.properties)
+  // These are handled by the tool itself rather than passed through, by design.
+  const NOT_FORWARDED = new Set(['brandKitId', 'orderedIds', 'extract', 'isDefault'])
+  for (const field of declared) {
+    if (NOT_FORWARDED.has(field)) continue
+    assert.ok(field in SAMPLES, `add a sample value for update_brand_kit.${field} to this test`)
+    captured = undefined
+    await mcp.callTool({ name: 'update_brand_kit', arguments: { brandKitId: 'bk1', [field]: SAMPLES[field] } })
+    assert.ok(captured, `update_brand_kit dropped "${field}": the patch reached the client empty`)
+    assert.ok(field in captured, `update_brand_kit declared "${field}" but never forwarded it`)
+  }
+})
+
 test('update_brand_kit sets sections declaratively, keyed by tab and name', async () => {
   let captured
   const mcp = await connect(

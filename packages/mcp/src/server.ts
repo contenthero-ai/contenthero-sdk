@@ -1048,6 +1048,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           ...(logos !== undefined ? { logos } : {}),
           ...(assets !== undefined ? { assets } : {}),
           ...(sections !== undefined ? { sections: sections as BrandKitSectionInput[] } : {}),
+          // ⚠️ THESE TWO WERE DESTRUCTURED OUT OF `args` AND NEVER PUT BACK, so a patch that named only
+          // accounts arrived here empty and the handler answered "nothing to change". Anything pulled out of
+          // `args` by name has to be re-added by name; `...rest` cannot cover it.
+          ...(brandAccounts !== undefined ? { brandAccounts: brandAccounts as BrandKitAccountInput[] } : {}),
+          ...(inspirationAccounts !== undefined ? { inspirationAccounts: inspirationAccounts as BrandKitAccountInput[] } : {}),
         }
 
         // Reorder is the collection-level mode and takes no kit id at all.
