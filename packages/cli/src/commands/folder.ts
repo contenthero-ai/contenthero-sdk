@@ -12,7 +12,8 @@ import type { Command } from 'commander'
 import type { Folder, DerivedFolder, FolderItem } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, table } from '../output.js'
-import { toInt } from '../args.js'
+import { collect } from '../args.js'
+import { CliError, EXIT } from '../errors.js'
 
 function clip(s: string | null | undefined, n = 50): string {
   if (!s) return ''
@@ -87,28 +88,51 @@ export function registerFolder(program: Command): void {
     })
 
   folder
-    .command('add')
-    .description('File an item into a manual folder')
-    .argument('<folderId>', 'destination folder id')
-    .argument('<sourceTable>', 'item source table')
-    .argument('<sourceRecordId>', 'item source record id')
-    .option('--variant <n>', 'variation index (default 0)', toInt)
-    .action(async (folderId: string, sourceTable: string, sourceRecordId: string, opts: Record<string, unknown>, command: Command) => {
+    .command('update')
+    .description('Rename, move, re-query a folder, and file or unfile items (requires assets:write)')
+    .argument('<id>', 'the folder id')
+    .option('--name <text>', 'a new name')
+    .option('--parent <id>', 'move under this folder id, or "none" for the top level')
+    .option('--also <id>', 'apply to this folder too; repeatable. Name and query still need exactly one', collect)
+    .option('--add <ref>', 'file an item: sourceTable:sourceRecordId[:variant]. Repeatable', collect)
+    .option('--remove <ref>', 'unfile an item: sourceTable:sourceRecordId[:variant]. Repeatable', collect)
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      await client.addToFolder(folderId, { sourceTable, sourceRecordId, variant: opts.variant as number | undefined })
-      emit({ ok: true }, ctx, () => 'Filed into the folder.')
+      const patch = {
+        name: opts.name as string | undefined,
+        parentId:
+          opts.parent === undefined ? undefined : NONE.includes(String(opts.parent).toLowerCase()) ? null : (opts.parent as string),
+        addItems: parseRefs(opts.add as string[] | undefined),
+        removeItems: parseRefs(opts.remove as string[] | undefined),
+      }
+      const also = (opts.also as string[] | undefined) ?? []
+      const targets = [id, ...also]
+      const folders = targets.length > 1 ? await client.updateFolders(targets, patch) : [await client.updateFolder(id, patch)]
+      emit(folders, ctx, (list: Folder[]) => {
+        const filed = patch.addItems?.length ?? 0
+        const unfiled = patch.removeItems?.length ?? 0
+        const what = [filed ? `filed ${filed}` : null, unfiled ? `unfiled ${unfiled}` : null].filter(Boolean).join(', ')
+        return `Updated ${list.length} folder(s)${what ? `: ${what} item(s)` : '.'}`
+      })
     })
+}
 
-  folder
-    .command('remove')
-    .description('Remove an item from a manual folder')
-    .argument('<folderId>', 'folder id')
-    .argument('<sourceTable>', 'item source table')
-    .argument('<sourceRecordId>', 'item source record id')
-    .option('--variant <n>', 'variation index (default 0)', toInt)
-    .action(async (folderId: string, sourceTable: string, sourceRecordId: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      await client.removeFromFolder(folderId, { sourceTable, sourceRecordId, variant: opts.variant as number | undefined })
-      emit({ ok: true }, ctx, () => 'Removed from the folder.')
-    })
+/** "none" clears a parent, which is how you move a folder to the top level. */
+const NONE = ['none', 'null', 'root', 'clear']
+
+/**
+ * `sourceTable:sourceRecordId[:variant]`, which is the universal identity `search_media` returns.
+ *
+ * A compact form because these are repeatable and bulk is the point: three positional arguments per item
+ * would mean one invocation per item, which is exactly what the two tools this replaced forced.
+ */
+function parseRefs(refs: string[] | undefined) {
+  if (!refs?.length) return undefined
+  return refs.map((raw) => {
+    const [sourceTable, sourceRecordId, variant] = raw.split(':')
+    if (!sourceTable || !sourceRecordId) {
+      throw new CliError(`Invalid item ref "${raw}". Expected sourceTable:sourceRecordId[:variant].`, EXIT.USAGE)
+    }
+    return { sourceTable, sourceRecordId, ...(variant ? { variant: Number(variant) } : {}) }
+  })
 }

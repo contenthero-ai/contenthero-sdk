@@ -981,8 +981,25 @@ export interface CreateFolderInput {
 
 export interface UpdateFolderInput {
   name?: string
+  /**
+   * MOVES the folder: a folder has exactly ONE parent, so setting this takes it out of wherever it was.
+   * That is a different relationship from `addItems`, where an item gains a pointer and keeps the ones it
+   * already had.
+   */
   parentId?: string | null
   query?: SmartFolderQuery | null
+  icon?: string | null
+  color?: string | null
+  position?: number
+  /**
+   * File these items. A DELTA, not a list to replace: folder membership is many-to-many, so a declarative
+   * list would silently unfile everything absent from it.
+   */
+  addItems?: FolderItemRef[]
+  /** Unfile these items. Only the pointer goes; the asset is never touched. */
+  removeItems?: FolderItemRef[]
+  /** Apply this patch to several folders. Attribute fields (name, query, icon, color, position) need one. */
+  folderIds?: string[]
 }
 
 /** A pointer into a manual folder, by the universal variation-atomic identity. */

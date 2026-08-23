@@ -399,7 +399,6 @@ test('advertises exactly the v1 tools', async () => {
   const names = tools.map((t) => t.name).sort()
   assert.deepEqual(names, [
     'add_brand_knowledge',
-    'add_to_folder',
     'archive',
     'complete_media_upload',
     'create_brand_kit',
@@ -465,7 +464,6 @@ test('advertises exactly the v1 tools', async () => {
     'list_voices',
     'publish_post',
     'remove_brand_knowledge',
-    'remove_from_folder',
     'search_brand_knowledge',
     'search_media',
     'transcribe',

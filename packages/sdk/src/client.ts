@@ -17,7 +17,6 @@ import type {
   Folder,
   DerivedFolder,
   FolderItem,
-  FolderItemRef,
   CreateFolderInput,
   UpdateFolderInput,
   BrandKitSectionInput,
@@ -606,23 +605,36 @@ export class ContentHero {
     return data.folder
   }
 
+  /**
+   * Update a folder: rename it, move it (`parentId`), re-query a smart folder, and file or unfile items.
+   *
+   * `addItems` / `removeItems` are DELTAS, because folder membership is many-to-many: an item lives in
+   * several folders at once, so a declarative list would silently unfile everything absent from it.
+   * `folderIds` applies the patch to several folders; attribute fields still need exactly one.
+   */
   async updateFolder(folderId: string, patch: UpdateFolderInput): Promise<Folder> {
     const data = await this.request<{ folder: Folder }>('PATCH', `/api/v1/library/folders/${encodeURIComponent(folderId)}`, patch)
     return data.folder
+  }
+
+  /** Patch several folders at once (bulk moves and filing). Returns every folder that was found. */
+  async updateFolders(folderIds: string[], patch: UpdateFolderInput): Promise<Folder[]> {
+    const first = folderIds[0]
+    if (!first) throw new Error('updateFolders needs at least one folder id')
+    const data = await this.request<{ folders: Folder[] }>(
+      'PATCH',
+      // The path names one folder because the route is per-folder; `folderIds` in the body is what widens
+      // it. The first id is as good as any for addressing.
+      `/api/v1/library/folders/${encodeURIComponent(first)}`,
+      { ...patch, folderIds },
+    )
+    return data.folders
   }
 
   async deleteFolder(folderId: string): Promise<void> {
     await this.request<{ ok: boolean }>('DELETE', `/api/v1/library/folders/${encodeURIComponent(folderId)}`)
   }
 
-  /** File an item into a manual folder (a pointer; no bytes move). */
-  async addToFolder(folderId: string, ref: FolderItemRef): Promise<void> {
-    await this.request<{ ok: boolean }>('POST', `/api/v1/library/folders/${encodeURIComponent(folderId)}/items`, ref)
-  }
-
-  async removeFromFolder(folderId: string, ref: FolderItemRef): Promise<void> {
-    await this.request<{ ok: boolean }>('DELETE', `/api/v1/library/folders/${encodeURIComponent(folderId)}/items`, ref)
-  }
 
   /**
    * Resolve a batch of media references to vision-ready URLs + light metadata (the

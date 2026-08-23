@@ -1356,24 +1356,65 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  /**
+   * One item's universal identity. NO folder_id: the folder is named by the tool's own folder_id /
+   * folder_ids now, which is what lets one call file many items into many folders.
+   */
+  const itemRefBodySchema = z.object({
+    source_table: z.string().describe("The item's source table (e.g. as returned by search_media)."),
+    source_record_id: z.string().describe("The item's source record id."),
+    variant: z.number().int().optional().describe('The variation index (default 0 for single-asset items).'),
+  })
+
   server.registerTool(
     'update_folder',
     {
       title: 'Update Folder',
       annotations: WRITE,
       description:
-        "Update one of the account's own folders: rename it, move it under a different parent (or to the top level with a null parent), or change a smart folder's saved query. Only the provided fields change.",
+        "Update the account's own folders: rename one, MOVE folders under a different parent (or to the top level with a null parent), change a smart folder's saved query, and FILE or UNFILE items. addItems/removeItems are DELTAS of { source_table, source_record_id, variant? }, not a list to replace, because an item can sit in several folders at once and a replace would silently unfile it from the others. Filing never moves or copies anything: it adds a pointer, and only manual folders accept items (a smart folder computes its own membership). Pass folderIds to patch several folders at once, which crossed with addItems files the same items into all of them; renaming and re-querying still need exactly one folder. NOTE the asymmetry: nesting a FOLDER via parentId is a MOVE (a folder has one parent), while filing an ITEM is a pointer that leaves its other folders alone.",
       inputSchema: {
         folder_id: z.string().describe('The folder id to update.'),
+        folder_ids: z
+          .array(z.string())
+          .optional()
+          .describe('Patch several folders at once. Attribute fields (name, query) still need exactly one.'),
         name: z.string().optional().describe('A new name.'),
-        parent_id: z.string().nullable().optional().describe('A new parent folder id, or null to move to the top level.'),
+        parent_id: z.string().nullable().optional().describe('A new parent folder id, or null to move to the top level. MOVES the folder.'),
         query: smartQuerySchema,
+        add_items: z
+          .array(itemRefBodySchema)
+          .optional()
+          .describe('File these items into the folder(s). A delta: their other folders are untouched.'),
+        remove_items: z
+          .array(itemRefBodySchema)
+          .optional()
+          .describe('Unfile these items. Only the pointer goes; the asset is never deleted.'),
       },
     },
     async (args, extra) => {
       try {
-        const f = await (await getClient(extra)).updateFolder(args.folder_id, { name: args.name, parentId: args.parent_id, query: args.query })
-        return text(`Updated folder "${f.name}" (id ${f.id}).`)
+        const client = await getClient(extra)
+        const patch = {
+          name: args.name,
+          parentId: args.parent_id,
+          query: args.query,
+          addItems: args.add_items?.map((r) => ({ sourceTable: r.source_table, sourceRecordId: r.source_record_id, variant: r.variant })),
+          removeItems: args.remove_items?.map((r) => ({ sourceTable: r.source_table, sourceRecordId: r.source_record_id, variant: r.variant })),
+        }
+        const targets: string[] = args.folder_ids?.length ? args.folder_ids : [args.folder_id]
+        const folders = targets.length > 1
+          ? await client.updateFolders(targets, patch)
+          : [await client.updateFolder(targets[0]!, patch)]
+
+        const filed = args.add_items?.length ?? 0
+        const unfiled = args.remove_items?.length ?? 0
+        const what = [
+          filed ? `filed ${filed} item(s)` : null,
+          unfiled ? `unfiled ${unfiled} item(s)` : null,
+        ].filter(Boolean).join(', ')
+        const names = folders.map((f) => `"${f.name}" (id ${f.id})`).join(', ')
+        return text(`Updated ${folders.length === 1 ? 'folder' : `${folders.length} folders`} ${names}${what ? `: ${what}` : '.'}`)
       } catch (err) { return errorResult(err) }
     },
   )
@@ -1392,46 +1433,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  const itemRefSchema = {
-    folder_id: z.string().describe('The folder id.'),
-    source_table: z.string().describe("The item's source table (e.g. as returned by search_media)."),
-    source_record_id: z.string().describe("The item's source record id."),
-    variant: z.number().int().optional().describe('The variation index (default 0 for single-asset items).'),
-  }
-
-  server.registerTool(
-    'add_to_folder',
-    {
-      title: 'Add to Folder',
-      annotations: WRITE,
-      description:
-        'File an item into a manual folder by its universal identity (source_table, source_record_id, and variant, as returned by search_media). Filing never moves or copies the asset; it adds a pointer, so the same item can live in several folders. Only manual folders accept items (a smart folder computes its own membership).',
-      inputSchema: itemRefSchema,
-    },
-    async (args, extra) => {
-      try {
-        await (await getClient(extra)).addToFolder(args.folder_id, { sourceTable: args.source_table, sourceRecordId: args.source_record_id, variant: args.variant })
-        return text('Filed into the folder.')
-      } catch (err) { return errorResult(err) }
-    },
-  )
-
-  server.registerTool(
-    'remove_from_folder',
-    {
-      title: 'Remove from Folder',
-      annotations: WRITE,
-      description:
-        'Remove an item from a manual folder by its universal identity. This unfiles the pointer only; the underlying asset is never deleted.',
-      inputSchema: itemRefSchema,
-    },
-    async (args, extra) => {
-      try {
-        await (await getClient(extra)).removeFromFolder(args.folder_id, { sourceTable: args.source_table, sourceRecordId: args.source_record_id, variant: args.variant })
-        return text('Removed from the folder.')
-      } catch (err) { return errorResult(err) }
-    },
-  )
 
   // -- get_media ------------------------------------------------------------
   server.registerTool(
