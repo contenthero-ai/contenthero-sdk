@@ -20,6 +20,7 @@ import type {
   CreateFolderInput,
   UpdateFolderInput,
   BrandKitSectionInput,
+  BrandKitAccountInput,
   AddBrandKnowledgeInput,
   Avatar,
   AvatarSummary,

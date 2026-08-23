@@ -52,6 +52,7 @@ export type {
   ExtractionOutcome,
   BrandKitSectionRecord,
   BrandKitSectionInput,
+  BrandKitAccountInput,
   BrandKnowledgeItem,
   BrandKnowledgeDetail,
   BrandKnowledgeListResult,

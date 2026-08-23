@@ -672,11 +672,16 @@ export interface UpdateBrandKitInput {
    * Linked tracked accounts, declarative: pass the whole set and what is absent is unlinked. Undefined leaves
    * a list untouched, `[]` clears it.
    *
-   * The two lists mean opposite things and stay separate: `brandAccountIds` are the user's OWN profiles,
-   * `inspirationAccountIds` are competitors and creators they watch.
+   * The two lists mean opposite things and stay separate: `brandAccounts` are the user's OWN profiles,
+   * `inspirationAccounts` are competitors and creators they watch.
+   *
+   * An entry is either an existing tracked-account id, or `{ platform?, handleOrUrl }` to ADD a profile that
+   * is not tracked yet. Adding one is what STARTS ingestion: it sets the account pending, and the dispatcher
+   * drains pending accounts every 5 minutes. A full profile url carries its own platform, so `platform` is
+   * only needed for a bare handle.
    */
-  brandAccountIds?: string[]
-  inspirationAccountIds?: string[]
+  brandAccounts?: BrandKitAccountInput[]
+  inspirationAccounts?: BrandKitAccountInput[]
   /** Re-run website extraction after applying this patch. Requires the kit to have a `websiteUrl`. */
   extract?: boolean
 }
@@ -708,6 +713,9 @@ export interface BrandKitSectionRecord {
   sortOrder: number
   fields: unknown[]
 }
+
+/** An account to link: an existing tracked-account id, or a profile to ADD by handle or url. */
+export type BrandKitAccountInput = string | { platform?: string; handleOrUrl: string }
 
 /** One curated section on a brand kit. Keyed by (tab, sectionName). */
 export interface BrandKitSectionInput {

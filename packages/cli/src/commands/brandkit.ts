@@ -48,6 +48,25 @@ function mediaRefs(refs: string[] | undefined): Array<Record<string, unknown>> |
   )
 }
 
+/**
+ * An account ref: a tracked-account id, a full profile url, or `platform:handle`.
+ *
+ * A url carries its own platform, so it needs no prefix. A bare handle cannot say whether it is instagram
+ * or youtube, which is why that form takes one.
+ */
+function accountRefs(refs: string[] | undefined) {
+  if (!refs?.length) return undefined
+  return refs.map((raw) => {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return raw
+    if (/^https?:\/\//i.test(raw)) return { handleOrUrl: raw }
+    const [platform, ...rest] = raw.split(':')
+    if (!rest.length) {
+      throw new CliError(`"${raw}" needs a platform: pass a profile url, or platform:handle.`, EXIT.USAGE)
+    }
+    return { platform, handleOrUrl: rest.join(':') }
+  })
+}
+
 function recordHuman(s: BrandKitSectionRecord, action: string): string {
   return keyValues([
     [action, s.sectionName],
@@ -205,8 +224,8 @@ export function registerBrandKit(program: Command): void {
     .option('--content-strategy <json>', 'content strategy object (JSON)', toJson)
     .option('--design-principle <text>', 'a design principle; repeatable', collect)
     .option('--default', 'make this the default brand kit, un-defaulting every other')
-    .option('--brand-account <id>', "link one of the account owner's OWN tracked accounts; repeatable. REPLACES the list", collect)
-    .option('--inspiration-account <id>', 'link a tracked competitor/creator account; repeatable. REPLACES the list', collect)
+    .option('--brand-account <ref>', "the owner's OWN profile: a tracked-account id, or a profile url / platform:handle to ADD one. Repeatable. REPLACES the list", collect)
+    .option('--inspiration-account <ref>', 'a competitor/creator profile: same forms as --brand-account. Repeatable. REPLACES the list', collect)
     .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary. REPLACES the list', collect)
     .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable. REPLACES the list', collect)
     .option('--sections <json>', 'curated sections as JSON. REPLACES the set, keyed by (tab, sectionName); one left out is ARCHIVED', toJson)
@@ -224,8 +243,8 @@ export function registerBrandKit(program: Command): void {
         contentStrategy: opts.contentStrategy as Record<string, unknown> | undefined,
         designPrinciples: opts.designPrinciple as string[] | undefined,
         isDefault: opts.default ? true : undefined,
-        brandAccountIds: opts.brandAccount as string[] | undefined,
-        inspirationAccountIds: opts.inspirationAccount as string[] | undefined,
+        brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
+        inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
         logos: mediaRefs(opts.logo as string[] | undefined),
         assets: mediaRefs(opts.asset as string[] | undefined),
         sections: opts.sections as UpdateBrandKitInput['sections'],
