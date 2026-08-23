@@ -1028,18 +1028,12 @@ export class ContentHero {
    * Pass `{ assetType, id }` for a top-level asset (post, voice, brand_kit,
    * project, inspiration_content, gallery), or `{ id, variationIndex }` to
    * favorite a single studio output variation slot (id is a studio output id).
-   * Idempotent.
+   *
+   * `favorited` defaults to true; pass false to CLEAR it. That boolean is what replaced the separate
+   * `unfavorite` method, which was this call with one value flipped. Idempotent in both directions.
    */
   async favorite(input: FavoriteInput): Promise<void> {
     await this.request<{ favorited: boolean }>('POST', '/api/v1/favorite', input)
-  }
-
-  /**
-   * Clear the favorite flag on an asset. Requires the `favorites:write` scope.
-   * Same target shape as `favorite`. Idempotent.
-   */
-  async unfavorite(input: FavoriteInput): Promise<void> {
-    await this.request<{ favorited: boolean }>('POST', '/api/v1/unfavorite', input)
   }
 
   /**
@@ -1048,18 +1042,12 @@ export class ContentHero {
    * Pass `{ assetType, id }` for a top-level asset (post, brand_kit,
    * brand_kit_section, project), or `{ id, variationIndex }` to archive a single
    * studio output variation slot. Archiving a post sets its status to 'archived'.
-   * Idempotent.
+   *
+   * `archived` defaults to true; pass false to RESTORE (a post goes back to 'draft'). That boolean is what
+   * replaced the separate `unarchive` method. Idempotent in both directions.
    */
   async archive(input: ArchiveInput): Promise<void> {
     await this.request<{ archived: boolean }>('POST', '/api/v1/archive', input)
-  }
-
-  /**
-   * Unarchive an asset. Requires the `favorites:write` scope. Same target shape
-   * as `archive`. Unarchiving a post restores it to 'draft'. Idempotent.
-   */
-  async unarchive(input: ArchiveInput): Promise<void> {
-    await this.request<{ archived: boolean }>('POST', '/api/v1/unarchive', input)
   }
 
   // -------------------------------------------------------------------------

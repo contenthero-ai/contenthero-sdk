@@ -2355,7 +2355,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Favorite',
       annotations: WRITE,
       description:
-        "Mark an asset as a favorite. For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery, transition). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent.",
+        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery, transition). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
           .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition'])
@@ -2368,13 +2368,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .min(1)
           .optional()
           .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+        favorited: z.boolean().optional().describe('Default true. Pass false to UNfavorite.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        await client.favorite({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
-        return statusActionResult('Favorited', args)
+        const favorited = args.favorited ?? true
+        await client.favorite({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex, favorited })
+        return statusActionResult(favorited ? 'Favorited' : 'Unfavorited', args)
       } catch (err) {
         return errorResult(err)
       }
@@ -2382,38 +2384,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- unfavorite -----------------------------------------------------------
-  server.registerTool(
-    'unfavorite',
-    {
-      title: 'Unfavorite',
-      annotations: WRITE,
-      description:
-        'Remove the favorite flag from an asset. Same target shape as favorite: assetType + id for a top-level asset, or output id + variationIndex (1-based) for a studio media variation. Requires the favorites:write scope. Idempotent.',
-      inputSchema: {
-        assetType: z
-          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition'])
-          .optional()
-          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
-        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
-        variationIndex: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        await client.unfavorite({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
-        return statusActionResult('Unfavorited', args)
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
   // -- archive --------------------------------------------------------------
   server.registerTool(
     'archive',
@@ -2421,7 +2391,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive an asset (reversible; ContentHero never hard-deletes). For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a post sets its status to 'archived'. Requires the favorites:write scope. Idempotent.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a post sets its status to 'archived'; restoring returns it to 'draft'. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
           .enum(['post', 'brand_kit', 'brand_kit_section', 'project'])
@@ -2434,13 +2404,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .min(1)
           .optional()
           .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+        archived: z.boolean().optional().describe('Default true. Pass false to RESTORE (unarchive).'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        await client.archive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
-        return statusActionResult('Archived', args)
+        const archived = args.archived ?? true
+        await client.archive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex, archived })
+        return statusActionResult(archived ? 'Archived' : 'Unarchived', args)
       } catch (err) {
         return errorResult(err)
       }
@@ -2448,42 +2420,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- unarchive ------------------------------------------------------------
-  server.registerTool(
-    'unarchive',
-    {
-      title: 'Unarchive',
-      annotations: WRITE,
-      description:
-        "Unarchive an asset (restore it). For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project). To unarchive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Unarchiving a post restores it to 'draft'. Requires the favorites:write scope. Idempotent.",
-      inputSchema: {
-        assetType: z
-          .enum(['post', 'brand_kit', 'brand_kit_section', 'project'])
-          .optional()
-          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
-        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
-        variationIndex: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        await client.unarchive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex })
-        return statusActionResult('Unarchived', args)
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // ===========================================================================
-  // Editor / canvas ops (programmatic parity with the manual UI + in-app agent)
-  // ===========================================================================
-
   server.registerTool(
     'list_projects',
     {

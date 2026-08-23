@@ -362,9 +362,7 @@ function fakeClient(overrides = {}) {
     completeMediaUpload: async (outputId) => ({ outputId, url: `https://cloud/${outputId}.png` }),
     importMedia: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
     favorite: async () => {},
-    unfavorite: async () => {},
     archive: async () => {},
-    unarchive: async () => {},
     applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
     listProjects: async () => [
       { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
@@ -467,8 +465,6 @@ test('advertises exactly the v1 tools', async () => {
     'search_brand_knowledge',
     'search_media',
     'transcribe',
-    'unarchive',
-    'unfavorite',
     'update_brand_kit',
     'update_canvas',
     'update_element',
@@ -1358,7 +1354,7 @@ test('archive marks a post via the universal tool', async () => {
     }),
   )
   const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'post', id: 'p1' } })
-  assert.deepEqual(captured, { assetType: 'post', id: 'p1', variationIndex: undefined })
+  assert.deepEqual(captured, { assetType: 'post', id: 'p1', variationIndex: undefined, archived: true })
   assert.match(res.content[0].text, /Archived post p1/)
 })
 
@@ -1372,7 +1368,7 @@ test('favorite marks a top-level asset and reports it', async () => {
     }),
   )
   const res = await mcp.callTool({ name: 'favorite', arguments: { assetType: 'brand_kit', id: 'bk1' } })
-  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined })
+  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined, favorited: true })
   assert.match(res.content[0].text, /Favorited brand_kit bk1/)
 })
 
@@ -1386,28 +1382,30 @@ test('favorite routes a studio variation via variationIndex (no assetType)', asy
     }),
   )
   const res = await mcp.callTool({ name: 'favorite', arguments: { id: 'out-uuid', variationIndex: 2 } })
-  assert.deepEqual(captured, { assetType: undefined, id: 'out-uuid', variationIndex: 2 })
+  assert.deepEqual(captured, { assetType: undefined, id: 'out-uuid', variationIndex: 2, favorited: true })
   assert.match(res.content[0].text, /Favorited variation 2 of output out-uuid/)
 })
 
-test('unfavorite and unarchive hit their universal handlers', async () => {
-  let unfav, unarch
+test('favorite and archive clear with a boolean instead of an inverse tool', async () => {
+  let fav, arch
   const mcp = await connect(
     fakeClient({
-      unfavorite: async (input) => {
-        unfav = input
+      favorite: async (input) => {
+        fav = input
       },
-      unarchive: async (input) => {
-        unarch = input
+      archive: async (input) => {
+        arch = input
       },
     }),
   )
-  const r1 = await mcp.callTool({ name: 'unfavorite', arguments: { assetType: 'voice', id: 'v1' } })
-  assert.deepEqual(unfav, { assetType: 'voice', id: 'v1', variationIndex: undefined })
+  // The two inverse tools were their positive twins with one value flipped, so a caller had to know which
+  // NAME set which value. Now it is an argument.
+  const r1 = await mcp.callTool({ name: 'favorite', arguments: { assetType: 'voice', id: 'v1', favorited: false } })
+  assert.deepEqual(fav, { assetType: 'voice', id: 'v1', variationIndex: undefined, favorited: false })
   assert.match(r1.content[0].text, /Unfavorited voice v1/)
 
-  const r2 = await mcp.callTool({ name: 'unarchive', arguments: { assetType: 'project', id: 'pr1' } })
-  assert.deepEqual(unarch, { assetType: 'project', id: 'pr1', variationIndex: undefined })
+  const r2 = await mcp.callTool({ name: 'archive', arguments: { assetType: 'project', id: 'pr1', archived: false } })
+  assert.deepEqual(arch, { assetType: 'project', id: 'pr1', variationIndex: undefined, archived: false })
   assert.match(r2.content[0].text, /Unarchived project pr1/)
 })
 
@@ -1682,7 +1680,7 @@ test('archive confirms a brand kit via the universal tool', async () => {
     }),
   )
   const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'brand_kit', id: 'bk1' } })
-  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined })
+  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined, archived: true })
   assert.match(res.content[0].text, /Archived brand_kit bk1/)
 })
 
@@ -1727,7 +1725,7 @@ test('archive a brand_kit_section by section id via the universal tool', async (
     name: 'archive',
     arguments: { assetType: 'brand_kit_section', id: 'sec9' },
   })
-  assert.deepEqual(captured, { assetType: 'brand_kit_section', id: 'sec9', variationIndex: undefined })
+  assert.deepEqual(captured, { assetType: 'brand_kit_section', id: 'sec9', variationIndex: undefined, archived: true })
   assert.match(res.content[0].text, /Archived brand_kit_section sec9/)
 })
 

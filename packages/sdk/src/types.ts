@@ -1557,7 +1557,8 @@ export interface FavoriteInput {
   assetType?: FavoriteAssetType
   id: string
   /** 1-based variation slot; when set, `id` is a studio output id. */
-  variationIndex?: number
+  variationIndex?: number  /** Defaults to true. Pass false to clear the favorite. */
+  favorited?: boolean
 }
 
 /**
@@ -1571,7 +1572,8 @@ export interface ArchiveInput {
   assetType?: ArchiveAssetType
   id: string
   /** 1-based variation slot; when set, `id` is a studio output id. */
-  variationIndex?: number
+  variationIndex?: number  /** Defaults to true. Pass false to restore. */
+  archived?: boolean
 }
 
 // ---------------------------------------------------------------------------

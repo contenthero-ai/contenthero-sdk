@@ -36,9 +36,7 @@ test('every top-level command group is registered', () => {
     'connected-account',
     'schema',
     'favorite',
-    'unfavorite',
     'archive',
-    'unarchive',
     'project',
   ]) {
     assert.ok(names.includes(expected), `missing top-level command: ${expected}`)
@@ -93,14 +91,22 @@ test('avatar and voice expose list + get', () => {
   assert.deepEqual(subcommands('voice').sort(), ['get', 'list'])
 })
 
-test('universal status verbs are registered, each accepting --variation', () => {
+test('universal status verbs are registered, each taking --variation and --off', () => {
   const program = buildProgram()
-  for (const name of ['favorite', 'unfavorite', 'archive', 'unarchive']) {
+  for (const name of ['favorite', 'archive']) {
     const cmd = program.commands.find((c) => c.name() === name)
     assert.ok(cmd, `missing top-level command: ${name}`)
     assert.ok(
       cmd!.options.some((o) => o.long === '--variation'),
       `${name} should accept --variation`,
+    )
+    // --off is what replaced the inverse commands: the direction is an argument, not a name.
+    assert.ok(cmd!.options.some((o) => o.long === '--off'), `${name} should accept --off`)
+  }
+  for (const gone of ['unfavorite', 'unarchive']) {
+    assert.ok(
+      !program.commands.some((c) => c.name() === gone),
+      `${gone} should no longer be its own command`,
     )
   }
 })

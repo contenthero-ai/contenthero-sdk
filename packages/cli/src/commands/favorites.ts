@@ -1,15 +1,15 @@
 /**
- * `contenthero favorite | unfavorite | archive | unarchive` - the universal
- * status verbs, one pair each across asset types.
+ * `contenthero favorite | archive` - the universal status verbs, one per concern.
  *
- *   favorite   <assetType> <id> [--variation <n>]
- *   unfavorite <assetType> <id> [--variation <n>]
- *   archive    <assetType> <id> [--variation <n>]
- *   unarchive  <assetType> <id> [--variation <n>]
+ *   favorite <assetType> <id> [--variation <n>] [--off]
+ *   archive  <assetType> <id> [--variation <n>] [--off]
  *
- * For a top-level asset, pass its type + id. For one studio media variation
- * (an image/video/audio slot from `media get`), pass `media <outputId>
- * --variation <n>` (1-based). All four require the favorites:write scope.
+ * `--off` is what replaced the separate `unfavorite` and `unarchive` commands. They were their positive
+ * twins with one value flipped, so the direction lived in the command NAME, which meant the SDK, the MCP
+ * and this CLI each carried two of everything for one operation.
+ *
+ * For a top-level asset, pass its type + id. For one studio media variation (an image/video/audio slot
+ * from `media get`), pass `media <outputId> --variation <n>` (1-based). Both require favorites:write.
  */
 
 import type { Command } from 'commander'
@@ -70,53 +70,31 @@ const TYPES_HELP = (allowed: readonly string[]) => `${[...allowed, MEDIA].join('
 export function registerFavorites(program: Command): void {
   program
     .command('favorite')
-    .description('Mark an asset as a favorite (requires favorites:write)')
+    .description('Favorite an asset, or clear it with --off (requires favorites:write)')
     .argument('<assetType>', TYPES_HELP(FAVORITE_TYPES))
     .argument('<id>', 'the asset id (or studio output id when assetType is media)')
     .option('--variation <n>', '1-based studio media variation slot (media only)', toInt)
+    .option('--off', 'clear the favorite instead of setting it')
     .action(async (assetType: string, id: string, opts: Record<string, unknown>, command: Command) => {
       const target = resolveTarget(assetType, id, opts.variation as number | undefined, FAVORITE_TYPES)
+      const favorited = !opts.off
       const { client, ctx } = makeClient(command)
-      await client.favorite(target as FavoriteInput)
-      emit({ favorited: true, ...target }, ctx, () => actionHuman('Favorited', target))
-    })
-
-  program
-    .command('unfavorite')
-    .description('Remove the favorite flag from an asset (requires favorites:write)')
-    .argument('<assetType>', TYPES_HELP(FAVORITE_TYPES))
-    .argument('<id>', 'the asset id (or studio output id when assetType is media)')
-    .option('--variation <n>', '1-based studio media variation slot (media only)', toInt)
-    .action(async (assetType: string, id: string, opts: Record<string, unknown>, command: Command) => {
-      const target = resolveTarget(assetType, id, opts.variation as number | undefined, FAVORITE_TYPES)
-      const { client, ctx } = makeClient(command)
-      await client.unfavorite(target as FavoriteInput)
-      emit({ favorited: false, ...target }, ctx, () => actionHuman('Unfavorited', target))
+      await client.favorite({ ...target, favorited } as FavoriteInput)
+      emit({ favorited, ...target }, ctx, () => actionHuman(favorited ? 'Favorited' : 'Unfavorited', target))
     })
 
   program
     .command('archive')
-    .description('Archive an asset (reversible; requires favorites:write)')
+    .description('Archive an asset, or restore it with --off (reversible; requires favorites:write)')
     .argument('<assetType>', TYPES_HELP(ARCHIVE_TYPES))
     .argument('<id>', 'the asset id (or studio output id when assetType is media)')
     .option('--variation <n>', '1-based studio media variation slot (media only)', toInt)
+    .option('--off', 'restore instead of archiving')
     .action(async (assetType: string, id: string, opts: Record<string, unknown>, command: Command) => {
       const target = resolveTarget(assetType, id, opts.variation as number | undefined, ARCHIVE_TYPES)
+      const archived = !opts.off
       const { client, ctx } = makeClient(command)
-      await client.archive(target as ArchiveInput)
-      emit({ archived: true, ...target }, ctx, () => actionHuman('Archived', target))
-    })
-
-  program
-    .command('unarchive')
-    .description('Unarchive an asset (restore it; requires favorites:write)')
-    .argument('<assetType>', TYPES_HELP(ARCHIVE_TYPES))
-    .argument('<id>', 'the asset id (or studio output id when assetType is media)')
-    .option('--variation <n>', '1-based studio media variation slot (media only)', toInt)
-    .action(async (assetType: string, id: string, opts: Record<string, unknown>, command: Command) => {
-      const target = resolveTarget(assetType, id, opts.variation as number | undefined, ARCHIVE_TYPES)
-      const { client, ctx } = makeClient(command)
-      await client.unarchive(target as ArchiveInput)
-      emit({ archived: false, ...target }, ctx, () => actionHuman('Unarchived', target))
+      await client.archive({ ...target, archived } as ArchiveInput)
+      emit({ archived, ...target }, ctx, () => actionHuman(archived ? 'Archived' : 'Unarchived', target))
     })
 }
