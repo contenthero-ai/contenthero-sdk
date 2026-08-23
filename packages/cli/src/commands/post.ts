@@ -27,7 +27,7 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { toInt } from '../args.js'
+import { toInt, toJson } from '../args.js'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -219,6 +219,9 @@ export function registerPost(program: Command): void {
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)')
+    .option('--schedule <when>', 'ISO-8601 publish time for the post AND its destinations, or "clear"')
+    .option('--destinations <json>', 'the post\'s destinations as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
+    .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
       assertStatus(opts.status as string | undefined)
@@ -234,21 +237,18 @@ export function registerPost(program: Command): void {
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
         tags: parseTagsOpt(opts.tags),
+        // 'clear' unschedules. compact() drops undefined but keeps null, which is the difference between
+        // "leave the schedule alone" and "remove it".
+        scheduledAt:
+          opts.schedule === undefined
+            ? undefined
+            : CLEAR.includes(String(opts.schedule).toLowerCase())
+              ? null
+              : (opts.schedule as string),
+        destinations: opts.destinations as UpdatePostInput['destinations'],
+        assets: opts.assets as UpdatePostInput['assets'],
       })
       emit(await client.updatePost(id, input), ctx, (p: PostSummary) => summaryHuman(p, 'Updated'))
-    })
-
-  post
-    .command('schedule')
-    .description('Set or clear the scheduled publish time on a post and its destinations')
-    .argument('<id>', 'the post id')
-    .argument('<when>', 'ISO-8601 timestamp, or "clear" to unschedule')
-    .action(async (id: string, when: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const scheduledAt = CLEAR.includes(when.toLowerCase()) ? null : when
-      emit(await client.schedulePost(id, scheduledAt), ctx, (p: PostSummary) =>
-        summaryHuman(p, scheduledAt ? 'Scheduled' : 'Unscheduled'),
-      )
     })
 
   post
@@ -268,126 +268,5 @@ export function registerPost(program: Command): void {
         return `${t}\n\nPublished ${r.publishedCount}, failed ${r.failedCount}`
       })
       if (result.failedCount > 0) process.exitCode = EXIT.GENERAL
-    })
-
-  // -- post destination -----------------------------------------------------
-  const destination = post.command('destination').description('Manage a post\'s publish destinations')
-
-  destination
-    .command('add')
-    .description('Attach (or replace) a destination on a post (requires pipeline:write)')
-    .argument('<postId>', 'the post id')
-    .requiredOption('--platform <platform>', `destination platform: ${PLATFORMS.join(', ')}`)
-    .option('--format <format>', "platform format, e.g. post, reel, story, short, thread")
-    .option('--account <id>', 'connected account id (from `connected-account list`)')
-    .option('--scheduled <iso>', 'ISO-8601 scheduled time for this destination')
-    .option('--settings <json>', 'platform publish config as a JSON object (shape from `platform get`)')
-    .action(async (postId: string, opts: Record<string, unknown>, command: Command) => {
-      assertPlatform(opts.platform as string)
-      const { client, ctx } = makeClient(command)
-      const d = await client.addPostDestination(postId, {
-        platform: opts.platform as PostPlatform,
-        format: opts.format as string | undefined,
-        connectedAccountId: opts.account as string | undefined,
-        scheduledAt: opts.scheduled as string | undefined,
-        platformSettings: parsePlatformSettings(opts.settings as string | undefined),
-      })
-      emit(d, ctx, destinationHuman)
-    })
-
-  destination
-    .command('update')
-    .description('Update one of a post\'s destinations (requires pipeline:write)')
-    .argument('<postId>', 'the post id')
-    .argument('<destinationId>', 'the destination id (from `post get`)')
-    .option('--format <format>')
-    .option('--account <id>', 'connected account id')
-    .option('--scheduled <iso>', 'ISO-8601 scheduled time')
-    .option('--status <status>')
-    .option('--settings <json>', 'platform publish config as a JSON object (replaces existing; shape from `platform get`)')
-    .action(async (postId: string, destinationId: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const d = await client.updatePostDestination(postId, destinationId, {
-        format: opts.format as string | undefined,
-        connectedAccountId: opts.account as string | undefined,
-        scheduledAt: opts.scheduled as string | undefined,
-        status: opts.status as string | undefined,
-        platformSettings: parsePlatformSettings(opts.settings as string | undefined),
-      })
-      emit(d, ctx, destinationHuman)
-    })
-
-  destination
-    .command('remove')
-    .description("Detach a destination from a post (requires pipeline:write)")
-    .argument('<postId>', 'the post id')
-    .argument('<destinationId>', 'the destination id (from `post get`)')
-    .action(async (postId: string, destinationId: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const r = await client.removePostDestination(postId, destinationId)
-      emit(r, ctx, () => `Destination removed (id ${r.id}).`)
-    })
-
-  // -- post asset -----------------------------------------------------------
-  const asset = post.command('asset').description('Manage a post\'s assets')
-
-  asset
-    .command('add')
-    .description('Attach an asset to a post by output-id or URL (requires assets:write)')
-    .argument('<postId>', 'the post id')
-    .option('--output-id <id>', 'media token (output id, first-8, or "-N") of generated/uploaded media')
-    .option('--url <url>', 'public URL of the asset (alternative to --output-id)')
-    .option('--type <type>', 'asset type: image, video, audio, document, link (required with --url)')
-    .option('--name <name>', 'optional display name')
-    .action(async (postId: string, opts: Record<string, unknown>, command: Command) => {
-      if (!opts.outputId && !opts.url) {
-        throw new CliError('Provide --output-id or --url.', EXIT.USAGE)
-      }
-      const types = ['image', 'video', 'audio', 'document', 'link']
-      if (opts.type && !types.includes(opts.type as string)) {
-        throw new CliError(`Invalid --type "${opts.type}". Expected one of: ${types.join(', ')}.`, EXIT.USAGE)
-      }
-      const { client, ctx } = makeClient(command)
-      const a = await client.addPostAsset(postId, {
-        outputId: opts.outputId as string | undefined,
-        assetType: opts.type as 'image' | 'video' | 'audio' | 'document' | 'link' | undefined,
-        assetUrl: opts.url as string | undefined,
-        displayName: opts.name as string | undefined,
-      })
-      emit(a, ctx, () =>
-        keyValues([
-          ['Asset', a.id],
-          ['Type', a.assetType ?? ''],
-          ['Name', a.displayName ?? ''],
-          ['URL', a.assetUrl ?? ''],
-        ]),
-      )
-    })
-
-  asset
-    .command('reorder')
-    .description("Set a post's asset order, e.g. carousel slides (requires assets:write)")
-    .argument('<postId>', 'the post id')
-    .argument('<assetIds...>', "all of the post's asset ids (from `post get`), in the desired order")
-    .action(async (postId: string, assetIds: string[], _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const assets = await client.reorderPostAssets(postId, assetIds)
-      emit(assets, ctx, (rows: PostAsset[]) =>
-        table(
-          ['#', 'TYPE', 'ID', 'URL'],
-          rows.map((a, i) => [String(i + 1), a.assetType ?? '', a.id.slice(0, 8), a.assetUrl ?? '']),
-        ),
-      )
-    })
-
-  asset
-    .command('remove')
-    .description('Detach an asset from a post (requires assets:write)')
-    .argument('<postId>', 'the post id')
-    .argument('<assetId>', 'the asset id (from `post get`)')
-    .action(async (postId: string, assetId: string, _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const r = await client.removePostAsset(postId, assetId)
-      emit(r, ctx, () => `Asset removed (id ${r.id}).`)
     })
 }

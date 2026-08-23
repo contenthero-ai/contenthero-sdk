@@ -20,10 +20,8 @@ import type {
   FolderItemRef,
   CreateFolderInput,
   UpdateFolderInput,
-  AddAssetInput,
   AddBrandKitSectionInput,
   AddBrandKnowledgeInput,
-  AddDestinationInput,
   Avatar,
   AvatarSummary,
   Balance,
@@ -106,8 +104,9 @@ import type {
   PublishPostResult,
   TranscribeRequest,
   Transcription,
-  UpdateDestinationInput,
   UpdatePostInput,
+  PostDestinationInput,
+  PostAssetInput,
   Voice,
   VoiceSummary,
   WaitOptions,
@@ -841,7 +840,6 @@ export class ContentHero {
     if (options.status) q.set('status', options.status)
     if (options.platform) q.set('platform', options.platform)
     if (options.pipelineStage) q.set('pipeline_stage', options.pipelineStage)
-    if (options.folderId) q.set('folder_id', options.folderId)
     if (options.isFavorite) q.set('is_favorite', 'true')
     if (options.search) q.set('search', options.search)
     if (options.limit != null) q.set('limit', String(options.limit))
@@ -885,69 +883,6 @@ export class ContentHero {
     return data.stages
   }
 
-  /** Attach (or replace) a destination on a post. Upserts on platform. */
-  async addPostDestination(postId: string, input: AddDestinationInput): Promise<PostDestination> {
-    const data = await this.request<{ destination: PostDestination }>(
-      'POST',
-      `/api/v1/posts/${encodeURIComponent(postId)}/destinations`,
-      input,
-    )
-    return data.destination
-  }
-
-  /** Update one of a post's destinations. */
-  async updatePostDestination(
-    postId: string,
-    destinationId: string,
-    input: UpdateDestinationInput,
-  ): Promise<PostDestination> {
-    const data = await this.request<{ destination: PostDestination }>(
-      'PATCH',
-      `/api/v1/posts/${encodeURIComponent(postId)}/destinations?destination_id=${encodeURIComponent(destinationId)}`,
-      input,
-    )
-    return data.destination
-  }
-
-  /** Attach an asset to a post by URL or outputId. */
-  async addPostAsset(postId: string, input: AddAssetInput): Promise<PostAsset> {
-    const data = await this.request<{ asset: PostAsset }>(
-      'POST',
-      `/api/v1/posts/${encodeURIComponent(postId)}/assets`,
-      input,
-    )
-    return data.asset
-  }
-
-  /**
-   * Reorder a post's assets (e.g. carousel slide order). `assetIds` must list all
-   * of the post's asset ids in the desired order. Returns the assets reordered.
-   */
-  async reorderPostAssets(postId: string, assetIds: string[]): Promise<PostAsset[]> {
-    const data = await this.request<{ assets: PostAsset[] }>(
-      'PATCH',
-      `/api/v1/posts/${encodeURIComponent(postId)}/assets`,
-      { assetIds },
-    )
-    return data.assets
-  }
-
-  /** Detach an asset from a post. */
-  async removePostAsset(postId: string, assetId: string): Promise<{ id: string }> {
-    return this.request<{ id: string }>(
-      'DELETE',
-      `/api/v1/posts/${encodeURIComponent(postId)}/assets?asset_id=${encodeURIComponent(assetId)}`,
-    )
-  }
-
-  /** Detach a destination from a post. */
-  async removePostDestination(postId: string, destinationId: string): Promise<{ id: string }> {
-    return this.request<{ id: string }>(
-      'DELETE',
-      `/api/v1/posts/${encodeURIComponent(postId)}/destinations?destination_id=${encodeURIComponent(destinationId)}`,
-    )
-  }
-
   // -------------------------------------------------------------------------
   // Tags (the organizational tag library; set a post's tags via the `tags`
   // field on createPost / updatePost)
@@ -980,18 +915,6 @@ export class ContentHero {
     return this.request<{ id: string }>('DELETE', `/api/v1/tags/${encodeURIComponent(id)}`)
   }
 
-  /**
-   * Schedule a post: set (or clear, with null) the publish time on the post and
-   * all its destinations. This queues; publishing now is `publishPost`.
-   */
-  async schedulePost(postId: string, scheduledAt: string | null): Promise<PostSummary> {
-    const data = await this.request<{ post: PostSummary }>(
-      'POST',
-      `/api/v1/posts/${encodeURIComponent(postId)}/schedule`,
-      { scheduledAt },
-    )
-    return data.post
-  }
 
   /**
    * Publish a post NOW. Publishes a single platform when `platform` is given,

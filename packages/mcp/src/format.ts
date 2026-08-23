@@ -767,7 +767,10 @@ export function postListResult(result: PostListResult): CallToolResult {
 /** A single post summary line (create / update / schedule / archive results). */
 export function postSummaryResult(p: PostSummary, prefix = 'Post'): CallToolResult {
   const stage = p.pipelineStageId ? ` | stage ${p.pipelineStageId}` : ''
-  return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}`)
+  // The schedule is surfaced here because scheduling is now part of update_post rather than its own tool.
+  // Without it a caller who just set a publish time gets no confirmation of what time was actually stored.
+  const scheduled = p.scheduledAt ? ` | Scheduled: ${p.scheduledAt}` : ''
+  return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}${scheduled}`)
 }
 
 /** One post in full, with its destinations and assets. */

@@ -45,6 +45,8 @@ import {
   type EditAudioRequest,
   type References,
   type EditorOp,
+  type PostDestinationInput,
+  type PostAssetInput,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 import {
@@ -2028,7 +2030,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Post',
       annotations: WRITE,
       description:
-        "Update a post's fields: title, description, script, notes, status, platform, cover (coverUrl/coverOutputId), or pipeline stage (move it through the pipeline by passing `stage`). Requires the pipeline:write scope.",
+        "Update a post: its fields (title, description, script, notes, status, platform, cover, pipeline stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         title: z.string().optional(),
@@ -2047,201 +2049,34 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('Tag names to set on the post (must already exist; replaces the set). Omit to leave tags unchanged.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        const { postId, ...input } = args
-        return postSummaryResult(await client.updatePost(postId, input), 'Updated')
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- add_post_destination -------------------------------------------------
-  server.registerTool(
-    'add_post_destination',
-    {
-      title: 'Add Post Destination',
-      annotations: WRITE,
-      description:
-        "Attach a publish destination (one platform) to a post, or replace the existing one for that platform. Set connectedAccountId (an id from list_connected_accounts) to make it publishable. Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform first for the exact fields. In platformSettings, media URL fields (mediaItems, videoUrl, thumbnailUrl, ...) also accept an outputId of generated/uploaded media, resolved server-side. Requires the pipeline:write scope.",
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        platform: z.enum(POST_PLATFORMS).describe('Destination platform.'),
-        format: z.string().optional().describe("Platform format, e.g. 'post', 'reel', 'story', 'short', 'thread'."),
-        connectedAccountId: z.string().optional().describe('The connected account to publish through.'),
-        scheduledAt: z.string().optional().describe('ISO-8601 scheduled time for this destination.'),
-        platformSettings: z
-          .record(z.string(), z.unknown())
-          .optional()
-          .describe('Per-platform/per-format publish config (mediaItems, caption, thumbnails, privacy, etc.). Get the exact field shape for this platform + format from get_platform.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return destinationResult(
-          await client.addPostDestination(args.postId, {
-            platform: args.platform,
-            format: args.format,
-            connectedAccountId: args.connectedAccountId,
-            scheduledAt: args.scheduledAt,
-            platformSettings: args.platformSettings,
-          }),
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- update_post_destination ----------------------------------------------
-  server.registerTool(
-    'update_post_destination',
-    {
-      title: 'Update Post Destination',
-      annotations: WRITE,
-      description:
-        "Update one of a post's destinations (format, connected account, scheduled time, status, or platformSettings). Pass platformSettings (the publish payload: media, caption, thumbnail, privacy) shaped to the platform + format; call get_platform for the exact fields. It replaces the destination's settings, so include the full object. Requires the pipeline:write scope.",
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        destinationId: z.string().describe('The destination id (from get_post).'),
-        format: z.string().optional(),
-        connectedAccountId: z.string().optional(),
-        scheduledAt: z.string().optional().describe('ISO-8601 scheduled time, or empty to clear.'),
-        status: z.string().optional(),
-        platformSettings: z
-          .record(z.string(), z.unknown())
-          .optional()
-          .describe('Per-platform/per-format publish config (mediaItems, caption, thumbnails, privacy, etc.); replaces the existing settings. Get the field shape from get_platform.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return destinationResult(
-          await client.updatePostDestination(args.postId, args.destinationId, {
-            format: args.format,
-            connectedAccountId: args.connectedAccountId,
-            scheduledAt: args.scheduledAt,
-            status: args.status,
-            platformSettings: args.platformSettings,
-          }),
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- add_post_asset -------------------------------------------------------
-  server.registerTool(
-    'add_post_asset',
-    {
-      title: 'Add Post Asset',
-      annotations: WRITE,
-      description:
-        "Attach an asset to a post, by outputId (generated or uploaded media, resolved to its URL) or by a public assetUrl. With outputId the assetType is inferred. Sets the post cover from the first image. Requires the assets:write scope.",
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        outputId: z
+        scheduledAt: z
           .string()
+          .nullable()
           .optional()
-          .describe('A media token (output id, first-8, or "-N") of generated/uploaded media. Provide this or assetUrl.'),
-        assetUrl: z.string().optional().describe('Public URL of the asset. Provide this or outputId.'),
-        assetType: z
-          .enum(['image', 'video', 'audio', 'document', 'link'])
+          .describe('ISO time to publish. Sets the post AND every destination. null clears the schedule.'),
+        destinations: z
+          .array(z.unknown())
           .optional()
-          .describe('The kind of asset. Required with assetUrl; inferred when using outputId.'),
-        displayName: z.string().optional().describe('Optional display name.'),
+          .describe("The post's destinations, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
+        assets: z
+          .array(z.unknown())
+          .optional()
+          .describe("The post's assets IN ORDER, each { id } to keep an existing one or { assetUrl | outputId, assetType?, displayName? } to add. REPLACES the list; [] clears it."),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return assetResult(
-          await client.addPostAsset(args.postId, {
-            outputId: args.outputId,
-            assetType: args.assetType,
-            assetUrl: args.assetUrl,
-            displayName: args.displayName,
+        const { postId, destinations, assets, ...input } = args
+        // The two declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
+        // server validates), so they are cast at this one boundary rather than duplicating the shape in zod.
+        return postSummaryResult(
+          await client.updatePost(postId, {
+            ...input,
+            ...(destinations !== undefined ? { destinations: destinations as PostDestinationInput[] } : {}),
+            ...(assets !== undefined ? { assets: assets as PostAssetInput[] } : {}),
           }),
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- reorder_post_assets --------------------------------------------------
-  server.registerTool(
-    'reorder_post_assets',
-    {
-      title: 'Reorder Post Assets',
-      annotations: WRITE,
-      description:
-        "Set a post's asset order (e.g. the carousel slide order; the first image is the cover). Pass assetIds as ALL of the post's asset ids (from get_post) in the desired order. Requires the assets:write scope.",
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        assetIds: z
-          .array(z.string())
-          .describe("All of the post's asset ids (from get_post), in the desired order."),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return assetOrderResult(await client.reorderPostAssets(args.postId, args.assetIds))
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- remove_post_asset ----------------------------------------------------
-  server.registerTool(
-    'remove_post_asset',
-    {
-      title: 'Remove Post Asset',
-      annotations: WRITE,
-      description:
-        'Detach an asset from a post by its asset id (from get_post). Requires the assets:write scope.',
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        assetId: z.string().describe('The asset id (from get_post).'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return assetRemovedResult(await client.removePostAsset(args.postId, args.assetId))
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- remove_post_destination ----------------------------------------------
-  server.registerTool(
-    'remove_post_destination',
-    {
-      title: 'Remove Post Destination',
-      annotations: WRITE,
-      description:
-        'Detach a publish destination from a post by its destination id (from get_post). Requires the pipeline:write scope.',
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        destinationId: z.string().describe('The destination id (from get_post).'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return destinationRemovedResult(
-          await client.removePostDestination(args.postId, args.destinationId),
+          'Updated',
         )
       } catch (err) {
         return errorResult(err)
@@ -2330,32 +2165,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return tagDeletedResult(await client.deleteTag(args.tagId))
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  // -- schedule_post --------------------------------------------------------
-  server.registerTool(
-    'schedule_post',
-    {
-      title: 'Schedule Post',
-      annotations: WRITE,
-      description:
-        'Queue a post for future publishing: set the scheduled time on the post and all its destinations (pass scheduledAt=null to clear). This only queues; use publish_post to publish now. Requires the pipeline:write scope.',
-      inputSchema: {
-        postId: z.string().describe('The post id.'),
-        scheduledAt: z
-          .string()
-          .nullable()
-          .describe('ISO-8601 timestamp to schedule, or null to clear the schedule.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return postSummaryResult(await client.schedulePost(args.postId, args.scheduledAt), 'Scheduled')
       } catch (err) {
         return errorResult(err)
       }

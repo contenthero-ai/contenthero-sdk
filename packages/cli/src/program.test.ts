@@ -58,13 +58,20 @@ test('generate exposes the five generation subcommands', () => {
   }
 })
 
-test('post exposes its verbs and nested destination/asset groups', () => {
+test('post exposes its verbs, with destinations and assets folded into update', () => {
   const subs = subcommands('post')
-  for (const n of ['list', 'get', 'create', 'update', 'schedule', 'publish', 'destination', 'asset']) {
+  for (const n of ['list', 'get', 'create', 'update', 'publish']) {
     assert.ok(subs.includes(n), `post is missing: ${n}`)
   }
   // Archiving moved to the universal top-level `archive` command.
   assert.ok(!subs.includes('archive'), 'post should no longer have its own archive subcommand')
+  // Seven operations edited one document. Destinations and assets are now declarative fields on update,
+  // and the schedule is `--schedule` on it, so these groups are gone.
+  for (const n of ['destination', 'asset', 'schedule']) {
+    assert.ok(!subs.includes(n), `post should no longer have a ${n} subcommand`)
+  }
+  // publish_post KEEPS its own command: irreversible external side effects do not belong in a patch.
+  assert.ok(subs.includes('publish'))
 })
 
 test('brand-kit exposes its verbs and the section group', () => {

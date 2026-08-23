@@ -1191,7 +1191,6 @@ export interface ListPostsOptions {
   platform?: string
   /** A stage id, slug, or name; resolved against your stages server-side. */
   pipelineStage?: string
-  folderId?: string
   isFavorite?: boolean
   search?: string
   limit?: number
@@ -1204,7 +1203,6 @@ export interface CreatePostInput {
   platform: PostPlatform
   description?: string | null
   stage?: string | null
-  folderId?: string | null
   status?: PostStatus
   /** A public URL for the post cover (the card thumbnail). */
   coverUrl?: string | null
@@ -1212,9 +1210,40 @@ export interface CreatePostInput {
   coverOutputId?: string | null
   /** Tag names to set on the post (must already exist; replaces the set). */
   tags?: string[]
+  /**
+   * The post's destinations. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
+   * longer present is detached. `[]` clears them.
+   */
+  destinations?: PostDestinationInput[]
+  /**
+   * The post's assets. DECLARATIVE, and **the array ORDER IS the carousel order**. Keep an existing asset
+   * by `id`, add a new one by `assetUrl` / `outputId`; anything absent is removed. `[]` clears them.
+   */
+  assets?: PostAssetInput[]
 }
 
 /** Fields to update a post. `stage` accepts a stage id, slug, or name. */
+/** One publish destination, keyed by platform. */
+export interface PostDestinationInput {
+  platform: PostPlatform
+  format?: string
+  connectedAccountId?: string | null
+  /** Per-destination override. Omitted, the post's own `scheduledAt` applies. */
+  scheduledAt?: string | null
+  platformSpecificData?: Record<string, unknown> | null
+  status?: string
+}
+
+/** One asset on a post: keep an existing one by `id`, or add a new one by `assetUrl` / `outputId`. */
+export interface PostAssetInput {
+  id?: string
+  assetUrl?: string
+  outputId?: string
+  assetType?: string
+  displayName?: string
+  metadata?: Record<string, unknown> | null
+}
+
 export interface UpdatePostInput {
   title?: string
   description?: string | null
@@ -1222,7 +1251,6 @@ export interface UpdatePostInput {
   status?: PostStatus
   stage?: string | null
   pipelineOrder?: number
-  folderId?: string | null
   isFavorite?: boolean
   coverUrl?: string | null
   /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
@@ -1235,53 +1263,16 @@ export interface UpdatePostInput {
   script?: string | null
   notes?: string | null
   metadata?: Record<string, unknown> | null
-}
-
-/** Fields to attach (or replace) a destination on a post. Upserts on platform. */
-export interface AddDestinationInput {
-  platform: PostPlatform
-  format?: string
-  connectedAccountId?: string | null
-  scheduledAt?: string | null
   /**
-   * Per-platform/per-format publish config (mediaItems, caption, thumbnails,
-   * privacy, etc.). Get the exact shape for the platform + format from
-   * getPlatform, then fill it here.
+   * The post's destinations. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
+   * longer present is detached. `[]` clears them.
    */
-  platformSettings?: Record<string, unknown> | null
-  /** @deprecated Use platformSettings. Still accepted for back-compat. */
-  platformSpecificData?: Record<string, unknown> | null
-}
-
-/** Fields to update a destination. */
-export interface UpdateDestinationInput {
-  format?: string
-  status?: string
-  connectedAccountId?: string | null
-  scheduledAt?: string | null
+  destinations?: PostDestinationInput[]
   /**
-   * Per-platform/per-format publish config (mediaItems, caption, thumbnails,
-   * privacy, etc.). Get the exact shape from getPlatform, then fill it here.
+   * The post's assets. DECLARATIVE, and **the array ORDER IS the carousel order**. Keep an existing asset
+   * by `id`, add a new one by `assetUrl` / `outputId`; anything absent is removed. `[]` clears them.
    */
-  platformSettings?: Record<string, unknown> | null
-  /** @deprecated Use platformSettings. Still accepted for back-compat. */
-  platformSpecificData?: Record<string, unknown> | null
-}
-
-/** Fields to attach an asset to a post: by URL, or by output-id (outputId). */
-export interface AddAssetInput {
-  /** Required with assetUrl; optional with outputId (inferred from the media type). */
-  assetType?: 'image' | 'video' | 'audio' | 'document' | 'link'
-  /** A public URL. Provide this or outputId. */
-  assetUrl?: string
-  /**
-   * A media token (output id, first-8, or "-N") of generated or uploaded media,
-   * resolved server-side to its URL and type. Provide this or assetUrl.
-   */
-  outputId?: string | null
-  assetId?: string | null
-  displayName?: string | null
-  metadata?: Record<string, unknown> | null
+  assets?: PostAssetInput[]
 }
 
 /** The result of publishing one destination. */
