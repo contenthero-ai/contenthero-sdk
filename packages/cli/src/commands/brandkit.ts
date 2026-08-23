@@ -131,7 +131,7 @@ export function registerBrandKit(program: Command): void {
   brandKit
     .command('create')
     .description('Create a brand kit: empty, from a website, or as a copy (requires brandkit:write)')
-    .option('--name <text>', "the kit's name; optional when --website-url is given")
+    .option('--name <text>', "the kit's name; optional when a website or social profile url is given")
     .option('--website-url <url>', 'the business website')
     .option('--extract', 'scrape --website-url and fill the kit in automatically (returns immediately)')
     .option('--duplicate-from <id>', 'copy an existing brand kit instead of starting empty')
@@ -144,8 +144,15 @@ export function registerBrandKit(program: Command): void {
     .option('--sections <json>', 'curated sections as JSON: [{ tab, sectionName, sortOrder?, fields? }]', toJson)
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      if (!opts.name && !opts.websiteUrl && !opts.duplicateFrom) {
-        throw new CliError('Pass --name, --website-url, or --duplicate-from', EXIT.USAGE)
+      const seedsFromAccount =
+        ((opts.brandAccount as string[] | undefined)?.length ?? 0) +
+          ((opts.inspirationAccount as string[] | undefined)?.length ?? 0) >
+        0
+      if (!opts.name && !opts.websiteUrl && !opts.duplicateFrom && !seedsFromAccount) {
+        throw new CliError(
+          'Pass --name, --website-url, --brand-account/--inspiration-account, or --duplicate-from',
+          EXIT.USAGE,
+        )
       }
       if (opts.extract && !opts.websiteUrl) {
         throw new CliError('--extract needs --website-url to scrape', EXIT.USAGE)
