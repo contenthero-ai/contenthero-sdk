@@ -25,8 +25,8 @@ import { registerTranscribe } from './commands/transcribe.js'
 import { registerGeneration } from './commands/generation.js'
 import { registerMedia } from './commands/media.js'
 import { registerFolder } from './commands/folder.js'
-import { registerPost } from './commands/post.js'
-import { registerPipeline } from './commands/pipeline.js'
+import { registerCard } from './commands/card.js'
+import { registerStage } from './commands/stage.js'
 import { registerSpace } from './commands/space.js'
 import { registerBrandKit } from './commands/brandkit.js'
 import { registerIdentity } from './commands/identity.js'
@@ -79,9 +79,9 @@ export function buildProgram(): Command {
   registerGeneration(program)
   registerMedia(program)
   registerFolder(program)
-  registerPost(program)
+  registerCard(program)
   registerTag(program)
-  registerPipeline(program)
+  registerStage(program)
   registerSpace(program)
   registerBrandKit(program)
   registerIdentity(program)

@@ -35,15 +35,15 @@ import type {
   ModelInfo,
   PlatformSummary,
   PlatformSchema,
-  PipelineStage,
+  Stage,
   Space,
-  PostAsset,
-  PostDestination,
-  PostDetail,
-  PostListResult,
-  PostSummary,
+  CardAsset,
+  Post,
+  CardDetail,
+  CardListResult,
+  CardSummary,
   Tag,
-  PublishPostResult,
+  PublishCardResult,
   TrackedAccount,
   ContentSummary,
   ContentDetail,
@@ -748,7 +748,7 @@ function promptReferenceLines(pr: ModelInfo['promptReferences']): Array<string |
 // -- posts (content pipeline) -------------------------------------------------
 
 /** One line summarizing a post. */
-function postLine(p: PostSummary): string {
+function postLine(p: CardSummary): string {
   const where = p.platforms.length ? p.platforms.join('+') : (p.platform ?? 'general')
   const when = p.publishedAt
     ? ` | published ${p.publishedAt}`
@@ -759,23 +759,23 @@ function postLine(p: PostSummary): string {
 }
 
 /** List of posts with pagination context. */
-export function postListResult(result: PostListResult): CallToolResult {
+export function cardListResult(result: CardListResult): CallToolResult {
   if (!result.posts.length) return text('No posts found.')
   const more = result.hasMore ? ` (showing ${result.posts.length} of ${result.total}; raise limit/offset for more)` : ''
   return text([`${result.total} post(s)${more}:`, ...result.posts.map(postLine)].join('\n'))
 }
 
 /** A single post summary line (create / update / schedule / archive results). */
-export function postSummaryResult(p: PostSummary, prefix = 'Post'): CallToolResult {
+export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResult {
   const stage = p.pipelineStageId ? ` | stage ${p.pipelineStageId}` : ''
-  // The schedule is surfaced here because scheduling is now part of update_post rather than its own tool.
+  // The schedule is surfaced here because scheduling is now part of update_card rather than its own tool.
   // Without it a caller who just set a publish time gets no confirmation of what time was actually stored.
   const scheduled = p.scheduledAt ? ` | Scheduled: ${p.scheduledAt}` : ''
   return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}${scheduled}`)
 }
 
 /** One post in full, with its destinations and assets. */
-export function postResult(p: PostDetail): CallToolResult {
+export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
       `${p.title || '(untitled)'} (id ${p.id}) | ${p.status} | platform: ${p.platform ?? 'general'}`,
@@ -783,7 +783,6 @@ export function postResult(p: PostDetail): CallToolResult {
       p.scheduledAt ? `scheduled: ${p.scheduledAt}` : null,
       p.publishedAt ? `published: ${p.publishedAt}` : null,
       p.publishUrl ? `publish url: ${p.publishUrl}` : null,
-      p.description ? `description: ${p.description}` : null,
       p.script ? `script: ${p.script}` : null,
       p.notes ? `notes: ${p.notes}` : null,
       p.tags?.length ? `tags: ${p.tags.join(', ')}` : null,
@@ -834,7 +833,7 @@ export function spaceResult(s: Space): CallToolResult {
   return text(lines.join('\n'))
 }
 
-export function pipelineStageListResult(stages: PipelineStage[]): CallToolResult {
+export function stageListResult(stages: Stage[]): CallToolResult {
   if (!stages.length) return text('No pipeline stages found.')
   const rows = stages.map(
     (s) => `- ${s.name} (id ${s.id}${s.slug ? `, slug ${s.slug}` : ''})${s.isDefault ? ' [default]' : ''}`,
@@ -856,7 +855,7 @@ function settingsKeys(settings: Record<string, unknown> | null | undefined): str
 }
 
 /** A created or updated destination. */
-export function destinationResult(d: PostDestination): CallToolResult {
+export function destinationResult(d: Post): CallToolResult {
   const set = settingsKeys(d.platformSettings)
   return text(
     `Destination: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}${set ? ` | settings: ${set}` : ' | no settings (set platformSettings to make it publishable)'}.`,
@@ -864,12 +863,12 @@ export function destinationResult(d: PostDestination): CallToolResult {
 }
 
 /** An attached asset. */
-export function assetResult(a: PostAsset): CallToolResult {
+export function assetResult(a: CardAsset): CallToolResult {
   return text(`Asset attached: [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id}).`)
 }
 
 /** A post's assets in their (new) order. */
-export function assetOrderResult(assets: PostAsset[]): CallToolResult {
+export function assetOrderResult(assets: CardAsset[]): CallToolResult {
   if (!assets.length) return text('No assets on this post.')
   return text(
     [
@@ -908,7 +907,7 @@ export function tagDeletedResult(r: { id: string }): CallToolResult {
 }
 
 /** The result of publishing a post (per-destination outcomes). */
-export function publishResult(r: PublishPostResult): CallToolResult {
+export function publishResult(r: PublishCardResult): CallToolResult {
   if (!r.results.length) {
     return text('Nothing to publish: this post has no destinations. Add one with add_post_destination first.', true)
   }

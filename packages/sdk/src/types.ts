@@ -978,7 +978,7 @@ export interface DerivedFolder {
 /** One item inside a folder: media (variation-atomic) or an entity (project/post, manual folders only). */
 export type FolderItem =
   | { type: 'media'; kind: MediaKind | null; sourceTable: string; sourceRecordId: string; variant: number; url: string | null; summary: string | null; isFavorited: boolean; relevance?: number }
-  | { type: 'project' | 'post'; id: string; name: string; subtype: string | null }
+  | { type: 'project' | 'card'; id: string; name: string; subtype: string | null }
 
 export interface CreateFolderInput {
   name: string
@@ -1117,11 +1117,11 @@ export type PostPlatform =
   | 'general'
 
 /** A post's lifecycle status. 'archived' is the archive state (no hard delete). */
-export type PostStatus = 'draft' | 'active' | 'completed' | 'archived'
+export type CardStatus = 'draft' | 'active' | 'completed' | 'archived'
 
 /**
  * A pipeline stage. Stages are per-account customizable (renamed, reordered,
- * added, removed), so resolve one with `listPipelineStages` rather than assuming
+ * added, removed), so resolve one with `listStages` rather than assuming
  * fixed names. The `id` is the only fully stable handle; `slug` is frozen at
  * creation and `name` is a display label.
  */
@@ -1150,7 +1150,7 @@ export interface Space {
   postCount?: number
 }
 
-export interface PipelineStage {
+export interface Stage {
   id: string
   name: string
   slug: string | null
@@ -1159,11 +1159,10 @@ export interface PipelineStage {
   isDefault: boolean
 }
 
-/** A post as returned by `listPosts` (the list projection). */
-export interface PostSummary {
+/** A post as returned by `listCards` (the list projection). */
+export interface CardSummary {
   id: string
   title: string
-  description: string | null
   platform: string | null
   status: string
   pipelineStageId: string | null
@@ -1182,7 +1181,7 @@ export interface PostSummary {
 }
 
 /** An asset attached to a post. */
-export interface PostAsset {
+export interface CardAsset {
   id: string
   assetType: string | null
   assetId: string | null
@@ -1192,7 +1191,7 @@ export interface PostAsset {
 }
 
 /** A publish destination on a post (one platform + connected account). */
-export interface PostDestination {
+export interface Post {
   id: string
   connectedAccountId: string | null
   platform: string | null
@@ -1208,13 +1207,13 @@ export interface PostDestination {
   platformSettings: Record<string, unknown> | null
 }
 
-/** Full post detail as returned by `getPost`, with its assets and destinations. */
-export interface PostDetail extends PostSummary {
+/** Full post detail as returned by `getCard`, with its assets and destinations. */
+export interface CardDetail extends CardSummary {
   script: string | null
   notes: string | null
   metadata: Record<string, unknown> | null
-  assets: PostAsset[]
-  destinations: PostDestination[]
+  assets: CardAsset[]
+  destinations: Post[]
   /** Tag names on the post (organizational). */
   tags: string[]
 }
@@ -1227,15 +1226,15 @@ export interface Tag {
   isSystem: boolean
 }
 
-/** Result of `listPosts`: a page of posts plus pagination metadata. */
-export interface PostListResult {
-  posts: PostSummary[]
+/** Result of `listCards`: a page of posts plus pagination metadata. */
+export interface CardListResult {
+  posts: CardSummary[]
   total: number
   hasMore: boolean
 }
 
-/** Options for `listPosts`. */
-export interface ListPostsOptions {
+/** Options for `listCards`. */
+export interface ListCardsOptions {
   status?: string
   platform?: string
   /** A stage id, slug, or name; resolved against your stages server-side. */
@@ -1247,12 +1246,11 @@ export interface ListPostsOptions {
 }
 
 /** Fields to create a post. `stage` accepts a stage id, slug, or name. */
-export interface CreatePostInput {
+export interface CreateCardInput {
   title: string
   platform: PostPlatform
-  description?: string | null
   stage?: string | null
-  status?: PostStatus
+  status?: CardStatus
   /** A public URL for the post cover (the card thumbnail). */
   coverUrl?: string | null
   /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
@@ -1263,17 +1261,17 @@ export interface CreatePostInput {
    * The post's destinations. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
    * longer present is detached. `[]` clears them.
    */
-  destinations?: PostDestinationInput[]
+  destinations?: PostInput[]
   /**
    * The post's assets. DECLARATIVE, and **the array ORDER IS the carousel order**. Keep an existing asset
    * by `id`, add a new one by `assetUrl` / `outputId`; anything absent is removed. `[]` clears them.
    */
-  assets?: PostAssetInput[]
+  assets?: CardAssetInput[]
 }
 
 /** Fields to update a post. `stage` accepts a stage id, slug, or name. */
 /** One publish destination, keyed by platform. */
-export interface PostDestinationInput {
+export interface PostInput {
   platform: PostPlatform
   format?: string
   connectedAccountId?: string | null
@@ -1284,7 +1282,7 @@ export interface PostDestinationInput {
 }
 
 /** One asset on a post: keep an existing one by `id`, or add a new one by `assetUrl` / `outputId`. */
-export interface PostAssetInput {
+export interface CardAssetInput {
   id?: string
   assetUrl?: string
   outputId?: string
@@ -1293,11 +1291,10 @@ export interface PostAssetInput {
   metadata?: Record<string, unknown> | null
 }
 
-export interface UpdatePostInput {
+export interface UpdateCardInput {
   title?: string
-  description?: string | null
   platform?: PostPlatform
-  status?: PostStatus
+  status?: CardStatus
   stage?: string | null
   pipelineOrder?: number
   isFavorite?: boolean
@@ -1316,12 +1313,12 @@ export interface UpdatePostInput {
    * The post's destinations. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
    * longer present is detached. `[]` clears them.
    */
-  destinations?: PostDestinationInput[]
+  destinations?: PostInput[]
   /**
    * The post's assets. DECLARATIVE, and **the array ORDER IS the carousel order**. Keep an existing asset
    * by `id`, add a new one by `assetUrl` / `outputId`; anything absent is removed. `[]` clears them.
    */
-  assets?: PostAssetInput[]
+  assets?: CardAssetInput[]
 }
 
 /** The result of publishing one destination. */
@@ -1333,8 +1330,8 @@ export interface PublishDestinationResult {
   error?: string
 }
 
-/** The result of `publishPost`: per-destination outcomes plus tallies. */
-export interface PublishPostResult {
+/** The result of `publishCard`: per-destination outcomes plus tallies. */
+export interface PublishCardResult {
   postId: string
   results: PublishDestinationResult[]
   publishedCount: number
@@ -1568,7 +1565,7 @@ export interface PlatformSchema {
 
 /** The asset types that can be favorited. */
 export type FavoriteAssetType =
-  | 'post'
+  | 'card'
   | 'voice'
   | 'brand_kit'
   | 'project'
@@ -1578,7 +1575,7 @@ export type FavoriteAssetType =
   | 'space'
 
 /** The asset types that can be archived. */
-export type ArchiveAssetType = 'post' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space'
+export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space'
 
 /**
  * The target of a favorite / unfavorite call.

@@ -40,7 +40,7 @@ import type {
   AccountDetail,
   SearchBrandKnowledgeOptions,
   CostEstimate,
-  CreatePostInput,
+  CreateCardInput,
   UpdateBrandKitInput,
   CreateBrandKitInput,
   ExtractionOutcome,
@@ -54,7 +54,7 @@ import type {
   ListMediaOptions,
   ListVoicesOptions,
   ListBrandKitsOptions,
-  ListPostsOptions,
+  ListCardsOptions,
   FavoriteInput,
   ArchiveInput,
   ApplyEditorOpsInput,
@@ -91,21 +91,21 @@ import type {
   PlatformSchema,
   Element,
   CreateElementRequest,
-  PipelineStage,
+  Stage,
   Space,
-  PostAsset,
-  PostDestination,
-  PostDetail,
-  PostListResult,
+  CardAsset,
+  Post,
+  CardDetail,
+  CardListResult,
   PostPlatform,
-  PostSummary,
+  CardSummary,
   Tag,
-  PublishPostResult,
+  PublishCardResult,
   TranscribeRequest,
   Transcription,
-  UpdatePostInput,
-  PostDestinationInput,
-  PostAssetInput,
+  UpdateCardInput,
+  PostInput,
+  CardAssetInput,
   Voice,
   VoiceSummary,
   WaitOptions,
@@ -823,7 +823,7 @@ export class ContentHero {
   // -------------------------------------------------------------------------
 
   /** List the account's posts (most recently updated first), with optional filters. */
-  async listPosts(options: ListPostsOptions = {}): Promise<PostListResult> {
+  async listCards(options: ListCardsOptions = {}): Promise<CardListResult> {
     const q = new URLSearchParams()
     if (options.status) q.set('status', options.status)
     if (options.platform) q.set('platform', options.platform)
@@ -833,29 +833,29 @@ export class ContentHero {
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
     const qs = q.toString()
-    return this.request<PostListResult>('GET', `/api/v1/posts${qs ? `?${qs}` : ''}`)
+    return this.request<CardListResult>('GET', `/api/v1/cards${qs ? `?${qs}` : ''}`)
   }
 
   /** Get one post with its assets and destinations. Throws NotFoundError if absent. */
-  async getPost(postId: string): Promise<PostDetail> {
-    const data = await this.request<{ post: PostDetail }>(
+  async getCard(postId: string): Promise<CardDetail> {
+    const data = await this.request<{ post: CardDetail }>(
       'GET',
-      `/api/v1/posts/${encodeURIComponent(postId)}`,
+      `/api/v1/cards/${encodeURIComponent(postId)}`,
     )
     return data.post
   }
 
   /** Create a post. `stage` accepts a stage id, slug, or name (defaults to the first stage). */
-  async createPost(input: CreatePostInput): Promise<PostSummary> {
-    const data = await this.request<{ post: PostSummary }>('POST', '/api/v1/posts', input)
+  async createCard(input: CreateCardInput): Promise<CardSummary> {
+    const data = await this.request<{ post: CardSummary }>('POST', '/api/v1/cards', input)
     return data.post
   }
 
   /** Update a post's fields. `stage` accepts a stage id, slug, or name. */
-  async updatePost(postId: string, input: UpdatePostInput): Promise<PostSummary> {
-    const data = await this.request<{ post: PostSummary }>(
+  async updateCard(postId: string, input: UpdateCardInput): Promise<CardSummary> {
+    const data = await this.request<{ post: CardSummary }>(
       'PATCH',
-      `/api/v1/posts/${encodeURIComponent(postId)}`,
+      `/api/v1/cards/${encodeURIComponent(postId)}`,
       input,
     )
     return data.post
@@ -866,8 +866,8 @@ export class ContentHero {
    * access. Use this to resolve a stage before placing a post; stages are
    * per-account customizable.
    */
-  async listPipelineStages(): Promise<PipelineStage[]> {
-    const data = await this.request<{ stages: PipelineStage[] }>('GET', '/api/v1/pipeline-stages')
+  async listStages(): Promise<Stage[]> {
+    const data = await this.request<{ stages: Stage[] }>('GET', '/api/v1/stages')
     return data.stages
   }
 
@@ -963,7 +963,7 @@ export class ContentHero {
 
   // -------------------------------------------------------------------------
   // Tags (the organizational tag library; set a post's tags via the `tags`
-  // field on createPost / updatePost)
+  // field on createCard / updateCard)
   // -------------------------------------------------------------------------
 
   /** List the account's tags. */
@@ -999,10 +999,10 @@ export class ContentHero {
    * otherwise every destination. Requires a key with the `publish:write` scope.
    * Each destination publishes independently; check per-destination results.
    */
-  async publishPost(postId: string, options: { platform?: PostPlatform } = {}): Promise<PublishPostResult> {
-    return this.request<PublishPostResult>(
+  async publishCard(postId: string, options: { platform?: PostPlatform } = {}): Promise<PublishCardResult> {
+    return this.request<PublishCardResult>(
       'POST',
-      `/api/v1/posts/${encodeURIComponent(postId)}/publish`,
+      `/api/v1/cards/${encodeURIComponent(postId)}/publish`,
       options.platform ? { platform: options.platform } : {},
     )
   }

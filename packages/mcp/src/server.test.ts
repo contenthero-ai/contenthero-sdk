@@ -269,14 +269,14 @@ function fakeClient(overrides = {}) {
         post: { mediaItems: [], caption: '', postingMode: 'automatic', format: 'post' },
       },
     }),
-    listPosts: async () => ({
+    listCards: async () => ({
       posts: [
         { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
       ],
       total: 1,
       hasMore: false,
     }),
-    getPost: async (id) => ({
+    getCard: async (id) => ({
       id,
       title: 'Launch clip',
       description: 'a clip',
@@ -301,14 +301,14 @@ function fakeClient(overrides = {}) {
       destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
       tags: ['contenthero', 'feature'],
     }),
-    createPost: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
-    updatePost: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
-    listPipelineStages: async () => [
+    createCard: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    updateCard: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    listStages: async () => [
       { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
       { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
     ],
     updatePostDestination: async (_postId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
-    publishPost: async (postId) => ({ postId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
+    publishCard: async (postId) => ({ postId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
     listAccounts: async (options) => {
       const all = [
         { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
@@ -422,10 +422,10 @@ test('advertises exactly the v1 tools', async () => {
     'archive',
     'complete_media_upload',
     'create_brand_kit',
+    'create_card',
     'create_element',
     'create_folder',
     'create_media_upload',
-    'create_post',
     'create_preview',
     'create_project',
     'create_space',
@@ -448,6 +448,7 @@ test('advertises exactly the v1 tools', async () => {
     'get_balance',
     'get_brand_kit',
     'get_brand_knowledge',
+    'get_card',
     'get_connected_account',
     'get_content',
     'get_context',
@@ -460,7 +461,6 @@ test('advertises exactly the v1 tools', async () => {
     'get_media',
     'get_model',
     'get_platform',
-    'get_post',
     'get_preview',
     'get_project',
     'get_space',
@@ -473,29 +473,29 @@ test('advertises exactly the v1 tools', async () => {
     'list_avatars',
     'list_brand_kits',
     'list_brand_knowledge',
+    'list_cards',
     'list_connected_accounts',
     'list_content',
     'list_elements',
     'list_folders',
     'list_media',
     'list_models',
-    'list_pipeline_stages',
     'list_platforms',
-    'list_posts',
     'list_projects',
     'list_spaces',
+    'list_stages',
     'list_tags',
     'list_voices',
-    'publish_post',
+    'publish_card',
     'remove_brand_knowledge',
     'search_brand_knowledge',
     'search_media',
     'transcribe',
     'update_brand_kit',
     'update_canvas',
+    'update_card',
     'update_element',
     'update_folder',
-    'update_post',
     'update_space',
     'update_tag',
     'update_timeline',
@@ -1220,18 +1220,18 @@ test('delete_tag destroys the tag and notes the cascade', async () => {
   assert.match(res.content[0].text, /removed from all posts/)
 })
 
-test('create_post forwards tags', async () => {
+test('create_card forwards tags', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      createPost: async (input) => {
+      createCard: async (input) => {
         captured = input
         return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
   await mcp.callTool({
-    name: 'create_post',
+    name: 'create_card',
     arguments: { title: 'X', platform: 'instagram', tags: ['contenthero', 'feature'] },
   })
   assert.deepEqual(captured.tags, ['contenthero', 'feature'])
@@ -1330,17 +1330,17 @@ test('generate_audio rejects transcribe (outputType filter)', async () => {
 
 // -- posts (content pipeline) -------------------------------------------------
 
-test('list_posts surfaces id, status, and platform with pagination context', async () => {
+test('list_cards surfaces id, status, and platform with pagination context', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_posts', arguments: {} })
+  const res = await mcp.callTool({ name: 'list_cards', arguments: {} })
   assert.match(res.content[0].text, /Launch clip \(id p1\)/)
   assert.match(res.content[0].text, /draft/)
   assert.ok(!res.isError)
 })
 
-test('get_post returns the post with its destinations and assets', async () => {
+test('get_card returns the post with its destinations and assets', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_post', arguments: { postId: 'p1' } })
+  const res = await mcp.callTool({ name: 'get_card', arguments: { postId: 'p1' } })
   assert.match(res.content[0].text, /destinations \(1\)/)
   assert.match(res.content[0].text, /instagram \(id d1\)/)
   // The destination's platformSettings keys are surfaced (the publish payload).
@@ -1349,18 +1349,18 @@ test('get_post returns the post with its destinations and assets', async () => {
   assert.match(res.content[0].text, /assets \(1\)/)
 })
 
-test('create_post passes the title/platform/stage through and returns the new id', async () => {
+test('create_card passes the title/platform/stage through and returns the new id', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      createPost: async (input) => {
+      createCard: async (input) => {
         captured = input
         return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
   const res = await mcp.callTool({
-    name: 'create_post',
+    name: 'create_card',
     arguments: { title: 'Launch clip', platform: 'instagram', stage: 'ideation' },
   })
   assert.equal(captured.title, 'Launch clip')
@@ -1369,14 +1369,14 @@ test('create_post passes the title/platform/stage through and returns the new id
   assert.match(res.content[0].text, /Created: Launch clip \(id p-new\)/)
 })
 
-test('list_pipeline_stages lists stages with id and slug for resolution', async () => {
+test('list_stages lists stages with id and slug for resolution', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_pipeline_stages', arguments: {} })
+  const res = await mcp.callTool({ name: 'list_stages', arguments: {} })
   assert.match(res.content[0].text, /Ideation \(id st1, slug ideation\)/)
   assert.match(res.content[0].text, /Published \(id st2, slug published\)/)
 })
 
-test('archive marks a post via the universal tool', async () => {
+test('archive marks a card via the universal tool', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -1385,9 +1385,9 @@ test('archive marks a post via the universal tool', async () => {
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'post', id: 'p1' } })
-  assert.deepEqual(captured, { assetType: 'post', id: 'p1', variationIndex: undefined, archived: true })
-  assert.match(res.content[0].text, /Archived post p1/)
+  const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'card', id: 'p1' } })
+  assert.deepEqual(captured, { assetType: 'card', id: 'p1', variationIndex: undefined, archived: true })
+  assert.match(res.content[0].text, /Archived card p1/)
 })
 
 test('favorite marks a top-level asset and reports it', async () => {
@@ -1467,18 +1467,18 @@ test('list filters forward favorited/archived to the client', async () => {
   assert.equal(voiceOpts.favorited, true)
 })
 
-test('update_post sets destinations declaratively, keyed by platform', async () => {
+test('update_card sets destinations declaratively, keyed by platform', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      updatePost: async (id, input) => {
+      updateCard: async (id, input) => {
         captured = input
         return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
   await mcp.callTool({
-    name: 'update_post',
+    name: 'update_card',
     arguments: {
       postId: 'p1',
       destinations: [
@@ -1493,18 +1493,18 @@ test('update_post sets destinations declaratively, keyed by platform', async () 
   assert.deepEqual(captured.destinations[0].platformSpecificData, { title: 'My Short' })
 })
 
-test('update_post reorders assets by sending the same ids in a new order', async () => {
+test('update_card reorders assets by sending the same ids in a new order', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      updatePost: async (id, input) => {
+      updateCard: async (id, input) => {
         captured = input
         return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
   await mcp.callTool({
-    name: 'update_post',
+    name: 'update_card',
     arguments: { postId: 'p1', assets: [{ id: 'as2' }, { id: 'as1' }] },
   })
   // Reordering used to be its own tool that demanded "ALL of the post's asset ids in the desired order",
@@ -1512,18 +1512,18 @@ test('update_post reorders assets by sending the same ids in a new order', async
   assert.deepEqual(captured.assets.map((a) => a.id), ['as2', 'as1'])
 })
 
-test('update_post attaches a new asset by output id alongside kept ones', async () => {
+test('update_card attaches a new asset by output id alongside kept ones', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      updatePost: async (id, input) => {
+      updateCard: async (id, input) => {
         captured = input
         return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
   await mcp.callTool({
-    name: 'update_post',
+    name: 'update_card',
     arguments: { postId: 'p1', assets: [{ id: 'as1' }, { outputId: 'out7-2' }] },
   })
   assert.equal(captured.assets[0].id, 'as1')
@@ -1531,55 +1531,55 @@ test('update_post attaches a new asset by output id alongside kept ones', async 
   assert.equal(captured.assets[1].outputId, 'out7-2')
 })
 
-test('update_post schedules the post, which cascades to its destinations', async () => {
+test('update_card schedules the post, which cascades to its destinations', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      updatePost: async (id, input) => {
+      updateCard: async (id, input) => {
         captured = input
         return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: input.scheduledAt ?? null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
   const res = await mcp.callTool({
-    name: 'update_post',
+    name: 'update_card',
     arguments: { postId: 'p1', scheduledAt: '2026-07-01T00:00:00Z' },
   })
   assert.equal(captured.scheduledAt, '2026-07-01T00:00:00Z')
   assert.match(res.content[0].text, /Scheduled:/)
 })
 
-test('update_post clears destinations with an empty array', async () => {
+test('update_card clears destinations with an empty array', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      updatePost: async (id, input) => {
+      updateCard: async (id, input) => {
         captured = input
         return { id, title: 'x', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
-  await mcp.callTool({ name: 'update_post', arguments: { postId: 'p1', destinations: [] } })
+  await mcp.callTool({ name: 'update_card', arguments: { postId: 'p1', destinations: [] } })
   // [] must reach the server as an empty list, not be dropped as falsy: that is the difference between
   // "detach everything" and "change nothing".
   assert.deepEqual(captured.destinations, [])
 })
 
-test('publish_post reports per-destination results', async () => {
+test('publish_card reports per-destination results', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'publish_post', arguments: { postId: 'p1' } })
+  const res = await mcp.callTool({ name: 'publish_card', arguments: { postId: 'p1' } })
   assert.match(res.content[0].text, /Published 1\/1 destination/)
   assert.match(res.content[0].text, /instagram: published/)
   assert.ok(!res.isError)
 })
 
-test('publish_post flags a total failure as an error result', async () => {
+test('publish_card flags a total failure as an error result', async () => {
   const mcp = await connect(
     fakeClient({
-      publishPost: async (postId) => ({ postId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
+      publishCard: async (postId) => ({ postId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
     }),
   )
-  const res = await mcp.callTool({ name: 'publish_post', arguments: { postId: 'p1' } })
+  const res = await mcp.callTool({ name: 'publish_card', arguments: { postId: 'p1' } })
   assert.match(res.content[0].text, /token expired/)
   assert.ok(res.isError, 'a 0-published publish should be an error result')
 })

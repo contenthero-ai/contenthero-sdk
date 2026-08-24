@@ -25,9 +25,10 @@ test('every top-level command group is registered', () => {
     'transcribe',
     'generation',
     'media',
-    'post',
+    'card',
     'tag',
-    'pipeline',
+    'stage',
+    'space',
     'brand-kit',
     'avatar',
     'voice',
@@ -67,19 +68,19 @@ test('generate exposes the five generation subcommands', () => {
   }
 })
 
-test('post exposes its verbs, with destinations and assets folded into update', () => {
-  const subs = subcommands('post')
+test('card exposes its verbs, with posts and assets folded into update', () => {
+  const subs = subcommands('card')
   for (const n of ['list', 'get', 'create', 'update', 'publish']) {
-    assert.ok(subs.includes(n), `post is missing: ${n}`)
+    assert.ok(subs.includes(n), `card is missing: ${n}`)
   }
   // Archiving moved to the universal top-level `archive` command.
-  assert.ok(!subs.includes('archive'), 'post should no longer have its own archive subcommand')
+  assert.ok(!subs.includes('archive'), 'card should no longer have its own archive subcommand')
   // Seven operations edited one document. Destinations and assets are now declarative fields on update,
   // and the schedule is `--schedule` on it, so these groups are gone.
   for (const n of ['destination', 'asset', 'schedule']) {
-    assert.ok(!subs.includes(n), `post should no longer have a ${n} subcommand`)
+    assert.ok(!subs.includes(n), `card should no longer have a ${n} subcommand`)
   }
-  // publish_post KEEPS its own command: irreversible external side effects do not belong in a patch.
+  // publish_card KEEPS its own command: irreversible external side effects do not belong in a patch.
   assert.ok(subs.includes('publish'))
 })
 

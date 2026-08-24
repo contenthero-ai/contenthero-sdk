@@ -44,10 +44,10 @@ import {
   type EditAudioRequest,
   type References,
   type EditorOp,
-  type PostDestinationInput,
+  type PostInput,
   type BrandKitSectionInput,
   type BrandKitAccountInput,
-  type PostAssetInput,
+  type CardAssetInput,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 import {
@@ -107,12 +107,12 @@ import {
   outlierListResult,
   enhanceClipsResult,
   pendingResult,
-  pipelineStageListResult,
+  stageListResult,
   spaceDeletedResult,
   spaceListResult,
   spaceResult,
-  postListResult,
-  postResult,
+  cardListResult,
+  cardResult,
   postSummaryResult,
   publishResult,
   statusActionResult,
@@ -1392,7 +1392,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Folders',
       annotations: READ,
       description:
-        "List the account's library folders (their own manual and smart folders, as a flat list with parent links for nesting) together with the built-in derived folders (recents, favorites, edits, canvas, posts). Use this to see how the library is organized before browsing or filing items.",
+        "List the account's library folders (their own manual and smart folders, as a flat list with parent links for nesting) together with the built-in derived folders (recents, favorites, edits, canvas, cards). Use this to see how the library is organized before browsing or filing items.",
       inputSchema: {},
     },
     async (_args, extra) => {
@@ -1408,7 +1408,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Return the contents of one folder. The folder id is either one of the account's own folder ids or a built-in derived-folder key. A manual folder returns exactly the items filed in it; a smart folder computes its members live from its saved query; a derived folder returns its built-in set. Items are media (with kind and a description) and, in manual folders, entities such as projects or posts.",
       inputSchema: {
-        folder_id: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, posts).'),
+        folder_id: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, cards).'),
       },
     },
     async (args, extra) => {
@@ -1523,13 +1523,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Media',
       annotations: READ,
       description:
-        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_post, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
             z.union([
               z.object({
-                url: z.string().describe('A media URL on our storage (from get_context / get_project / get_post).'),
+                url: z.string().describe('A media URL on our storage (from get_context / get_project / get_card).'),
                 fromSec: z.number().min(0).optional().describe('Video keyframes: start of the source-time window (seconds). Omit for the whole clip.'),
                 toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
                 frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
@@ -1919,14 +1919,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- list_posts -----------------------------------------------------------
+  // -- list_cards -----------------------------------------------------------
   server.registerTool(
-    'list_posts',
+    'list_cards',
     {
       title: 'List Posts',
       annotations: READ,
       description:
-        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, pipeline_stage (id/slug/name), folder, favorite, or a title search. Call get_post for one post's full detail (destinations + assets).",
+        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, pipeline_stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (destinations + assets).",
       inputSchema: {
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional().describe('Filter by lifecycle status.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
@@ -1939,8 +1939,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return postListResult(
-          await client.listPosts({
+        return cardListResult(
+          await client.listCards({
             status: args.status,
             platform: args.platform,
             pipelineStage: args.pipelineStage,
@@ -1955,22 +1955,22 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- get_post -------------------------------------------------------------
+  // -- get_card -------------------------------------------------------------
   server.registerTool(
-    'get_post',
+    'get_card',
     {
       title: 'Get Post',
       annotations: READ,
       description:
         "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish destinations and attached assets.",
       inputSchema: {
-        postId: z.string().describe('The post id from list_posts.'),
+        postId: z.string().describe('The post id from list_cards.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return postResult(await client.getPost(args.postId))
+        return cardResult(await client.getCard(args.postId))
       } catch (err) {
         return errorResult(err)
       }
@@ -1984,7 +1984,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Spaces',
       annotations: READ,
       description:
-        "List the account's SPACES. A space is the planner's top-level container: Space > Stage > Card > Post. Each space has its own stages, so two spaces can both hold a stage called 'Published'. Call this FIRST to discover which board to work in, then pass a space id to list_pipeline_stages, list_posts or create_post. Archived spaces are excluded unless includeArchived is set.",
+        "List the account's SPACES. A space is the planner's top-level container: Space > Stage > Card > Post. Each space has its own stages, so two spaces can both hold a stage called 'Published'. Call this FIRST to discover which board to work in, then pass a space id to list_stages, list_cards or create_card. Archived spaces are excluded unless includeArchived is set.",
       inputSchema: {
         includeArchived: z
           .boolean()
@@ -2106,37 +2106,36 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- list_pipeline_stages -------------------------------------------------
+  // -- list_stages -------------------------------------------------
   server.registerTool(
-    'list_pipeline_stages',
+    'list_stages',
     {
       title: 'List Pipeline Stages',
       annotations: READ,
       description:
-        "List the account's pipeline stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_post / update_post.",
+        "List the account's pipeline stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_card / update_card.",
     },
     async (extra) => {
       try {
         const client = await getClient(extra)
-        return pipelineStageListResult(await client.listPipelineStages())
+        return stageListResult(await client.listStages())
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- create_post ----------------------------------------------------------
+  // -- create_card ----------------------------------------------------------
   server.registerTool(
-    'create_post',
+    'create_card',
     {
       title: 'Create Post',
       annotations: WRITE,
       description:
-        "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_post. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the pipeline:write scope.",
+        "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_card. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the pipeline:write scope.",
       inputSchema: {
         title: z.string().describe('Post title (required).'),
         platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
-        description: z.string().optional().describe('Optional description / caption draft.'),
         stage: z.string().optional().describe('Pipeline stage id, slug, or name. Defaults to the first stage.'),
         coverUrl: z.string().optional().describe('Public URL for the post cover (the card thumbnail).'),
         coverOutputId: z
@@ -2153,10 +2152,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return postSummaryResult(
-          await client.createPost({
+          await client.createCard({
             title: args.title,
             platform: args.platform,
-            description: args.description,
             stage: args.stage,
             coverUrl: args.coverUrl,
             coverOutputId: args.coverOutputId,
@@ -2170,18 +2168,17 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- update_post ----------------------------------------------------------
+  // -- update_card ----------------------------------------------------------
   server.registerTool(
-    'update_post',
+    'update_card',
     {
       title: 'Update Post',
       annotations: WRITE,
       description:
-        "Update a post: its fields (title, description, script, notes, status, platform, cover, pipeline stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Requires the pipeline:write scope.",
+        "Update a post: its fields (title, description, script, notes, status, platform, cover, pipeline stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Requires the pipeline:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         title: z.string().optional(),
-        description: z.string().optional(),
         platform: z.enum(POST_PLATFORMS).optional(),
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional(),
         stage: z.string().optional().describe('Move the post to this stage (id, slug, or name).'),
@@ -2218,10 +2215,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // The two declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than duplicating the shape in zod.
         return postSummaryResult(
-          await client.updatePost(postId, {
+          await client.updateCard(postId, {
             ...input,
-            ...(destinations !== undefined ? { destinations: destinations as PostDestinationInput[] } : {}),
-            ...(assets !== undefined ? { assets: assets as PostAssetInput[] } : {}),
+            ...(destinations !== undefined ? { destinations: destinations as PostInput[] } : {}),
+            ...(assets !== undefined ? { assets: assets as CardAssetInput[] } : {}),
           }),
           'Updated',
         )
@@ -2238,7 +2235,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Tags',
       annotations: READ,
       description:
-        "List the account's tags (the organizational tag library). Set a post's tags with the `tags` field on create_post / update_post. A tag is just a lowercase name.",
+        "List the account's tags (the organizational tag library). Set a post's tags with the `tags` field on create_card / update_card. A tag is just a lowercase name.",
       inputSchema: {},
     },
     async (extra) => {
@@ -2258,7 +2255,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Tag',
       annotations: WRITE,
       description:
-        "Create a tag in the account's tag library (the name is lowercased). Tags organize posts; apply them with the `tags` field on create_post / update_post. Requires the pipeline:write scope.",
+        "Create a tag in the account's tag library (the name is lowercased). Tags organize posts; apply them with the `tags` field on create_card / update_card. Requires the pipeline:write scope.",
       inputSchema: {
         name: z.string().describe('The tag name (lowercased on save).'),
       },
@@ -2280,7 +2277,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Tag',
       annotations: WRITE,
       description:
-        'Rename a tag (preserves its assignments on all posts). To detach a tag from one post, set that post\'s `tags` without it via update_post. Requires the pipeline:write scope.',
+        'Rename a tag (preserves its assignments on all posts). To detach a tag from one post, set that post\'s `tags` without it via update_card. Requires the pipeline:write scope.',
       inputSchema: {
         tagId: z.string().describe('The tag id (from list_tags).'),
         name: z.string().describe('The new tag name (lowercased on save).'),
@@ -2303,7 +2300,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Delete Tag',
       annotations: WRITE,
       description:
-        "Delete a tag from the account's library. This DESTROYS the tag and removes it from every post it was on. To just detach a tag from one post, set that post's `tags` without it via update_post instead. Requires the pipeline:write scope.",
+        "Delete a tag from the account's library. This DESTROYS the tag and removes it from every post it was on. To just detach a tag from one post, set that post's `tags` without it via update_card instead. Requires the pipeline:write scope.",
       inputSchema: {
         tagId: z.string().describe('The tag id (from list_tags).'),
       },
@@ -2318,9 +2315,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- publish_post ---------------------------------------------------------
+  // -- publish_card ---------------------------------------------------------
   server.registerTool(
-    'publish_post',
+    'publish_card',
     {
       title: 'Publish Post',
       annotations: PUBLISH,
@@ -2334,7 +2331,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return publishResult(await client.publishPost(args.postId, { platform: args.platform }))
+        return publishResult(await client.publishCard(args.postId, { platform: args.platform }))
       } catch (err) {
         return errorResult(err)
       }
@@ -2480,7 +2477,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Connected Accounts',
       annotations: READ,
       description:
-        "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on add_post_destination, then publish_post. Read-only: connecting an account is done in the ContentHero app.",
+        "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on add_post_destination, then publish_card. Read-only: connecting an account is done in the ContentHero app.",
     },
     async (extra) => {
       try {
@@ -2543,10 +2540,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Favorite',
       annotations: WRITE,
       description:
-        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery, transition, space). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
+        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (card, voice, brand_kit, project, inspiration_content, gallery, transition, space). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
-          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'])
+          .enum(['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
@@ -2579,10 +2576,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project, space). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a post sets its status to 'archived'; restoring returns it to 'draft'. Requires the favorites:write scope. Idempotent in both directions.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (card, brand_kit, brand_kit_section, project, space). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a card sets its status to 'archived'; restoring returns it to 'draft'. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
-          .enum(['post', 'brand_kit', 'brand_kit_section', 'project', 'space'])
+          .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),

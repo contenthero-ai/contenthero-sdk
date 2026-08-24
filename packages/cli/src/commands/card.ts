@@ -1,27 +1,30 @@
 /**
- * `contenthero post` - the content pipeline (posts, destinations, assets).
- *   post list | get | create | update | archive | schedule | publish
- *   post destination add | update
- *   post asset add
+ * `contenthero card` - the planner's unit of work. Space > Stage > Card > Post.
+ *   card list | get | create | update | publish
  *
- * A post is the container: create it, attach destinations (platforms) and assets
+ * A card's POSTS (the platforms it goes out to) are set through `card update`,
+ * which takes the whole set; there is no separate add/remove subcommand.
+ *
+ * A CARD is the container: create it, attach POSTS (one per platform) and assets
  * (media URLs), then schedule or publish. Stages accept an id, slug, or name and
- * resolve server-side. Writes need pipeline:write (assets need assets:write,
- * publish needs publish:write); the key's scopes are the consent.
+ * resolve server-side; use `contenthero stage list` to discover them, and
+ * `contenthero space list` to pick the board first. Writes need pipeline:write
+ * (assets need assets:write, publish needs publish:write); the key's scopes are
+ * the consent.
  */
 
 import type { Command } from 'commander'
 import type {
-  CreatePostInput,
-  PostAsset,
-  PostDetail,
-  PostDestination,
-  PostListResult,
+  CreateCardInput,
+  CardAsset,
+  CardDetail,
+  Post,
+  CardListResult,
   PostPlatform,
-  PostStatus,
-  PostSummary,
-  PublishPostResult,
-  UpdatePostInput,
+  CardStatus,
+  CardSummary,
+  PublishCardResult,
+  UpdateCardInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
@@ -39,7 +42,7 @@ const PLATFORMS: PostPlatform[] = [
   'threads',
   'general',
 ]
-const STATUSES: PostStatus[] = ['draft', 'active', 'completed', 'archived']
+const STATUSES: CardStatus[] = ['draft', 'active', 'completed', 'archived']
 const CLEAR = ['null', 'clear', 'none']
 
 function assertPlatform(value: string | undefined): void {
@@ -48,12 +51,12 @@ function assertPlatform(value: string | undefined): void {
   }
 }
 function assertStatus(value: string | undefined): void {
-  if (value && !STATUSES.includes(value as PostStatus)) {
+  if (value && !STATUSES.includes(value as CardStatus)) {
     throw new CliError(`Invalid status "${value}". Expected one of: ${STATUSES.join(', ')}.`, EXIT.USAGE)
   }
 }
 
-function summaryHuman(p: PostSummary, action?: string): string {
+function summaryHuman(p: CardSummary, action?: string): string {
   return keyValues([
     ...(action ? [[action, p.title] as [string, string]] : [['Title', p.title] as [string, string]]),
     ['Id', p.id],
@@ -64,7 +67,7 @@ function summaryHuman(p: PostSummary, action?: string): string {
   ])
 }
 
-function destinationHuman(d: PostDestination): string {
+function destinationHuman(d: Post): string {
   const settingsKeys = d.platformSettings
     ? Object.keys(d.platformSettings).filter((k) => {
         const v = (d.platformSettings as Record<string, unknown>)[k]
@@ -106,10 +109,10 @@ function parsePlatformSettings(json: string | undefined): Record<string, unknown
   return parsed as Record<string, unknown>
 }
 
-export function registerPost(program: Command): void {
-  const post = program.command('post').description('Content pipeline: posts, destinations, assets')
+export function registerCard(program: Command): void {
+  const card = program.command('card').description('Planner cards: the unit of work on a space board')
 
-  post
+  card
     .command('list')
     .description('List posts (newest-updated first)')
     .option('--status <status>', `filter by status: ${STATUSES.join(', ')}`)
@@ -123,7 +126,7 @@ export function registerPost(program: Command): void {
       assertStatus(opts.status as string | undefined)
       assertPlatform(opts.platform as string | undefined)
       const { client, ctx } = makeClient(command)
-      const result = await client.listPosts({
+      const result = await client.listCards({
         status: opts.status as string | undefined,
         platform: opts.platform as string | undefined,
         pipelineStage: opts.stage as string | undefined,
@@ -132,7 +135,7 @@ export function registerPost(program: Command): void {
         limit: opts.limit as number | undefined,
         offset: opts.offset as number | undefined,
       })
-      emit(result, ctx, (r: PostListResult) => {
+      emit(result, ctx, (r: CardListResult) => {
         const t = table(
           ['ID', 'STATUS', 'PLATFORM', 'TITLE'],
           r.posts.map((p) => [p.id.slice(0, 8), p.status, p.platform ?? '', p.title]),
@@ -141,21 +144,20 @@ export function registerPost(program: Command): void {
       })
     })
 
-  post
+  card
     .command('get')
     .description('Get one post with its destinations and assets')
     .argument('<id>', 'the post id')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const p = await client.getPost(id)
-      emit(p, ctx, (post: PostDetail) => {
+      const p = await client.getCard(id)
+      emit(p, ctx, (post: CardDetail) => {
         const head = keyValues([
           ['Title', post.title],
           ['Id', post.id],
           ['Status', post.status],
           ['Platform', post.platform ?? ''],
           ...(post.scheduledAt ? [['Scheduled', post.scheduledAt] as [string, string]] : []),
-          ...(post.description ? [['Description', post.description] as [string, string]] : []),
         ])
         const dests = post.destinations.length
           ? '\n\nDestinations:\n' +
@@ -180,12 +182,11 @@ export function registerPost(program: Command): void {
       })
     })
 
-  post
+  card
     .command('create')
     .description('Create a post (requires pipeline:write)')
     .argument('<title>', 'post title')
     .requiredOption('--platform <platform>', `primary platform: ${PLATFORMS.join(', ')}`)
-    .option('--description <text>', 'description / caption draft')
     .option('--stage <stage>', 'pipeline stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
@@ -193,24 +194,22 @@ export function registerPost(program: Command): void {
     .action(async (title: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string)
       const { client, ctx } = makeClient(command)
-      const input = compact<CreatePostInput>({
+      const input = compact<CreateCardInput>({
         title,
         platform: opts.platform as PostPlatform,
-        description: opts.description as string | undefined,
         stage: opts.stage as string | undefined,
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
         tags: parseTagsOpt(opts.tags),
       })
-      emit(await client.createPost(input), ctx, (p: PostSummary) => summaryHuman(p, 'Created'))
+      emit(await client.createCard(input), ctx, (p: CardSummary) => summaryHuman(p, 'Created'))
     })
 
-  post
+  card
     .command('update')
     .description("Update a post's fields, including its pipeline stage (requires pipeline:write)")
     .argument('<id>', 'the post id')
     .option('--title <text>')
-    .option('--description <text>')
     .option('--platform <platform>')
     .option('--status <status>')
     .option('--stage <stage>', 'move the post to this stage (id, slug, or name)')
@@ -226,11 +225,10 @@ export function registerPost(program: Command): void {
       assertPlatform(opts.platform as string | undefined)
       assertStatus(opts.status as string | undefined)
       const { client, ctx } = makeClient(command)
-      const input = compact<UpdatePostInput>({
+      const input = compact<UpdateCardInput>({
         title: opts.title as string | undefined,
-        description: opts.description as string | undefined,
         platform: opts.platform as PostPlatform | undefined,
-        status: opts.status as PostStatus | undefined,
+        status: opts.status as CardStatus | undefined,
         stage: opts.stage as string | undefined,
         script: opts.script as string | undefined,
         notes: opts.notes as string | undefined,
@@ -245,13 +243,13 @@ export function registerPost(program: Command): void {
             : CLEAR.includes(String(opts.schedule).toLowerCase())
               ? null
               : (opts.schedule as string),
-        destinations: opts.destinations as UpdatePostInput['destinations'],
-        assets: opts.assets as UpdatePostInput['assets'],
+        destinations: opts.destinations as UpdateCardInput['destinations'],
+        assets: opts.assets as UpdateCardInput['assets'],
       })
-      emit(await client.updatePost(id, input), ctx, (p: PostSummary) => summaryHuman(p, 'Updated'))
+      emit(await client.updateCard(id, input), ctx, (p: CardSummary) => summaryHuman(p, 'Updated'))
     })
 
-  post
+  card
     .command('publish')
     .description('Publish a post NOW to its destinations (requires publish:write; pushes to live socials)')
     .argument('<id>', 'the post id')
@@ -259,8 +257,8 @@ export function registerPost(program: Command): void {
     .action(async (id: string, opts: { platform?: string }, command: Command) => {
       assertPlatform(opts.platform)
       const { client, ctx } = makeClient(command)
-      const result = await client.publishPost(id, { platform: opts.platform as PostPlatform | undefined })
-      emit(result, ctx, (r: PublishPostResult) => {
+      const result = await client.publishCard(id, { platform: opts.platform as PostPlatform | undefined })
+      emit(result, ctx, (r: PublishCardResult) => {
         const t = table(
           ['PLATFORM', 'OK', 'URL / ERROR'],
           r.results.map((d) => [d.platform, d.success ? 'yes' : 'no', d.url ?? d.error ?? '']),

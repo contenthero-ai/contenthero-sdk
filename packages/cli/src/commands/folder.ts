@@ -42,7 +42,7 @@ export function registerFolder(program: Command): void {
 
   folder
     .command('get')
-    .description("A folder's contents (a folder id or a derived key: recents, favorites, edits, canvas, posts)")
+    .description("A folder's contents (a folder id or a derived key: recents, favorites, edits, canvas, cards)")
     .argument('<id>', 'folder id or derived key')
     .action(async (id: string, _opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
