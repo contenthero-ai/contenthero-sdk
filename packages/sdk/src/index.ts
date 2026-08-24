@@ -92,6 +92,7 @@ export type {
   PostAsset,
   PostDestination,
   PostDetail,
+  Space,
   Tag,
   PostListResult,
   ListPostsOptions,

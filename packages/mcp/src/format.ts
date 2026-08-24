@@ -36,6 +36,7 @@ import type {
   PlatformSummary,
   PlatformSchema,
   PipelineStage,
+  Space,
   PostAsset,
   PostDestination,
   PostDetail,
@@ -798,6 +799,41 @@ export function postResult(p: PostDetail): CallToolResult {
 }
 
 /** List of pipeline stages (the agent resolves a stage from here before placing a post). */
+/**
+ * The account's spaces.
+ *
+ * The card count is stated on every row because "which board has work on it" is the question an agent
+ * asks next, and making it call get_space per row to find out is the N+1 the API already avoids.
+ */
+export function spaceListResult(spaces: Space[]): CallToolResult {
+  if (!spaces.length) return text('No spaces found.')
+  const rows = spaces.map((s) => {
+    const bits = [`id ${s.id}`, `${s.postCount ?? 0} card(s)`]
+    if (s.isFavorite) bits.push('favorite')
+    if (s.archivedAt) bits.push('ARCHIVED')
+    return `- ${s.name} (${bits.join(', ')})`
+  })
+  return text([`${spaces.length} space(s):`, ...rows].join('\n'))
+}
+
+/** A deleted space. */
+export function spaceDeletedResult(id: string): CallToolResult {
+  return text(`Deleted space ${id}. Its stages went with it; the space had to be empty of cards.`)
+}
+
+/** One space. */
+export function spaceResult(s: Space): CallToolResult {
+  const lines = [
+    `${s.name} (id ${s.id})`,
+    `Cards: ${s.postCount ?? 0}`,
+    `Favorite: ${s.isFavorite ? 'yes' : 'no'}`,
+    s.archivedAt ? `Archived: ${s.archivedAt}` : 'Archived: no',
+    s.coverUrl ? `Cover: ${s.coverUrl}` : 'Cover: none',
+    `Updated: ${s.updatedAt}`,
+  ]
+  return text(lines.join('\n'))
+}
+
 export function pipelineStageListResult(stages: PipelineStage[]): CallToolResult {
   if (!stages.length) return text('No pipeline stages found.')
   const rows = stages.map(

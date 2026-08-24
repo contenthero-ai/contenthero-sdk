@@ -92,6 +92,7 @@ import type {
   Element,
   CreateElementRequest,
   PipelineStage,
+  Space,
   PostAsset,
   PostDestination,
   PostDetail,
@@ -868,6 +869,96 @@ export class ContentHero {
   async listPipelineStages(): Promise<PipelineStage[]> {
     const data = await this.request<{ stages: PipelineStage[] }>('GET', '/api/v1/pipeline-stages')
     return data.stages
+  }
+
+  // -------------------------------------------------------------------------
+  // Spaces (the planner's top-level container: Space > Stage > Card > Post)
+  //
+  // Favouriting and archiving a space are NOT here. They are cross-entity verbs
+  // reached through `favorite()` and `archive()` with assetType 'space', the
+  // same way they work for posts, projects and brand kits.
+  // -------------------------------------------------------------------------
+
+  /**
+   * List the account's spaces, most recently active first.
+   *
+   * Archived spaces are excluded unless `includeArchived` is set, matching the
+   * grid in the app. Each space carries `postCount`, its live card total.
+   */
+  async listSpaces(options: { includeArchived?: boolean } = {}): Promise<Space[]> {
+    const query = options.includeArchived ? '?include_archived=true' : ''
+    const data = await this.request<{ spaces: Space[] }>('GET', `/api/v1/spaces${query}`)
+    return data.spaces
+  }
+
+  /** One space, with its live card count. Throws 404 for a space in another account. */
+  async getSpace(spaceId: string): Promise<Space> {
+    const data = await this.request<{ space: Space }>(
+      'GET',
+      `/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+    )
+    return data.space
+  }
+
+  /**
+   * Create a space.
+   *
+   * `duplicateFrom` copies another space's STAGES, never its cards, so the new
+   * board arrives with the columns and none of the work.
+   */
+  async createSpace(input: {
+    name: string
+    coverUrl?: string | null
+    coverPosition?: { x: number; y: number } | null
+    duplicateFrom?: string
+  }): Promise<Space> {
+    const data = await this.request<{ space: Space }>('POST', '/api/v1/spaces', {
+      name: input.name,
+      cover_url: input.coverUrl,
+      cover_position: input.coverPosition,
+      duplicate_from: input.duplicateFrom,
+    })
+    return data.space
+  }
+
+  /**
+   * Update a space. Every field is optional and this is a PATCH, not a replace:
+   * a field you omit is left alone.
+   *
+   * `coverUrl` distinguishes ABSENT from NULL. Omit it to keep the current
+   * cover; pass `null` to remove it, which clears its framing too.
+   */
+  async updateSpace(
+    spaceId: string,
+    input: {
+      name?: string
+      coverUrl?: string | null
+      coverPosition?: { x: number; y: number } | null
+    },
+  ): Promise<Space> {
+    const body: Record<string, unknown> = {}
+    if (input.name !== undefined) body.name = input.name
+    if (input.coverUrl !== undefined) body.cover_url = input.coverUrl
+    if (input.coverPosition !== undefined) body.cover_position = input.coverPosition
+
+    const data = await this.request<{ space: Space }>(
+      'PATCH',
+      `/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+      body,
+    )
+    return data.space
+  }
+
+  /**
+   * Delete a space. The server REFUSES a space that still holds cards, naming
+   * the count, because the delete cascades to every card in it along with their
+   * covers, captions, destinations and schedules.
+   */
+  async deleteSpace(spaceId: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+    )
   }
 
   // -------------------------------------------------------------------------

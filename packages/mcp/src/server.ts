@@ -108,6 +108,9 @@ import {
   enhanceClipsResult,
   pendingResult,
   pipelineStageListResult,
+  spaceDeletedResult,
+  spaceListResult,
+  spaceResult,
   postListResult,
   postResult,
   postSummaryResult,
@@ -1974,6 +1977,135 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- list_spaces ----------------------------------------------------------
+  server.registerTool(
+    'list_spaces',
+    {
+      title: 'List Spaces',
+      annotations: READ,
+      description:
+        "List the account's SPACES. A space is the planner's top-level container: Space > Stage > Card > Post. Each space has its own stages, so two spaces can both hold a stage called 'Published'. Call this FIRST to discover which board to work in, then pass a space id to list_pipeline_stages, list_posts or create_post. Archived spaces are excluded unless includeArchived is set.",
+      inputSchema: {
+        includeArchived: z
+          .boolean()
+          .optional()
+          .describe('Include archived spaces. Default false, matching the grid in the app.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return spaceListResult(await client.listSpaces({ includeArchived: args.includeArchived }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_space ------------------------------------------------------------
+  server.registerTool(
+    'get_space',
+    {
+      title: 'Get Space',
+      annotations: READ,
+      description:
+        'Return one space with its live card count. Use list_spaces to discover ids. The count excludes archived cards, and is the same number list_spaces reports for that space.',
+      inputSchema: { spaceId: z.string().describe('The space id.') },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return spaceResult(await client.getSpace(args.spaceId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_space ---------------------------------------------------------
+  server.registerTool(
+    'create_space',
+    {
+      title: 'Create Space',
+      annotations: WRITE,
+      description:
+        "Create a space: a new planner board with its own stages. duplicateFrom copies another space's STAGES, never its cards, so the new board arrives with the columns and none of the work. Requires the pipeline:write scope.",
+      inputSchema: {
+        name: z.string().describe('The space name.'),
+        coverUrl: z.string().optional().describe('A cover image URL for the space tile.'),
+        duplicateFrom: z
+          .string()
+          .optional()
+          .describe("Copy this space's stages into the new one. Cards are never copied."),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return spaceResult(
+          await client.createSpace({
+            name: args.name,
+            coverUrl: args.coverUrl,
+            duplicateFrom: args.duplicateFrom,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_space ---------------------------------------------------------
+  server.registerTool(
+    'update_space',
+    {
+      title: 'Update Space',
+      annotations: WRITE,
+      description:
+        "Rename a space or change its cover. This is a PATCH: a field you omit is left alone, so renaming does not disturb the cover. Pass coverUrl as an empty string to REMOVE the cover. To favorite or archive a space, use the `favorite` and `archive` tools with assetType 'space' instead. Requires the pipeline:write scope.",
+      inputSchema: {
+        spaceId: z.string().describe('The space id to update.'),
+        name: z.string().optional().describe('A new name.'),
+        coverUrl: z
+          .string()
+          .optional()
+          .describe('A new cover image URL. Pass an empty string to remove the cover entirely.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        // An empty string is how a tool caller says "remove it": JSON Schema has no way to
+        // distinguish an omitted string from an explicit null in a plain string field.
+        const coverUrl = args.coverUrl === undefined ? undefined : args.coverUrl === '' ? null : args.coverUrl
+        return spaceResult(await client.updateSpace(args.spaceId, { name: args.name, coverUrl }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- delete_space ---------------------------------------------------------
+  server.registerTool(
+    'delete_space',
+    {
+      title: 'Delete Space',
+      annotations: WRITE,
+      description:
+        'Delete a space. The server REFUSES a space that still holds cards and names the count, because the delete cascades to every card in it along with their covers, captions, destinations and schedules. Archive the space instead if you want it out of the way. Requires the pipeline:write scope.',
+      inputSchema: { spaceId: z.string().describe('The space id to delete.') },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.deleteSpace(args.spaceId)
+        return spaceDeletedResult(args.spaceId)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // -- list_pipeline_stages -------------------------------------------------
   server.registerTool(
     'list_pipeline_stages',
@@ -2411,10 +2543,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Favorite',
       annotations: WRITE,
       description:
-        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery, transition). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
+        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (post, voice, brand_kit, project, inspiration_content, gallery, transition, space). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
-          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition'])
+          .enum(['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
@@ -2447,10 +2579,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a post sets its status to 'archived'; restoring returns it to 'draft'. Requires the favorites:write scope. Idempotent in both directions.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (post, brand_kit, brand_kit_section, project, space). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a post sets its status to 'archived'; restoring returns it to 'draft'. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
-          .enum(['post', 'brand_kit', 'brand_kit_section', 'project'])
+          .enum(['post', 'brand_kit', 'brand_kit_section', 'project', 'space'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),

@@ -27,6 +27,7 @@ import { registerMedia } from './commands/media.js'
 import { registerFolder } from './commands/folder.js'
 import { registerPost } from './commands/post.js'
 import { registerPipeline } from './commands/pipeline.js'
+import { registerSpace } from './commands/space.js'
 import { registerBrandKit } from './commands/brandkit.js'
 import { registerIdentity } from './commands/identity.js'
 import { registerContent, registerTrackedAccount } from './commands/content.js'
@@ -81,6 +82,7 @@ export function buildProgram(): Command {
   registerPost(program)
   registerTag(program)
   registerPipeline(program)
+  registerSpace(program)
   registerBrandKit(program)
   registerIdentity(program)
   registerContent(program)

@@ -1125,6 +1125,31 @@ export type PostStatus = 'draft' | 'active' | 'completed' | 'archived'
  * fixed names. The `id` is the only fully stable handle; `slug` is frozen at
  * creation and `name` is a display label.
  */
+/**
+ * A SPACE: the planner's top-level container. Space > Stage > Card > Post.
+ *
+ * A space is ACCOUNT-owned, not user-owned, so every member of an account sees the same spaces. Each
+ * space has its own stages, so two spaces can both hold a stage called `Published` without collision.
+ */
+export interface Space {
+  id: string
+  accountId: string
+  name: string
+  coverUrl: string | null
+  coverPosition: { x: number; y: number } | null
+  isFavorite: boolean
+  /** ISO timestamp when the space was archived, or null while it is active. */
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+  /**
+   * Live cards on the board, ARCHIVED EXCLUDED. Present on both `listSpaces` and `getSpace`, and the
+   * two agree by construction: they ask the same question so an agent never sees two numbers for one
+   * board.
+   */
+  postCount?: number
+}
+
 export interface PipelineStage {
   id: string
   name: string
@@ -1550,9 +1575,10 @@ export type FavoriteAssetType =
   | 'inspiration_content'
   | 'gallery'
   | 'transition'
+  | 'space'
 
 /** The asset types that can be archived. */
-export type ArchiveAssetType = 'post' | 'brand_kit' | 'brand_kit_section' | 'project'
+export type ArchiveAssetType = 'post' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space'
 
 /**
  * The target of a favorite / unfavorite call.

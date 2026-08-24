@@ -21,8 +21,8 @@ import { toInt } from '../args.js'
 
 /** The 'media' positional means "a studio output variation" (needs --variation). */
 const MEDIA = 'media'
-const FAVORITE_TYPES = ['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition'] as const
-const ARCHIVE_TYPES = ['post', 'brand_kit', 'brand_kit_section', 'project'] as const
+const FAVORITE_TYPES = ['post', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'] as const
+const ARCHIVE_TYPES = ['post', 'brand_kit', 'brand_kit_section', 'project', 'space'] as const
 
 type Target = { assetType?: string; id: string; variationIndex?: number }
 
