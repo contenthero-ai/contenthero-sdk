@@ -1120,7 +1120,7 @@ export type PostPlatform =
 export type CardStatus = 'draft' | 'active' | 'completed' | 'archived'
 
 /**
- * A pipeline stage. Stages are per-account customizable (renamed, reordered,
+ * A stage. Stages are per-account customizable (renamed, reordered,
  * added, removed), so resolve one with `listStages` rather than assuming
  * fixed names. The `id` is the only fully stable handle; `slug` is frozen at
  * creation and `name` is a display label.
@@ -1165,8 +1165,8 @@ export interface CardSummary {
   title: string
   platform: string | null
   status: string
-  pipelineStageId: string | null
-  pipelineOrder: number | null
+  stageId: string | null
+  boardOrder: number | null
   contentType: string | null
   coverUrl: string | null
   isFavorite: boolean
@@ -1238,7 +1238,7 @@ export interface ListCardsOptions {
   status?: string
   platform?: string
   /** A stage id, slug, or name; resolved against your stages server-side. */
-  pipelineStage?: string
+  stage?: string
   isFavorite?: boolean
   search?: string
   limit?: number
@@ -1295,12 +1295,25 @@ export interface UpdateCardInput {
   title?: string
   platform?: PostPlatform
   status?: CardStatus
+  /** A stage id, slug, or name; resolved in the space the card is landing in. */
   stage?: string | null
-  pipelineOrder?: number
+  /**
+   * MOVE the card to another space. A space id or slug.
+   *
+   * 🚨 A MOVE, NOT A FIELD WRITE. `cards_stage_in_space_fkey` is composite on `(stage_id, space_id)`, so
+   * the card's stage must already belong to its new space IN THE SAME STATEMENT; writing the space alone
+   * is not a state the database will hold. Sent WITHOUT `stage`, the card lands in the target's stage
+   * whose SLUG matches its current one, and failing that in the target's first stage.
+   */
+  spaceId?: string | null
   isFavorite?: boolean
   coverUrl?: string | null
   /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
   coverOutputId?: string | null
+  /** Cover framing as `{x, y}` percentages. Sent alone, it reframes without replacing the image. */
+  coverPosition?: { x: number; y: number } | null
+  /** What the card is (reel, lesson, ad, banner). Free text; the board does not branch on it. */
+  contentType?: string | null
   /** Tag names to set on the post (must already exist; replaces the set). */
   tags?: string[]
   scheduledAt?: string | null

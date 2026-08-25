@@ -827,7 +827,7 @@ export class ContentHero {
     const q = new URLSearchParams()
     if (options.status) q.set('status', options.status)
     if (options.platform) q.set('platform', options.platform)
-    if (options.pipelineStage) q.set('pipeline_stage', options.pipelineStage)
+    if (options.stage) q.set('stage', options.stage)
     if (options.isFavorite) q.set('is_favorite', 'true')
     if (options.search) q.set('search', options.search)
     if (options.limit != null) q.set('limit', String(options.limit))
@@ -862,7 +862,29 @@ export class ContentHero {
   }
 
   /**
-   * List the account's pipeline stages (sorted), seeding the defaults on first
+   * Patch several cards at once. The bulk half of `updateCard`.
+   *
+   * ⚠️ FIELDS THAT DESCRIBE ONE CARD STILL NEED EXACTLY ONE. You cannot retitle five cards to one title,
+   * and the server refuses rather than doing it silently. `spaceId`, `stage`, `status`, `isFavorite` and
+   * `tags` are the bulk-safe ones, because each is genuinely something a person means for a selection.
+   *
+   * ⭐ THIS EXISTS FOR THE MOVE. Sending twelve cards to another space per-card would resolve the same
+   * target space and the same stage twelve times and interleave twelve advisory locks on the destination
+   * column. Same shape as `updateFolders`: the path names one card and `cardIds` in the body widens it.
+   */
+  async updateCards(cardIds: string[], input: UpdateCardInput): Promise<CardSummary[]> {
+    const first = cardIds[0]
+    if (!first) throw new Error('updateCards needs at least one card id')
+    const data = await this.request<{ posts: CardSummary[] }>(
+      'PATCH',
+      `/api/v1/cards/${encodeURIComponent(first)}`,
+      { ...input, cardIds },
+    )
+    return data.posts
+  }
+
+  /**
+   * List the account's stages (sorted), seeding the defaults on first
    * access. Use this to resolve a stage before placing a post; stages are
    * per-account customizable.
    */

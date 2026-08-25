@@ -1926,11 +1926,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Posts',
       annotations: READ,
       description:
-        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, pipeline_stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (destinations + assets).",
+        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (destinations + assets).",
       inputSchema: {
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional().describe('Filter by lifecycle status.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
-        pipelineStage: z.string().optional().describe('Filter by a pipeline stage id, slug, or name.'),
+        stage: z.string().optional().describe('Filter by a stage id, slug, or name.'),
         search: z.string().optional().describe('Case-insensitive title search.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 50).'),
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
@@ -1943,7 +1943,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           await client.listCards({
             status: args.status,
             platform: args.platform,
-            pipelineStage: args.pipelineStage,
+            stage: args.stage,
             search: args.search,
             limit: args.limit,
             offset: args.offset,
@@ -2029,7 +2029,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Space',
       annotations: WRITE,
       description:
-        "Create a space: a new planner board with its own stages. duplicateFrom copies another space's STAGES, never its cards, so the new board arrives with the columns and none of the work. Requires the pipeline:write scope.",
+        "Create a space: a new planner board with its own stages. duplicateFrom copies another space's STAGES, never its cards, so the new board arrives with the columns and none of the work. Requires the planner:write scope.",
       inputSchema: {
         name: z.string().describe('The space name.'),
         coverUrl: z.string().optional().describe('A cover image URL for the space tile.'),
@@ -2062,7 +2062,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Space',
       annotations: WRITE,
       description:
-        "Rename a space or change its cover. This is a PATCH: a field you omit is left alone, so renaming does not disturb the cover. Pass coverUrl as an empty string to REMOVE the cover. To favorite or archive a space, use the `favorite` and `archive` tools with assetType 'space' instead. Requires the pipeline:write scope.",
+        "Rename a space or change its cover. This is a PATCH: a field you omit is left alone, so renaming does not disturb the cover. Pass coverUrl as an empty string to REMOVE the cover. To favorite or archive a space, use the `favorite` and `archive` tools with assetType 'space' instead. Requires the planner:write scope.",
       inputSchema: {
         spaceId: z.string().describe('The space id to update.'),
         name: z.string().optional().describe('A new name.'),
@@ -2092,7 +2092,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Delete Space',
       annotations: WRITE,
       description:
-        'Delete a space. The server REFUSES a space that still holds cards and names the count, because the delete cascades to every card in it along with their covers, captions, destinations and schedules. Archive the space instead if you want it out of the way. Requires the pipeline:write scope.',
+        'Delete a space. The server REFUSES a space that still holds cards and names the count, because the delete cascades to every card in it along with their covers, captions, destinations and schedules. Archive the space instead if you want it out of the way. Requires the planner:write scope.',
       inputSchema: { spaceId: z.string().describe('The space id to delete.') },
     },
     async (args, extra) => {
@@ -2113,7 +2113,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Pipeline Stages',
       annotations: READ,
       description:
-        "List the account's pipeline stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_card / update_card.",
+        "List the account's stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_card / update_card.",
     },
     async (extra) => {
       try {
@@ -2132,7 +2132,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Post',
       annotations: WRITE,
       description:
-        "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_card. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the pipeline:write scope.",
+        "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_card. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the planner:write scope.",
       inputSchema: {
         title: z.string().describe('Post title (required).'),
         platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
@@ -2175,13 +2175,25 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Post',
       annotations: WRITE,
       description:
-        "Update a post: its fields (title, description, script, notes, status, platform, cover, pipeline stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Requires the pipeline:write scope.",
+        "Update a post: its fields (title, description, script, notes, status, platform, cover, stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
       inputSchema: {
         postId: z.string().describe('The post id.'),
         title: z.string().optional(),
         platform: z.enum(POST_PLATFORMS).optional(),
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional(),
         stage: z.string().optional().describe('Move the post to this stage (id, slug, or name).'),
+        spaceId: z
+          .string()
+          .optional()
+          .describe(
+            "Move the card to a different space (id or slug). Without a stage, it lands in that space's stage whose slug matches its current one, or that space's first stage.",
+          ),
+        cardIds: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Update several cards at once. Fields that describe ONE card (title, notes, script, cover) still require exactly one.',
+          ),
         script: z.string().optional(),
         notes: z.string().optional(),
         coverUrl: z.string().optional().describe('Public URL for the post cover.'),
@@ -2211,17 +2223,22 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { postId, destinations, assets, ...input } = args
+        const { postId, cardIds, destinations, assets, ...input } = args
         // The two declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than duplicating the shape in zod.
-        return postSummaryResult(
-          await client.updateCard(postId, {
-            ...input,
-            ...(destinations !== undefined ? { destinations: destinations as PostInput[] } : {}),
-            ...(assets !== undefined ? { assets: assets as CardAssetInput[] } : {}),
-          }),
-          'Updated',
-        )
+        const patch = {
+          ...input,
+          ...(destinations !== undefined ? { destinations: destinations as PostInput[] } : {}),
+          ...(assets !== undefined ? { assets: assets as CardAssetInput[] } : {}),
+        }
+        // `cardIds` widens the path id, matching update_folder's folder_id / folder_ids. One card still
+        // goes through updateCard so the single-card response shape is unchanged for every caller.
+        const targets = cardIds?.length ? cardIds : [postId]
+        if (targets.length > 1) {
+          const cards = await client.updateCards(targets, patch)
+          return text(`Updated ${cards.length} cards.`)
+        }
+        return postSummaryResult(await client.updateCard(targets[0]!, patch), 'Updated')
       } catch (err) {
         return errorResult(err)
       }
@@ -2255,7 +2272,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Tag',
       annotations: WRITE,
       description:
-        "Create a tag in the account's tag library (the name is lowercased). Tags organize posts; apply them with the `tags` field on create_card / update_card. Requires the pipeline:write scope.",
+        "Create a tag in the account's tag library (the name is lowercased). Tags organize posts; apply them with the `tags` field on create_card / update_card. Requires the planner:write scope.",
       inputSchema: {
         name: z.string().describe('The tag name (lowercased on save).'),
       },
@@ -2277,7 +2294,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Tag',
       annotations: WRITE,
       description:
-        'Rename a tag (preserves its assignments on all posts). To detach a tag from one post, set that post\'s `tags` without it via update_card. Requires the pipeline:write scope.',
+        'Rename a tag (preserves its assignments on all posts). To detach a tag from one post, set that post\'s `tags` without it via update_card. Requires the planner:write scope.',
       inputSchema: {
         tagId: z.string().describe('The tag id (from list_tags).'),
         name: z.string().describe('The new tag name (lowercased on save).'),
@@ -2300,7 +2317,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Delete Tag',
       annotations: WRITE,
       description:
-        "Delete a tag from the account's library. This DESTROYS the tag and removes it from every post it was on. To just detach a tag from one post, set that post's `tags` without it via update_card instead. Requires the pipeline:write scope.",
+        "Delete a tag from the account's library. This DESTROYS the tag and removes it from every post it was on. To just detach a tag from one post, set that post's `tags` without it via update_card instead. Requires the planner:write scope.",
       inputSchema: {
         tagId: z.string().describe('The tag id (from list_tags).'),
       },

@@ -271,7 +271,7 @@ function fakeClient(overrides = {}) {
     }),
     listCards: async () => ({
       posts: [
-        { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
+        { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
       ],
       total: 1,
       hasMore: false,
@@ -282,8 +282,8 @@ function fakeClient(overrides = {}) {
       description: 'a clip',
       platform: 'instagram',
       status: 'draft',
-      pipelineStageId: 'st1',
-      pipelineOrder: 0,
+      stageId: 'st1',
+      boardOrder: 0,
       contentType: null,
       coverUrl: null,
       isFavorite: false,
@@ -301,8 +301,8 @@ function fakeClient(overrides = {}) {
       destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
       tags: ['contenthero', 'feature'],
     }),
-    createCard: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
-    updateCard: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    createCard: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
+    updateCard: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     listStages: async () => [
       { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
       { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
@@ -1226,7 +1226,7 @@ test('create_card forwards tags', async () => {
     fakeClient({
       createCard: async (input) => {
         captured = input
-        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
@@ -1355,7 +1355,7 @@ test('create_card passes the title/platform/stage through and returns the new id
     fakeClient({
       createCard: async (input) => {
         captured = input
-        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
@@ -1473,7 +1473,7 @@ test('update_card sets destinations declaratively, keyed by platform', async () 
     fakeClient({
       updateCard: async (id, input) => {
         captured = input
-        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
@@ -1493,13 +1493,68 @@ test('update_card sets destinations declaratively, keyed by platform', async () 
   assert.deepEqual(captured.destinations[0].platformSpecificData, { title: 'My Short' })
 })
 
+/**
+ * The MOVE, which is the whole reason spaceId and cardIds exist on this tool.
+ *
+ * ⚠️ ONE CARD AND A SET TAKE DIFFERENT CLIENT METHODS, so the branch is real code rather than a spread.
+ * These assert which one was called AND what it carried, because routing a set through the single-card
+ * method would still "work" (it would move the first card and answer 200 for all of them).
+ */
+test('update_card moves ONE card to another space through updateCard', async () => {
+  let captured
+  let bulkCalled = false
+  const mcp = await connect(
+    fakeClient({
+      updateCard: async (id, input) => {
+        captured = { id, input }
+        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st9', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+      },
+      updateCards: async () => { bulkCalled = true; return [] },
+    }),
+  )
+  await mcp.callTool({ name: 'update_card', arguments: { postId: 'p1', spaceId: 'sp2' } })
+
+  assert.equal(bulkCalled, false)
+  assert.equal(captured.id, 'p1')
+  assert.equal(captured.input.spaceId, 'sp2')
+  // No stage named: absence is what tells the server to match the card's own stage by slug. A null here
+  // would mean "no column", which is a different and real value.
+  assert.equal('stage' in captured.input, false)
+})
+
+test('update_card moves a SET through updateCards, and reports the count', async () => {
+  let captured
+  let singleCalled = false
+  const mcp = await connect(
+    fakeClient({
+      updateCard: async (id) => { singleCalled = true; return { id, title: 'x', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] } },
+      updateCards: async (ids, input) => {
+        captured = { ids, input }
+        return ids.map((id) => ({ id, title: 'x', description: null, platform: 'instagram', status: 'draft', stageId: 'st9', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }))
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'update_card',
+    arguments: { postId: 'p1', cardIds: ['p1', 'p2', 'p3'], spaceId: 'sp2', stage: 'review' },
+  })
+
+  assert.equal(singleCalled, false)
+  assert.deepEqual(captured.ids, ['p1', 'p2', 'p3'])
+  assert.equal(captured.input.spaceId, 'sp2')
+  assert.equal(captured.input.stage, 'review')
+  // `cardIds` is the ADDRESSING, not a field to write, so it must not reach the patch.
+  assert.equal('cardIds' in captured.input, false)
+  assert.match(res.content[0].text, /Updated 3 cards/)
+})
+
 test('update_card reorders assets by sending the same ids in a new order', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
       updateCard: async (id, input) => {
         captured = input
-        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
@@ -1518,7 +1573,7 @@ test('update_card attaches a new asset by output id alongside kept ones', async 
     fakeClient({
       updateCard: async (id, input) => {
         captured = input
-        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
@@ -1537,7 +1592,7 @@ test('update_card schedules the post, which cascades to its destinations', async
     fakeClient({
       updateCard: async (id, input) => {
         captured = input
-        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: input.scheduledAt ?? null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: input.scheduledAt ?? null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )
@@ -1555,7 +1610,7 @@ test('update_card clears destinations with an empty array', async () => {
     fakeClient({
       updateCard: async (id, input) => {
         captured = input
-        return { id, title: 'x', description: null, platform: 'instagram', status: 'draft', pipelineStageId: 'st1', pipelineOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+        return { id, title: 'x', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
       },
     }),
   )

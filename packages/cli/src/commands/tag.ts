@@ -34,7 +34,7 @@ export function registerTag(program: Command): void {
 
   tag
     .command('create')
-    .description('Create a tag (the name is lowercased) (requires pipeline:write)')
+    .description('Create a tag (the name is lowercased) (requires planner:write)')
     .argument('<name>', 'the tag name')
     .action(async (name: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -44,7 +44,7 @@ export function registerTag(program: Command): void {
 
   tag
     .command('update')
-    .description('Rename a tag, keeping its post assignments (requires pipeline:write)')
+    .description('Rename a tag, keeping its post assignments (requires planner:write)')
     .argument('<id>', 'the tag id (from `tag list`)')
     .argument('<name>', 'the new tag name')
     .action(async (id: string, name: string, _opts, command: Command) => {
@@ -55,7 +55,7 @@ export function registerTag(program: Command): void {
 
   tag
     .command('remove')
-    .description('Delete a tag from the account, removing it from every post (requires pipeline:write)')
+    .description('Delete a tag from the account, removing it from every post (requires planner:write)')
     .argument('<id>', 'the tag id (from `tag list`)')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)

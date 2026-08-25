@@ -767,7 +767,7 @@ export function cardListResult(result: CardListResult): CallToolResult {
 
 /** A single post summary line (create / update / schedule / archive results). */
 export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResult {
-  const stage = p.pipelineStageId ? ` | stage ${p.pipelineStageId}` : ''
+  const stage = p.stageId ? ` | stage ${p.stageId}` : ''
   // The schedule is surfaced here because scheduling is now part of update_card rather than its own tool.
   // Without it a caller who just set a publish time gets no confirmation of what time was actually stored.
   const scheduled = p.scheduledAt ? ` | Scheduled: ${p.scheduledAt}` : ''
@@ -779,7 +779,7 @@ export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
       `${p.title || '(untitled)'} (id ${p.id}) | ${p.status} | platform: ${p.platform ?? 'general'}`,
-      p.pipelineStageId ? `stage: ${p.pipelineStageId}` : null,
+      p.stageId ? `stage: ${p.stageId}` : null,
       p.scheduledAt ? `scheduled: ${p.scheduledAt}` : null,
       p.publishedAt ? `published: ${p.publishedAt}` : null,
       p.publishUrl ? `publish url: ${p.publishUrl}` : null,
@@ -797,7 +797,7 @@ export function cardResult(p: CardDetail): CallToolResult {
   )
 }
 
-/** List of pipeline stages (the agent resolves a stage from here before placing a post). */
+/** List of stages (the agent resolves a stage from here before placing a post). */
 /**
  * The account's spaces.
  *
@@ -834,11 +834,11 @@ export function spaceResult(s: Space): CallToolResult {
 }
 
 export function stageListResult(stages: Stage[]): CallToolResult {
-  if (!stages.length) return text('No pipeline stages found.')
+  if (!stages.length) return text('No stages found.')
   const rows = stages.map(
     (s) => `- ${s.name} (id ${s.id}${s.slug ? `, slug ${s.slug}` : ''})${s.isDefault ? ' [default]' : ''}`,
   )
-  return text([`${stages.length} pipeline stage(s) (in order):`, ...rows].join('\n'))
+  return text([`${stages.length} stage(s) (in order):`, ...rows].join('\n'))
 }
 
 /** The non-empty keys of a destination's platformSettings, for a compact summary. */

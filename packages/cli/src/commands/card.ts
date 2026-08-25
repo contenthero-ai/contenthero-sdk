@@ -8,7 +8,7 @@
  * A CARD is the container: create it, attach POSTS (one per platform) and assets
  * (media URLs), then schedule or publish. Stages accept an id, slug, or name and
  * resolve server-side; use `contenthero stage list` to discover them, and
- * `contenthero space list` to pick the board first. Writes need pipeline:write
+ * `contenthero space list` to pick the board first. Writes need planner:write
  * (assets need assets:write, publish needs publish:write); the key's scopes are
  * the consent.
  */
@@ -30,7 +30,7 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { toInt, toJson } from '../args.js'
+import { collect, toInt, toJson } from '../args.js'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -117,7 +117,7 @@ export function registerCard(program: Command): void {
     .description('List posts (newest-updated first)')
     .option('--status <status>', `filter by status: ${STATUSES.join(', ')}`)
     .option('--platform <platform>', 'filter by platform')
-    .option('--stage <stage>', 'filter by pipeline stage (id, slug, or name)')
+    .option('--stage <stage>', 'filter by stage (id, slug, or name)')
     .option('--search <text>', 'case-insensitive title search')
     .option('--favorite', 'only favorited posts')
     .option('--limit <n>', 'how many to return (default 50)', toInt)
@@ -129,7 +129,7 @@ export function registerCard(program: Command): void {
       const result = await client.listCards({
         status: opts.status as string | undefined,
         platform: opts.platform as string | undefined,
-        pipelineStage: opts.stage as string | undefined,
+        stage: opts.stage as string | undefined,
         search: opts.search as string | undefined,
         isFavorite: opts.favorite === true ? true : undefined,
         limit: opts.limit as number | undefined,
@@ -184,10 +184,10 @@ export function registerCard(program: Command): void {
 
   card
     .command('create')
-    .description('Create a post (requires pipeline:write)')
+    .description('Create a post (requires planner:write)')
     .argument('<title>', 'post title')
     .requiredOption('--platform <platform>', `primary platform: ${PLATFORMS.join(', ')}`)
-    .option('--stage <stage>', 'pipeline stage id, slug, or name (defaults to the first stage)')
+    .option('--stage <stage>', 'stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)')
@@ -207,12 +207,14 @@ export function registerCard(program: Command): void {
 
   card
     .command('update')
-    .description("Update a post's fields, including its pipeline stage (requires pipeline:write)")
+    .description("Update a post's fields, including its stage (requires planner:write)")
     .argument('<id>', 'the post id')
     .option('--title <text>')
     .option('--platform <platform>')
     .option('--status <status>')
     .option('--stage <stage>', 'move the post to this stage (id, slug, or name)')
+    .option('--space <space>', "move the card to another space (id or slug); without --stage it lands in that space's matching stage, or its first")
+    .option('--also <id>', 'another card id to apply this to; repeatable. Fields describing ONE card (title, notes, script, cover) still need exactly one', collect)
     .option('--script <text>')
     .option('--notes <text>')
     .option('--cover-url <url>', 'public URL for the post cover')
@@ -230,6 +232,7 @@ export function registerCard(program: Command): void {
         platform: opts.platform as PostPlatform | undefined,
         status: opts.status as CardStatus | undefined,
         stage: opts.stage as string | undefined,
+        spaceId: opts.space as string | undefined,
         script: opts.script as string | undefined,
         notes: opts.notes as string | undefined,
         coverUrl: opts.coverUrl as string | undefined,
@@ -246,6 +249,17 @@ export function registerCard(program: Command): void {
         destinations: opts.destinations as UpdateCardInput['destinations'],
         assets: opts.assets as UpdateCardInput['assets'],
       })
+      /**
+       * `--also` widens the positional id into a SET, matching `update_card`'s cardIds and the folder
+       * commands' shape. One card keeps the single-card output every existing script parses; a set gets
+       * a count, because printing ten summaries to answer "did it work" is worse than saying so.
+       */
+      const also = (opts.also as string[] | undefined) ?? []
+      if (also.length > 0) {
+        const cards = await client.updateCards([id, ...also], input)
+        emit(cards, ctx, (list: CardSummary[]) => `Updated ${list.length} cards.`)
+        return
+      }
       emit(await client.updateCard(id, input), ctx, (p: CardSummary) => summaryHuman(p, 'Updated'))
     })
 
