@@ -85,6 +85,7 @@ import type {
   CreateMediaUploadInput,
   CreateMediaUploadResult,
   ImportMediaInput,
+  ImportedMedia,
   UploadedMedia,
   ModelInfo,
   PlatformSummary,
@@ -723,10 +724,15 @@ export class ContentHero {
   /**
    * Import a remote URL as first-class media: the server fetches and re-hosts it.
    * Use when the file is already on a public URL (or from an environment that can't
-   * read local files). Returns the new media, referenceable by outputId.
+   * read local files).
+   *
+   * ⚠️ IDEMPOTENT. If the account already holds these exact bytes nothing is created and `alreadyExisted`
+   * is true; `outputId` is then the item that already owns them, or NULL when the bytes belong to something
+   * that is not a library item (an export from a project, an avatar look). A duplicate import is a
+   * successful no-op, not an error, so check the flag rather than assuming a new row.
    */
-  async importMedia(input: ImportMediaInput): Promise<UploadedMedia> {
-    return this.request<UploadedMedia>('POST', '/api/v1/media/imports', input)
+  async importMedia(input: ImportMediaInput): Promise<ImportedMedia> {
+    return this.request<ImportedMedia>('POST', '/api/v1/media/imports', input)
   }
 
   /**

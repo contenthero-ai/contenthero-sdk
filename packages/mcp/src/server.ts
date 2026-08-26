@@ -88,6 +88,7 @@ import {
   folderContentsResult,
   mediaBatchResult,
   mediaUploadResult,
+  importedMediaResult,
   uploadedMediaResult,
   assetOrderResult,
   assetRemovedResult,
@@ -1641,7 +1642,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return uploadedMediaResult(
+        return importedMediaResult(
           await client.importMedia({
             url: args.url,
             contentType: args.contentType,

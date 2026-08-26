@@ -31,6 +31,7 @@ import type {
   MediaBatchResult,
   ResolvedMediaBatchItem,
   CreateMediaUploadResult,
+  ImportedMedia,
   UploadedMedia,
   ModelInfo,
   PlatformSummary,
@@ -540,6 +541,42 @@ export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
 export function uploadedMediaResult(r: UploadedMedia): CallToolResult {
   return text(
     `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
+  )
+}
+
+/**
+ * The result of an import, which may have created nothing.
+ *
+ * ## Why a duplicate gets its own sentence rather than the same one
+ *
+ * An import of bytes the account already holds is a successful no-op. Reporting it as "Media ready" would
+ * be a lie an agent then acts on: it would try to reference an `outputId` that is null, or import again on
+ * the next run because nothing said it had already happened.
+ *
+ * The two duplicate cases differ in what the caller can DO next, so they read differently:
+ *
+ *   an existing library item -> there is an id to use, so give it
+ *   no library item          -> the bytes are an export or a look; there is no id, so say what it IS
+ *
+ * Saying "already imported" without naming what it is would send someone hunting for a library item that
+ * does not exist. That is the exact confusion this whole fix came from.
+ */
+export function importedMediaResult(r: ImportedMedia): CallToolResult {
+  if (!r.alreadyExisted) {
+    return text(
+      `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
+    )
+  }
+  if (r.outputId) {
+    return text(
+      `Already in your library (id ${r.outputId}): ${r.url}. Nothing was imported: these exact bytes are already there. Reference it by outputId as usual.`,
+    )
+  }
+  const what = r.existing?.role ? `a ${r.existing.role}` : 'an existing file'
+  return text(
+    `You already have this file. Nothing was imported: these exact bytes are already in your account as ${what}` +
+      `${r.existing?.objectName ? ` (${r.existing.objectName})` : ''}. ` +
+      `It is not a library item, so there is no outputId to reference. Use its URL directly: ${r.url}`,
   )
 }
 

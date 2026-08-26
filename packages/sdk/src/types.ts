@@ -1055,6 +1055,29 @@ export interface UploadedMedia {
   url: string
 }
 
+/**
+ * The result of importing a remote URL.
+ *
+ * ⚠️ Separate from `UploadedMedia` because `outputId` can be NULL here and cannot there. A two-phase upload
+ * always creates a row; an import may create nothing, because the server dedups on content hash and the same
+ * bytes twice give one library item rather than two. Widening `UploadedMedia` instead would force every
+ * upload caller to handle a null that its path can never produce.
+ */
+export interface ImportedMedia {
+  /**
+   * The library item, or null.
+   *
+   * Null means the bytes are already the account's but belong to something that is not a library item, such
+   * as an export from a project. There is nothing to reference by id in that case.
+   */
+  outputId: string | null
+  url: string
+  /** True when nothing was created because the account already held these exact bytes. NOT an error. */
+  alreadyExisted: boolean
+  /** What the bytes already ARE, when `alreadyExisted`, so a caller can say which thing rather than "duplicate". */
+  existing?: { objectName: string; role: string | null; ownedBy: string | null }
+}
+
 /** The operation a model performs within its content type. */
 export type ModelKind = 'generate' | 'upscale' | 'lip-sync' | 'voice'
 

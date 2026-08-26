@@ -84,6 +84,7 @@ export type {
   CreateMediaUploadInput,
   CreateMediaUploadResult,
   ImportMediaInput,
+  ImportedMedia,
   UploadedMedia,
   PostPlatform,
   CardStatus,
