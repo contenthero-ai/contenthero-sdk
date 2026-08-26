@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import type { MediaBatchItem, MediaItem, MediaKind, MediaSource, MediaSummary, MediaType, SearchMediaResult, UploadedMedia } from '@contenthero/sdk'
+import type { ImportedMedia, MediaBatchItem, MediaItem, MediaKind, MediaSource, MediaSummary, MediaType, SearchMediaResult, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -71,6 +71,55 @@ function clip(text: string | null, max = 48): string {
 function uploadedHuman(m: UploadedMedia): string {
   return keyValues([
     ['Output id', m.outputId],
+    ['URL', m.url],
+  ])
+}
+
+/**
+ * An import may have created NOTHING, so it cannot share `uploadedHuman`.
+ *
+ * ## Why this is not cosmetic
+ *
+ * `import_media` is idempotent: the same bytes twice give one library item, not two. Rendered through the
+ * upload formatter, a duplicate printed `Output id:` followed by nothing, because `outputId` is null in that
+ * case. That reads as a broken command rather than a deliberate no-op, which is worse than the behaviour it
+ * replaced.
+ *
+ * Three cases, because what the operator can DO next differs:
+ *
+ *   created            -> an id to reference
+ *   duplicate, is a library item -> the EXISTING id, and a note that nothing was imported
+ *   duplicate, is not  -> no id at all; the bytes are an export or a look, so say what they ARE
+ *
+ * The third is the case that caused the incident behind this work: an editor export still was imported and
+ * became a row that owned no object. "Already imported" without naming what it is sends the operator hunting
+ * for a library item that does not exist.
+ *
+ * ⚠️ `--json` is unaffected and still emits the full object. This is the HUMAN rendering only, so a script
+ * reading `alreadyExisted` keeps working unchanged.
+ */
+export function importedHuman(m: ImportedMedia): string {
+  if (!m.alreadyExisted) {
+    // Non-null whenever something was created; the fallback exists so a null can never render as a blank
+    // value, which is the exact failure this function was written to remove.
+    return keyValues([
+      ['Output id', m.outputId ?? 'none'],
+      ['URL', m.url],
+    ])
+  }
+  if (m.outputId) {
+    return keyValues([
+      ['Status', 'Already in your library. Nothing was imported.'],
+      ['Output id', m.outputId],
+      ['URL', m.url],
+    ])
+  }
+  return keyValues([
+    ['Status', 'You already have this file. Nothing was imported.'],
+    ['Already stored as', m.existing?.role ?? 'an existing file'],
+    ['Object', m.existing?.objectName ?? ''],
+    // Stated rather than left blank: an absent id is the ANSWER here, not a missing value.
+    ['Output id', 'none (not a library item, reference it by URL)'],
     ['URL', m.url],
   ])
 }
@@ -328,6 +377,6 @@ export function registerMedia(program: Command): void {
         contentType: opts.contentType as string | undefined,
         fileName: opts.name as string | undefined,
       })
-      emit(m, ctx, uploadedHuman)
+      emit(m, ctx, importedHuman)
     })
 }
