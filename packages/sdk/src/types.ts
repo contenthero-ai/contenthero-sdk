@@ -1757,7 +1757,7 @@ export interface ProjectDetail extends ProjectSummary {
   groups: GroupSummary[]
   assetReferences: unknown
   brandKitId: string | null
-  exportedPostId: string | null
+  exportedCardId: string | null
   exportedUrl: string | null
   shareId: string | null
   favoritedAt: string | null

@@ -1182,7 +1182,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   favoritedAt: 'omitted: lifecycle state, surfaced by list_projects',
   createdAt: 'omitted: list metadata',
   updatedAt: 'omitted: superseded by revision, which is the token that actually matters here',
-  exportedPostId: 'omitted: publishing workflow, owned by the post tools',
+  exportedCardId: 'omitted: publishing workflow, owned by the card tools',
   exportedUrl: 'omitted: publishing workflow, owned by the post tools',
   shareId: 'omitted: sharing workflow, no editing effect',
 } satisfies Record<keyof ProjectDetail, string>
