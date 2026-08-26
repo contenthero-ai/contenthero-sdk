@@ -1927,7 +1927,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Posts',
       annotations: READ,
       description:
-        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (destinations + assets).",
+        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (posts + assets).",
       inputSchema: {
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional().describe('Filter by lifecycle status.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
@@ -1963,7 +1963,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Post',
       annotations: READ,
       description:
-        "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish destinations and attached assets.",
+        "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish posts and attached assets.",
       inputSchema: {
         cardId: z.string().describe('The card id from list_cards.'),
       },
@@ -2093,7 +2093,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Delete Space',
       annotations: WRITE,
       description:
-        'Delete a space. The server REFUSES a space that still holds cards and names the count, because the delete cascades to every card in it along with their covers, captions, destinations and schedules. Archive the space instead if you want it out of the way. Requires the planner:write scope.',
+        'Delete a space. The server REFUSES a space that still holds cards and names the count, because the delete cascades to every card in it along with their covers, captions, posts and schedules. Archive the space instead if you want it out of the way. Requires the planner:write scope.',
       inputSchema: { spaceId: z.string().describe('The space id to delete.') },
     },
     async (args, extra) => {
@@ -2176,7 +2176,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Post',
       annotations: WRITE,
       description:
-        "Update a post: its fields (title, description, script, notes, status, platform, cover, stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
+        "Update a post: its fields (title, description, script, notes, status, platform, cover, stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
         title: z.string().optional(),
@@ -2211,10 +2211,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .nullable()
           .optional()
           .describe('ISO time to publish. Sets the post AND every destination. null clears the schedule.'),
-        destinations: z
+        posts: z
           .array(postDestinationSchema)
           .optional()
-          .describe("The post's destinations, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
+          .describe("The post's posts, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
         assets: z
           .array(postAssetSchema)
           .optional()
@@ -2224,12 +2224,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { cardId, cardIds, destinations, assets, ...input } = args
+        const { cardId, cardIds, posts, assets, ...input } = args
         // The two declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than duplicating the shape in zod.
         const patch = {
           ...input,
-          ...(destinations !== undefined ? { destinations: destinations as PostInput[] } : {}),
+          ...(posts !== undefined ? { posts: posts as PostInput[] } : {}),
           ...(assets !== undefined ? { assets: assets as CardAssetInput[] } : {}),
         }
         // `cardIds` widens the path id, matching update_folder's folder_id / folder_ids. One card still
@@ -2340,10 +2340,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Publish Post',
       annotations: PUBLISH,
       description:
-        "Publish a post NOW to its destinations (a single platform when `platform` is given, otherwise all). Each destination must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns per-destination results.",
+        "Publish a post NOW to its posts (a single platform when `platform` is given, otherwise all). Each destination must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns per-destination results.",
       inputSchema: {
         cardId: z.string().describe('The card id to publish.'),
-        platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all destinations.'),
+        platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all posts.'),
       },
     },
     async (args, extra) => {

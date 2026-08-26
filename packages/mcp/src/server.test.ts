@@ -298,7 +298,7 @@ function fakeClient(overrides = {}) {
       notes: null,
       metadata: null,
       assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null, sortOrder: 0 }],
-      destinations: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
+      posts: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
       tags: ['contenthero', 'feature'],
     }),
     createCard: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
@@ -1338,10 +1338,10 @@ test('list_cards surfaces id, status, and platform with pagination context', asy
   assert.ok(!res.isError)
 })
 
-test('get_card returns the post with its destinations and assets', async () => {
+test('get_card returns the post with its posts and assets', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_card', arguments: { cardId: 'p1' } })
-  assert.match(res.content[0].text, /destinations \(1\)/)
+  assert.match(res.content[0].text, /posts \(1\)/)
   assert.match(res.content[0].text, /instagram \(id d1\)/)
   // The destination's platformSettings keys are surfaced (the publish payload).
   assert.match(res.content[0].text, /settings: caption, mediaItems/)
@@ -1467,7 +1467,7 @@ test('list filters forward favorited/archived to the client', async () => {
   assert.equal(voiceOpts.favorited, true)
 })
 
-test('update_card sets destinations declaratively, keyed by platform', async () => {
+test('update_card sets posts declaratively, keyed by platform', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -1481,16 +1481,16 @@ test('update_card sets destinations declaratively, keyed by platform', async () 
     name: 'update_card',
     arguments: {
       cardId: 'p1',
-      destinations: [
+      posts: [
         { platform: 'youtube', format: 'short', connectedAccountId: 'ca9', platformSpecificData: { title: 'My Short' } },
       ],
     },
   })
-  assert.equal(captured.destinations.length, 1)
-  assert.equal(captured.destinations[0].platform, 'youtube')
-  assert.equal(captured.destinations[0].connectedAccountId, 'ca9')
+  assert.equal(captured.posts.length, 1)
+  assert.equal(captured.posts[0].platform, 'youtube')
+  assert.equal(captured.posts[0].connectedAccountId, 'ca9')
   // The free-form publish payload survives the boundary untouched.
-  assert.deepEqual(captured.destinations[0].platformSpecificData, { title: 'My Short' })
+  assert.deepEqual(captured.posts[0].platformSpecificData, { title: 'My Short' })
 })
 
 /**
@@ -1586,7 +1586,7 @@ test('update_card attaches a new asset by output id alongside kept ones', async 
   assert.equal(captured.assets[1].outputId, 'out7-2')
 })
 
-test('update_card schedules the post, which cascades to its destinations', async () => {
+test('update_card schedules the post, which cascades to its posts', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -1604,7 +1604,7 @@ test('update_card schedules the post, which cascades to its destinations', async
   assert.match(res.content[0].text, /Scheduled:/)
 })
 
-test('update_card clears destinations with an empty array', async () => {
+test('update_card clears posts with an empty array', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -1614,10 +1614,10 @@ test('update_card clears destinations with an empty array', async () => {
       },
     }),
   )
-  await mcp.callTool({ name: 'update_card', arguments: { cardId: 'p1', destinations: [] } })
+  await mcp.callTool({ name: 'update_card', arguments: { cardId: 'p1', posts: [] } })
   // [] must reach the server as an empty list, not be dropped as falsy: that is the difference between
   // "detach everything" and "change nothing".
-  assert.deepEqual(captured.destinations, [])
+  assert.deepEqual(captured.posts, [])
 })
 
 test('publish_card reports per-destination results', async () => {

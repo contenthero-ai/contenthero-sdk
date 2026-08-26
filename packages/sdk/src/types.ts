@@ -1230,13 +1230,15 @@ export interface Post {
   platformSettings: Record<string, unknown> | null
 }
 
-/** Full post detail as returned by `getCard`, with its assets and destinations. */
+/** Full card detail as returned by `getCard`, with its assets and posts. */
 export interface CardDetail extends CardSummary {
   script: string | null
   notes: string | null
   metadata: Record<string, unknown> | null
   assets: CardAsset[]
-  destinations: Post[]
+  /** ⚠️ `posts`, NOT `destinations`. The type was ALREADY `Post`; only the field name lagged.
+   *  A card publishes one or more POSTS, each with its own platform-specific settings. */
+  posts: Post[]
   /** Tag names on the post (organizational). */
   tags: string[]
 }
@@ -1283,10 +1285,10 @@ export interface CreateCardInput {
   /** Tag names to set on the post (must already exist; replaces the set). */
   tags?: string[]
   /**
-   * The post's destinations. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
+   * The card's posts. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
    * longer present is detached. `[]` clears them.
    */
-  destinations?: PostInput[]
+  posts?: PostInput[]
   /**
    * The post's assets. DECLARATIVE, and **the array ORDER IS the carousel order**. Keep an existing asset
    * by `id`, add a new one by `assetUrl` / `outputId`; anything absent is removed. `[]` clears them.
@@ -1348,10 +1350,10 @@ export interface UpdateCardInput {
   notes?: string | null
   metadata?: Record<string, unknown> | null
   /**
-   * The post's destinations. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
+   * The card's posts. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
    * longer present is detached. `[]` clears them.
    */
-  destinations?: PostInput[]
+  posts?: PostInput[]
   /**
    * The post's assets. DECLARATIVE, and **the array ORDER IS the carousel order**. Keep an existing asset
    * by `id`, add a new one by `assetUrl` / `outputId`; anything absent is removed. `[]` clears them.
@@ -1360,7 +1362,7 @@ export interface UpdateCardInput {
 }
 
 /** The result of publishing one destination. */
-export interface PublishDestinationResult {
+export interface PublishPostResult {
   success: boolean
   platform: string
   destinationId: string | null
@@ -1371,7 +1373,7 @@ export interface PublishDestinationResult {
 /** The result of `publishCard`: per-destination outcomes plus tallies. */
 export interface PublishCardResult {
   cardId: string
-  results: PublishDestinationResult[]
+  results: PublishPostResult[]
   publishedCount: number
   failedCount: number
 }

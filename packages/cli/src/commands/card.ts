@@ -146,7 +146,7 @@ export function registerCard(program: Command): void {
 
   card
     .command('get')
-    .description('Get one post with its destinations and assets')
+    .description('Get one post with its posts and assets')
     .argument('<id>', 'the post id')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -159,11 +159,11 @@ export function registerCard(program: Command): void {
           ['Platform', post.platform ?? ''],
           ...(post.scheduledAt ? [['Scheduled', post.scheduledAt] as [string, string]] : []),
         ])
-        const dests = post.destinations.length
+        const dests = post.posts.length
           ? '\n\nDestinations:\n' +
             table(
               ['PLATFORM', 'FORMAT', 'ACCOUNT', 'STATUS'],
-              post.destinations.map((d) => [
+              post.posts.map((d) => [
                 d.platform ?? '',
                 d.format ?? '',
                 d.connectedAccountId ?? '',
@@ -220,8 +220,8 @@ export function registerCard(program: Command): void {
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)')
-    .option('--schedule <when>', 'ISO-8601 publish time for the post AND its destinations, or "clear"')
-    .option('--destinations <json>', 'the post\'s destinations as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
+    .option('--schedule <when>', 'ISO-8601 publish time for the post AND its posts, or "clear"')
+    .option('--posts <json>', 'the post\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
     .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
@@ -246,7 +246,7 @@ export function registerCard(program: Command): void {
             : CLEAR.includes(String(opts.schedule).toLowerCase())
               ? null
               : (opts.schedule as string),
-        destinations: opts.destinations as UpdateCardInput['destinations'],
+        posts: opts.posts as UpdateCardInput['posts'],
         assets: opts.assets as UpdateCardInput['assets'],
       })
       /**
@@ -265,9 +265,9 @@ export function registerCard(program: Command): void {
 
   card
     .command('publish')
-    .description('Publish a post NOW to its destinations (requires publish:write; pushes to live socials)')
+    .description('Publish a post NOW to its posts (requires publish:write; pushes to live socials)')
     .argument('<id>', 'the post id')
-    .option('--platform <platform>', 'publish only this platform (default: all destinations)')
+    .option('--platform <platform>', 'publish only this platform (default: all posts)')
     .action(async (id: string, opts: { platform?: string }, command: Command) => {
       assertPlatform(opts.platform)
       const { client, ctx } = makeClient(command)

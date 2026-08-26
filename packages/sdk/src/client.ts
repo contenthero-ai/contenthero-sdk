@@ -842,7 +842,7 @@ export class ContentHero {
     return this.request<CardListResult>('GET', `/api/v1/cards${qs ? `?${qs}` : ''}`)
   }
 
-  /** Get one post with its assets and destinations. Throws NotFoundError if absent. */
+  /** Get one post with its assets and posts. Throws NotFoundError if absent. */
   async getCard(cardId: string): Promise<CardDetail> {
     const data = await this.request<{ post: CardDetail }>(
       'GET',
@@ -980,7 +980,7 @@ export class ContentHero {
   /**
    * Delete a space. The server REFUSES a space that still holds cards, naming
    * the count, because the delete cascades to every card in it along with their
-   * covers, captions, destinations and schedules.
+   * covers, captions, posts and schedules.
    */
   async deleteSpace(spaceId: string): Promise<{ id: string }> {
     return this.request<{ id: string }>(

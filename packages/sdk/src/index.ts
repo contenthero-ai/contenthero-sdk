@@ -101,7 +101,7 @@ export type {
   UpdateCardInput,
   PostInput,
   CardAssetInput,
-  PublishDestinationResult,
+  PublishPostResult,
   PublishCardResult,
   TrackedAccount,
   ContentSummary,

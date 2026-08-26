@@ -811,7 +811,7 @@ export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResu
   return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}${scheduled}`)
 }
 
-/** One post in full, with its destinations and assets. */
+/** One post in full, with its posts and assets. */
 export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
@@ -823,8 +823,8 @@ export function cardResult(p: CardDetail): CallToolResult {
       p.script ? `script: ${p.script}` : null,
       p.notes ? `notes: ${p.notes}` : null,
       p.tags?.length ? `tags: ${p.tags.join(', ')}` : null,
-      `destinations (${p.destinations.length}):`,
-      ...p.destinations.map((d) => {
+      `posts (${p.posts.length}):`,
+      ...p.posts.map((d) => {
         const set = settingsKeys(d.platformSettings)
         return `  - ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}${set ? ` | settings: ${set}` : ''}`
       }),
@@ -946,7 +946,7 @@ export function tagDeletedResult(r: { id: string }): CallToolResult {
 /** The result of publishing a post (per-destination outcomes). */
 export function publishResult(r: PublishCardResult): CallToolResult {
   if (!r.results.length) {
-    return text('Nothing to publish: this post has no destinations. Add one with add_post_destination first.', true)
+    return text('Nothing to publish: this post has no posts. Add one with add_post_destination first.', true)
   }
   const rows = r.results.map((d) =>
     d.success
