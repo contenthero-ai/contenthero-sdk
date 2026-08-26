@@ -310,7 +310,7 @@ test('getProject GETs the encoded /api/v1/projects path and unwraps { project }'
 
 test('getContext GETs /api/v1/context and returns the envelope', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { context: { surface: 'canvas', focusedSlideId: 's1', snapshotUrl: 'https://x/s.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [] } },
+    { status: 200, body: { context: { surface: 'canvas', focusedSlideId: 's1', snapshotUrl: 'https://x/s.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const r = await client.getContext()

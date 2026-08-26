@@ -1370,7 +1370,7 @@ export interface PublishDestinationResult {
 
 /** The result of `publishCard`: per-destination outcomes plus tallies. */
 export interface PublishCardResult {
-  postId: string
+  cardId: string
   results: PublishDestinationResult[]
   publishedCount: number
   failedCount: number
@@ -1786,7 +1786,7 @@ export interface LiveContextParticipant {
   /** The surface they are on: 'canvas' | 'editor' | 'studio' | 'content' | future surfaces. */
   surface: string
   projectId: string | null
-  postId: string | null
+  cardId: string | null
   /** ISO timestamp of their last activity. */
   updatedAt: string
 }

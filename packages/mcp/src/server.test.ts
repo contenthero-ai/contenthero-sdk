@@ -307,8 +307,8 @@ function fakeClient(overrides = {}) {
       { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
       { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
     ],
-    updatePostDestination: async (_postId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
-    publishCard: async (postId) => ({ postId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
+    updatePostDestination: async (_cardId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
+    publishCard: async (cardId) => ({ cardId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
     listAccounts: async (options) => {
       const all = [
         { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
@@ -368,7 +368,7 @@ function fakeClient(overrides = {}) {
       { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],
     getProject: async (projectId, options) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
-    getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
+    getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
     createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'editor'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
@@ -1340,7 +1340,7 @@ test('list_cards surfaces id, status, and platform with pagination context', asy
 
 test('get_card returns the post with its destinations and assets', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_card', arguments: { postId: 'p1' } })
+  const res = await mcp.callTool({ name: 'get_card', arguments: { cardId: 'p1' } })
   assert.match(res.content[0].text, /destinations \(1\)/)
   assert.match(res.content[0].text, /instagram \(id d1\)/)
   // The destination's platformSettings keys are surfaced (the publish payload).
@@ -1480,7 +1480,7 @@ test('update_card sets destinations declaratively, keyed by platform', async () 
   await mcp.callTool({
     name: 'update_card',
     arguments: {
-      postId: 'p1',
+      cardId: 'p1',
       destinations: [
         { platform: 'youtube', format: 'short', connectedAccountId: 'ca9', platformSpecificData: { title: 'My Short' } },
       ],
@@ -1512,7 +1512,7 @@ test('update_card moves ONE card to another space through updateCard', async () 
       updateCards: async () => { bulkCalled = true; return [] },
     }),
   )
-  await mcp.callTool({ name: 'update_card', arguments: { postId: 'p1', spaceId: 'sp2' } })
+  await mcp.callTool({ name: 'update_card', arguments: { cardId: 'p1', spaceId: 'sp2' } })
 
   assert.equal(bulkCalled, false)
   assert.equal(captured.id, 'p1')
@@ -1536,7 +1536,7 @@ test('update_card moves a SET through updateCards, and reports the count', async
   )
   const res = await mcp.callTool({
     name: 'update_card',
-    arguments: { postId: 'p1', cardIds: ['p1', 'p2', 'p3'], spaceId: 'sp2', stage: 'review' },
+    arguments: { cardId: 'p1', cardIds: ['p1', 'p2', 'p3'], spaceId: 'sp2', stage: 'review' },
   })
 
   assert.equal(singleCalled, false)
@@ -1560,7 +1560,7 @@ test('update_card reorders assets by sending the same ids in a new order', async
   )
   await mcp.callTool({
     name: 'update_card',
-    arguments: { postId: 'p1', assets: [{ id: 'as2' }, { id: 'as1' }] },
+    arguments: { cardId: 'p1', assets: [{ id: 'as2' }, { id: 'as1' }] },
   })
   // Reordering used to be its own tool that demanded "ALL of the post's asset ids in the desired order",
   // which is a declarative list with a tool wrapped around it. Position in the array IS the order.
@@ -1579,7 +1579,7 @@ test('update_card attaches a new asset by output id alongside kept ones', async 
   )
   await mcp.callTool({
     name: 'update_card',
-    arguments: { postId: 'p1', assets: [{ id: 'as1' }, { outputId: 'out7-2' }] },
+    arguments: { cardId: 'p1', assets: [{ id: 'as1' }, { outputId: 'out7-2' }] },
   })
   assert.equal(captured.assets[0].id, 'as1')
   // The VARIATION token survives intact: "-2" is which image of the batch.
@@ -1598,7 +1598,7 @@ test('update_card schedules the post, which cascades to its destinations', async
   )
   const res = await mcp.callTool({
     name: 'update_card',
-    arguments: { postId: 'p1', scheduledAt: '2026-07-01T00:00:00Z' },
+    arguments: { cardId: 'p1', scheduledAt: '2026-07-01T00:00:00Z' },
   })
   assert.equal(captured.scheduledAt, '2026-07-01T00:00:00Z')
   assert.match(res.content[0].text, /Scheduled:/)
@@ -1614,7 +1614,7 @@ test('update_card clears destinations with an empty array', async () => {
       },
     }),
   )
-  await mcp.callTool({ name: 'update_card', arguments: { postId: 'p1', destinations: [] } })
+  await mcp.callTool({ name: 'update_card', arguments: { cardId: 'p1', destinations: [] } })
   // [] must reach the server as an empty list, not be dropped as falsy: that is the difference between
   // "detach everything" and "change nothing".
   assert.deepEqual(captured.destinations, [])
@@ -1622,7 +1622,7 @@ test('update_card clears destinations with an empty array', async () => {
 
 test('publish_card reports per-destination results', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'publish_card', arguments: { postId: 'p1' } })
+  const res = await mcp.callTool({ name: 'publish_card', arguments: { cardId: 'p1' } })
   assert.match(res.content[0].text, /Published 1\/1 destination/)
   assert.match(res.content[0].text, /instagram: published/)
   assert.ok(!res.isError)
@@ -1631,10 +1631,10 @@ test('publish_card reports per-destination results', async () => {
 test('publish_card flags a total failure as an error result', async () => {
   const mcp = await connect(
     fakeClient({
-      publishCard: async (postId) => ({ postId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
+      publishCard: async (cardId) => ({ cardId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
     }),
   )
-  const res = await mcp.callTool({ name: 'publish_card', arguments: { postId: 'p1' } })
+  const res = await mcp.callTool({ name: 'publish_card', arguments: { cardId: 'p1' } })
   assert.match(res.content[0].text, /token expired/)
   assert.ok(res.isError, 'a 0-published publish should be an error result')
 })
@@ -2012,8 +2012,8 @@ test('get_context render returns the composed-output as an inline image block', 
     fakeClient({
       getContext: async () => ({
         context: { surface: 'editor', playheadFrame: 34, rendered },
-        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' },
-        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }],
+        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' },
+        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }],
       }),
     }),
   )
@@ -2041,8 +2041,8 @@ test('get_context filmstrip render returns one image block per frame', async () 
     fakeClient({
       getContext: async () => ({
         context: { surface: 'editor', playheadFrame: 0, rendered },
-        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' },
-        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', postId: null, updatedAt: '2026-07-12T00:00:00Z' }],
+        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' },
+        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }],
       }),
     }),
   )

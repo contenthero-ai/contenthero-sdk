@@ -1965,13 +1965,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish destinations and attached assets.",
       inputSchema: {
-        postId: z.string().describe('The post id from list_cards.'),
+        cardId: z.string().describe('The card id from list_cards.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return cardResult(await client.getCard(args.postId))
+        return cardResult(await client.getCard(args.cardId))
       } catch (err) {
         return errorResult(err)
       }
@@ -2178,7 +2178,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Update a post: its fields (title, description, script, notes, status, platform, cover, stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. destinations and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
       inputSchema: {
-        postId: z.string().describe('The post id.'),
+        cardId: z.string().describe('The card id.'),
         title: z.string().optional(),
         platform: z.enum(POST_PLATFORMS).optional(),
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional(),
@@ -2224,7 +2224,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { postId, cardIds, destinations, assets, ...input } = args
+        const { cardId, cardIds, destinations, assets, ...input } = args
         // The two declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than duplicating the shape in zod.
         const patch = {
@@ -2234,7 +2234,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         }
         // `cardIds` widens the path id, matching update_folder's folder_id / folder_ids. One card still
         // goes through updateCard so the single-card response shape is unchanged for every caller.
-        const targets = cardIds?.length ? cardIds : [postId]
+        const targets = cardIds?.length ? cardIds : [cardId]
         if (targets.length > 1) {
           const cards = await client.updateCards(targets, patch)
           return text(`Updated ${cards.length} cards.`)
@@ -2342,14 +2342,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Publish a post NOW to its destinations (a single platform when `platform` is given, otherwise all). Each destination must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns per-destination results.",
       inputSchema: {
-        postId: z.string().describe('The post id to publish.'),
+        cardId: z.string().describe('The card id to publish.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all destinations.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return publishResult(await client.publishCard(args.postId, { platform: args.platform }))
+        return publishResult(await client.publishCard(args.cardId, { platform: args.platform }))
       } catch (err) {
         return errorResult(err)
       }

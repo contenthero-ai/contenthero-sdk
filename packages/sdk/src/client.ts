@@ -843,10 +843,10 @@ export class ContentHero {
   }
 
   /** Get one post with its assets and destinations. Throws NotFoundError if absent. */
-  async getCard(postId: string): Promise<CardDetail> {
+  async getCard(cardId: string): Promise<CardDetail> {
     const data = await this.request<{ post: CardDetail }>(
       'GET',
-      `/api/v1/cards/${encodeURIComponent(postId)}`,
+      `/api/v1/cards/${encodeURIComponent(cardId)}`,
     )
     return data.post
   }
@@ -858,10 +858,10 @@ export class ContentHero {
   }
 
   /** Update a post's fields. `stage` accepts a stage id, slug, or name. */
-  async updateCard(postId: string, input: UpdateCardInput): Promise<CardSummary> {
+  async updateCard(cardId: string, input: UpdateCardInput): Promise<CardSummary> {
     const data = await this.request<{ post: CardSummary }>(
       'PATCH',
-      `/api/v1/cards/${encodeURIComponent(postId)}`,
+      `/api/v1/cards/${encodeURIComponent(cardId)}`,
       input,
     )
     return data.post
@@ -1027,10 +1027,10 @@ export class ContentHero {
    * otherwise every destination. Requires a key with the `publish:write` scope.
    * Each destination publishes independently; check per-destination results.
    */
-  async publishCard(postId: string, options: { platform?: PostPlatform } = {}): Promise<PublishCardResult> {
+  async publishCard(cardId: string, options: { platform?: PostPlatform } = {}): Promise<PublishCardResult> {
     return this.request<PublishCardResult>(
       'POST',
-      `/api/v1/cards/${encodeURIComponent(postId)}/publish`,
+      `/api/v1/cards/${encodeURIComponent(cardId)}/publish`,
       options.platform ? { platform: options.platform } : {},
     )
   }
