@@ -1,5 +1,5 @@
 /**
- * `contenthero platform` - the publish-destination discovery catalog.
+ * `contenthero platform` - the catalog of what a post can target.
  *   platform list                          platforms you can publish to + formats
  *   platform get <platform> [--format f]   one platform's full post shape
  *

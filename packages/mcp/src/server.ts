@@ -79,7 +79,7 @@ import {
   connectedAccountListResult,
   connectedAccountResult,
   costResult,
-  destinationResult,
+  postResult,
   accountDetailResult,
   inspirationContentResult,
   mediaListResult,
@@ -92,7 +92,7 @@ import {
   uploadedMediaResult,
   assetOrderResult,
   assetRemovedResult,
-  destinationRemovedResult,
+  postRemovedResult,
   tagListResult,
   tagResult,
   tagDeletedResult,
@@ -135,7 +135,7 @@ import {
   voiceResult,
 } from './format.js'
 
-/** Platforms a post or destination may target. */
+/** Platforms a card or one of its posts may target. */
 const POST_PLATFORMS = [
   'youtube',
   'instagram',
@@ -368,11 +368,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     }),
   ])
 
-  const postDestinationSchema = z.object({
-    platform: z.enum(POST_PLATFORMS).describe('The platform. This is the KEY: one destination per platform.'),
+  const cardPostSchema = z.object({
+    platform: z.enum(POST_PLATFORMS).describe('The platform. This is the KEY: one post per platform.'),
     format: z.string().optional(),
     connectedAccountId: z.string().nullable().optional(),
-    scheduledAt: z.string().nullable().optional().describe("Per-destination override of the post's schedule."),
+    scheduledAt: z.string().nullable().optional().describe("Per-post override of the card's schedule."),
     platformSpecificData: z.record(z.string(), z.unknown()).optional().describe('The publish payload for this platform.'),
     status: z.string().optional(),
   })
@@ -1729,7 +1729,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Platform',
       annotations: READ,
       description:
-        "Get one platform's full publishing shape: the fields, options (enums), and character limits a post requires per format (post, reel, short, story, thread). Ground a destination's platformSettings against this instead of guessing the fields. Optionally pass a format to narrow the result.",
+        "Get one platform's full publishing shape: the fields, options (enums), and character limits a post requires per format (post, reel, short, story, thread). Ground a post's platformSettings against this instead of guessing the fields. Optionally pass a format to narrow the result.",
       inputSchema: {
         platform: z
           .enum(POST_PLATFORMS)
@@ -1924,7 +1924,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'list_cards',
     {
-      title: 'List Posts',
+      title: 'List Cards',
       annotations: READ,
       description:
         "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (posts + assets).",
@@ -1960,7 +1960,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'get_card',
     {
-      title: 'Get Post',
+      title: 'Get Card',
       annotations: READ,
       description:
         "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish posts and attached assets.",
@@ -2130,10 +2130,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'create_card',
     {
-      title: 'Create Post',
+      title: 'Create Card',
       annotations: WRITE,
       description:
-        "Create a content-pipeline post. The post is the container; attach platforms with add_post_destination and media with add_post_asset, then schedule_post or publish_card. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the planner:write scope.",
+        "Create a card, the container in the content pipeline. A card holds the work (title, script, notes, cover) and the posts that publish it. Attach posts and media by passing `posts` and `assets` to update_card, then publish with publish_post. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the planner:write scope.",
       inputSchema: {
         title: z.string().describe('Post title (required).'),
         platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
@@ -2173,10 +2173,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'update_card',
     {
-      title: 'Update Post',
+      title: 'Update Card',
       annotations: WRITE,
       description:
-        "Update a post: its fields (title, description, script, notes, status, platform, cover, stage), its DESTINATIONS (which platforms it publishes to), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Destinations key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the post AND every destination (pass null to clear); give a destination its own scheduledAt to override it for that platform. To publish NOW, use publish_card. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
+        "Update a card: its fields (title, description, script, notes, status, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
         title: z.string().optional(),
@@ -2210,11 +2210,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .nullable()
           .optional()
-          .describe('ISO time to publish. Sets the post AND every destination. null clears the schedule.'),
+          .describe('ISO time to publish. Sets the card AND every post. null clears the schedule.'),
         posts: z
-          .array(postDestinationSchema)
+          .array(cardPostSchema)
           .optional()
-          .describe("The post's posts, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
+          .describe("The card's posts, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
         assets: z
           .array(postAssetSchema)
           .optional()
@@ -2333,14 +2333,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- publish_card ---------------------------------------------------------
+  // -- publish_post ---------------------------------------------------------
   server.registerTool(
-    'publish_card',
+    'publish_post',
     {
       title: 'Publish Post',
       annotations: PUBLISH,
       description:
-        "Publish a post NOW to its posts (a single platform when `platform` is given, otherwise all). Each destination must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns per-destination results.",
+        "Publish a card's posts NOW: every post on the card, or only the named platform's post when `platform` is given. Each post must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns one result per post.",
       inputSchema: {
         cardId: z.string().describe('The card id to publish.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all posts.'),
@@ -2349,7 +2349,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return publishResult(await client.publishCard(args.cardId, { platform: args.platform }))
+        return publishResult(await client.publishPost(args.cardId, { platform: args.platform }))
       } catch (err) {
         return errorResult(err)
       }
@@ -2495,7 +2495,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Connected Accounts',
       annotations: READ,
       description:
-        "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on add_post_destination, then publish_card. Read-only: connecting an account is done in the ContentHero app.",
+        "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on a post in update_card, then publish_post. Read-only: connecting an account is done in the ContentHero app.",
     },
     async (extra) => {
       try {

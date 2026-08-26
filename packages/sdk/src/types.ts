@@ -1128,7 +1128,7 @@ export interface ModelInfo {
 // Content pipeline (posts)
 // ---------------------------------------------------------------------------
 
-/** Platforms a post or destination may target. */
+/** Platforms a card or one of its posts may target. */
 export type PostPlatform =
   | 'youtube'
   | 'instagram'
@@ -1199,7 +1199,7 @@ export interface CardSummary {
   publishUrl: string | null
   createdAt: string | null
   updatedAt: string | null
-  /** Distinct destination platforms attached to this post. */
+  /** Distinct platforms this card has posts for. */
   platforms: string[]
 }
 
@@ -1213,7 +1213,7 @@ export interface CardAsset {
   sortOrder: number
 }
 
-/** A publish destination on a post (one platform + connected account). */
+/** One post: a card's publication on one platform, bound to a connected account. */
 export interface Post {
   id: string
   connectedAccountId: string | null
@@ -1224,7 +1224,7 @@ export interface Post {
   publishedAt: string | null
   /**
    * Per-platform/per-format publish config: the publish payload for this
-   * destination (mediaItems, caption, thumbnails, privacy, etc.). The shape per
+   * post (mediaItems, caption, thumbnails, privacy, etc.). The shape per
    * platform/format comes from getPlatform. Null when not yet set.
    */
   platformSettings: Record<string, unknown> | null
@@ -1297,12 +1297,12 @@ export interface CreateCardInput {
 }
 
 /** Fields to update a post. `stage` accepts a stage id, slug, or name. */
-/** One publish destination, keyed by platform. */
+/** One post, keyed by platform. */
 export interface PostInput {
   platform: PostPlatform
   format?: string
   connectedAccountId?: string | null
-  /** Per-destination override. Omitted, the post's own `scheduledAt` applies. */
+  /** Per-post override. Omitted, the card's own `scheduledAt` applies. */
   scheduledAt?: string | null
   platformSpecificData?: Record<string, unknown> | null
   status?: string
@@ -1361,17 +1361,18 @@ export interface UpdateCardInput {
   assets?: CardAssetInput[]
 }
 
-/** The result of publishing one destination. */
+/** One post's publish outcome. */
 export interface PublishPostResult {
   success: boolean
   platform: string
-  destinationId: string | null
+  /** ⚠️ Renamed from `destinationId` (2026-08-26). A publish destination IS a post now. */
+  postId: string | null
   url?: string
   error?: string
 }
 
-/** The result of `publishCard`: per-destination outcomes plus tallies. */
-export interface PublishCardResult {
+/** The result of `publishPost`: one outcome per post, plus tallies. */
+export interface PublishResult {
   cardId: string
   results: PublishPostResult[]
   publishedCount: number
@@ -1560,7 +1561,7 @@ export interface ConnectedAccount {
 }
 
 // ---------------------------------------------------------------------------
-// Publish platforms (destination discovery)
+// Publish platforms (what a post can target)
 // ---------------------------------------------------------------------------
 
 /** One selectable format for a platform (e.g. reel, short, story, thread). */
@@ -1585,7 +1586,7 @@ export interface PlatformSummary {
 /**
  * One platform's full publishing shape (the getPlatform result): the fields,
  * options, and limits a post requires per format, which a client fills as a
- * destination's platformSettings.
+ * post's platformSettings.
  */
 export interface PlatformSchema {
   platform: string

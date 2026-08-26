@@ -23,7 +23,7 @@ import type {
   PostPlatform,
   CardStatus,
   CardSummary,
-  PublishCardResult,
+  PublishResult,
   UpdateCardInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -67,7 +67,7 @@ function summaryHuman(p: CardSummary, action?: string): string {
   ])
 }
 
-function destinationHuman(d: Post): string {
+function postHuman(d: Post): string {
   const settingsKeys = d.platformSettings
     ? Object.keys(d.platformSettings).filter((k) => {
         const v = (d.platformSettings as Record<string, unknown>)[k]
@@ -78,7 +78,7 @@ function destinationHuman(d: Post): string {
       })
     : []
   return keyValues([
-    ['Destination', d.id],
+    ['Post', d.id],
     ['Platform', d.platform ?? ''],
     ['Format', d.format ?? ''],
     ['Connected account', d.connectedAccountId ?? '(none)'],
@@ -146,7 +146,7 @@ export function registerCard(program: Command): void {
 
   card
     .command('get')
-    .description('Get one post with its posts and assets')
+    .description('Get one card with its posts and assets')
     .argument('<id>', 'the post id')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -160,7 +160,7 @@ export function registerCard(program: Command): void {
           ...(post.scheduledAt ? [['Scheduled', post.scheduledAt] as [string, string]] : []),
         ])
         const dests = post.posts.length
-          ? '\n\nDestinations:\n' +
+          ? '\n\nPosts:\n' +
             table(
               ['PLATFORM', 'FORMAT', 'ACCOUNT', 'STATUS'],
               post.posts.map((d) => [
@@ -220,8 +220,8 @@ export function registerCard(program: Command): void {
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)')
-    .option('--schedule <when>', 'ISO-8601 publish time for the post AND its posts, or "clear"')
-    .option('--posts <json>', 'the post\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
+    .option('--schedule <when>', 'ISO-8601 publish time for the card AND its posts, or "clear"')
+    .option('--posts <json>', 'the card\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
     .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
@@ -265,14 +265,14 @@ export function registerCard(program: Command): void {
 
   card
     .command('publish')
-    .description('Publish a post NOW to its posts (requires publish:write; pushes to live socials)')
+    .description('Publish a card\'s posts NOW (requires publish:write; pushes to live socials)')
     .argument('<id>', 'the post id')
-    .option('--platform <platform>', 'publish only this platform (default: all posts)')
+    .option('--platform <platform>', 'publish only this platform (default: every post on the card)')
     .action(async (id: string, opts: { platform?: string }, command: Command) => {
       assertPlatform(opts.platform)
       const { client, ctx } = makeClient(command)
-      const result = await client.publishCard(id, { platform: opts.platform as PostPlatform | undefined })
-      emit(result, ctx, (r: PublishCardResult) => {
+      const result = await client.publishPost(id, { platform: opts.platform as PostPlatform | undefined })
+      emit(result, ctx, (r: PublishResult) => {
         const t = table(
           ['PLATFORM', 'OK', 'URL / ERROR'],
           r.results.map((d) => [d.platform, d.success ? 'yes' : 'no', d.url ?? d.error ?? '']),

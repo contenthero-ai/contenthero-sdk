@@ -80,7 +80,7 @@ test('card exposes its verbs, with posts and assets folded into update', () => {
   for (const n of ['destination', 'asset', 'schedule']) {
     assert.ok(!subs.includes(n), `card should no longer have a ${n} subcommand`)
   }
-  // publish_card KEEPS its own command: irreversible external side effects do not belong in a patch.
+  // publish_post KEEPS its own command: irreversible external side effects do not belong in a patch.
   assert.ok(subs.includes('publish'))
 })
 

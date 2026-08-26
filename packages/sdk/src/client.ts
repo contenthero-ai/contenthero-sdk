@@ -101,7 +101,7 @@ import type {
   PostPlatform,
   CardSummary,
   Tag,
-  PublishCardResult,
+  PublishResult,
   TranscribeRequest,
   Transcription,
   UpdateCardInput,
@@ -758,14 +758,14 @@ export class ContentHero {
   }
 
   // -------------------------------------------------------------------------
-  // Publish platforms (destination discovery)
+  // Publish platforms (what a post can target)
   // -------------------------------------------------------------------------
 
   /**
    * List the platforms this account can publish to (the discovery catalog):
    * their formats, and whether a connected account exists for each. The source
    * of truth for valid platforms/formats; call getPlatform for one platform's
-   * full request shape before configuring a destination.
+   * full request shape before configuring a post.
    */
   async listPlatforms(): Promise<PlatformSummary[]> {
     const data = await this.request<{ platforms: PlatformSummary[] }>('GET', '/api/v1/platforms')
@@ -775,7 +775,7 @@ export class ContentHero {
   /**
    * Get one platform's full publishing shape: the fields, options (enums), and
    * character limits a post requires per format. Use this to construct a
-   * destination's platformSettings against the platform's real fields instead of
+   * post's platformSettings against the platform's real fields instead of
    * guessing. Optionally narrow to one format. Throws NotFoundError for an
    * unknown platform.
    */
@@ -875,7 +875,7 @@ export class ContentHero {
    * `tags` are the bulk-safe ones, because each is genuinely something a person means for a selection.
    *
    * ⭐ THIS EXISTS FOR THE MOVE. Sending twelve cards to another space per-card would resolve the same
-   * target space and the same stage twelve times and interleave twelve advisory locks on the destination
+   * target space and the same stage twelve times and interleave twelve advisory locks on the target
    * column. Same shape as `updateFolders`: the path names one card and `cardIds` in the body widens it.
    */
   async updateCards(cardIds: string[], input: UpdateCardInput): Promise<CardSummary[]> {
@@ -1023,12 +1023,13 @@ export class ContentHero {
 
 
   /**
-   * Publish a post NOW. Publishes a single platform when `platform` is given,
-   * otherwise every destination. Requires a key with the `publish:write` scope.
-   * Each destination publishes independently; check per-destination results.
+   * Publish a card's posts NOW: every post on the card, or only the named
+   * platform's post when `platform` is given. Requires a key with the
+   * `publish:write` scope. Each post publishes independently; check the
+   * per-post results.
    */
-  async publishCard(cardId: string, options: { platform?: PostPlatform } = {}): Promise<PublishCardResult> {
-    return this.request<PublishCardResult>(
+  async publishPost(cardId: string, options: { platform?: PostPlatform } = {}): Promise<PublishResult> {
+    return this.request<PublishResult>(
       'POST',
       `/api/v1/cards/${encodeURIComponent(cardId)}/publish`,
       options.platform ? { platform: options.platform } : {},

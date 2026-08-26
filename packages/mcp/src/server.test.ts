@@ -308,7 +308,7 @@ function fakeClient(overrides = {}) {
       { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
     ],
     updatePostDestination: async (_cardId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
-    publishCard: async (cardId) => ({ cardId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
+    publishPost: async (cardId) => ({ cardId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
     listAccounts: async (options) => {
       const all = [
         { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
@@ -486,7 +486,7 @@ test('advertises exactly the v1 tools', async () => {
     'list_stages',
     'list_tags',
     'list_voices',
-    'publish_card',
+    'publish_post',
     'remove_brand_knowledge',
     'search_brand_knowledge',
     'search_media',
@@ -1620,21 +1620,21 @@ test('update_card clears posts with an empty array', async () => {
   assert.deepEqual(captured.posts, [])
 })
 
-test('publish_card reports per-destination results', async () => {
+test('publish_post reports one result per post', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'publish_card', arguments: { cardId: 'p1' } })
-  assert.match(res.content[0].text, /Published 1\/1 destination/)
+  const res = await mcp.callTool({ name: 'publish_post', arguments: { cardId: 'p1' } })
+  assert.match(res.content[0].text, /Published 1\/1 post/)
   assert.match(res.content[0].text, /instagram: published/)
   assert.ok(!res.isError)
 })
 
-test('publish_card flags a total failure as an error result', async () => {
+test('publish_post flags a total failure as an error result', async () => {
   const mcp = await connect(
     fakeClient({
-      publishCard: async (cardId) => ({ cardId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
+      publishPost: async (cardId) => ({ cardId, results: [{ success: false, platform: 'instagram', destinationId: 'd1', error: 'token expired' }], publishedCount: 0, failedCount: 1 }),
     }),
   )
-  const res = await mcp.callTool({ name: 'publish_card', arguments: { cardId: 'p1' } })
+  const res = await mcp.callTool({ name: 'publish_post', arguments: { cardId: 'p1' } })
   assert.match(res.content[0].text, /token expired/)
   assert.ok(res.isError, 'a 0-published publish should be an error result')
 })
@@ -1969,7 +1969,7 @@ test('get_connected_account lists enabled capabilities', async () => {
   // capabilities with a truthy value are surfaced; analytics:false is omitted.
   assert.match(res.content[0].text, /capabilities: publish/)
   assert.ok(!/analytics/.test(res.content[0].text), 'falsy capabilities are not listed')
-  assert.match(res.content[0].text, /connectedAccountId on add_post_destination/)
+  assert.match(res.content[0].text, /connectedAccountId on a post in update_card/)
 })
 
 test('list_projects lists projects with kind + title', async () => {

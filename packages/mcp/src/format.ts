@@ -44,7 +44,7 @@ import type {
   CardListResult,
   CardSummary,
   Tag,
-  PublishCardResult,
+  PublishResult,
   TrackedAccount,
   ContentSummary,
   ContentDetail,
@@ -753,7 +753,7 @@ export function platformResult(p: PlatformSchema): CallToolResult {
       `formats: ${p.formats.join(', ')}`,
       `posting modes: ${p.postingModes.join(', ')}`,
       '',
-      'Fields by format (set these as platformSettings on add_post_destination / update_post_destination):',
+      'Fields by format (set these as platformSettings on a post in update_card):',
       ...fmtBlocks,
       enumLines.length ? '' : null,
       enumLines.length ? 'Allowed option values:' : null,
@@ -762,7 +762,7 @@ export function platformResult(p: PlatformSchema): CallToolResult {
       limitLines.length ? 'Character limits:' : null,
       ...limitLines,
       '',
-      'Fill platformSettings to this shape, then attach with add_post_destination (or update_post_destination).',
+      'Fill platformSettings to this shape, then attach it as a post with update_card.',
     ]),
   )
 }
@@ -811,7 +811,7 @@ export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResu
   return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}${scheduled}`)
 }
 
-/** One post in full, with its posts and assets. */
+/** One card in full, with its posts and assets. */
 export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
@@ -878,7 +878,7 @@ export function stageListResult(stages: Stage[]): CallToolResult {
   return text([`${stages.length} stage(s) (in order):`, ...rows].join('\n'))
 }
 
-/** The non-empty keys of a destination's platformSettings, for a compact summary. */
+/** The non-empty keys of a post's platformSettings, for a compact summary. */
 function settingsKeys(settings: Record<string, unknown> | null | undefined): string | null {
   if (!settings) return null
   const keys = Object.keys(settings).filter((k) => {
@@ -891,11 +891,11 @@ function settingsKeys(settings: Record<string, unknown> | null | undefined): str
   return keys.length ? keys.join(', ') : null
 }
 
-/** A created or updated destination. */
-export function destinationResult(d: Post): CallToolResult {
+/** A created or updated post. */
+export function postResult(d: Post): CallToolResult {
   const set = settingsKeys(d.platformSettings)
   return text(
-    `Destination: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}${set ? ` | settings: ${set}` : ' | no settings (set platformSettings to make it publishable)'}.`,
+    `Post: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}${set ? ` | settings: ${set}` : ' | no settings (set platformSettings to make it publishable)'}.`,
   )
 }
 
@@ -920,9 +920,9 @@ export function assetRemovedResult(r: { id: string }): CallToolResult {
   return text(`Asset removed (id ${r.id}).`)
 }
 
-/** Confirmation of a detached destination. */
-export function destinationRemovedResult(r: { id: string }): CallToolResult {
-  return text(`Destination removed (id ${r.id}).`)
+/** Confirmation of a detached post. */
+export function postRemovedResult(r: { id: string }): CallToolResult {
+  return text(`Post removed (id ${r.id}).`)
 }
 
 /** The account's tags. */
@@ -943,17 +943,17 @@ export function tagDeletedResult(r: { id: string }): CallToolResult {
   return text(`Tag deleted (id ${r.id}). It was removed from all posts.`)
 }
 
-/** The result of publishing a post (per-destination outcomes). */
-export function publishResult(r: PublishCardResult): CallToolResult {
+/** The result of publishing a card's posts (one outcome per post). */
+export function publishResult(r: PublishResult): CallToolResult {
   if (!r.results.length) {
-    return text('Nothing to publish: this post has no posts. Add one with add_post_destination first.', true)
+    return text('Nothing to publish: this card has no posts. Add one with update_card first.', true)
   }
   const rows = r.results.map((d) =>
     d.success
       ? `- ${d.platform}: published${d.url ? ` | ${d.url}` : ''}`
       : `- ${d.platform}: FAILED | ${d.error ?? 'unknown error'}`,
   )
-  const header = `Published ${r.publishedCount}/${r.results.length} destination(s)${r.failedCount ? `, ${r.failedCount} failed` : ''}:`
+  const header = `Published ${r.publishedCount}/${r.results.length} post(s)${r.failedCount ? `, ${r.failedCount} failed` : ''}:`
   return text([header, ...rows].join('\n'), r.publishedCount === 0)
 }
 
@@ -1089,7 +1089,7 @@ export function connectedAccountResult(a: ConnectedAccount): CallToolResult {
       a.accountUrl ? `url: ${a.accountUrl}` : null,
       caps.length ? `capabilities: ${caps.join(', ')}` : null,
       a.lastValidatedAt ? `last validated: ${a.lastValidatedAt}` : null,
-      `Use this id as connectedAccountId on add_post_destination to publish here.`,
+      `Use this id as connectedAccountId on a post in update_card to publish here.`,
     ]),
   )
 }

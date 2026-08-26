@@ -102,7 +102,7 @@ export type {
   PostInput,
   CardAssetInput,
   PublishPostResult,
-  PublishCardResult,
+  PublishResult,
   TrackedAccount,
   ContentSummary,
   ContentDetail,
