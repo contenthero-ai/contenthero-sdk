@@ -785,7 +785,7 @@ function promptReferenceLines(pr: ModelInfo['promptReferences']): Array<string |
 // -- posts (content pipeline) -------------------------------------------------
 
 /** One line summarizing a post. */
-function postLine(p: CardSummary): string {
+function cardLine(p: CardSummary): string {
   const where = p.platforms.length ? p.platforms.join('+') : (p.platform ?? 'general')
   const when = p.publishedAt
     ? ` | published ${p.publishedAt}`
@@ -797,9 +797,9 @@ function postLine(p: CardSummary): string {
 
 /** List of posts with pagination context. */
 export function cardListResult(result: CardListResult): CallToolResult {
-  if (!result.posts.length) return text('No posts found.')
-  const more = result.hasMore ? ` (showing ${result.posts.length} of ${result.total}; raise limit/offset for more)` : ''
-  return text([`${result.total} post(s)${more}:`, ...result.posts.map(postLine)].join('\n'))
+  if (!result.cards.length) return text('No cards found.')
+  const more = result.hasMore ? ` (showing ${result.cards.length} of ${result.total}; raise limit/offset for more)` : ''
+  return text([`${result.total} card(s)${more}:`, ...result.cards.map(cardLine)].join('\n'))
 }
 
 /** A single post summary line (create / update / schedule / archive results). */

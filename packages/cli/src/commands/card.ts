@@ -138,9 +138,9 @@ export function registerCard(program: Command): void {
       emit(result, ctx, (r: CardListResult) => {
         const t = table(
           ['ID', 'STATUS', 'PLATFORM', 'TITLE'],
-          r.posts.map((p) => [p.id.slice(0, 8), p.status, p.platform ?? '', p.title]),
+          r.cards.map((p) => [p.id.slice(0, 8), p.status, p.platform ?? '', p.title]),
         )
-        return `${t}\n\n${r.posts.length} of ${r.total}${r.hasMore ? ' (more available)' : ''}`
+        return `${t}\n\n${r.cards.length} of ${r.total}${r.hasMore ? ' (more available)' : ''}`
       })
     })
 

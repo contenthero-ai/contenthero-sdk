@@ -1249,9 +1249,11 @@ export interface Tag {
   isSystem: boolean
 }
 
-/** Result of `listCards`: a page of posts plus pagination metadata. */
+/** Result of `listCards`: a page of cards plus pagination metadata. */
 export interface CardListResult {
-  posts: CardSummary[]
+  /** ⚠️ `cards`, NOT `posts`. This has always held CARDS. `Post` now means a publish DESTINATION,
+   *  and the stale name is what let an app-side realtime binding subscribe to the wrong table. */
+  cards: CardSummary[]
   total: number
   hasMore: boolean
 }
