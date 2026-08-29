@@ -147,15 +147,37 @@ export function costResult(est: CostEstimate): CallToolResult {
   return text(`Estimated cost: ${credits} for ${what}. No generation ran and nothing was charged.`)
 }
 
-/** One generation's status. Used directly for a single id, and per-row by the batch form below. */
+/**
+ * One generation's status. Used directly for a single id, and per-row by the batch form below.
+ *
+ * ⭐ A STILL-RUNNING GENERATION REPORTS THE URLS IT ALREADY HAS. `outputUrls` fills in slot by slot,
+ * so a 4-image batch can have three finished assets while `status` is still 'processing'. Reporting
+ * only "still processing" threw those away and made every caller block on the SLOWEST slot, even
+ * though the finished ones are already visible in the app's own grid. The caller can start reviewing
+ * immediately and re-poll only for the remainder.
+ *
+ * ⚠️ THE PARTIAL LIST IS NOT A FINAL ONE, so it never uses `completedResult`'s "Done." header. A
+ * caller that stopped at a partial result believing it was complete would silently lose images,
+ * which is the failure this is meant to prevent, not cause.
+ */
 export function generationStatusResult(gen: Generation): CallToolResult {
   if (gen.status === 'completed') return completedResult(gen)
   if (gen.status === 'failed') {
     return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
   }
   const secs = pollAfterSecondsFor(gen.contentType)
+  const ready = gen.outputUrls ?? []
+  const poll = `Call get_generation_status again in ~${secs}s [poll_after_seconds: ${secs}]`
+  if (ready.length === 0) {
+    return text(`Generation ${gen.outputId} is still ${gen.status}. ${poll}.`)
+  }
+  const noun = ready.length === 1 ? gen.contentType : `${gen.contentType}s`
   return text(
-    `Generation ${gen.outputId} is still ${gen.status}. Call get_generation_status again in ~${secs}s [poll_after_seconds: ${secs}].`,
+    [
+      `Partial. ${ready.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
+      ...ready.map((u, i) => `${i + 1}. ${u}`),
+      `NOT the full set. ${poll} for the rest.`,
+    ].join('\n'),
   )
 }
 
@@ -171,6 +193,13 @@ export function generationBatchResult(gens: Generation[]): CallToolResult {
       return `- ${gen.outputId}: failed | ${gen.error ?? 'unknown error'}`
     }
     const secs = pollAfterSecondsFor(gen.contentType)
+    // Same rule as the single form: surface the slots that already landed rather than making the
+    // caller block on the slowest one. The count says the set is incomplete, so a row can never be
+    // mistaken for a finished generation.
+    const ready = gen.outputUrls ?? []
+    if (ready.length > 0) {
+      return `- ${gen.outputId}: ${gen.status}, ${ready.length} ready so far | ${ready.join(', ')} [poll_after_seconds: ${secs}]`
+    }
     return `- ${gen.outputId}: ${gen.status} [poll_after_seconds: ${secs}]`
   })
   return text([`${gens.length} generation(s):`, ...rows].join('\n'))

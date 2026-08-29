@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ContentHero, type FetchLike } from '@contenthero/sdk'
-import { compact, references, runGeneration } from './generation.js'
+import { compact, references, runGeneration, generationHuman } from './generation.js'
 import { EXIT } from './errors.js'
 import type { Context } from './context.js'
 
@@ -206,4 +206,45 @@ test('a genuinely FAILED generation still propagates as an error', async () => {
       runGeneration(client, jsonCtx, { modelId: 'm', contentType: 'image' }, { cost: false, wait: true, timeoutSec: 30 }),
     ),
   )
+})
+
+/**
+ * Parity with the MCP formatter (packages/mcp/src/format.ts): a STILL-RUNNING generation must
+ * report the slots that already landed. `outputUrls` fills in slot by slot, so a 4-image batch can
+ * have finished assets while `status` is still 'processing'.
+ *
+ * ⚠️ THE CLI ALREADY BEHAVED CORRECTLY AND NOTHING PINNED IT. Its only processing-state test used
+ * `outputUrls: []`, so the partial case was never exercised; the MCP's copy of this logic dropped
+ * those urls and no test noticed there either. One vocabulary, two renderers, so both get a test.
+ */
+test('generationHuman lists urls that have already landed while still processing', () => {
+  const out = generationHuman({
+    outputId: 'abc',
+    status: 'processing',
+    contentType: 'image',
+    modelId: 'gpt-image-2',
+    outputUrls: ['https://cdn/a.png'],
+    error: null,
+    createdAt: 'now',
+    completedAt: null,
+  })
+  assert.match(out, /a\.png/)
+  assert.match(out, /processing/)
+  // The poll hint must survive: a partial render is not a finished one.
+  assert.match(out, /contenthero generation status abc/)
+})
+
+test('generationHuman on a processing generation with no urls yet shows none', () => {
+  const out = generationHuman({
+    outputId: 'abc',
+    status: 'processing',
+    contentType: 'image',
+    modelId: 'gpt-image-2',
+    outputUrls: [],
+    error: null,
+    createdAt: 'now',
+    completedAt: null,
+  })
+  assert.doesNotMatch(out, /URL 1/)
+  assert.match(out, /contenthero generation status abc/)
 })
