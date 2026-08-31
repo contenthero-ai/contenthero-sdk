@@ -96,10 +96,22 @@ export function pollAfterSecondsFor(contentType: string): number {
   return contentType === 'image' ? 5 : 15
 }
 
+/**
+ * How to call `get_generation_status`, written as the call itself.
+ *
+ * ⚠️ THE ARGUMENT IS `outputIds` AND IT IS AN ARRAY, ALWAYS, even for one job. Every handoff here used to
+ * say "call get_generation_status with this outputId", which names a parameter that does not exist: an agent
+ * following the sentence literally sends `{ outputId }` and the schema rejects it. Naming the shape in prose
+ * is what drifted, so these messages now print the call instead, and every site shares this one function.
+ */
+export function getStatusCall(outputIds: readonly string[]): string {
+  return `get_generation_status { outputIds: [${outputIds.map((id) => `"${id}"`).join(', ')}] }`
+}
+
 /** A slow job that did not finish within the smart-wait window. */
 export function pendingResult(outputId: string, pollAfterSeconds = 15): CallToolResult {
   return text(
-    `Still rendering (outputId ${outputId}). This is normal for video. Call get_generation_status with this outputId in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`,
+    `Still rendering (outputId ${outputId}). This is normal for video. Call ${getStatusCall([outputId])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`,
   )
 }
 
@@ -127,10 +139,11 @@ export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
       `${i + 1}. outputId ${j.outputId} covers ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}` +
       ` from one source (${j.windows} window${j.windows === 1 ? '' : 's'})`,
   )
+  const poll = `Poll with ${getStatusCall(jobs.map((j) => j.outputId))}`
   const header =
     jobs.length === 1
-      ? 'Enhancing 1 source. Poll its outputId with get_generation_status:'
-      : `Enhancing ${jobs.length} sources as separate jobs, because a noise profile is estimated per recording. Poll EVERY outputId:`
+      ? `Enhancing 1 source. ${poll}:`
+      : `Enhancing ${jobs.length} sources as separate jobs, because a noise profile is estimated per recording. ${poll} (EVERY id, in one call):`
   const footer = [
     'The enhanced audio is applied to the clips automatically when each job lands, so no placement call is needed.',
     result.silencedClipsExcluded

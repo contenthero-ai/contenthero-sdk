@@ -1,6 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generationStatusResult, generationBatchResult } from './format.js'
+import {
+  generationStatusResult,
+  generationBatchResult,
+  getStatusCall,
+  pendingResult,
+  enhanceClipsResult,
+} from './format.js'
 
 /**
  * A running generation must report the slots that have already landed.
@@ -75,4 +81,42 @@ test('the batch form also surfaces partial urls', () => {
   assert.match(out, /- a: processing, 1 ready so far \| https:\/\/a\/1\.png/)
   assert.match(out, /- b: processing \[poll_after_seconds/)
   assert.match(out, /- c: completed \| https:\/\/c\/1\.png/)
+})
+
+/**
+ * The async handoff must name the argument the tool actually takes.
+ *
+ * `get_generation_status` requires `outputIds`, an ARRAY of 1 to 8, even for a single job. The handoff
+ * used to read "call get_generation_status with this outputId", so an agent following it literally sent
+ * `{ outputId }` and the schema rejected the call. Found by driving the MCP as an ordinary user on
+ * 2026-08-31. These tests assert the printed CALL, not prose, because prose is what drifted.
+ */
+
+test('the status call names outputIds and passes an array, even for one id', () => {
+  const call = getStatusCall(['o1'])
+  assert.match(call, /outputIds: \["o1"\]/)
+  // The singular must not appear as an argument name anywhere in the call.
+  assert.doesNotMatch(call, /outputId:/)
+})
+
+test('the status call carries every id in one call', () => {
+  assert.match(getStatusCall(['a', 'b', 'c']), /outputIds: \["a", "b", "c"\]/)
+})
+
+test('a still-rendering job hands back a callable get_generation_status', () => {
+  const out = body(pendingResult('vid-7', 15))
+  assert.match(out, /outputIds: \["vid-7"\]/)
+  assert.doesNotMatch(out, /with this outputId/)
+})
+
+test('in-place enhancement hands back every outputId in one callable form', () => {
+  const out = body(
+    enhanceClipsResult({
+      outputs: [
+        { outputId: 'j1', clipIds: ['c1', 'c2'], windows: 2 },
+        { outputId: 'j2', clipIds: ['c3'], windows: 1 },
+      ],
+    }),
+  )
+  assert.match(out, /outputIds: \["j1", "j2"\]/)
 })
