@@ -141,6 +141,19 @@ export interface GenerateRequest {
    *  standalone library output. Sync models (audio) place immediately; async models (image/video) place when
    *  the output finalizes. */
   projectId?: string
+
+  /**
+   * Optional: file the generated image onto this avatar as a new LOOK rather than as a standalone library
+   * output. Image models only.
+   *
+   * A look is one appearance of a reusable character: same person, different outfit, setting or framing.
+   * Generating into one directly is how an agent builds out an avatar without a human attaching the result
+   * afterwards. Use an id from `listAvatars`.
+   *
+   * ⚠️ The avatar must be one you own; the server rejects an id that is not, because an id in a request body
+   * is an argument the caller chose and not a claim about who they are.
+   */
+  avatarId?: string
   /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
   placement?: PlacementIntent
   /** Optional interactive-fallback playhead frame (echo one from get_context for playhead-relative placement). */

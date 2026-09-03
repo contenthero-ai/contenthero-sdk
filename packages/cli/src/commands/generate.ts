@@ -9,6 +9,10 @@
  * Request shaping mirrors the MCP intent tools so the CLI, SDK, and MCP submit
  * identical payloads. Shared async flags (--cost / --wait / --no-wait /
  * --timeout) come from runOptions; audio is synchronous so it only takes --cost.
+ *
+ * `--avatar` on `image` and `board` files the result against an avatar. The API has accepted this since the
+ * avatar work landed and no client exposed it, so generating a new LOOK for a character had no path outside
+ * the browser even though the server was ready for one.
  */
 
 import type { Command } from 'commander'
@@ -83,7 +87,8 @@ export function registerGenerate(program: Command): void {
       .option('--mode <mode>', 'variant mode for models that expose one (e.g. flux-2-pro: pro/flex)')
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
       .option('--seed <seed>', 'seed for reproducibility', toInt)
-      .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect),
+      .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
+      .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)'),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
     const request = compact<GenerateRequest>({
@@ -96,6 +101,7 @@ export function registerGenerate(program: Command): void {
       seed: opts.seed as number | undefined,
       references: references({ images: opts.ref as string[] | undefined }),
       parameters: opts.mode ? { mode: opts.mode } : undefined,
+      avatarId: opts.avatar as string | undefined,
       ...placementFields(opts),
     })
     await runGeneration(client, ctx, request, runOptions(opts))
@@ -202,7 +208,8 @@ export function registerGenerate(program: Command): void {
       .requiredOption('-t, --type <type>', `board type: ${BOARD_TYPES.join(', ')}`)
       .option('--ref <urlOrId>', 'source image (URL or output id); repeatable', collect)
       .option('-n, --num <count>', 'number of board variations (1-4)', toInt)
-      .option('--name <name>', 'optional board name'),
+      .option('--name <name>', 'optional board name')
+      .option('--avatar <id>', 'associate the board with this avatar (see `contenthero avatar list`)'),
   ).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const boardType = opts.type as string
     if (!BOARD_TYPES.includes(boardType as BoardType)) {
@@ -218,6 +225,7 @@ export function registerGenerate(program: Command): void {
       referenceImages: opts.ref as string[] | undefined,
       numImages: opts.num as number | undefined,
       boardName: opts.name as string | undefined,
+      avatarId: opts.avatar as string | undefined,
     })
     await runBoard(client, ctx, request, runOptions(opts))
   })

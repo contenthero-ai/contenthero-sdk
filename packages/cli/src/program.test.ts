@@ -123,6 +123,21 @@ test('universal status verbs are registered, each taking --variation and --off',
   }
 })
 
+test('generate image and board expose --avatar, so a generation can file itself against an avatar', () => {
+  // The API has accepted `avatarId` on both endpoints since avatar looks landed. No client advertised it,
+  // so generating a new LOOK for a character had no path outside the browser. That gap is invisible from
+  // either side alone: the server looks complete and the CLI looks internally consistent.
+  const generate = buildProgram().commands.find((c) => c.name() === 'generate')!
+  for (const name of ['image', 'board']) {
+    const cmd = generate.commands.find((c) => c.name() === name)
+    assert.ok(cmd, `generate ${name} is registered`)
+    assert.ok(
+      cmd!.options.some((o) => o.long === '--avatar'),
+      `generate ${name} should accept --avatar`,
+    )
+  }
+})
+
 test('media and brand-kit list expose the favorite/archived filters', () => {
   const program = buildProgram()
   const mediaList = program.commands

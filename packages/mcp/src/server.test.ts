@@ -606,6 +606,56 @@ test('generate_image forwards mode via the parameters passthrough', async () => 
   assert.equal(captured.parameters?.mode, 'flex')
 })
 
+/**
+ * The defect class these two cover is NOT "avatarId is broken". It is "the server supported this all
+ * along and no client exposed it".
+ *
+ * `/api/v1/studio/generate` has accepted `avatarId` since avatar looks landed, and the core tags the row
+ * `kind: 'look'`. The SDK carried the field on the BOARD request only, and neither MCP tool advertised it,
+ * so an agent could generate an image for a character and then had to hand it to a human to attach. A gap
+ * like that is invisible from either side on its own: the server looks complete and the client looks
+ * consistent. Asserting the field ARRIVES in the request is what makes it visible.
+ */
+test('generate_image forwards avatarId, so a generation can file itself as a look', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generateAndWait: async (req) => {
+        captured = req
+        return {
+          outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
+          outputUrls: ['https://cdn/look.png'], error: null, createdAt: 't', completedAt: 't2',
+        }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'generate_image',
+    arguments: { modelId: 'gpt-image-2', prompt: 'x', avatarId: 'av1' },
+  })
+  assert.equal(captured.avatarId, 'av1')
+})
+
+test('generate_board forwards avatarId', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generateBoardAndWait: async (req) => {
+        captured = req
+        return {
+          outputId: 'b', status: 'completed', contentType: 'image', modelId: 'board',
+          outputUrls: ['https://cdn/board.png'], error: null, createdAt: 't', completedAt: 't2',
+        }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'generate_board',
+    arguments: { boardType: 'character', prompt: 'x', avatarId: 'av1' },
+  })
+  assert.equal(captured.avatarId, 'av1')
+})
+
 test('generate_video forwards wan multiShot and reference audio', async () => {
   let captured
   const mcp = await connect(

@@ -412,6 +412,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('References for image-to-image / editing. Each may be a URL or a previous output id (e.g. "<id>" or "<id>-2") to chain from an earlier generation.'),
+        avatarId: z
+          .string()
+          .optional()
+          .describe(
+            'Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model.',
+          ),
         ...PLACEMENT_INPUT_FIELDS,
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
@@ -429,6 +435,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           seed: args.seed,
           references: buildReferences({ images: args.referenceImages }),
           parameters: args.mode ? { mode: args.mode } : undefined,
+          avatarId: args.avatarId,
           projectId: args.projectId,
           placement: args.placement as GenerateRequest['placement'],
           playheadFrame: args.playheadFrame,
@@ -477,6 +484,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Number of board variations (1-4). Defaults to 1.'),
         boardName: z.string().optional().describe('Optional name for the board.'),
+        avatarId: z
+          .string()
+          .optional()
+          .describe(
+            'Optional avatar id from list_avatars. Associate the board with that avatar, so a character sheet built for an avatar stays filed against it.',
+          ),
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
     },
@@ -489,6 +502,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           referenceImages: args.referenceImages,
           numImages: args.numImages,
           boardName: args.boardName,
+          avatarId: args.avatarId,
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
