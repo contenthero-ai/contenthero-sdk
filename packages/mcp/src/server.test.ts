@@ -1338,6 +1338,34 @@ test('list_cards surfaces id, status, and platform with pagination context', asy
   assert.ok(!res.isError)
 })
 
+/**
+ * The SDK sending `space_id` is not enough: the MCP tool has to forward the arg.
+ * This asserts the WIRING, not the rule. Both halves failed here originally, and a
+ * response-shape test passes either way because the server just answers about a
+ * different space.
+ */
+test('list_cards and list_stages forward spaceId to the client', async () => {
+  const seen: { cards?: unknown; stages?: unknown } = {}
+  const client = fakeClient()
+  const base = client.listCards
+  client.listCards = async (opts: unknown) => {
+    seen.cards = opts
+    return base(opts)
+  }
+  const baseStages = client.listStages
+  client.listStages = async (opts: unknown) => {
+    seen.stages = opts
+    return baseStages(opts)
+  }
+
+  const mcp = await connect(client)
+  await mcp.callTool({ name: 'list_cards', arguments: { spaceId: 'sp1' } })
+  assert.equal((seen.cards as { spaceId?: string })?.spaceId, 'sp1')
+
+  await mcp.callTool({ name: 'list_stages', arguments: { spaceId: 'sp1' } })
+  assert.equal((seen.stages as { spaceId?: string })?.spaceId, 'sp1')
+})
+
 test('get_card returns the post with its posts and assets', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_card', arguments: { cardId: 'p1' } })

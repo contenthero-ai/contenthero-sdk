@@ -17,10 +17,11 @@ export function registerStage(program: Command): void {
 
   stage
     .command('list')
-    .description("List the space's stages, in order")
-    .action(async (_opts, command: Command) => {
+    .description("List a space's stages, in order (defaults to the default space)")
+    .option('--space <id>', "which space's stages (from `contenthero space list`); default space if omitted")
+    .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const stages = await client.listStages()
+      const stages = await client.listStages({ spaceId: opts.space as string | undefined })
       emit(stages, ctx, (rows: Stage[]) =>
         table(
           ['ORDER', 'NAME', 'SLUG', 'DEFAULT', 'ID'],

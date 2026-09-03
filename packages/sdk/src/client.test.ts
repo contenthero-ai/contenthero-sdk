@@ -259,6 +259,41 @@ test('list filters append favorited and archived query params', async () => {
   assert.equal(voices.calls[0]?.url, 'https://example.test/api/v1/voices?favorited=true')
 })
 
+/**
+ * The defect this guards: `/api/v1/cards` and `/api/v1/stages` have always accepted
+ * `space_id`, and the SDK never sent it. `listCards` is `.eq('space_id', ...)`
+ * server-side, so it silently returned ONE space's cards while looking like the
+ * whole account, and `search` missed every other board. Nothing failed; the answer
+ * was just quietly incomplete.
+ *
+ * Asserting the URL is the only thing that catches this class, because a response
+ * shape test passes whether or not the param was ever sent.
+ */
+test('space_id reaches the wire for cards and stages', async () => {
+  const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, hasMore: false } }])
+  const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: cards.fetch, baseUrl: 'https://example.test' })
+  await c1.listCards({ spaceId: 'sp1', search: 'lesson' })
+  assert.ok(cards.calls[0]?.url.includes('space_id=sp1'), 'listCards must send space_id')
+  assert.ok(cards.calls[0]?.url.includes('search=lesson'), 'listCards must keep its other filters')
+
+  const stages = stubFetch([{ status: 200, body: { stages: [] } }])
+  const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: stages.fetch, baseUrl: 'https://example.test' })
+  await c2.listStages({ spaceId: 'sp 2' })
+  assert.equal(stages.calls[0]?.url, 'https://example.test/api/v1/stages?space_id=sp%202')
+})
+
+test('omitting spaceId sends no space_id, so the server picks the default space', async () => {
+  const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, hasMore: false } }])
+  const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: cards.fetch, baseUrl: 'https://example.test' })
+  await c1.listCards()
+  assert.equal(cards.calls[0]?.url, 'https://example.test/api/v1/cards')
+
+  const stages = stubFetch([{ status: 200, body: { stages: [] } }])
+  const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: stages.fetch, baseUrl: 'https://example.test' })
+  await c2.listStages()
+  assert.equal(stages.calls[0]?.url, 'https://example.test/api/v1/stages')
+})
+
 test('applyEditorOps posts ops to /api/v1/editor/ops and returns the result', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { surface: 'editor', revision: 4, results: [{ op: 'delete_clip', ok: true }] } },

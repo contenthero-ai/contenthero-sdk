@@ -1927,12 +1927,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Cards',
       annotations: READ,
       description:
-        "List the account's content-pipeline posts (newest-updated first). Filter by status, platform, stage (id/slug/name), folder, favorite, or a title search. Call get_card for one post's full detail (posts + assets).",
+        "List one SPACE's cards (newest-updated first). ⚠️ SCOPED, NOT COMPLETE: without spaceId this lists the account's DEFAULT space only, and cards on any other board are absent with nothing in the response saying so (search misses them too). Call list_spaces FIRST and pass spaceId unless you specifically mean the default board. Filter by status, platform, stage (id/slug/name), favorite, or a title search. Call get_card for one card's full detail (posts + assets).",
       inputSchema: {
+        spaceId: z
+          .string()
+          .optional()
+          .describe(
+            "Which space's board to list, from list_spaces. Omit ONLY when you mean the account's default space; omitting it does not search every board.",
+          ),
         status: z.enum(['draft', 'active', 'completed', 'archived']).optional().describe('Filter by lifecycle status.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
-        stage: z.string().optional().describe('Filter by a stage id, slug, or name.'),
-        search: z.string().optional().describe('Case-insensitive title search.'),
+        stage: z.string().optional().describe('Filter by a stage id, slug, or name. Resolved within the chosen space.'),
+        search: z.string().optional().describe('Case-insensitive title search, scoped to the chosen space.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 50).'),
         offset: z.number().int().min(0).optional().describe('Pagination offset.'),
       },
@@ -1942,6 +1948,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         return cardListResult(
           await client.listCards({
+            spaceId: args.spaceId,
             status: args.status,
             platform: args.platform,
             stage: args.stage,
@@ -2114,12 +2121,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Pipeline Stages',
       annotations: READ,
       description:
-        "List the account's stages, in order. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a post; pass a stage's id (most stable), slug, or name to create_card / update_card.",
+        "List one SPACE's stages, in order. ⚠️ STAGES ARE PER-SPACE: without spaceId this is the account's DEFAULT space, and two spaces can each hold a stage named 'Published' with different ids, so a stage name resolved against the wrong space is a different column. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a card; pass a stage's id (most stable), slug, or name to create_card / update_card.",
+      inputSchema: {
+        spaceId: z
+          .string()
+          .optional()
+          .describe("Which space's stages, from list_spaces. Omit only when you mean the account's default space."),
+      },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return stageListResult(await client.listStages())
+        return stageListResult(await client.listStages({ spaceId: args.spaceId }))
       } catch (err) {
         return errorResult(err)
       }

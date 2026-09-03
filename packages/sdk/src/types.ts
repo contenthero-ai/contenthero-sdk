@@ -1270,6 +1270,26 @@ export interface ListCardsOptions {
   search?: string
   limit?: number
   offset?: number
+  /**
+   * Which SPACE's board to list. Omitted means the account's DEFAULT space, not
+   * every space.
+   *
+   * ⚠️ A LIST WITHOUT THIS IS SCOPED, NOT COMPLETE. `listCards` is always
+   * `.eq('space_id', ...)` server-side, so cards on any other board are absent
+   * with nothing in the response saying so, and `search` misses them too. Get an
+   * id from `listSpaces()`.
+   */
+  spaceId?: string
+}
+
+/** Options for {@link ContentHeroClient.listStages}. */
+export interface ListStagesOptions {
+  /**
+   * Which SPACE's stages. Omitted means the account's default space. Stages are
+   * per-space, so two spaces can each have a stage called "Published" with
+   * different ids.
+   */
+  spaceId?: string
 }
 
 /** Fields to create a post. `stage` accepts a stage id, slug, or name. */

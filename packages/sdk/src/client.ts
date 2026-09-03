@@ -55,6 +55,7 @@ import type {
   ListVoicesOptions,
   ListBrandKitsOptions,
   ListCardsOptions,
+  ListStagesOptions,
   FavoriteInput,
   ArchiveInput,
   ApplyEditorOpsInput,
@@ -828,7 +829,14 @@ export class ContentHero {
   // Content pipeline (posts)
   // -------------------------------------------------------------------------
 
-  /** List the account's posts (most recently updated first), with optional filters. */
+  /**
+   * List the account's cards (most recently updated first), with optional filters.
+   *
+   * ⚠️ SCOPED TO ONE SPACE. Without `spaceId` this is the account's DEFAULT
+   * space, not every card you own, and the response says nothing about the ones
+   * it excluded. `search` is scoped the same way, so a title that exists on
+   * another board returns no results. Call `listSpaces()` first.
+   */
   async listCards(options: ListCardsOptions = {}): Promise<CardListResult> {
     const q = new URLSearchParams()
     if (options.status) q.set('status', options.status)
@@ -838,6 +846,7 @@ export class ContentHero {
     if (options.search) q.set('search', options.search)
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
+    if (options.spaceId) q.set('space_id', options.spaceId)
     const qs = q.toString()
     return this.request<CardListResult>('GET', `/api/v1/cards${qs ? `?${qs}` : ''}`)
   }
@@ -894,8 +903,9 @@ export class ContentHero {
    * access. Use this to resolve a stage before placing a post; stages are
    * per-account customizable.
    */
-  async listStages(): Promise<Stage[]> {
-    const data = await this.request<{ stages: Stage[] }>('GET', '/api/v1/stages')
+  async listStages(options: ListStagesOptions = {}): Promise<Stage[]> {
+    const qs = options.spaceId ? `?space_id=${encodeURIComponent(options.spaceId)}` : ''
+    const data = await this.request<{ stages: Stage[] }>('GET', `/api/v1/stages${qs}`)
     return data.stages
   }
 

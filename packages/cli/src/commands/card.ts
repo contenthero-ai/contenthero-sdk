@@ -114,7 +114,8 @@ export function registerCard(program: Command): void {
 
   card
     .command('list')
-    .description('List posts (newest-updated first)')
+    .description("List one space's cards (newest-updated first; defaults to the default space)")
+    .option('--space <id>', "which space's board (from `contenthero space list`); default space if omitted")
     .option('--status <status>', `filter by status: ${STATUSES.join(', ')}`)
     .option('--platform <platform>', 'filter by platform')
     .option('--stage <stage>', 'filter by stage (id, slug, or name)')
@@ -127,6 +128,7 @@ export function registerCard(program: Command): void {
       assertPlatform(opts.platform as string | undefined)
       const { client, ctx } = makeClient(command)
       const result = await client.listCards({
+        spaceId: opts.space as string | undefined,
         status: opts.status as string | undefined,
         platform: opts.platform as string | undefined,
         stage: opts.stage as string | undefined,

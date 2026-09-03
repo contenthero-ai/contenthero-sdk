@@ -97,6 +97,7 @@ export type {
   Tag,
   CardListResult,
   ListCardsOptions,
+  ListStagesOptions,
   CreateCardInput,
   UpdateCardInput,
   PostInput,
