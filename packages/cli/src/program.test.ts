@@ -98,9 +98,37 @@ test('brand-kit exposes its verbs, with sections folded into update', () => {
   assert.ok(!subs.includes('archive'), 'brand-kit should no longer have its own archive subcommand')
 })
 
-test('avatar and voice expose list + get', () => {
-  assert.deepEqual(subcommands('avatar').sort(), ['get', 'list'])
+test('avatar is a full CRUD surface and voice is still read-only', () => {
+  // ⚠️ THE ASYMMETRY IS DELIBERATE, NOT AN OVERSIGHT. Avatars became writable in Phase 7; voice
+  // creation stays in the app because only avatars had a demonstrated agent use case. Asserting
+  // voice's shape too is what makes a later accidental voice write show up as a decision.
+  assert.deepEqual(subcommands('avatar').sort(), ['create', 'delete', 'get', 'list', 'look', 'update'])
   assert.deepEqual(subcommands('voice').sort(), ['get', 'list'])
+})
+
+test('avatar look add/remove exist as their own verbs', () => {
+  const look = buildProgram()
+    .commands.find((c) => c.name() === 'avatar')!
+    .commands.find((c) => c.name() === 'look')
+  assert.ok(look, 'avatar look is registered')
+  assert.deepEqual(look!.commands.map((c) => c.name()).sort(), ['add', 'remove'])
+})
+
+test('avatar create requires the traits the prompt writer needs, and offers --cost', () => {
+  // age and gender are REQUIRED because the generator writes the portrait prompt from them. If they
+  // ever become optional the model has nothing to describe and produces a generic face.
+  const create = buildProgram()
+    .commands.find((c) => c.name() === 'avatar')!
+    .commands.find((c) => c.name() === 'create')!
+  // ⚠️ `o.mandatory` ONLY. In Commander `o.required` means the option takes a VALUE (`--age <age>`
+  // rather than `--age [age]`), which is true of an optional flag too. Filtering on `required ||
+  // mandatory` passed identically after `requiredOption` was downgraded to `option`, so the first
+  // version of this test could not fail. Caught by breaking it on purpose.
+  const mandatory = create.options.filter((o) => o.mandatory).map((o) => o.long)
+  assert.ok(mandatory.includes('--age'), '--age must be required')
+  assert.ok(mandatory.includes('--gender'), '--gender must be required')
+  // Creating an avatar spends credits, so it gets the same preflight every generating command has.
+  assert.ok(create.options.some((o) => o.long === '--cost'), 'create must offer --cost')
 })
 
 test('universal status verbs are registered, each taking --variation and --off', () => {

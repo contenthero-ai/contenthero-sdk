@@ -24,6 +24,11 @@ import type {
   AddBrandKnowledgeInput,
   Avatar,
   AvatarSummary,
+  CreateAvatarRequest,
+  CreateAvatarResult,
+  UpdateAvatarRequest,
+  UpdateAvatarResult,
+  AddAvatarLooksResult,
   Balance,
   BrandKit,
   BrandKitSummary,
@@ -372,6 +377,84 @@ export class ContentHero {
   /** Get one avatar with its looks (the get half). Throws NotFoundError if absent. */
   async getAvatar(avatarId: string): Promise<Avatar> {
     return this.request<Avatar>('GET', `/api/v1/avatars/${encodeURIComponent(avatarId)}`)
+  }
+
+  /**
+   * Create an avatar and start generating its first look.
+   *
+   * ⚠️ RESOLVES BEFORE THE AVATAR IS USABLE. The row lands at `status: 'processing'` with no image; its
+   * default look and profile photo are set when the first look finishes. Poll `getAvatar` for
+   * `status: 'completed'`.
+   *
+   * ⚠️ SPENDS CREDITS, charged when that look completes rather than here, so a failed generation does
+   * not charge. Preview the price with `estimateAvatarCost()`.
+   */
+  async createAvatar(request: CreateAvatarRequest): Promise<CreateAvatarResult> {
+    return this.request<CreateAvatarResult>('POST', '/api/v1/avatars', request)
+  }
+
+  /** What `createAvatar` will cost, in credits. Nothing runs and nothing is charged. */
+  async estimateAvatarCost(): Promise<number> {
+    const data = await this.request<{ creditsEstimate: number }>('POST', '/api/v1/avatars', {
+      getCost: true,
+    })
+    return data.creditsEstimate
+  }
+
+  /**
+   * Update an avatar's fields, and optionally add or remove looks in the same call.
+   *
+   * Ops are applied before the fields, so one call can add a look and make it the default.
+   */
+  async updateAvatar(avatarId: string, request: UpdateAvatarRequest): Promise<UpdateAvatarResult> {
+    return this.request<UpdateAvatarResult>(
+      'PATCH',
+      `/api/v1/avatars/${encodeURIComponent(avatarId)}`,
+      request,
+    )
+  }
+
+  /**
+   * Soft-delete an avatar.
+   *
+   * ⚠️ ITS LOOKS SURVIVE. They stay as library rows and can be reassigned to another avatar, which is
+   * what makes consolidating duplicate avatars recoverable rather than destructive.
+   */
+  async deleteAvatar(avatarId: string): Promise<{ deleted: boolean; avatarId: string }> {
+    return this.request('DELETE', `/api/v1/avatars/${encodeURIComponent(avatarId)}`)
+  }
+
+  /**
+   * File images you already own onto an avatar as looks.
+   *
+   * ⚠️ THIS DOES NOT GENERATE ANYTHING. To make a NEW image and file it as a look, pass `avatarId` to
+   * `generate`. This one costs nothing and only files what exists.
+   *
+   * Accepts any url the account owns: an upload, a studio creation, an editor export, another avatar's
+   * look. Anything it cannot resolve as yours is reported in `skipped` rather than failing the call.
+   */
+  async addAvatarLooks(avatarId: string, imageUrls: string[]): Promise<AddAvatarLooksResult> {
+    return this.request<AddAvatarLooksResult>(
+      'POST',
+      `/api/v1/avatars/${encodeURIComponent(avatarId)}/looks`,
+      { imageUrls },
+    )
+  }
+
+  /**
+   * Remove one look from an avatar.
+   *
+   * ⚠️ REVERSIBLE. The image moves to trash and is recoverable for 30 days, the same as any other
+   * library item. If it was the avatar's default, that pointer is cleared.
+   */
+  async removeAvatarLook(
+    avatarId: string,
+    lookId: string,
+  ): Promise<{ deleted: boolean; lookId: string }> {
+    return this.request(
+      'DELETE',
+      `/api/v1/avatars/${encodeURIComponent(avatarId)}/looks/${encodeURIComponent(lookId)}`,
+    )
   }
 
   /** List the account's saved voices (the list half of the list+get pair). */

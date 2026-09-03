@@ -469,6 +469,97 @@ export interface Avatar extends AvatarSummary {
   looks: AvatarLook[]
 }
 
+/**
+ * What `createAvatar` needs.
+ *
+ * `age` and `gender` are required because the generator writes the portrait prompt from this metadata;
+ * without them it has nothing to describe. Everything else sharpens the result.
+ */
+export interface CreateAvatarRequest {
+  /** At least 3 characters. */
+  name: string
+  age: string
+  gender: string
+  ethnicity?: string
+  niche?: string[]
+  /** Visual style hint for the prompt writer. Not stored on the avatar. */
+  style?: string
+  /** Free-text description of the character. The strongest single input. */
+  description?: string
+  /** An ElevenLabs voice id from `listVoices`, used as this avatar's default. */
+  defaultVoiceId?: string
+  /**
+   * Photos of a REAL PERSON to anchor identity to, as URLs or previous output ids.
+   *
+   * ⚠️ These make the avatar a likeness of someone. Only supply photos of a person who has agreed to it.
+   * With them the generator runs in edit mode against the identity-locked profile prompt; without them it
+   * invents a character from the metadata.
+   */
+  referenceImageUrls?: string[]
+}
+
+/**
+ * The result of `createAvatar`.
+ *
+ * ⚠️ THE AVATAR IS NOT READY YET. It lands at `status: 'processing'` with no image, and becomes usable
+ * when its first look finishes generating, which is when its default look and profile photo are set.
+ * Poll `getAvatar` until `status` is 'completed'.
+ */
+export interface CreateAvatarResult {
+  avatar: Avatar
+  status: string
+  message: string
+}
+
+/** Fields `updateAvatar` can change. Omitted fields are left alone. */
+export interface UpdateAvatarRequest {
+  /** At least 3 characters. */
+  name?: string
+  /**
+   * An existing look OF THIS AVATAR, from `getAvatar().looks`. Also becomes the avatar's profile photo,
+   * because the two are one fact and setting them apart is how they drift.
+   */
+  defaultLookId?: string
+  /** An ElevenLabs voice id, or null to clear it. */
+  defaultVoiceId?: string | null
+  /**
+   * Look changes to apply in the same call, in order.
+   *
+   * ⚠️ NOT A TRANSACTION. Ops run before the field updates so `add_look` can create the look that
+   * `defaultLookId` then points at, but a failure part-way leaves the earlier ops applied. The result's
+   * `applied` array says which ran.
+   */
+  ops?: AvatarOp[]
+}
+
+/** A look change applied through `updateAvatar`. */
+export type AvatarOp =
+  | {
+      op: 'add_look'
+      /** Images you already own, as URLs. An image this account does not own is skipped, not an error. */
+      imageUrls: string[]
+    }
+  | { op: 'remove_look'; lookId: string }
+
+/** What `updateAvatar` returns: the avatar, plus a per-op record when `ops` were supplied. */
+export interface UpdateAvatarResult {
+  avatar: Avatar
+  applied?: Array<Record<string, unknown>>
+}
+
+/** What `addAvatarLooks` returns. */
+export interface AddAvatarLooksResult {
+  /** The look rows created, in submission order. */
+  looks: Array<Record<string, unknown>>
+  /**
+   * How many images were skipped because they are not this account's.
+   *
+   * ⚠️ CHECK THIS. Resolution is owner-scoped, so an unresolvable url is silently dropped rather than
+   * failing the call; a non-zero count means you asked for more looks than you got.
+   */
+  skipped: number
+}
+
 /** A voice as returned by `listVoices` (the list projection). */
 export interface VoiceSummary {
   voiceId: string

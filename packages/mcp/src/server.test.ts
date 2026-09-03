@@ -421,6 +421,7 @@ test('advertises exactly the v1 tools', async () => {
     'add_brand_knowledge',
     'archive',
     'complete_media_upload',
+    'create_avatar',
     'create_brand_kit',
     'create_card',
     'create_element',
@@ -430,6 +431,7 @@ test('advertises exactly the v1 tools', async () => {
     'create_project',
     'create_space',
     'create_tag',
+    'delete_avatar',
     'delete_element',
     'delete_folder',
     'delete_project',
@@ -491,6 +493,7 @@ test('advertises exactly the v1 tools', async () => {
     'search_brand_knowledge',
     'search_media',
     'transcribe',
+    'update_avatar',
     'update_brand_kit',
     'update_canvas',
     'update_card',
@@ -989,6 +992,127 @@ test('get_avatar returns detail with looks and passes the id through', async () 
   assert.ok(!res.isError)
   assert.equal(capturedId, 'av1')
   assert.match(res.content[0].text, /https:\/\/cdn\/look\.png/)
+})
+
+/**
+ * The avatar WRITE surface.
+ *
+ * ⚠️ THE THING WORTH GUARDING IS NOT THAT THE CALLS GO THROUGH. It is that `create_avatar` tells the
+ * model the avatar is NOT READY. The row comes back at `status: 'processing'` with a null image and no
+ * looks, so a result formatted like a finished avatar reads as "created, and empty". A model that
+ * believes that goes on to file looks onto an avatar whose own first look is still in flight, or tells
+ * the user their avatar is ready when nothing is visible yet.
+ */
+test('create_avatar says the avatar is NOT ready and names the poll call', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createAvatar: async (req) => {
+        captured = req
+        return {
+          avatar: {
+            id: 'av-new', name: 'Mika', imageUrl: null, defaultVoiceId: null, isDefault: false,
+            status: 'processing', description: null, age: '20s', gender: 'female', ethnicity: null,
+            niche: [], createdAt: 't', looks: [],
+          },
+          status: 'processing',
+          message: 'Avatar created; its first look is generating.',
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'create_avatar',
+    arguments: { name: 'Mika', age: '20s', gender: 'female', description: 'a creator' },
+  })
+  assert.ok(!res.isError)
+  assert.equal(captured.name, 'Mika')
+  assert.equal(captured.age, '20s')
+  const body = res.content[0].text
+  assert.match(body, /NOT READY/, 'the wait must be stated, not implied by a null image')
+  assert.match(body, /get_avatar/, 'the poll call must be named')
+  assert.match(body, /av-new/, 'the new id must be present so the caller can poll it')
+})
+
+test('create_avatar getCost estimates without creating', async () => {
+  let created = false
+  const mcp = await connect(
+    fakeClient({
+      estimateAvatarCost: async () => 10,
+      createAvatar: async () => {
+        created = true
+        throw new Error('must not create')
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'create_avatar',
+    arguments: { name: 'Mika', age: '20s', gender: 'female', getCost: true },
+  })
+  assert.ok(!res.isError)
+  assert.equal(created, false, 'getCost must not create anything')
+  assert.match(res.content[0].text, /10 credits/)
+})
+
+test('update_avatar forwards look ops alongside fields', async () => {
+  let capturedId, captured
+  const mcp = await connect(
+    fakeClient({
+      updateAvatar: async (id, req) => {
+        capturedId = id
+        captured = req
+        return {
+          avatar: {
+            id, name: 'Renamed', imageUrl: 'https://cdn/l.png', defaultVoiceId: null, isDefault: false,
+            status: 'completed', description: null, age: null, gender: null, ethnicity: null,
+            niche: [], createdAt: 't', looks: [],
+          },
+          applied: [{ op: 'add_look', lookIds: ['lk9'], skipped: 0 }],
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({
+    name: 'update_avatar',
+    arguments: {
+      avatarId: 'av1',
+      name: 'Renamed',
+      ops: [{ op: 'add_look', imageUrls: ['https://cdn/x.png'] }],
+    },
+  })
+  assert.ok(!res.isError)
+  assert.equal(capturedId, 'av1')
+  assert.equal(captured.name, 'Renamed')
+  assert.deepEqual(captured.ops, [{ op: 'add_look', imageUrls: ['https://cdn/x.png'] }])
+  // `avatarId` addresses the resource; it must not also be sent as a field to update.
+  assert.equal(captured.avatarId, undefined)
+})
+
+test('update_avatar rejects an unknown op at the schema boundary', async () => {
+  const mcp = await connect(
+    fakeClient({ updateAvatar: async () => assert.fail('must not reach the client') }),
+  )
+  const res = await mcp.callTool({
+    name: 'update_avatar',
+    arguments: { avatarId: 'av1', ops: [{ op: 'rename_look', lookId: 'lk1' }] },
+  })
+  assert.ok(res.isError, 'an op the server cannot apply must fail before it is sent')
+})
+
+test('delete_avatar says the looks survive, because "deleted" reads as terminal', async () => {
+  let capturedId
+  const mcp = await connect(
+    fakeClient({
+      deleteAvatar: async (id) => {
+        capturedId = id
+        return { deleted: true, avatarId: id }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'delete_avatar', arguments: { avatarId: 'av1' } })
+  assert.ok(!res.isError)
+  assert.equal(capturedId, 'av1')
+  assert.match(res.content[0].text, /looks are retained/i)
 })
 
 test('list_voices marks favorites and exposes the voiceId + preview', async () => {

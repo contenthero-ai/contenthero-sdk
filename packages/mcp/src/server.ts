@@ -48,6 +48,8 @@ import {
   type BrandKitSectionInput,
   type BrandKitAccountInput,
   type CardAssetInput,
+  type UpdateAvatarRequest,
+
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 import {
@@ -67,6 +69,7 @@ import {
   audioResult,
   avatarListResult,
   avatarResult,
+  avatarPendingResult,
   balanceResult,
   brandKitListResult,
   brandKitResult,
@@ -906,6 +909,138 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return avatarResult(await client.getAvatar(args.avatarId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_avatar --------------------------------------------------------
+  server.registerTool(
+    'create_avatar',
+    {
+      title: 'Create Avatar',
+      annotations: WRITE,
+      description:
+        "Create a reusable character and start generating its first look. SPENDS CREDITS (pass getCost to preview the price without creating anything). Returns as soon as the record exists: the avatar is NOT usable yet, it sits at status 'processing' with no image until its first look finishes, so poll get_avatar until status is 'completed'. Supply referenceImageUrls to make the avatar a likeness of a real person from their photos; omit them to invent a character from the description and traits.",
+      inputSchema: {
+        name: z.string().describe('Avatar name, at least 3 characters.'),
+        age: z.string().describe("Apparent age, e.g. '20s', '35', 'middle-aged'. Required: the prompt writer describes the character from these traits."),
+        gender: z.string().describe('Gender presentation. Required, same reason as age.'),
+        ethnicity: z.string().optional().describe('Optional ethnicity, for a more specific likeness.'),
+        niche: z.array(z.string()).optional().describe('Content niches this character is for, e.g. ["fitness","nutrition"].'),
+        style: z.string().optional().describe('Visual style hint for the portrait, e.g. "editorial", "cinematic". Not stored on the avatar.'),
+        description: z
+          .string()
+          .optional()
+          .describe('Free-text description of the character. The strongest single input when no reference photos are given.'),
+        defaultVoiceId: z.string().optional().describe('A voiceId from list_voices, used as this avatar the default voice.'),
+        referenceImageUrls: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Photos of a REAL PERSON to anchor identity to: each a URL or a previous output id. Only use photos of someone who has agreed to being cloned.',
+          ),
+        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of creating (nothing runs, nothing is charged).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        if (args.getCost) {
+          const creditsEstimate = await client.estimateAvatarCost()
+          // `modelId` is the first thing `costResult` names in its sentence, and `contentType` only
+          // admits image/video/audio. An avatar is none of those: the price is the fixed
+          // avatar-creation fee, not the cost of the portrait model, so say that rather than pick a
+          // media kind that would misdescribe it.
+          return costResult({ getCost: true, creditsEstimate, modelId: 'avatar creation' })
+        }
+        const created = await client.createAvatar({
+          name: args.name,
+          age: args.age,
+          gender: args.gender,
+          ethnicity: args.ethnicity,
+          niche: args.niche,
+          style: args.style,
+          description: args.description,
+          defaultVoiceId: args.defaultVoiceId,
+          referenceImageUrls: args.referenceImageUrls,
+        })
+        return avatarPendingResult(created)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_avatar --------------------------------------------------------
+  server.registerTool(
+    'update_avatar',
+    {
+      title: 'Update Avatar',
+      annotations: WRITE,
+      description:
+        "Update an avatar and/or change its looks. Fields: name, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId. Looks are changed through ops, the same shape update_timeline and update_canvas use: add_look files images the account ALREADY OWNS onto the avatar, remove_look trashes one (recoverable for 30 days). Ops run before the fields, so one call can add a look and make it the default. To GENERATE a new look instead of filing an existing image, call generate_image with avatarId.",
+      inputSchema: {
+        avatarId: z.string().describe('The avatar id from list_avatars.'),
+        name: z.string().optional().describe('New name, at least 3 characters.'),
+        defaultLookId: z
+          .string()
+          .optional()
+          .describe("A look id from get_avatar. Becomes the avatar's default look AND its profile photo."),
+        defaultVoiceId: z.string().nullable().optional().describe('A voiceId from list_voices, or null to clear it.'),
+        ops: z
+          .array(
+            z.union([
+              z.object({
+                op: z.literal('add_look'),
+                imageUrls: z
+                  .array(z.string())
+                  .describe(
+                    'Images the account already owns, as URLs: an upload, a creation, an editor export, or another avatar look. Anything not owned by this account is skipped rather than failing the call.',
+                  ),
+              }),
+              z.object({
+                op: z.literal('remove_look'),
+                lookId: z.string().describe('A look id from get_avatar.'),
+              }),
+            ]),
+          )
+          .optional()
+          .describe('Look changes, applied in order before the field updates. NOT a transaction: a failure part-way leaves earlier ops applied.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { avatarId, ...request } = args
+        const updated = await client.updateAvatar(avatarId, request as UpdateAvatarRequest)
+        return avatarResult(updated.avatar)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- delete_avatar --------------------------------------------------------
+  server.registerTool(
+    'delete_avatar',
+    {
+      title: 'Delete Avatar',
+      annotations: WRITE,
+      description:
+        "Delete an avatar. Soft: the avatar stops appearing, but ITS LOOKS SURVIVE as library images and can be filed onto another avatar with update_avatar's add_look. Use this to retire a duplicate or an abandoned character, after moving any looks worth keeping.",
+      inputSchema: {
+        avatarId: z.string().describe('The avatar id from list_avatars.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.deleteAvatar(args.avatarId)
+        return text(
+          `Avatar ${args.avatarId} deleted. Its looks are retained and can be filed onto another avatar with update_avatar add_look.`,
+        )
       } catch (err) {
         return errorResult(err)
       }

@@ -18,6 +18,7 @@ import type {
   BrandKnowledgeMatch,
   ConnectedAccount,
   CostEstimate,
+  CreateAvatarResult,
   Element,
   Generation,
   GenerateResult,
@@ -259,6 +260,32 @@ export function avatarResult(a: Avatar): CallToolResult {
         (l) =>
           `  - ${l.name ?? l.lookType ?? 'look'} (id ${l.id})${l.isDefault ? ' [default]' : ''}${l.isFavorited ? ' [favorite]' : ''}${l.isArchived ? ' [archived]' : ''}: ${l.imageUrl ?? 'none'}`,
       ),
+    ]),
+  )
+}
+
+/**
+ * A just-created avatar, which is NOT READY.
+ *
+ * ⚠️ THE POINT OF A SEPARATE FORMATTER IS THE WAIT. `avatarResult` describes a finished avatar, and
+ * using it here would show an avatar with `image: none` and no looks, which reads as "created, and
+ * empty" rather than "created, and still generating". A model that reads it that way goes on to
+ * generate a look into an avatar whose own first look is still in flight, or reports success to the
+ * user for something they cannot yet see.
+ *
+ * Says the poll call explicitly, the same way `pendingResult` does for a generation.
+ */
+export function avatarPendingResult(created: CreateAvatarResult): CallToolResult {
+  const a = created.avatar
+  return text(
+    lines([
+      `Created "${a.name}" (id ${a.id}).`,
+      '',
+      `⚠️ NOT READY YET: status is ${created.status}. The avatar has no image until its first look`,
+      'finishes generating, which is also when its default look and profile photo are set.',
+      `Poll with: get_avatar { "avatarId": "${a.id}" } until status is "completed" (usually 1-4 minutes).`,
+      '',
+      'Credits are charged when that look completes, not now, so a failed generation is not charged.',
     ]),
   )
 }
