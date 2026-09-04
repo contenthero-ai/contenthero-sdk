@@ -391,6 +391,50 @@ async function connect(client) {
   return mcp
 }
 
+/**
+ * Every tool input is camelCase.
+ *
+ * ⚠️ THIS IS NOT STYLE. A model reads these names off the schema and writes them into a call, so a
+ * surface that spells the same idea two ways makes the wrong spelling a plausible guess. Measured
+ * 2026-09-04: `get_folder`, `update_folder` and `delete_folder` took `folder_id` / `folder_ids`, the
+ * only snake_case in 85 tools, while `update_folder`'s OWN DESCRIPTION told the caller to "pass
+ * folderIds". The description and the schema disagreed, so following the description silently did
+ * nothing.
+ *
+ * Nothing caught it because no test calls those tools; the manifest test only checks that the tool
+ * NAMES exist. This checks the shape of every input instead, so it covers tools nobody exercises.
+ */
+test('every tool input parameter is camelCase', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const offenders = []
+  for (const tool of tools) {
+    for (const param of Object.keys(tool.inputSchema?.properties ?? {})) {
+      if (param.includes('_')) offenders.push(`${tool.name}.${param}`)
+    }
+  }
+  assert.deepEqual(offenders, [], `snake_case tool inputs: ${offenders.join(', ')}`)
+})
+
+/**
+ * An id parameter names the thing it identifies.
+ *
+ * A bare `id` is fine on a UNIVERSAL tool, where the caller supplies `assetType` to say what kind of id
+ * it is: `favorite` and `archive` are exactly that, and renaming their `id` would be wrong. On a
+ * single-resource tool it is a missed opportunity to be unambiguous, and it is how `delete_element`
+ * ended up taking `id` while its five sibling deletes each took a named one.
+ */
+test('single-resource tools name their id parameter after the resource', async () => {
+  const UNIVERSAL = new Set(['favorite', 'archive'])
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const offenders = tools
+    .filter((t) => !UNIVERSAL.has(t.name))
+    .filter((t) => Object.keys(t.inputSchema?.properties ?? {}).includes('id'))
+    .map((t) => t.name)
+  assert.deepEqual(offenders, [], `tools taking a bare \`id\`: ${offenders.join(', ')}`)
+})
+
 test('no tool advertises an array without an item schema', async () => {
   // ⚠️ THE BUG THIS EXISTS FOR. `z.array(z.unknown())` serialises to {"type":"array","items":{}}, which tells
   // a client NOTHING about what may go inside. The server accepted every shape when called directly, and

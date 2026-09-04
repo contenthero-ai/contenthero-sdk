@@ -1558,11 +1558,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Return the contents of one folder. The folder id is either one of the account's own folder ids or a built-in derived-folder key. A manual folder returns exactly the items filed in it; a smart folder computes its members live from its saved query; a derived folder returns its built-in set. Items are media (with kind and a description) and, in manual folders, entities such as projects or posts.",
       inputSchema: {
-        folder_id: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, cards).'),
+        folderId: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, cards).'),
       },
     },
     async (args, extra) => {
-      try { const r = await (await getClient(extra)).getFolder(args.folder_id); return folderContentsResult(r.folder, r.items) } catch (err) { return errorResult(err) }
+      try { const r = await (await getClient(extra)).getFolder(args.folderId); return folderContentsResult(r.folder, r.items) } catch (err) { return errorResult(err) }
     },
   )
 
@@ -1577,24 +1577,24 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         name: z.string().describe('The folder name.'),
         type: z.enum(['manual', 'smart']).optional().describe("'manual' (a collection you file items into) or 'smart' (a saved live query). Defaults to manual."),
         query: smartQuerySchema,
-        parent_id: z.string().optional().describe('Nest the new folder under this parent folder id.'),
+        parentId: z.string().optional().describe('Nest the new folder under this parent folder id.'),
       },
     },
     async (args, extra) => {
       try {
-        const f = await (await getClient(extra)).createFolder({ name: args.name, type: args.type, query: args.query, parentId: args.parent_id })
+        const f = await (await getClient(extra)).createFolder({ name: args.name, type: args.type, query: args.query, parentId: args.parentId })
         return text(`Created ${f.type} folder "${f.name}" (id ${f.id}).`)
       } catch (err) { return errorResult(err) }
     },
   )
 
   /**
-   * One item's universal identity. NO folder_id: the folder is named by the tool's own folder_id /
-   * folder_ids now, which is what lets one call file many items into many folders.
+   * One item's universal identity. NO folderId: the folder is named by the tool's own folderId /
+   * folderIds now, which is what lets one call file many items into many folders.
    */
   const itemRefBodySchema = z.object({
-    source_table: z.string().describe("The item's source table (e.g. as returned by search_media)."),
-    source_record_id: z.string().describe("The item's source record id."),
+    sourceTable: z.string().describe("The item's source table (e.g. as returned by list_media / get_media)."),
+    sourceRecordId: z.string().describe("The item's source record id."),
     variant: z.number().int().optional().describe('The variation index (default 0 for single-asset items).'),
   })
 
@@ -1604,21 +1604,21 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Folder',
       annotations: WRITE,
       description:
-        "Update the account's own folders: rename one, MOVE folders under a different parent (or to the top level with a null parent), change a smart folder's saved query, and FILE or UNFILE items. addItems/removeItems are DELTAS of { source_table, source_record_id, variant? }, not a list to replace, because an item can sit in several folders at once and a replace would silently unfile it from the others. Filing never moves or copies anything: it adds a pointer, and only manual folders accept items (a smart folder computes its own membership). Pass folderIds to patch several folders at once, which crossed with addItems files the same items into all of them; renaming and re-querying still need exactly one folder. NOTE the asymmetry: nesting a FOLDER via parentId is a MOVE (a folder has one parent), while filing an ITEM is a pointer that leaves its other folders alone.",
+        "Update the account's own folders: rename one, MOVE folders under a different parent (or to the top level with a null parent), change a smart folder's saved query, and FILE or UNFILE items. addItems/removeItems are DELTAS of { sourceTable, sourceRecordId, variant? }, not a list to replace, because an item can sit in several folders at once and a replace would silently unfile it from the others. Filing never moves or copies anything: it adds a pointer, and only manual folders accept items (a smart folder computes its own membership). Pass folderIds to patch several folders at once, which crossed with addItems files the same items into all of them; renaming and re-querying still need exactly one folder. NOTE the asymmetry: nesting a FOLDER via parentId is a MOVE (a folder has one parent), while filing an ITEM is a pointer that leaves its other folders alone.",
       inputSchema: {
-        folder_id: z.string().describe('The folder id to update.'),
-        folder_ids: z
+        folderId: z.string().describe('The folder id to update.'),
+        folderIds: z
           .array(z.string())
           .optional()
           .describe('Patch several folders at once. Attribute fields (name, query) still need exactly one.'),
         name: z.string().optional().describe('A new name.'),
-        parent_id: z.string().nullable().optional().describe('A new parent folder id, or null to move to the top level. MOVES the folder.'),
+        parentId: z.string().nullable().optional().describe('A new parent folder id, or null to move to the top level. MOVES the folder.'),
         query: smartQuerySchema,
-        add_items: z
+        addItems: z
           .array(itemRefBodySchema)
           .optional()
           .describe('File these items into the folder(s). A delta: their other folders are untouched.'),
-        remove_items: z
+        removeItems: z
           .array(itemRefBodySchema)
           .optional()
           .describe('Unfile these items. Only the pointer goes; the asset is never deleted.'),
@@ -1629,18 +1629,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const patch = {
           name: args.name,
-          parentId: args.parent_id,
+          parentId: args.parentId,
           query: args.query,
-          addItems: args.add_items?.map((r) => ({ sourceTable: r.source_table, sourceRecordId: r.source_record_id, variant: r.variant })),
-          removeItems: args.remove_items?.map((r) => ({ sourceTable: r.source_table, sourceRecordId: r.source_record_id, variant: r.variant })),
+          addItems: args.addItems,
+          removeItems: args.removeItems,
         }
-        const targets: string[] = args.folder_ids?.length ? args.folder_ids : [args.folder_id]
+        const targets: string[] = args.folderIds?.length ? args.folderIds : [args.folderId]
         const folders = targets.length > 1
           ? await client.updateFolders(targets, patch)
           : [await client.updateFolder(targets[0]!, patch)]
 
-        const filed = args.add_items?.length ?? 0
-        const unfiled = args.remove_items?.length ?? 0
+        const filed = args.addItems?.length ?? 0
+        const unfiled = args.removeItems?.length ?? 0
         const what = [
           filed ? `filed ${filed} item(s)` : null,
           unfiled ? `unfiled ${unfiled} item(s)` : null,
@@ -1658,10 +1658,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: WRITE,
       description:
         "Delete one of the account's own folders and everything nested under it. This removes the folder structure only; the media and entities inside are pointers, so the underlying assets are never deleted. Confirm intent before deleting a folder that contains items.",
-      inputSchema: { folder_id: z.string().describe('The folder id to delete.') },
+      inputSchema: { folderId: z.string().describe('The folder id to delete.') },
     },
     async (args, extra) => {
-      try { await (await getClient(extra)).deleteFolder(args.folder_id); return text(`Deleted folder ${args.folder_id}.`) } catch (err) { return errorResult(err) }
+      try { await (await getClient(extra)).deleteFolder(args.folderId); return text(`Deleted folder ${args.folderId}.`) } catch (err) { return errorResult(err) }
     },
   )
 
@@ -1926,12 +1926,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Element',
       annotations: READ,
       description: "Get one saved reference element by id: its name, category, description, and images.",
-      inputSchema: { id: z.string().describe('The element id.') },
+      inputSchema: { elementId: z.string().describe('The element id.') },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return elementResult(await client.getElement(args.id))
+        return elementResult(await client.getElement(args.elementId))
       } catch (err) {
         return errorResult(err)
       }
@@ -1981,7 +1981,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: WRITE,
       description: "Update a saved element's name, description, or category.",
       inputSchema: {
-        id: z.string().describe('The element id.'),
+        elementId: z.string().describe('The element id.'),
         name: z.string().optional(),
         description: z.string().optional(),
         category: z.enum(['auto', 'character', 'location', 'prop']).optional(),
@@ -1991,7 +1991,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return elementResult(
-          await client.updateElement(args.id, { name: args.name, description: args.description, category: args.category }),
+          await client.updateElement(args.elementId, { name: args.name, description: args.description, category: args.category }),
           'Updated',
         )
       } catch (err) {
@@ -2007,13 +2007,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Delete Element',
       annotations: WRITE,
       description: 'Delete a saved reference element.',
-      inputSchema: { id: z.string().describe('The element id.') },
+      inputSchema: { elementId: z.string().describe('The element id.') },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        await client.deleteElement(args.id)
-        return elementDeletedResult(args.id)
+        await client.deleteElement(args.elementId)
+        return elementDeletedResult(args.elementId)
       } catch (err) {
         return errorResult(err)
       }
@@ -2394,7 +2394,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           ...(posts !== undefined ? { posts: posts as PostInput[] } : {}),
           ...(assets !== undefined ? { assets: assets as CardAssetInput[] } : {}),
         }
-        // `cardIds` widens the path id, matching update_folder's folder_id / folder_ids. One card still
+        // `cardIds` widens the path id, matching update_folder's folderId / folderIds. One card still
         // goes through updateCard so the single-card response shape is unchanged for every caller.
         const targets = cardIds?.length ? cardIds : [cardId]
         if (targets.length > 1) {
