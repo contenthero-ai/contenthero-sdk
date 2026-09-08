@@ -328,6 +328,38 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   const { getClient, models } = opts
 
   /**
+   * 🚨🚨 **EVERY TOOL'S INPUT IS STRICT. AN UNDECLARED PARAMETER IS A 400, NEVER A SILENT DROP.**
+   *
+   * Zod object schemas STRIP unknown keys by default, and the SDK builds one from each `inputSchema` shape.
+   * So before this wrapper, all 85 tools accepted any parameter they did not declare, discarded it, and ran
+   * on whatever survived. The failure is invisible by construction: the caller gets a success.
+   *
+   * ⚠️ **THE MEASURED CASE, 2026-09-08.** `update_card` does not declare `ops`. A call passing `ops` had it
+   * stripped, leaving only `cardId`, and returned **"Updated: 01.3 Design Your Character"** having written
+   * nothing. A second call passing the nonsense op `__probe__` did the same. An agent running a batch of
+   * partial edits would collect a full set of success messages and zero writes.
+   *
+   * ⭐⭐ **WRAPPED HERE RATHER THAN AT 85 CALL SITES, AND THAT IS THE POINT.** A rule every registration must
+   * remember is a rule that holds until someone adds the 86th tool. Same move as `withSpineRegistration`
+   * wrapping the Supabase client instead of asking 73 upload sites to declare an owner.
+   *
+   * ⚠️ **NESTED `.passthrough()` SURVIVES, DELIBERATELY.** `update_timeline` and `update_canvas` declare
+   * `ops: z.array(z.object({ op: z.string() }).passthrough())` because a timeline op carries a different
+   * shape per op type. Strictness here applies to the TOP-LEVEL argument object only, so those keep taking
+   * varied op payloads while still rejecting an undeclared top-level parameter.
+   */
+  const rawRegisterTool = server.registerTool.bind(server)
+  server.registerTool = ((name: string, config: Record<string, unknown>, cb: unknown) => {
+    const shape = config.inputSchema
+    // A tool with no inputs, or one that already passed a built schema, is left exactly as it was.
+    const strict =
+      shape && typeof shape === 'object' && !(shape instanceof z.ZodType)
+        ? z.object(shape as z.ZodRawShape).strict()
+        : shape
+    return rawRegisterTool(name, { ...config, inputSchema: strict } as never, cb as never)
+  }) as typeof server.registerTool
+
+  /**
    * ⚠️ THESE SHAPES ARE DECLARED, NOT LEFT AS `z.unknown()`. An array of unknown serialises to
    * `{"type":"array","items":{}}`, which tells a client NOTHING about what may go inside it. The server
    * accepted every shape when called directly, and Claude Desktop rejected all of them before they left,
@@ -998,6 +1030,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                   .array(z.string())
                   .describe(
                     'Images the account already owns, as URLs: an upload, a creation, an editor export, or another avatar look. Anything not owned by this account is skipped rather than failing the call.',
+                  ),
+                name: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "What to call the look. Applied to every image in this op. Omit and it stays unnamed, displaying by its source label ('from_media'), which is rarely what you want for a look you will pick from a list later.",
                   ),
               }),
               z.object({

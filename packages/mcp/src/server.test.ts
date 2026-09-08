@@ -2454,3 +2454,82 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
   assert.match(res.content[0].text, /1792s/)
   assert.match(res.content[0].text, /editor-media-1\.mp4/)
 })
+
+/**
+ * 🚨🚨 AN UNDECLARED PARAMETER IS REFUSED, ON EVERY TOOL.
+ *
+ * Zod object schemas STRIP unknown keys by default, so before `registerTools` wrapped registration in
+ * `.strict()`, all 85 tools accepted any parameter they did not declare, discarded it, and ran on whatever
+ * survived. The caller got a success.
+ *
+ * MEASURED 2026-09-08 against production: `update_card` does not declare `ops`. A call passing `ops` had it
+ * stripped, leaving only `cardId`, and answered "Updated: 01.3 Design Your Character" having written nothing.
+ * A follow-up passing the nonsense op `__probe__` did the same. An agent running a batch of partial edits
+ * collects a full set of success messages and zero writes, which is worse than an error because nothing
+ * anywhere says the work did not happen.
+ *
+ * ⭐ THE PROPERTY WORTH PROTECTING IS "A SUCCESS MEANS A WRITE." These tests exist so that stays true.
+ */
+test('an undeclared parameter is REFUSED rather than silently dropped', async () => {
+  const calls = []
+  const mcp = await connect(
+    fakeClient({ updateCard: async (args) => { calls.push(args); return { id: 'c1', title: 'T', status: 'draft' } } }),
+  )
+
+  const res = await mcp.callTool({
+    name: 'update_card',
+    arguments: { cardId: 'c1', ops: [{ op: '__probe__' }] },
+  })
+
+  assert.equal(res.isError, true, 'an undeclared `ops` must be an error, not a success')
+  // ⭐ The half that matters: the write never ran. A rejection that still hit the backend would be worse
+  // than the silent drop, because the caller would be told no while something changed.
+  assert.equal(calls.length, 0, 'the backend must not be called when validation failed')
+})
+
+test('a declared parameter still works, so strictness did not break the surface', async () => {
+  const calls = []
+  const mcp = await connect(
+    // ⚠️ `updateCard(cardId, patch)` is POSITIONAL, so the patch is the SECOND argument.
+    fakeClient({ updateCard: async (cardId, patch) => { calls.push({ cardId, patch }); return { id: 'c1', title: 'New', status: 'draft' } } }),
+  )
+
+  const res = await mcp.callTool({ name: 'update_card', arguments: { cardId: 'c1', title: 'New' } })
+
+  assert.notEqual(res.isError, true)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].cardId, 'c1')
+  assert.equal(calls[0].patch.title, 'New')
+})
+
+test('⚠️ nested passthrough ops survive strictness, because a timeline op has no fixed shape', async () => {
+  // `update_timeline` declares `ops: z.array(z.object({ op: z.string() }).passthrough())`. Strictness applies
+  // to the TOP-LEVEL argument object only; flattening that distinction would break every timeline edit.
+  const calls = []
+  const mcp = await connect(
+    // ⚠️ The tool calls `applyEditorOps`, not `updateTimeline`. Named for the operation, not the tool.
+    fakeClient({
+      applyEditorOps: async (args) => {
+        calls.push(args)
+        // Same RESULT SHAPE as the default fake. A shape the formatter cannot read throws inside the handler
+        // and surfaces as a tool error, which would look exactly like strictness rejecting the call.
+        return { surface: 'editor', revision: 5, results: args.ops.map((o) => ({ op: o.op, opId: 'mock', ok: true })) }
+      },
+    }),
+  )
+
+  const res = await mcp.callTool({
+    name: 'update_timeline',
+    // `userIntent` is a DECLARED required field on this tool; omitting it is a real validation error and has
+    // nothing to do with strictness. Including it is what makes this a test of passthrough.
+    arguments: {
+      projectId: 'p1',
+      userIntent: 'nudge a clip',
+      ops: [{ op: 'update_clip', clipId: 'c1', anythingElse: { nested: true } }],
+    },
+  })
+
+  assert.notEqual(res.isError, true, 'a varied op payload must still be accepted: ' + JSON.stringify(res.content))
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].ops[0].anythingElse.nested, true, 'the op payload must arrive intact')
+})
