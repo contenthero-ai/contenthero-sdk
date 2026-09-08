@@ -216,7 +216,7 @@ export function registerProject(program: Command): void {
     .description('Export a project to a file (mp4/png/jpg both surfaces; pdf/pptx canvas) (requires editor:write)')
     .argument('<projectId>', 'the project id')
     .option('--format <format>', 'mp4 | png | jpg | pdf | pptx (default mp4)')
-    .option('--resolution <res>', 'mp4 resolution: 480p|720p|1080p|2k|4k (default 720p)')
+    .option('--resolution <res>', 'output resolution for ANY format: 480p|720p|1080p|2k|4k. Defaults 720p for an editor mp4, the project native size for a still. 1080p+ is plan-gated')
     .option('--quality <q>', 'mp4 quality: low|recommended|high')
     .option('--frame <n>', 'editor still (png/jpg) only: timeline frame to render (default 0)', toInt)
     .option('--no-watermark', 'remove the watermark (plan-gated)')
