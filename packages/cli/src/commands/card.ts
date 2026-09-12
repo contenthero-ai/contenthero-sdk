@@ -21,7 +21,6 @@ import type {
   Post,
   CardListResult,
   PostPlatform,
-  CardStatus,
   CardSummary,
   PublishResult,
   UpdateCardInput,
@@ -42,7 +41,6 @@ const PLATFORMS: PostPlatform[] = [
   'threads',
   'general',
 ]
-const STATUSES: CardStatus[] = ['draft', 'active', 'completed', 'archived']
 const CLEAR = ['null', 'clear', 'none']
 
 function assertPlatform(value: string | undefined): void {
@@ -50,18 +48,14 @@ function assertPlatform(value: string | undefined): void {
     throw new CliError(`Invalid platform "${value}". Expected one of: ${PLATFORMS.join(', ')}.`, EXIT.USAGE)
   }
 }
-function assertStatus(value: string | undefined): void {
-  if (value && !STATUSES.includes(value as CardStatus)) {
-    throw new CliError(`Invalid status "${value}". Expected one of: ${STATUSES.join(', ')}.`, EXIT.USAGE)
-  }
-}
-
 function summaryHuman(p: CardSummary, action?: string): string {
   return keyValues([
     ...(action ? [[action, p.title] as [string, string]] : [['Title', p.title] as [string, string]]),
     ['Id', p.id],
-    ['Status', p.status],
     ['Platform', p.platform ?? ''],
+    // A card has no status. Archive is the one lifecycle flag it carries on itself, and it is only shown
+    // when true: a line reading "Archived: no" on every live card is noise.
+    ...(p.isArchived ? [['Archived', p.archivedAt ?? 'yes'] as [string, string]] : []),
     ...(p.scheduledAt ? [['Scheduled', p.scheduledAt] as [string, string]] : []),
     ...(p.publishedAt ? [['Published', p.publishedAt] as [string, string]] : []),
   ])
@@ -116,7 +110,7 @@ export function registerCard(program: Command): void {
     .command('list')
     .description("List one space's cards (newest-updated first; defaults to the default space)")
     .option('--space <id>', "which space's board (from `contenthero space list`); default space if omitted")
-    .option('--status <status>', `filter by status: ${STATUSES.join(', ')}`)
+    .option('--archived', 'only ARCHIVED cards (excluded by default)')
     .option('--platform <platform>', 'filter by platform')
     .option('--stage <stage>', 'filter by stage (id, slug, or name)')
     .option('--search <text>', 'case-insensitive title search')
@@ -124,12 +118,11 @@ export function registerCard(program: Command): void {
     .option('--limit <n>', 'how many to return (default 50)', toInt)
     .option('--offset <n>', 'pagination offset', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
-      assertStatus(opts.status as string | undefined)
       assertPlatform(opts.platform as string | undefined)
       const { client, ctx } = makeClient(command)
       const result = await client.listCards({
         spaceId: opts.space as string | undefined,
-        status: opts.status as string | undefined,
+        archived: opts.archived === true ? true : undefined,
         platform: opts.platform as string | undefined,
         stage: opts.stage as string | undefined,
         search: opts.search as string | undefined,
@@ -139,8 +132,8 @@ export function registerCard(program: Command): void {
       })
       emit(result, ctx, (r: CardListResult) => {
         const t = table(
-          ['ID', 'STATUS', 'PLATFORM', 'TITLE'],
-          r.cards.map((p) => [p.id.slice(0, 8), p.status, p.platform ?? '', p.title]),
+          ['ID', 'PLATFORM', 'TITLE'],
+          r.cards.map((p) => [p.id.slice(0, 8), p.platform ?? '', p.title]),
         )
         return `${t}\n\n${r.cards.length} of ${r.total}${r.hasMore ? ' (more available)' : ''}`
       })
@@ -157,8 +150,10 @@ export function registerCard(program: Command): void {
         const head = keyValues([
           ['Title', post.title],
           ['Id', post.id],
-          ['Status', post.status],
           ['Platform', post.platform ?? ''],
+          // ⚠️ A CARD HAS NO STATUS. The POSTS table below keeps its own `STATUS` column, which is a
+          // real per-destination publish state and a different thing entirely.
+          ...(post.archivedAt ? [['Archived', post.archivedAt] as [string, string]] : []),
           ...(post.scheduledAt ? [['Scheduled', post.scheduledAt] as [string, string]] : []),
         ])
         const dests = post.posts.length
@@ -213,7 +208,6 @@ export function registerCard(program: Command): void {
     .argument('<id>', 'the post id')
     .option('--title <text>')
     .option('--platform <platform>')
-    .option('--status <status>')
     .option('--stage <stage>', 'move the post to this stage (id, slug, or name)')
     .option('--space <space>', "move the card to another space (id or slug); without --stage it lands in that space's matching stage, or its first")
     .option('--also <id>', 'another card id to apply this to; repeatable. Fields describing ONE card (title, notes, script, cover) still need exactly one', collect)
@@ -227,12 +221,10 @@ export function registerCard(program: Command): void {
     .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
-      assertStatus(opts.status as string | undefined)
       const { client, ctx } = makeClient(command)
       const input = compact<UpdateCardInput>({
         title: opts.title as string | undefined,
         platform: opts.platform as PostPlatform | undefined,
-        status: opts.status as CardStatus | undefined,
         stage: opts.stage as string | undefined,
         spaceId: opts.space as string | undefined,
         script: opts.script as string | undefined,

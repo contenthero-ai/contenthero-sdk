@@ -861,7 +861,9 @@ function cardLine(p: CardSummary): string {
     : p.scheduledAt
       ? ` | scheduled ${p.scheduledAt}`
       : ''
-  return `- ${p.title || '(untitled)'} (id ${p.id}) | ${p.status} | ${where}${when}`
+  // `[archived]` rather than a status. The list excludes archived cards unless asked for, so when one
+  // appears here the agent asked for it and the flag confirms the filter did what it said.
+  return `- ${p.title || '(untitled)'} (id ${p.id})${p.isArchived ? ' [archived]' : ''} | ${where}${when}`
 }
 
 /** List of posts with pagination context. */
@@ -871,21 +873,33 @@ export function cardListResult(result: CardListResult): CallToolResult {
   return text([`${result.total} card(s)${more}:`, ...result.cards.map(cardLine)].join('\n'))
 }
 
-/** A single post summary line (create / update / schedule / archive results). */
+/**
+ * A single post summary line (create / update / schedule / archive results).
+ *
+ * ⚠️ THIS USED TO PRINT `p.status`, AND A CARD NO LONGER HAS ONE. The field was almost always `draft`
+ * regardless of the card's real state, so it told the agent nothing while looking like it did. What it
+ * prints now is what is true: where the card sits, when it publishes, and whether it is archived.
+ *
+ * ⭐ ARCHIVE IS SHOWN ONLY WHEN TRUE. A live card saying "not archived" is noise on every line, and
+ * `spaceListResult` below already made this call for spaces.
+ */
 export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResult {
   const stage = p.stageId ? ` | stage ${p.stageId}` : ''
   // The schedule is surfaced here because scheduling is now part of update_card rather than its own tool.
   // Without it a caller who just set a publish time gets no confirmation of what time was actually stored.
   const scheduled = p.scheduledAt ? ` | Scheduled: ${p.scheduledAt}` : ''
-  return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id}) | ${p.status}${stage}${scheduled}`)
+  const archived = p.isArchived ? ' | ARCHIVED' : ''
+  return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id})${stage}${scheduled}${archived}`)
 }
 
 /** One card in full, with its posts and assets. */
 export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
-      `${p.title || '(untitled)'} (id ${p.id}) | ${p.status} | platform: ${p.platform ?? 'general'}`,
+      `${p.title || '(untitled)'} (id ${p.id}) | platform: ${p.platform ?? 'general'}`,
       p.stageId ? `stage: ${p.stageId}` : null,
+      // Stated only when archived, and it says WHEN, because "archived" with no date is half a fact.
+      p.archivedAt ? `archived: ${p.archivedAt}` : null,
       p.scheduledAt ? `scheduled: ${p.scheduledAt}` : null,
       p.publishedAt ? `published: ${p.publishedAt}` : null,
       p.publishUrl ? `publish url: ${p.publishUrl}` : null,

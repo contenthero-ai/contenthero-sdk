@@ -1548,11 +1548,47 @@ test('generate_audio rejects transcribe (outputType filter)', async () => {
 
 // -- posts (content pipeline) -------------------------------------------------
 
-test('list_cards surfaces id, status, and platform with pagination context', async () => {
+/**
+ * ⚠️ THIS USED TO ASSERT THE LINE CONTAINED `draft`. A card no longer has a status: the column carried no
+ * information and almost every row read `draft` regardless of what the card actually was, so the line was
+ * confirming the presence of a value that told the agent nothing. What it must carry now is identity,
+ * where the card publishes, and its archive state when there is one.
+ */
+test('list_cards surfaces id and platform with pagination context', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_cards', arguments: {} })
   assert.match(res.content[0].text, /Launch clip \(id p1\)/)
-  assert.match(res.content[0].text, /draft/)
+  assert.match(res.content[0].text, /instagram/)
+  // A live card must not be labelled archived, or the flag means nothing when it does appear.
+  assert.ok(!/\[archived\]/.test(res.content[0].text))
+  assert.ok(!res.isError)
+})
+
+test('list_cards flags an archived card and forwards the filter', async () => {
+  let seen: Record<string, unknown> | undefined
+  const client = fakeClient()
+  client.listCards = async (opts: Record<string, unknown>) => {
+    seen = opts
+    return {
+      cards: [
+        {
+          id: 'p9', title: 'Old idea', platform: 'instagram', stageId: 'st1', boardOrder: 0,
+          contentType: null, coverUrl: null, isFavorite: false, folderId: null,
+          archivedAt: '2026-09-12T00:00:00Z', isArchived: true,
+          scheduledAt: null, publishedAt: null, publishUrl: null,
+          createdAt: 't', updatedAt: 't', platforms: ['instagram'],
+        },
+      ],
+      total: 1,
+      hasMore: false,
+    }
+  }
+  const mcp = await connect(client)
+  const res = await mcp.callTool({ name: 'list_cards', arguments: { archived: true } })
+  // The WIRING half: a flag the tool accepts but never forwards would leave the agent unable to see the
+  // archive at all, which is exactly the regression this parameter was added to close.
+  assert.equal((seen as { archived?: boolean }).archived, true)
+  assert.match(res.content[0].text, /\[archived\]/)
   assert.ok(!res.isError)
 })
 

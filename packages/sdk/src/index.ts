@@ -93,7 +93,6 @@ export type {
   ImportedMedia,
   UploadedMedia,
   PostPlatform,
-  CardStatus,
   Stage,
   CardSummary,
   CardAsset,

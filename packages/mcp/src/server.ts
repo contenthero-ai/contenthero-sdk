@@ -2122,7 +2122,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe(
             "Which space's board to list, from list_spaces. Omit ONLY when you mean the account's default space; omitting it does not search every board.",
           ),
-        status: z.enum(['draft', 'active', 'completed', 'archived']).optional().describe('Filter by lifecycle status.'),
+        archived: z
+          .boolean()
+          .optional()
+          .describe('Only ARCHIVED cards. Archived cards are excluded by default, matching the board.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
         stage: z.string().optional().describe('Filter by a stage id, slug, or name. Resolved within the chosen space.'),
         search: z.string().optional().describe('Case-insensitive title search, scoped to the chosen space.'),
@@ -2136,7 +2139,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         return cardListResult(
           await client.listCards({
             spaceId: args.spaceId,
-            status: args.status,
+            archived: args.archived,
             platform: args.platform,
             stage: args.stage,
             search: args.search,
@@ -2376,12 +2379,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Card',
       annotations: WRITE,
       description:
-        "Update a card: its fields (title, description, script, notes, status, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
+        "Update a card: its fields (title, description, script, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
         title: z.string().optional(),
         platform: z.enum(POST_PLATFORMS).optional(),
-        status: z.enum(['draft', 'active', 'completed', 'archived']).optional(),
         stage: z.string().optional().describe('Move the post to this stage (id, slug, or name).'),
         spaceId: z
           .string()
@@ -2794,7 +2796,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (card, brand_kit, brand_kit_section, project, space). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving a card sets its status to 'archived'; restoring returns it to 'draft'. Requires the favorites:write scope. Idempotent in both directions.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (card, brand_kit, brand_kit_section, project, space). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
           .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space'])

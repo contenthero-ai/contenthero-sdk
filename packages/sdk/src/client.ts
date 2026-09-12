@@ -922,7 +922,7 @@ export class ContentHero {
    */
   async listCards(options: ListCardsOptions = {}): Promise<CardListResult> {
     const q = new URLSearchParams()
-    if (options.status) q.set('status', options.status)
+    if (options.archived) q.set('archived', 'true')
     if (options.platform) q.set('platform', options.platform)
     if (options.stage) q.set('stage', options.stage)
     if (options.isFavorite) q.set('is_favorite', 'true')

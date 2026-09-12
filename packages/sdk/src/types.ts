@@ -1243,8 +1243,16 @@ export type PostPlatform =
   | 'threads'
   | 'general'
 
-/** A post's lifecycle status. 'archived' is the archive state (no hard delete). */
-export type CardStatus = 'draft' | 'active' | 'completed' | 'archived'
+/**
+ * 🚨 `CardStatus` IS GONE, AND SO IS THE COLUMN BEHIND IT. A card has no status.
+ *
+ * It carried no information and where it was set it was wrong. Publishing deliberately never wrote it
+ * (`published_at IS NOT NULL` is the canonical indicator), so almost every row read `draft` regardless of
+ * what the card actually was, and the handful that did not contradicted their own timestamps.
+ *
+ * ⭐ A CARD'S STATE IS FOUR FACTS THAT ALREADY EXIST: `stageId` (the pipeline position the user controls),
+ * `scheduledAt`, `publishedAt` and `archivedAt`. Read those instead.
+ */
 
 /**
  * A stage. Stages are per-account customizable (renamed, reordered,
@@ -1291,12 +1299,15 @@ export interface CardSummary {
   id: string
   title: string
   platform: string | null
-  status: string
   stageId: string | null
   boardOrder: number | null
   contentType: string | null
   coverUrl: string | null
   isFavorite: boolean
+  /** When the card was archived; `null` is live. The stored fact. */
+  archivedAt: string | null
+  /** Derived from `archivedAt` for convenience. There is no such column. */
+  isArchived: boolean
   folderId: string | null
   scheduledAt: string | null
   publishedAt: string | null
@@ -1366,7 +1377,13 @@ export interface CardListResult {
 
 /** Options for `listCards`. */
 export interface ListCardsOptions {
-  status?: string
+  /**
+   * `true` lists ARCHIVED cards instead of live ones. Archived are excluded by default.
+   *
+   * ⚠️ THIS REPLACED `status`, WHICH WAS THE ONLY WAY TO SEE ARCHIVED CARDS. Archive is its own field now,
+   * so without this the archive would have become unreachable through the API.
+   */
+  archived?: boolean
   platform?: string
   /** A stage id, slug, or name; resolved against your stages server-side. */
   stage?: string
@@ -1401,7 +1418,6 @@ export interface CreateCardInput {
   title: string
   platform: PostPlatform
   stage?: string | null
-  status?: CardStatus
   /** A public URL for the post cover (the card thumbnail). */
   coverUrl?: string | null
   /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
@@ -1445,7 +1461,8 @@ export interface CardAssetInput {
 export interface UpdateCardInput {
   title?: string
   platform?: PostPlatform
-  status?: CardStatus
+  /** Archive or restore the card. `status` is untouched because a card no longer has one. */
+  archived?: boolean
   /** A stage id, slug, or name; resolved in the space the card is landing in. */
   stage?: string | null
   /**
