@@ -992,6 +992,98 @@ export class ContentHero {
     return data.stages
   }
 
+  /**
+   * Create a stage (a column on a board).
+   *
+   * `spaceId` may be omitted, and only here: a new column goes to the account's
+   * default board, the same answer `createCard` gives. Every other stage write
+   * requires the board, because the stage id already determines it and a
+   * default could only contradict it.
+   *
+   * The slug is DERIVED from the name and is not settable. A board cannot hold
+   * two columns whose names derive the same slug, and the server refuses the
+   * second rather than inventing `done-2`.
+   *
+   * `afterId` / `beforeId` place the column. Omit both and it goes to the end.
+   */
+  async createStage(input: {
+    name: string
+    spaceId?: string
+    color?: string
+    afterId?: string | null
+    beforeId?: string | null
+  }): Promise<Stage> {
+    const data = await this.request<{ stage: Stage }>('POST', '/api/v1/stages', {
+      name: input.name,
+      space_id: input.spaceId,
+      color: input.color,
+      after_id: input.afterId,
+      before_id: input.beforeId,
+    })
+    return data.stage
+  }
+
+  /**
+   * Update a stage: rename it, recolor it, or move it.
+   *
+   * A PATCH, not a replace: a field you omit is left alone. Renaming
+   * re-derives the slug, so a column called Done has the slug `done`; a rename
+   * that would collide with another column on the same board is REFUSED.
+   *
+   * Moving names NEIGHBORS rather than a position, because a position computed
+   * against a list you fetched earlier is stale by the time it arrives. Pass
+   * `afterId: null` to move it to the far left, `beforeId: null` for the far
+   * right. Omit both to leave it where it is.
+   *
+   * `respaced` is true when the move renumbered the WHOLE board, which happens
+   * when two columns have no room between them. Re-list the stages when you see
+   * it: every other `sortOrder` you are holding is stale.
+   */
+  async updateStage(
+    stageId: string,
+    input: {
+      spaceId: string
+      name?: string
+      color?: string
+      afterId?: string | null
+      beforeId?: string | null
+    },
+  ): Promise<{ stage: Stage; respaced: boolean }> {
+    const body: Record<string, unknown> = { space_id: input.spaceId }
+    if (input.name !== undefined) body.name = input.name
+    if (input.color !== undefined) body.color = input.color
+    if (input.afterId !== undefined) body.after_id = input.afterId
+    if (input.beforeId !== undefined) body.before_id = input.beforeId
+
+    return this.request<{ stage: Stage; respaced: boolean }>(
+      'PATCH',
+      `/api/v1/stages/${encodeURIComponent(stageId)}`,
+      body,
+    )
+  }
+
+  /**
+   * Delete a stage, moving its cards to `targetStageId`.
+   *
+   * The server REFUSES a column that still holds cards when you name no target,
+   * and says how many there are. Cards are never destroyed by deleting a
+   * column: the delete and the reassignment are one transaction.
+   *
+   * Returns the board as it stands afterwards, already counted, so you do not
+   * have to re-list to find out what is left.
+   */
+  async deleteStage(
+    stageId: string,
+    input: { spaceId: string; targetStageId?: string | null },
+  ): Promise<{ id: string; movedCards: number; stages: Stage[] }> {
+    const data = await this.request<{ id: string; moved_cards: number; stages: Stage[] }>(
+      'DELETE',
+      `/api/v1/stages/${encodeURIComponent(stageId)}`,
+      { space_id: input.spaceId, target_stage_id: input.targetStageId ?? null },
+    )
+    return { id: data.id, movedCards: data.moved_cards, stages: data.stages }
+  }
+
   // -------------------------------------------------------------------------
   // Spaces (the planner's top-level container: Space > Stage > Card > Post)
   //

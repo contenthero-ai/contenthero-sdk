@@ -112,6 +112,8 @@ import {
   enhanceClipsResult,
   pendingResult,
   stageListResult,
+  stageResult,
+  stageDeletedResult,
   spaceDeletedResult,
   spaceListResult,
   spaceResult,
@@ -2323,6 +2325,121 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return stageListResult(await client.listStages({ spaceId: args.spaceId }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_stage ---------------------------------------------------------
+  server.registerTool(
+    'create_stage',
+    {
+      title: 'Create Stage',
+      annotations: WRITE,
+      description:
+        "Create a stage (a column on one board). ⚠️ STAGES ARE PER-SPACE: without spaceId this creates on the account's DEFAULT board, which is rarely what you want once more than one space exists, so call list_spaces first. The slug is DERIVED from the name and is not settable; a board cannot hold two columns whose names produce the same slug and the server refuses the second rather than renaming it for you. Place the column with afterId/beforeId, or omit both to put it at the end. Requires the planner:write scope.",
+      inputSchema: {
+        name: z.string().describe('The column name, for example "In Review". Must contain a letter or number.'),
+        spaceId: z
+          .string()
+          .optional()
+          .describe("Which board, from list_spaces. Omit only when you mean the account's default space."),
+        color: z.string().optional().describe('A hex color such as "#3B82F6".'),
+        afterId: z.string().optional().describe('Put the new column immediately after this stage id.'),
+        beforeId: z.string().optional().describe('Put the new column immediately before this stage id.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return stageResult(
+          await client.createStage({
+            name: args.name,
+            spaceId: args.spaceId,
+            color: args.color,
+            afterId: args.afterId,
+            beforeId: args.beforeId,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_stage ---------------------------------------------------------
+  server.registerTool(
+    'update_stage',
+    {
+      title: 'Update Stage',
+      annotations: WRITE,
+      description:
+        "Rename, recolor or move one stage. This is a PATCH: a field you omit is left alone. ⚠️ spaceId is REQUIRED, because a stage id alone does not tell the server which board you mean and guessing the wrong one silently changes nothing. Renaming re-derives the slug, so renaming a column away from 'Published' also stops publishing auto-moving cards into it; a rename that collides with another column on the same board is refused. Moving names NEIGHBORS, not a position: pass afterId or beforeId. Requires the planner:write scope.",
+      inputSchema: {
+        stageId: z.string().describe('The stage id to update, from list_stages.'),
+        spaceId: z.string().describe('The board this stage is on, from list_stages or list_spaces.'),
+        name: z.string().optional().describe('A new name. The slug follows it automatically.'),
+        color: z.string().optional().describe('A new hex color such as "#3B82F6".'),
+        afterId: z
+          .string()
+          .optional()
+          .describe('Move it immediately after this stage id. Use the empty string to move it to the far left.'),
+        beforeId: z
+          .string()
+          .optional()
+          .describe('Move it immediately before this stage id. Use the empty string to move it to the far right.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        /*
+          An empty string is how a tool caller says "the edge": JSON Schema cannot distinguish an
+          omitted string from an explicit null in a plain string field, and the two mean opposite
+          things here. Omitted means "do not move it"; null means "move it to the end of the board".
+          `update_space` resolves the same ambiguity the same way for coverUrl.
+        */
+        const edge = (v: string | undefined) => (v === undefined ? undefined : v === '' ? null : v)
+        const { stage, respaced } = await client.updateStage(args.stageId, {
+          spaceId: args.spaceId,
+          name: args.name,
+          color: args.color,
+          afterId: edge(args.afterId),
+          beforeId: edge(args.beforeId),
+        })
+        return stageResult(stage, respaced)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- delete_stage ---------------------------------------------------------
+  server.registerTool(
+    'delete_stage',
+    {
+      title: 'Delete Stage',
+      annotations: WRITE,
+      description:
+        'Delete a stage and move its cards to another column. The server REFUSES a column that still holds cards when you name no targetStageId, and tells you how many there are: cards are never destroyed by deleting a column, and the delete and the reassignment happen in one transaction. Returns the board that is left. Requires the planner:write scope.',
+      inputSchema: {
+        stageId: z.string().describe('The stage id to delete, from list_stages.'),
+        spaceId: z.string().describe('The board this stage is on.'),
+        targetStageId: z
+          .string()
+          .optional()
+          .describe('Where this column\'s cards should go. Required unless the column is empty.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const result = await client.deleteStage(args.stageId, {
+          spaceId: args.spaceId,
+          targetStageId: args.targetStageId ?? null,
+        })
+        return stageDeletedResult(result.id, result.movedCards, result.stages)
       } catch (err) {
         return errorResult(err)
       }

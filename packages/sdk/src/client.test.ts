@@ -665,3 +665,93 @@ test('uploadMedia falls back to Content-Type when the API omits uploadHeaders', 
   const put = calls.find((c) => c.url === 'https://store.example/put2')
   assert.deepEqual(put?.init?.headers, { 'Content-Type': 'image/png' })
 })
+
+/**
+ * Stage WRITES. `/api/v1/stages` was read-only until now: an agent could see a board's columns and
+ * never change them, so it could file a card into Review but could not create Review.
+ */
+test('createStage posts the snake_case body the v1 route reads', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 201, body: { stage: { id: 'st1', name: 'In Review', slug: 'in-review', color: null, sortOrder: 3, isDefault: false } } },
+  ])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const stage = await c.createStage({ name: 'In Review', spaceId: 'sp1', afterId: 'st0' })
+
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/stages')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  const body = JSON.parse(String(calls[0]?.init?.body))
+  assert.equal(body.name, 'In Review')
+  assert.equal(body.space_id, 'sp1')
+  // ⚠️ THE WIRE IS snake_case AND THE SDK IS camelCase. A mismatch here is silent: the route reads
+  // `after_id`, so sending `afterId` would place nothing and still return 201.
+  assert.equal(body.after_id, 'st0')
+  assert.equal(stage.slug, 'in-review')
+})
+
+test('createStage may omit the space, and every other stage write may not', async () => {
+  const { fetch, calls } = stubFetch([{ status: 201, body: { stage: { id: 'st1', name: 'X', slug: 'x', color: null, sortOrder: 0, isDefault: false } } }])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await c.createStage({ name: 'X' })
+  const body = JSON.parse(String(calls[0]?.init?.body))
+  assert.equal(body.space_id, undefined, 'an absent space means the account default, deliberately')
+})
+
+/**
+ * 🚨 OMITTED AND NULL ARE OPPOSITE INSTRUCTIONS FOR AN ANCHOR. Omitting both means "do not move it";
+ * `afterId: null` means "move it to the far left". Collapsing them would make every rename also jump
+ * the column to one end.
+ */
+test('updateStage sends only the fields given, and distinguishes null from absent', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { stage: { id: 'st1', name: 'Done', slug: 'done', color: null, sortOrder: 2, isDefault: false }, respaced: false } },
+  ])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await c.updateStage('st1', { spaceId: 'sp1', name: 'Done' })
+
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/stages/st1')
+  assert.equal(calls[0]?.init?.method, 'PATCH')
+  const body = JSON.parse(String(calls[0]?.init?.body))
+  assert.equal(body.name, 'Done')
+  assert.equal(body.space_id, 'sp1')
+  assert.ok(!('after_id' in body), 'omitting the anchors must not move the column')
+  assert.ok(!('color' in body), 'a PATCH leaves an omitted field alone')
+
+  const edge = stubFetch([{ status: 200, body: { stage: { id: 'st1', name: 'Done', slug: 'done', color: null, sortOrder: 0, isDefault: false }, respaced: true } }])
+  const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: edge.fetch, baseUrl: 'https://example.test' })
+  const moved = await c2.updateStage('st1', { spaceId: 'sp1', afterId: null })
+  const edgeBody = JSON.parse(String(edge.calls[0]?.init?.body))
+  assert.equal(edgeBody.after_id, null, 'an explicit null must reach the wire as null')
+  // The one answer a caller cannot derive: a renumber invalidates every other sortOrder it holds.
+  assert.equal(moved.respaced, true)
+})
+
+test('updateStage encodes the id, so a stage id is never pasted raw into the path', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { stage: { id: 'a/b', name: 'X', slug: 'x', color: null, sortOrder: 0, isDefault: false }, respaced: false } }])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await c.updateStage('a/b', { spaceId: 'sp1', name: 'X' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/stages/a%2Fb')
+})
+
+test('deleteStage sends the board and the target in its body, and unwraps moved_cards', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { success: true, id: 'st1', moved_cards: 4, stages: [{ id: 'st2', name: 'Ideation', slug: 'ideation', color: null, sortOrder: 0, isDefault: true }] } },
+  ])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const result = await c.deleteStage('st1', { spaceId: 'sp1', targetStageId: 'st2' })
+
+  assert.equal(calls[0]?.init?.method, 'DELETE')
+  const body = JSON.parse(String(calls[0]?.init?.body))
+  assert.equal(body.space_id, 'sp1')
+  assert.equal(body.target_stage_id, 'st2')
+  // The response field is snake_case on the wire and camelCase in the SDK; unwrapped once, here.
+  assert.equal(result.movedCards, 4)
+  assert.equal(result.stages.length, 1)
+})
+
+test('deleteStage sends an explicit null target, so the server can refuse a non-empty column', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { success: true, id: 'st1', moved_cards: 0, stages: [] } }])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await c.deleteStage('st1', { spaceId: 'sp1' })
+  const body = JSON.parse(String(calls[0]?.init?.body))
+  assert.equal(body.target_stage_id, null)
+})

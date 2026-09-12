@@ -229,3 +229,57 @@ test('schema dumps a scoped command with its options, needing no key', async () 
   assert.ok(model?.required, 'model option is marked required')
   assert.ok(dumped.globalOptions.some((o) => o.flags.includes('--api-key')))
 })
+
+/**
+ * ⭐ THE CLI TRACKS THE MCP, AND THIS IS THE RATCHET FOR IT.
+ *
+ * The standing rule is that every MCP tool gets equal CLI coverage, and it had been enforced by
+ * remembering. Stage writes are the case that made it worth ratcheting: `/api/v1/stages` was read-only,
+ * so all three published surfaces had `list` and nothing else, and the two write surfaces were added
+ * together rather than one now and one later.
+ */
+test('stage is a full CRUD surface, matching the MCP stage tools one for one', () => {
+  assert.deepEqual(subcommands('stage').sort(), ['create', 'delete', 'list', 'update'])
+})
+
+/**
+ * 🚨 `--space` IS REQUIRED ON THE WRITES TO AN EXISTING COLUMN, AND THAT IS THE WHOLE DEFECT THIS
+ * WORKSTREAM OPENED WITH. A stage id alone does not name a board; the server used to default it to the
+ * account's OLDEST space, so a rename aimed at any other board matched zero rows and reported success.
+ *
+ * ⚠️ `create` IS DELIBERATELY EXEMPT. Creating into "the account's default board" is a meaningful
+ * answer; changing an existing column is not, because its id already decided which board it is on.
+ */
+test('stage update and delete require a board, and create does not', () => {
+  const stage = buildProgram().commands.find((c) => c.name() === 'stage')!
+  const spaceOption = (name: string) => {
+    const cmd = stage.commands.find((c) => c.name() === name)
+    assert.ok(cmd, `stage ${name} is registered`)
+    const opt = cmd!.options.find((o) => o.long === '--space')
+    assert.ok(opt, `stage ${name} takes --space`)
+    return opt!
+  }
+  /*
+    ⚠️ `mandatory`, NOT `required`. In commander `required` means the FLAG TAKES A VALUE, which is true
+    of `--space <id>` however it was declared, so the first version of this test passed for both the
+    right and the wrong reason and could not have caught `requiredOption` being downgraded to `option`.
+    `mandatory` is the one that means "the flag must be present".
+  */
+  assert.equal(spaceOption('update').mandatory, true, 'a rename must name its board')
+  assert.equal(spaceOption('delete').mandatory, true, 'a delete must name its board')
+  assert.notEqual(spaceOption('create').mandatory, true, 'creating may fall back to the default board')
+})
+
+/**
+ * ⚠️ AN EDGE NEEDS ITS OWN FLAG. "--after with no value" cannot be told apart from "--after omitted",
+ * and the two mean opposite things: omitting both anchors leaves the column where it is, while moving
+ * to the far left is an explicit null on the wire. `space update --no-cover` exists for the same reason.
+ */
+test('stage update can say "move it to an edge" separately from "do not move it"', () => {
+  const update = buildProgram()
+    .commands.find((c) => c.name() === 'stage')!
+    .commands.find((c) => c.name() === 'update')!
+  const longs = update.options.map((o) => o.long)
+  assert.ok(longs.includes('--to-start'), 'the far left needs a way to be said')
+  assert.ok(longs.includes('--to-end'), 'the far right needs a way to be said')
+})

@@ -961,6 +961,35 @@ export function stageListResult(stages: Stage[]): CallToolResult {
   return text([`${stages.length} stage(s) (in order):`, ...rows].join('\n'))
 }
 
+/** One created or updated stage. */
+export function stageResult(s: Stage, respaced = false): CallToolResult {
+  const lines = [
+    `Stage ${s.name} (id ${s.id})`,
+    s.slug ? `Slug: ${s.slug}` : null,
+    s.color ? `Color: ${s.color}` : null,
+    `Position: ${s.sortOrder}`,
+  ].filter(Boolean) as string[]
+  /*
+    ⚠️ SAID OUT LOUD, because it is the one answer the caller cannot derive. A move with no room between
+    two columns renumbers the WHOLE board, so every other stage the agent is holding is stale and a
+    renumbered key looks like any other number.
+  */
+  if (respaced) {
+    lines.push('The whole board was renumbered to make room. Call list_stages again: every other stage position you are holding is now stale.')
+  }
+  return text(lines.join('\n'))
+}
+
+/** A deleted stage, and the board that is left. */
+export function stageDeletedResult(id: string, movedCards: number, stages: Stage[]): CallToolResult {
+  const moved =
+    movedCards > 0
+      ? `${movedCards} ${movedCards === 1 ? 'card' : 'cards'} moved to the target stage.`
+      : 'It held no cards.'
+  const rows = stages.map((s) => `- ${s.name} (id ${s.id})`)
+  return text([`Deleted stage ${id}. ${moved}`, '', `${stages.length} stage(s) remaining:`, ...rows].join('\n'))
+}
+
 /** The non-empty keys of a post's platformSettings, for a compact summary. */
 function settingsKeys(settings: Record<string, unknown> | null | undefined): string | null {
   if (!settings) return null
