@@ -104,6 +104,7 @@ import type {
   Post,
   CardDetail,
   CardListResult,
+  StageListResult,
   PostPlatform,
   CardSummary,
   Tag,
@@ -986,10 +987,12 @@ export class ContentHero {
    * access. Use this to resolve a stage before placing a post; stages are
    * per-account customizable.
    */
-  async listStages(options: ListStagesOptions = {}): Promise<Stage[]> {
+  async listStages(options: ListStagesOptions = {}): Promise<StageListResult> {
     const qs = options.spaceId ? `?space_id=${encodeURIComponent(options.spaceId)}` : ''
-    const data = await this.request<{ stages: Stage[] }>('GET', `/api/v1/stages${qs}`)
-    return data.stages
+    // ⭐ RETURNS `{ stages, space }` RATHER THAN A BARE ARRAY. Unwrapping to `data.stages` threw away the
+    // only thing that says WHOSE stages these are, and this read falls back to the default space when none
+    // is named. See `StageListResult`.
+    return this.request<StageListResult>('GET', `/api/v1/stages${qs}`)
   }
 
   /**

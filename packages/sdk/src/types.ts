@@ -1388,6 +1388,22 @@ export interface CardListResult {
   space: ResolvedSpace
 }
 
+/**
+ * Result of `listStages`: a space's stages in order, and the SCOPE they belong to.
+ *
+ * ⭐⭐⭐ THIS USED TO BE A BARE `Stage[]`. A bare array has nowhere to say which board it came from, and
+ * this read falls back to the account's default space when none is named, so both surfaces rendered stages
+ * with no indication of whose they were.
+ *
+ * ⚠️ THE NAME CANNOT BE DERIVED FROM THE ROWS. A `Stage` carries its `spaceId`, so a populated list could
+ * have been labelled from its first row. An EMPTY list carries nothing, and the empty case is the one that
+ * misleads, so the scope is returned alongside rather than inferred from them.
+ */
+export interface StageListResult {
+  stages: Stage[]
+  space: ResolvedSpace
+}
+
 /** Options for `listCards`. */
 export interface ListCardsOptions {
   /**

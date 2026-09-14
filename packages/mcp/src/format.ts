@@ -43,6 +43,7 @@ import type {
   Post,
   CardDetail,
   CardListResult,
+  StageListResult,
   CardSummary,
   Tag,
   PublishResult,
@@ -965,12 +966,18 @@ export function spaceResult(s: Space): CallToolResult {
   return text(lines.join('\n'))
 }
 
-export function stageListResult(stages: Stage[]): CallToolResult {
-  if (!stages.length) return text('No stages found.')
-  const rows = stages.map(
-    (s) => `- ${s.name} (id ${s.id}${s.slug ? `, slug ${s.slug}` : ''})${s.isDefault ? ' [default]' : ''}`,
-  )
-  return text([`${stages.length} stage(s) (in order):`, ...rows].join('\n'))
+export function stageListResult(result: StageListResult): CallToolResult {
+  /**
+   * ⭐⭐⭐ NAME THE SCOPE, EMPTY CASE INCLUDED, matching `cardListResult` word for word.
+   *
+   * Stages are per-space and this read falls back to the default space when none is named, so a list of
+   * unfamiliar column names and "No stages found." are both answers about a board the caller may not have
+   * meant. The old signature took a bare `Stage[]` and had nothing to say it with.
+   */
+  const where = result.space ? ` in ${result.space.name}` : ''
+  if (!result.stages.length) return text(`No stages found${where}.`)
+  const rows = result.stages.map((s) => `- ${s.name} (id ${s.id}${s.slug ? `, slug ${s.slug}` : ''})`)
+  return text([`${result.stages.length} stage(s)${where} (in order):`, ...rows].join('\n'))
 }
 
 /** One created or updated stage. */

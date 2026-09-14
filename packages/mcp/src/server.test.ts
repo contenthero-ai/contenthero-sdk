@@ -303,10 +303,13 @@ function fakeClient(overrides = {}) {
     }),
     createCard: async (input) => ({ id: 'p-new', title: input.title, description: input.description ?? null, platform: input.platform, status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     updateCard: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
-    listStages: async () => [
-      { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
-      { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
-    ],
+    listStages: async () => ({
+      stages: [
+        { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
+        { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
+      ],
+      space: { id: 'sp1', name: 'Product Development' },
+    }),
     updatePostDestination: async (_cardId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
     publishPost: async (cardId) => ({ cardId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
     listAccounts: async (options) => {
@@ -1659,6 +1662,26 @@ test('list_stages lists stages with id and slug for resolution', async () => {
   const res = await mcp.callTool({ name: 'list_stages', arguments: {} })
   assert.match(res.content[0].text, /Ideation \(id st1, slug ideation\)/)
   assert.match(res.content[0].text, /Published \(id st2, slug published\)/)
+})
+
+/**
+ * ⭐⭐⭐ A SCOPED ANSWER MUST NAME ITS SCOPE, and stages are per-space with a silent fallback to the
+ * account's default. Asserted on BOTH branches because the empty one is the branch that misleads: a
+ * wrong-scope empty list reads as "the thing you asked for does not exist", which is exactly the reading
+ * that sent a whole investigation down the wrong path on 2026-09-14.
+ */
+test('list_stages names the space it is an answer about', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'list_stages', arguments: {} })
+  assert.match(res.content[0].text, /in Product Development/)
+})
+
+test('list_stages names the space even when the space has NO stages', async () => {
+  const client = fakeClient()
+  client.listStages = async () => ({ stages: [], space: { id: 'sp1', name: 'Product Development' } })
+  const mcp = await connect(client)
+  const res = await mcp.callTool({ name: 'list_stages', arguments: {} })
+  assert.equal(res.content[0].text, 'No stages found in Product Development.')
 })
 
 test('archive marks a card via the universal tool', async () => {

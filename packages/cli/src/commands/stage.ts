@@ -17,7 +17,7 @@
  */
 
 import type { Command } from 'commander'
-import type { Stage } from '@contenthero/sdk'
+import type { Stage, StageListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, table } from '../output.js'
 
@@ -35,13 +35,18 @@ export function registerStage(program: Command): void {
     .option('--space <id>', "which space's stages (from `contenthero space list`); default space if omitted")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const stages = await client.listStages({ spaceId: opts.space as string | undefined })
-      emit(stages, ctx, (rows: Stage[]) =>
-        table(
-          ['ORDER', 'NAME', 'SLUG', 'DEFAULT', 'ID'],
-          rows.map((s) => [s.sortOrder, s.name, s.slug ?? '', s.isDefault ? 'yes' : '', s.id]),
-        ),
-      )
+      const result = await client.listStages({ spaceId: opts.space as string | undefined })
+      emit(result, ctx, (r: StageListResult) => {
+        // ⭐ NAME THE SCOPE, matching `card list` and the MCP. Stages are per-space and this falls back to
+        // the default space, so an unfamiliar set of columns should say whose it is rather than look wrong.
+        const where = r.space ? ` in ${r.space.name}` : ''
+        if (!r.stages.length) return `No stages found${where}.`
+        const t = table(
+          ['ORDER', 'NAME', 'SLUG', 'ID'],
+          r.stages.map((s) => [s.sortOrder, s.name, s.slug ?? '', s.id]),
+        )
+        return `${t}\n\n${r.stages.length} stage(s)${where}`
+      })
     })
 
   stage

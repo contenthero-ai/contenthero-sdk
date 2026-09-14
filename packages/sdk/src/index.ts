@@ -102,6 +102,7 @@ export type {
   Tag,
   CardListResult,
   ResolvedSpace,
+  StageListResult,
   ListCardsOptions,
   ListStagesOptions,
   CreateCardInput,
