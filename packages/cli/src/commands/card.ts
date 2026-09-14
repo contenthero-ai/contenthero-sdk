@@ -131,11 +131,24 @@ export function registerCard(program: Command): void {
         offset: opts.offset as number | undefined,
       })
       emit(result, ctx, (r: CardListResult) => {
+        /**
+         * ⭐⭐⭐ NAME THE SCOPE, AND NAME IT IN THE EMPTY CASE TOO.
+         *
+         * This lists ONE space and falls back to the default when `--space` is omitted, so both "4 of 4" and
+         * an empty table are answers about a board the caller may not have meant. Measured 2026-09-14 on the
+         * MCP twin of this command: a wrong-scope EMPTY list reads as "the thing you asked for does not
+         * exist", and that is the reading that sent a whole investigation down the wrong path.
+         *
+         * ⚠️ WORDED IDENTICALLY TO `cardListResult` IN THE MCP. Two surfaces over one API should not
+         * describe the same fact two ways; a user moving between them should recognise the sentence.
+         */
+        const where = r.space ? ` in ${r.space.name}` : ''
+        if (!r.cards.length) return `No cards found${where}.`
         const t = table(
           ['ID', 'PLATFORM', 'TITLE'],
           r.cards.map((p) => [p.id.slice(0, 8), p.platform ?? '', p.title]),
         )
-        return `${t}\n\n${r.cards.length} of ${r.total}${r.hasMore ? ' (more available)' : ''}`
+        return `${t}\n\n${r.cards.length} of ${r.total}${where}${r.hasMore ? ' (more available)' : ''}`
       })
     })
 

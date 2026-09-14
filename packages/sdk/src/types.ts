@@ -1366,13 +1366,26 @@ export interface Tag {
   isSystem: boolean
 }
 
-/** Result of `listCards`: a page of cards plus pagination metadata. */
+/** The space a scoped read resolved to. Always present, so a caller never has to infer it. */
+export interface ResolvedSpace {
+  id: string
+  name: string
+}
+
+/** Result of `listCards`: a page of cards, pagination metadata, and the SCOPE it answers about. */
 export interface CardListResult {
   /** ⚠️ `cards`, NOT `posts`. This has always held CARDS. `Post` now means a publish DESTINATION,
    *  and the stale name is what let an app-side realtime binding subscribe to the wrong table. */
   cards: CardSummary[]
   total: number
   hasMore: boolean
+  /**
+   * ⭐⭐⭐ THE SPACE THIS LIST IS AN ANSWER ABOUT. This read is scoped to ONE space and falls back to the
+   * account's default when none is named, so without this a list of the wrong board is indistinguishable
+   * from a list of the right one. Measured 2026-09-14: a caller passing `space_id` where the parameter is
+   * `spaceId` got a complete-looking list of a different board and concluded the filter was ignored.
+   */
+  space: ResolvedSpace
 }
 
 /** Options for `listCards`. */

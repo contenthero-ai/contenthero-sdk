@@ -868,9 +868,21 @@ function cardLine(p: CardSummary): string {
 
 /** List of posts with pagination context. */
 export function cardListResult(result: CardListResult): CallToolResult {
-  if (!result.cards.length) return text('No cards found.')
+  /**
+   * ⭐⭐⭐ NAME THE SCOPE, INCLUDING WHEN THE LIST IS EMPTY.
+   *
+   * This read covers ONE space and falls back to the default when none is named, so "No cards found" and
+   * "9 card(s)" are both answers about a board the caller may not have meant. Measured 2026-09-14: a call
+   * passing `space_id`, where the tool declares `spaceId`, had the key dropped, listed the default space,
+   * and read as proof that the tool ignored its filters.
+   *
+   * ⚠️ THE EMPTY CASE IS THE ONE THAT MATTERS MOST. A wrong-scope list of cards at least looks unfamiliar;
+   * a wrong-scope EMPTY list looks like the thing you asked for does not exist.
+   */
+  const where = result.space ? ` in ${result.space.name}` : ''
+  if (!result.cards.length) return text(`No cards found${where}.`)
   const more = result.hasMore ? ` (showing ${result.cards.length} of ${result.total}; raise limit/offset for more)` : ''
-  return text([`${result.total} card(s)${more}:`, ...result.cards.map(cardLine)].join('\n'))
+  return text([`${result.total} card(s)${where}${more}:`, ...result.cards.map(cardLine)].join('\n'))
 }
 
 /**
