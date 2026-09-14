@@ -1291,8 +1291,19 @@ export interface Stage {
   slug: string | null
   color: string | null
   sortOrder: number
-  isDefault: boolean
 }
+
+/**
+ * ⛔ `isDefault` WAS REMOVED FROM `Stage`, AND IT NEVER MEANT "THE DEFAULT STAGE".
+ *
+ * It meant "came from the seeded stage set", so it was true on 5 of 5 stages in one space, 6 of 6 in
+ * another and 77 of 79 in a third, and a CLI column headed DEFAULT told users every column was the default
+ * one. The underlying `stages.is_default` was nullable, defaulted to false and carried no unique
+ * constraint, so nothing ever stopped them all being true.
+ *
+ * Nothing branched on it in either repository. The rule it appeared to describe, which stage a card lands
+ * in when none is named, is answered by ORDER: the server returns the first stage by `sortOrder`.
+ */
 
 /** A post as returned by `listCards` (the list projection). */
 export interface CardSummary {

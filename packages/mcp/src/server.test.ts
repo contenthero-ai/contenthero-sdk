@@ -305,8 +305,8 @@ function fakeClient(overrides = {}) {
     updateCard: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     listStages: async () => ({
       stages: [
-        { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0, isDefault: true },
-        { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5, isDefault: true },
+        { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0 },
+        { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5 },
       ],
       space: { id: 'sp1', name: 'Product Development' },
     }),
