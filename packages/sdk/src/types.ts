@@ -913,7 +913,7 @@ export interface MediaItem extends MediaSummary {
 
 /**
  * VIDEO keyframe watch (opt-in): set any of these on a video item to get low-res keyframes across the
- * [fromSec, toSec] source-time window (whole clip by default), so you can SEE the footage — the fix for
+ * [fromSec, toSec] source-time window (whole clip by default), so you can SEE the footage, which is the fix for
  * "video returns no frame yet". Frame-based, so cost is decoupled from clip length.
  */
 export interface MediaClipWindow {

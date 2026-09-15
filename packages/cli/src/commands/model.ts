@@ -97,7 +97,7 @@ export function registerModel(program: Command): void {
           ...(gen ? [['Generations', `${gen.min}-${gen.max} (default ${gen.default})`] as [string, string]] : []),
           ...(enabledFeatures.length ? [['Features', enabledFeatures.join(', ')] as [string, string]] : []),
           ...(model.promptReferences && model.promptReferences.scheme !== 'none'
-            ? [['Referencing', `${model.promptReferences.scheme} — ${model.promptReferences.instruction}`] as [string, string]]
+            ? [['Referencing', `${model.promptReferences.scheme}: ${model.promptReferences.instruction}`] as [string, string]]
             : []),
         ])
       })
