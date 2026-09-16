@@ -1457,6 +1457,18 @@ export interface ListStagesOptions {
 export interface CreateCardInput {
   title: string
   platform: PostPlatform
+  /**
+   * Which board the card is created on. Omitted means the account's DEFAULT space.
+   *
+   * 🚨 **THIS WAS MISSING WHILE EVERY OTHER SPACE-AWARE CALL HAD IT**, so the one write that PLACES a
+   * card was the one that could not choose where. `listCards`, `listStages`, `createStage` and
+   * `updateCard` all take a space; a card created through the SDK, the MCP or the CLI silently landed
+   * on the default board. `updateCard` could then MOVE it, which is what made the gap read as closed.
+   *
+   * ⚠️ The stage decides the space when `stage` is a stage ID, and the server rejects a `spaceId` that
+   * disagrees with it rather than picking one.
+   */
+  spaceId?: string | null
   stage?: string | null
   /** A public URL for the post cover (the card thumbnail). */
   coverUrl?: string | null

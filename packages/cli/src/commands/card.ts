@@ -197,6 +197,7 @@ export function registerCard(program: Command): void {
     .description('Create a post (requires planner:write)')
     .argument('<title>', 'post title')
     .requiredOption('--platform <platform>', `primary platform: ${PLATFORMS.join(', ')}`)
+    .option('--space <space>', "which space's board (from `contenthero space list`); default space if omitted")
     .option('--stage <stage>', 'stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
@@ -207,6 +208,7 @@ export function registerCard(program: Command): void {
       const input = compact<CreateCardInput>({
         title,
         platform: opts.platform as PostPlatform,
+        spaceId: opts.space as string | undefined,
         stage: opts.stage as string | undefined,
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,

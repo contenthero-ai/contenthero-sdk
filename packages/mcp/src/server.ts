@@ -2453,10 +2453,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Card',
       annotations: WRITE,
       description:
-        "Create a card, the container in the content pipeline. A card holds the work (title, script, notes, cover) and the posts that publish it. Attach posts and media by passing `posts` and `assets` to update_card, then publish with publish_post. `stage` accepts a stage id/slug/name (defaults to the first stage). Requires a key with the planner:write scope.",
+        "Create a card, the container in the content pipeline. A card holds the work (title, script, notes, cover) and the posts that publish it. Attach posts and media by passing `posts` and `assets` to update_card, then publish with publish_post. ⚠️ WITHOUT spaceId THIS LANDS ON THE ACCOUNT'S DEFAULT BOARD, which is rarely what you want once more than one space exists, so call list_spaces first. `stage` accepts a stage id/slug/name and DECIDES the space when it is an id; a spaceId that disagrees with it is rejected rather than guessed. Requires a key with the planner:write scope.",
       inputSchema: {
         title: z.string().describe('Post title (required).'),
         platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
+        spaceId: z
+          .string()
+          .optional()
+          .describe(
+            "Which board to create the card on, from list_spaces. Omit only when you mean the account's default space.",
+          ),
         stage: z.string().optional().describe('Pipeline stage id, slug, or name. Defaults to the first stage.'),
         coverUrl: z.string().optional().describe('Public URL for the post cover (the card thumbnail).'),
         coverOutputId: z
@@ -2476,6 +2482,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           await client.createCard({
             title: args.title,
             platform: args.platform,
+            spaceId: args.spaceId,
             stage: args.stage,
             coverUrl: args.coverUrl,
             coverOutputId: args.coverOutputId,

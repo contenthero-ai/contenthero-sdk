@@ -1657,6 +1657,46 @@ test('create_card passes the title/platform/stage through and returns the new id
   assert.match(res.content[0].text, /Created: Launch clip \(id p-new\)/)
 })
 
+/**
+ * 🚨 **THE ONE WRITE THAT PLACES A CARD COULD NOT CHOOSE WHERE.** `list_cards`, `list_stages`,
+ * `create_stage` and `update_card` all took a space; `create_card` did not, so every card made through
+ * the MCP, the SDK or the CLI landed silently on the account's DEFAULT board. The v1 route had accepted
+ * `spaceId` the whole time, so this was three client layers omitting a parameter the server already
+ * read. ⭐ `update_card` COULD move a card between spaces, which is what made the gap read as closed.
+ */
+test('create_card forwards the space, so a card lands on the board the caller named', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createCard: async (input) => {
+        captured = input
+        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'create_card',
+    arguments: { title: 'Scoped', platform: 'general', spaceId: 'sp-other' },
+  })
+  assert.equal(captured.spaceId, 'sp-other')
+})
+
+test('create_card without a space sends none, so the server picks the default', async () => {
+  // Sending undefined is NOT the same as sending the default's id: the server resolves it, and the
+  // stage decides the space when a stage id is given. The client must not pre-empt either.
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      createCard: async (input) => {
+        captured = input
+        return { id: 'p-new', title: input.title, description: null, platform: input.platform, status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'create_card', arguments: { title: 'Unscoped', platform: 'general' } })
+  assert.equal(captured.spaceId, undefined)
+})
+
 test('list_stages lists stages with id and slug for resolution', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_stages', arguments: {} })
