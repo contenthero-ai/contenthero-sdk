@@ -14,13 +14,39 @@ import { buildProgram } from './program.js'
 import { EXIT, exitCodeForError, messageForError } from './errors.js'
 import { releaseCliPresence } from './context.js'
 
+/**
+ * Exit only once stdout has actually reached the OS.
+ *
+ * `process.exit()` does NOT flush buffered stdout, and Node's stdout is ASYNCHRONOUS when
+ * it is a pipe (it is synchronous for files and TTYs, which is why this never showed up
+ * by hand). So a command whose output exceeds the 64KB pipe buffer had the remainder
+ * discarded the moment we exited.
+ *
+ * Measured on cli 0.3.4: `contenthero schema` wrote 93,998 bytes to a file and 65,536
+ * bytes through a pipe. The whole point of `schema` is that an agent can discover the
+ * command surface, and agents read through pipes, so every agent calling it received
+ * truncated JSON that could not be parsed. Any command whose output crosses 64KB was
+ * affected, not just this one.
+ *
+ * Setting `process.exitCode` and returning would also fix the truncation, but it leaves
+ * the process alive until every handle closes, and an HTTP keep-alive socket can hold it
+ * open for seconds after the work is done. Draining first and then exiting keeps the
+ * immediate exit and loses nothing.
+ */
+async function exitAfterFlush(code: number): Promise<never> {
+  if (process.stdout.writableLength > 0) {
+    await new Promise<void>((resolve) => process.stdout.write('', () => resolve()))
+  }
+  process.exit(code)
+}
+
 async function main(): Promise<void> {
   const program = buildProgram()
 
   // Bare invocation: show help and exit cleanly rather than erroring.
   if (process.argv.slice(2).length === 0) {
     program.outputHelp()
-    process.exit(EXIT.OK)
+    await exitAfterFlush(EXIT.OK)
   }
 
   // Compute the exit code, then release editor presence BEFORE exiting (process.exit would skip a finally), so
@@ -45,7 +71,7 @@ async function main(): Promise<void> {
   }
 
   await releaseCliPresence().catch(() => {})
-  process.exit(exitCode)
+  await exitAfterFlush(exitCode)
 }
 
 void main()

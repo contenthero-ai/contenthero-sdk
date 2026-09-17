@@ -430,7 +430,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Image',
       annotations: WRITE,
       description:
-        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output.',
+        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.image).describe(IMAGE_MODEL_GUIDANCE),
         prompt: z
@@ -498,7 +498,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Reference Board',
       annotations: WRITE,
       description:
-        'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~50s; boards render slowly (minutes), so it usually returns an outputId to poll with get_generation_status.',
+        'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~50s; boards render slowly (minutes), so it usually returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         boardType: z.enum(BOARD_TYPES).describe(BOARD_TYPE_GUIDANCE),
         prompt: z
@@ -562,7 +562,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Video',
       annotations: WRITE,
       description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output.',
+        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.video).describe(VIDEO_MODEL_GUIDANCE),
         prompt: z
@@ -666,7 +666,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Audio',
       annotations: WRITE,
       description:
-        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output.',
+        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.audio).describe(AUDIO_MODEL_GUIDANCE),
         prompt: z.string().optional().describe('For music / sfx: what to generate.'),
@@ -716,7 +716,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Edit Audio',
       annotations: WRITE,
       description:
-        'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST on outputs, one job per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl.',
+        'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST on outputs, one job per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.editAudio).describe(EDIT_AUDIO_MODEL_GUIDANCE),
         sourceUrl: z
@@ -775,7 +775,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Upscale',
       annotations: WRITE,
       description:
-        'Upscale an existing image or video to a higher resolution. Provide the source media URL and a model-supported factor. Waits for the result; if the job is still running it returns an outputId to poll with get_generation_status.',
+        'Upscale an existing image or video to a higher resolution. Provide the source media URL and a model-supported factor. Waits for the result; if the job is still running it returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.upscale).describe(UPSCALE_MODEL_GUIDANCE),
         sourceUrl: z.string().describe('The source image (image upscalers) or video (video upscalers): a URL or a previous output id (e.g. "<id>-1") to upscale an earlier generation.'),
@@ -819,7 +819,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Lip Sync',
       annotations: WRITE,
       description:
-        'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Waits up to ~50s; if still rendering it returns an outputId to poll with get_generation_status.',
+        'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Waits up to ~50s; if still rendering it returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.lipSync).describe(LIP_SYNC_MODEL_GUIDANCE),
         imageUrl: z.string().describe('The portrait to animate (the speaking subject): an image URL or a previous output id (e.g. "<id>-1") to chain.'),
@@ -881,9 +881,19 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'transcribe',
     {
       title: 'Transcribe Audio',
-      annotations: READ,
+      // NOT read-only, despite only returning text. readOnlyHint is a host's signal that a
+      // tool is safe to call without asking the user, and this one is metered per minute of
+      // audio: annotated READ, an agent could transcribe a two-hour file repeatedly,
+      // unattended, spending real credits. Every other metered tool here is a write with a
+      // getCost preflight, and a test now holds that line.
+      //
+      // ⚠️ This tool has NO getCost, and that is a server limitation, not an oversight:
+      // POST /api/v1/studio/transcribe does not accept the flag, and pricing the call
+      // means knowing the audio's duration before transcribing it. Until the route can
+      // price it, the cost is only knowable after the fact, from creditsUsed on the
+      // result. It is the single documented entry in METERED_WITHOUT_PREFLIGHT.
       description:
-        'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, no polling). Metered per minute of audio, so the result reports the credits it cost.',
+        'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, no polling). SPENDS CREDITS, metered per minute of audio, and the cost cannot be previewed: the result reports the credits it cost after the fact. Zero only when the account runs on its own ElevenLabs key.',
       inputSchema: {
         audioUrl: z.string().describe('Public URL of the audio file to transcribe.'),
         languageCode: z
@@ -968,7 +978,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .optional()
           .describe('Free-text description of the character. The strongest single input when no reference photos are given.'),
-        defaultVoiceId: z.string().optional().describe('A voiceId from list_voices, used as this avatar the default voice.'),
+        defaultVoiceId: z.string().optional().describe("A voiceId from list_voices, used as this avatar's default voice."),
         referenceImageUrls: z
           .array(z.string())
           .optional()
@@ -1184,7 +1194,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Brand Kit',
       annotations: WRITE,
       description:
-        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; or FROM A SOCIAL PROFILE, pass its url in brandAccounts (your own) or inspirationAccounts (a creator you watch) with no name at all, and the kit is named after the handle and starts ingesting that account's posts if it is YouTube or Instagram; (2) FROM A WEBSITE, pass websiteUrl + extract:true and ContentHero scrapes that site and fills in business name, positioning, voice, colours, typography, logos and assets by itself, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). A brand with NO WEBSITE (so nothing to extract) is built by passing its fields directly, including logos, whose entries may name outputId to bring in a generation you just made rather than a url. With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the fields fill in over the next minute or two, so poll extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrl or a social profile url is given: it defaults to the site's hostname or the @handle, a placeholder extraction or you overwrite later. Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brandkit:write scope.",
+        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; or FROM A SOCIAL PROFILE, pass its url in brandAccounts (your own) or inspirationAccounts (a creator you watch) with no name at all, and the kit is named after the handle and starts ingesting that account's posts if it is YouTube or Instagram; (2) FROM A WEBSITE, pass websiteUrl + extract:true and ContentHero scrapes that site and fills in business name, positioning, voice, colors, typography, logos and assets by itself, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). A brand with NO WEBSITE (so nothing to extract) is built by passing its fields directly, including logos, whose entries may name outputId to bring in a generation you just made rather than a url. With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the fields fill in over the next minute or two, so poll extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrl or a social profile url is given: it defaults to the site's hostname or the @handle, a placeholder extraction or you overwrite later. Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brandkit:write scope.",
       inputSchema: {
         name: z.string().optional().describe("The kit's name. Optional when websiteUrl is given."),
         websiteUrl: z.string().optional().describe('The business website. Required to use extract.'),
@@ -1193,14 +1203,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Scrape websiteUrl and fill the kit in automatically. Returns at once; poll extractionStatus.'),
         duplicateFrom: z.string().optional().describe('Copy an existing brand kit id instead of starting empty.'),
-        businessName: z.string().optional(),
-        primaryOffer: z.string().optional(),
-        nicheDefinition: z.string().optional(),
+        businessName: z.string().optional().describe('The business or creator name this kit represents.'),
+        primaryOffer: z.string().optional().describe('What this business sells, in one line. Grounds copy in what is actually being promoted.'),
+        nicheDefinition: z.string().optional().describe('The niche this brand operates in. Keeps generated angles on-topic.'),
         positioning: z.record(z.string(), z.unknown()).optional().describe('Positioning object (free-form).'),
         audience: z.record(z.string(), z.unknown()).optional().describe('Audience object (free-form).'),
         voiceProfile: z.record(z.string(), z.unknown()).optional().describe('Voice profile object (tone, style, ...).'),
-        visualStyle: z.string().optional(),
-        designPrinciples: z.array(z.string()).optional(),
+        visualStyle: z.string().optional().describe("The look in words, e.g. 'warm film grain, muted earth tones'. Grounds image and video prompts."),
+        designPrinciples: z.array(z.string()).optional().describe('Design rules to hold to, one per entry. REPLACES the list; [] clears it.'),
         contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
         logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
         assets: z.array(assetEntrySchema).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
@@ -1279,16 +1289,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(accountEntrySchema)
           .optional()
           .describe('Competitor/creator profiles they watch. Same entry shape as brandAccounts. REPLACES the list; [] clears it.'),
-        name: z.string().optional(),
-        businessName: z.string().optional(),
-        websiteUrl: z.string().optional(),
-        primaryOffer: z.string().optional(),
-        nicheDefinition: z.string().optional(),
+        name: z.string().optional().describe('Rename the kit. This is the label in the UI, not the business name.'),
+        businessName: z.string().optional().describe('The business or creator name this kit represents.'),
+        websiteUrl: z.string().optional().describe('The business website. Stored as a reference; it does not re-extract on its own.'),
+        primaryOffer: z.string().optional().describe('What this business sells, in one line. Grounds copy in what is actually being promoted.'),
+        nicheDefinition: z.string().optional().describe('The niche this brand operates in. Keeps generated angles on-topic.'),
         positioning: z.record(z.string(), z.unknown()).optional().describe('Positioning object (free-form).'),
         audience: z.record(z.string(), z.unknown()).optional().describe('Audience object (free-form).'),
         voiceProfile: z.record(z.string(), z.unknown()).optional().describe('Voice profile object (tone, style, ...).'),
-        visualStyle: z.string().optional(),
-        designPrinciples: z.array(z.string()).optional(),
+        visualStyle: z.string().optional().describe("The look in words, e.g. 'warm film grain, muted earth tones'. Grounds image and video prompts."),
+        designPrinciples: z.array(z.string()).optional().describe('Design rules to hold to, one per entry. REPLACES the list; [] clears it.'),
         contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
       },
     },
@@ -1769,7 +1779,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Media Upload',
       annotations: WRITE,
       description:
-        'Upload a local file as first-class media (phase 1 of 2). Returns a signed uploadUrl and the exact headers to send; PUT the file bytes to that URL with those headers unchanged, then call complete_media_upload with the returned outputId. The finished media is referenceable by outputId in generate_* and add_post_asset. For a file already on a public URL, use import_media instead. Requires the assets:write scope.',
+        'Upload a local file as first-class media (phase 1 of 2). Returns a signed uploadUrl and the exact headers to send; PUT the file bytes to that URL with those headers unchanged, then call complete_media_upload with the returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import_media instead. Requires the assets:write scope.',
       inputSchema: {
         fileName: z.string().describe('The file name (used for its extension), e.g. "cover.png".'),
         contentType: z.string().describe('The file MIME type, e.g. "image/png" or "video/mp4".'),
@@ -1821,7 +1831,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Import Media',
       annotations: WRITE,
       description:
-        'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and add_post_asset). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
+        'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
       inputSchema: {
         url: z.string().describe('A public http(s) URL to fetch and re-host.'),
         contentType: z.string().optional().describe('Optional MIME override (else taken from the response).'),
@@ -2022,9 +2032,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description: "Update a saved element's name, description, or category.",
       inputSchema: {
         elementId: z.string().describe('The element id.'),
-        name: z.string().optional(),
-        description: z.string().optional(),
-        category: z.enum(['auto', 'character', 'location', 'prop']).optional(),
+        name: z.string().optional().describe('Rename the element.'),
+        description: z.string().optional().describe('What this element is, in words. This is what makes it findable later.'),
+        category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("What kind of element this is. 'auto' lets the server classify it from the image."),
       },
     },
     async (args, extra) => {
@@ -2162,7 +2172,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Card',
       annotations: READ,
       description:
-        "Get one post in full: its fields (title, description, script, notes, status, stage, schedule), plus its publish posts and attached assets.",
+        'Get one CARD in full: its fields (title, description, script, notes, status, stage, schedule), plus its posts (one per platform, which is how it publishes) and its attached assets in carousel order.',
       inputSchema: {
         cardId: z.string().describe('The card id from list_cards.'),
       },
@@ -2506,9 +2516,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         "Update a card: its fields (title, description, script, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
-        title: z.string().optional(),
-        platform: z.enum(POST_PLATFORMS).optional(),
-        stage: z.string().optional().describe('Move the post to this stage (id, slug, or name).'),
+        title: z.string().optional().describe('Rename the card. Keep it short: a long title wraps and makes the column unreadable.'),
+        platform: z.enum(POST_PLATFORMS).optional().describe("The card's primary platform. This is a label on the card; what actually publishes is its posts."),
+        stage: z.string().optional().describe('Move the card to this stage (id, slug, or name).'),
         spaceId: z
           .string()
           .optional()
@@ -2521,8 +2531,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe(
             'Update several cards at once. Fields that describe ONE card (title, notes, script, cover) still require exactly one.',
           ),
-        script: z.string().optional(),
-        notes: z.string().optional(),
+        script: z.string().optional().describe('The spoken or written script for this card. The content itself, not a note about it.'),
+        notes: z.string().optional().describe('Working notes on the card. Plain text or markdown; tables render here. No emojis.'),
         coverUrl: z.string().optional().describe('Public URL for the post cover.'),
         coverOutputId: z
           .string()
@@ -2748,8 +2758,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         contentType: z.string().optional().describe("Filter by content type, e.g. 'video', 'short', 'reel'."),
         outlierScoreMin: z.number().optional().describe('Only content at or above this outlier score.'),
         outlierScoreMax: z.number().optional().describe('Only content at or below this outlier score.'),
-        viewsMin: z.number().optional(),
-        viewsMax: z.number().optional(),
+        viewsMin: z.number().optional().describe('Only content at or above this view count.'),
+        viewsMax: z.number().optional().describe('Only content at or below this view count.'),
         durationMin: z.number().optional().describe('Minimum duration in seconds.'),
         durationMax: z.number().optional().describe('Maximum duration in seconds.'),
         subscribersMin: z.number().optional().describe("Minimum follower count of the post's account."),
@@ -3057,7 +3067,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'create_preview',
     {
       title: 'Create Preview',
-      annotations: READ,
+      // NOT read-only. It does not charge the caller's credits (unlike transcribe), but it
+      // STARTS A RENDER JOB: it returns a renderId you then poll, which is state that did
+      // not exist before the call. readOnlyHint says a tool does not modify its
+      // environment, and dispatching a Lambda render does. get_preview, which only reads
+      // that job, stays READ.
       description:
         "Create an async PREVIEW of your work (ephemeral, never stored, not a deliverable). Currently a short low-res COMPOSED VIDEO of an editor range, so you can assess motion, cuts, transitions, and pacing that a still cannot show. This is a JOB: it returns a renderId + bucketName; poll get_preview with those until it is done, then fetch the returned url. To see a single frame or a few frames instead (cheaper, instant), use get_context render. Requires the context:read scope.",
       inputSchema: {

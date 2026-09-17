@@ -19,6 +19,8 @@ export { buildServer, registerTools } from './server.js'
 export type { BuildServerOptions, RegisterToolsOptions, GetClient } from './server.js'
 export { resolveModelEnums, fallbackModelEnums } from './models.js'
 export type { ResolvedModelEnums, ModelEnum } from './models.js'
+export { TOOL_GROUPS, assertGroupsCoverTools, groupedToolNames } from './groups.js'
+export type { ToolGroup } from './groups.js'
 
 async function main(): Promise<void> {
   const server = await buildServer()

@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
 import { buildServer } from './server.js'
+import { assertGroupsCoverTools, groupedToolNames } from './groups.js'
 
 /** A discovery-catalog entry, in the /api/v1/models projection shape. */
 function cap(modelId, contentType, kind, outputType) {
@@ -460,100 +461,103 @@ test('no tool advertises an array without an item schema', async () => {
   assert.deepEqual(offenders, [], `declare the item shape for: ${offenders.join(', ')}`)
 })
 
-test('advertises exactly the v1 tools', async () => {
+test('advertises exactly the v1 tools, and every one of them is grouped', async () => {
+  // This used to assert against 88 hand-maintained names right here. That list was a
+  // tripwire (you could not add a tool without deliberately editing it), but it was the
+  // THIRD copy of the same 88 names: the docs generator and the agent skill each kept
+  // their own. Three copies, no mechanism to notice a disagreement.
+  //
+  // TOOL_GROUPS is now the single copy, and the tripwire moved onto it: adding a tool
+  // still fails here until someone files it in a group, and that one edit now reaches the
+  // documentation and the skill instead of only this assertion.
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const names = tools.map((t) => t.name).sort()
-  assert.deepEqual(names, [
-    'add_brand_knowledge',
-    'archive',
-    'complete_media_upload',
-    'create_avatar',
-    'create_brand_kit',
-    'create_card',
-    'create_element',
-    'create_folder',
-    'create_media_upload',
-    'create_preview',
-    'create_project',
-    'create_space',
-    'create_stage',
-    'create_tag',
-    'delete_avatar',
-    'delete_element',
-    'delete_folder',
-    'delete_project',
-    'delete_space',
-    'delete_stage',
-    'delete_tag',
-    'edit_audio',
-    'export_project',
-    'favorite',
-    'generate_audio',
-    'generate_board',
-    'generate_image',
-    'generate_lip_sync',
-    'generate_video',
-    'get_account',
-    'get_avatar',
-    'get_balance',
-    'get_brand_kit',
-    'get_brand_knowledge',
-    'get_card',
-    'get_connected_account',
-    'get_content',
-    'get_context',
-    'get_element',
-    'get_export',
-    'get_export_formats',
-    'get_folder',
-    'get_generation_status',
-    'get_layer_types',
-    'get_media',
-    'get_model',
-    'get_platform',
-    'get_preview',
-    'get_project',
-    'get_space',
-    'get_timeline_types',
-    'get_transcript',
-    'get_voice',
-    'import_media',
-    'import_project',
-    'list_accounts',
-    'list_avatars',
-    'list_brand_kits',
-    'list_brand_knowledge',
-    'list_cards',
-    'list_connected_accounts',
-    'list_content',
-    'list_elements',
-    'list_folders',
-    'list_media',
-    'list_models',
-    'list_platforms',
-    'list_projects',
-    'list_spaces',
-    'list_stages',
-    'list_tags',
-    'list_voices',
-    'publish_post',
-    'remove_brand_knowledge',
-    'search_brand_knowledge',
-    'search_media',
-    'transcribe',
-    'update_avatar',
-    'update_brand_kit',
-    'update_canvas',
-    'update_card',
-    'update_element',
-    'update_folder',
-    'update_space',
-    'update_stage',
-    'update_tag',
-    'update_timeline',
-    'upscale',
-  ])
+
+  assert.deepEqual(names, groupedToolNames().sort())
+
+  // Names alone would pass if a tool were grouped twice and another not at all, since the
+  // sorted sets could still match by coincidence of length. Check the directions directly.
+  assertGroupsCoverTools(names)
+})
+
+test('no tool that spends credits is advertised as read-only', async () => {
+  // readOnlyHint is what a host uses to decide it may call a tool WITHOUT asking the user.
+  // A metered tool marked read-only can therefore be run in a loop, unattended, spending
+  // real credits. transcribe shipped that way: metered per minute of audio, annotated READ.
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+
+  const offenders = tools
+    .filter((t) => t.annotations?.readOnlyHint)
+    .filter((t) => /\bcredits? (it )?cost|metered|charges|spends/i.test(t.description ?? ''))
+    .map((t) => t.name)
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these tools spend credits but claim readOnlyHint: ${offenders.join(', ')}`,
+  )
+})
+
+/**
+ * Metered tools the SERVER cannot price, so the MCP cannot offer a preflight.
+ *
+ * This is a list of server limitations, not a list of tools we decided to skip, and it
+ * must stay that way or it becomes the place missing preflights go to hide. Every entry
+ * names the route that would have to change to remove it.
+ *
+ * - transcribe: POST /api/v1/studio/transcribe accepts no getCost flag, and pricing it
+ *   means reading the audio's duration before transcribing. The cost is knowable only
+ *   afterwards, from creditsUsed on the result.
+ */
+const METERED_WITHOUT_PREFLIGHT = new Set(['transcribe'])
+
+/**
+ * The declaration a tool makes when calling it costs the caller credits.
+ *
+ * An EXPLICIT marker, deliberately, because the first version of this guard inferred
+ * "metered" by grepping descriptions for "credits" or "metered" and immediately flagged
+ * two correct tools: update_timeline and update_canvas each mention that ONE op inside
+ * them (video background removal) is metered, which is operation-level, not tool-level. A
+ * guard that flags correct code gets switched off, so the signal has to be something a
+ * tool states about itself rather than something a regex infers about its prose.
+ */
+const SPEND_MARKER = 'SPENDS CREDITS'
+
+test('spending is declared and priceable in both directions', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+
+  const declares = (t) => (t.description ?? '').includes(SPEND_MARKER)
+  const hasPreflight = (t) => Object.keys(t.inputSchema?.properties ?? {}).includes('getCost')
+
+  // 1. Anything that declares a spend must be priceable first, so an agent can tell the
+  //    user what it costs BEFORE committing their credits, or be a named server limit.
+  const unpriceable = tools
+    .filter(declares)
+    .filter((t) => !hasPreflight(t))
+    .map((t) => t.name)
+    .filter((n) => !METERED_WITHOUT_PREFLIGHT.has(n))
+  assert.deepEqual(unpriceable, [], `declares a spend, offers no preflight: ${unpriceable}`)
+
+  // 2. And the reverse: a getCost preflight on a tool that never says it spends is a tool
+  //    whose description hides the cost. All seven generation tools shipped that way, with
+  //    the only mention of money living inside the getCost parameter's own text, which an
+  //    agent reads only AFTER deciding to call the thing.
+  const undeclared = tools
+    .filter(hasPreflight)
+    .filter((t) => !declares(t))
+    .map((t) => t.name)
+  assert.deepEqual(undeclared, [], `has a getCost preflight but never declares a spend: ${undeclared}`)
+
+  // 3. The exception list must not outlive its reason. If a route learns to price itself
+  //    and its tool gains getCost, this fails until the entry is deleted.
+  const stale = [...METERED_WITHOUT_PREFLIGHT].filter((n) => {
+    const t = tools.find((x) => x.name === n)
+    return !t || hasPreflight(t)
+  })
+  assert.deepEqual(stale, [], `remove from METERED_WITHOUT_PREFLIGHT: ${stale.join(', ')}`)
 })
 
 test('get_balance formats balance, tier, and top-up state', async () => {
