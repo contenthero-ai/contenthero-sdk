@@ -387,6 +387,24 @@ function fakeClient(overrides = {}) {
   }
 }
 
+
+/**
+ * Every url a result carries, from wherever it carries it.
+ *
+ * ⚠️ TESTS USED TO MATCH THE TEXT BLOCK DIRECTLY, which pinned the FORMAT rather than the guarantee. When
+ * the urls moved into `resource_link` blocks (they were being printed twice, once in prose and once by the
+ * host rendering the link), five tests went red without anything being wrong. The promise these assert is
+ * "a caller can find the asset", and this is that promise stated independently of where it lives.
+ */
+function urlsIn(result) {
+  const parts = []
+  for (const c of result.content ?? []) {
+    if (c.type === 'text') parts.push(c.text)
+    if (c.type === 'resource_link') parts.push(c.uri)
+  }
+  return parts.join('\n')
+}
+
 async function connect(client) {
   const server = await buildServer({ getClient: () => client })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -604,7 +622,7 @@ test('generate_image returns the image URLs on completion', async () => {
     name: 'generate_image',
     arguments: { modelId: 'nano-banana-2', prompt: 'a cat' },
   })
-  assert.match(res.content[0].text, /https:\/\/cdn\/x\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/x\.png/)
   assert.ok(!res.isError)
 })
 
@@ -631,7 +649,7 @@ test('generate_board returns the board URL on completion', async () => {
     name: 'generate_board',
     arguments: { boardType: 'character', prompt: 'a stoic ranger' },
   })
-  assert.match(res.content[0].text, /https:\/\/cdn\/board\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/board\.png/)
   assert.ok(!res.isError)
 })
 
@@ -785,7 +803,7 @@ test('generate_audio returns the audio URL synchronously', async () => {
     name: 'generate_audio',
     arguments: { modelId: 'elevenlabs-tts', text: 'hello', voiceId: 'v1' },
   })
-  assert.match(res.content[0].text, /https:\/\/cdn\/a\.mp3/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/a\.mp3/)
 })
 
 test('insufficient credits comes back as an isError result with detail', async () => {
@@ -832,7 +850,7 @@ test('rejects an unknown model at the schema boundary', async () => {
 test('get_generation_status blocks by default and returns the final URLs', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1'] } })
-  assert.match(res.content[0].text, /https:\/\/cdn\/v\.mp4/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/v\.mp4/)
   assert.ok(!res.isError)
 })
 
@@ -913,7 +931,7 @@ test('upscale accepts an upscale model and returns the result', async () => {
     arguments: { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' },
   })
   assert.ok(!res.isError, 'a valid upscale call should succeed')
-  assert.match(res.content[0].text, /https:\/\/cdn\/x\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/x\.png/)
 })
 
 test('upscale rejects a non-upscale model (enum filter)', async () => {
@@ -962,7 +980,7 @@ test('generate_lip_sync (script mode) builds a portrait + script request and ret
     },
   })
   assert.ok(!res.isError)
-  assert.match(res.content[0].text, /https:\/\/cdn\/talk\.mp4/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/talk\.mp4/)
   // The portrait rides in references.images; the motion prompt in `prompt`.
   assert.deepEqual(captured.references.images, ['https://cdn/face.png'])
   assert.equal(captured.references.audio, undefined)
@@ -1043,7 +1061,7 @@ test('list_avatars surfaces the id, base image, and default voice', async () => 
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /Taylan Test/)
   assert.match(res.content[0].text, /av1/)
-  assert.match(res.content[0].text, /https:\/\/cdn\/face\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/face\.png/)
   assert.match(res.content[0].text, /v1/)
 })
 
@@ -1074,7 +1092,7 @@ test('get_avatar returns detail with looks and passes the id through', async () 
   const res = await mcp.callTool({ name: 'get_avatar', arguments: { avatarId: 'av1' } })
   assert.ok(!res.isError)
   assert.equal(capturedId, 'av1')
-  assert.match(res.content[0].text, /https:\/\/cdn\/look\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/look\.png/)
 })
 
 /**
@@ -1281,7 +1299,7 @@ test('get_media resolves a batch and reports each item with its variation + url'
   assert.ok(!res.isError)
   assert.deepEqual(capturedItems, [{ mediaId: 'abcd1234', variation: 2 }])
   assert.match(res.content[0].text, /v2/)
-  assert.match(res.content[0].text, /https:\/\/cdn\/2\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/2\.png/)
   assert.match(res.content[0].text, /other variations: 1/)
 })
 
@@ -2860,4 +2878,49 @@ test('one output that fits is still inlined, so the common case keeps its fallba
   } finally {
     globalThis.fetch = realFetch
   }
+})
+
+/**
+ * ⛔⛔⛔ **THE WIDGET IS DECLARED BY THE TOOL, NOT BY THE RESULT, AND I SHIPPED IT THE OTHER WAY.**
+ *
+ * A host reads `tool._meta` at `tools/list` time to learn a tool renders a widget. With the binding only on
+ * the CallToolResult, the host never knows to mount anything: the result arrives as plain blocks, no widget,
+ * and NO ERROR ANYWHERE. Measured in Claude Desktop 2026-09-19, four URLs as text and no viewer.
+ *
+ * ⭐ Checked in BOTH directions. A tool that names a widget must have one registered, or it points at
+ * nothing; and every tool whose result is MEDIA must name it, or that medium silently stops rendering.
+ */
+test('every media tool declares the widget, and only media tools do', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const resources = await mcp.listResources()
+
+  const declares = (t: { _meta?: Record<string, unknown> }) =>
+    Boolean((t._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri || t._meta?.['ui/resourceUri'])
+
+  const bound = tools.filter(declares).map((t) => t.name).sort()
+  assert.deepEqual(
+    bound,
+    ['generate_board', 'generate_image', 'generate_lip_sync', 'generate_video', 'get_generation_status', 'upscale'],
+    'the set of tools that render a generation changed; add it here deliberately or it renders nothing',
+  )
+
+  // ⚠️ A uri is an IDENTIFIER the host asks this server to resolve. Naming one nobody registered renders a
+  // blank frame, which is worse than no widget at all.
+  const uris = new Set(resources.resources.map((r) => r.uri))
+  for (const t of tools.filter(declares)) {
+    const uri =
+      (t._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri ??
+      (t._meta?.['ui/resourceUri'] as string)
+    assert.ok(uris.has(uri), `${t.name} points at ${uri}, which no resource serves`)
+  }
+})
+
+test('the widget binding is emitted in BOTH the modern and legacy spellings', async () => {
+  // The spec tells hosts to accept either, so a server that emits one bets on which host it meets.
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const gen = tools.find((t) => t.name === 'generate_image')
+  assert.equal((gen?._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri, 'ui://contenthero/generation.html')
+  assert.equal(gen?._meta?.['ui/resourceUri'], 'ui://contenthero/generation.html')
 })

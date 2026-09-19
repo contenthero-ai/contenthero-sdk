@@ -573,6 +573,29 @@ async function inlineImagesWithinBudget(
   return out
 }
 
+
+/**
+ * ⛔⛔⛔ **THE WIDGET IS DECLARED BY THE TOOL, NOT BY THE RESULT. I HAD IT ON THE RESULT.**
+ *
+ * A host reads `tool._meta` at `tools/list` time to learn that a tool renders a widget. Putting the binding
+ * only on the CallToolResult means the host never knows to mount anything, so the result arrives as plain
+ * blocks and the widget silently never appears. Measured in Claude Desktop 2026-09-19: four URLs as text,
+ * no viewer, no error anywhere.
+ *
+ * ⚠️ BOTH SPELLINGS, DELIBERATELY. `_meta.ui.resourceUri` is the current format and `ui/resourceUri` the
+ * legacy one, and the spec's own guidance is that hosts must accept either. Emitting both costs nothing and
+ * removes a whole class of "works in one client" from the table.
+ *
+ * ⭐ Spread into the tools whose results are MEDIA. Not onto all 87: a tool that returns a card or a folder
+ * has nothing for this widget to show, and claiming otherwise would put an empty frame under every call.
+ */
+const RENDERS_GENERATION = {
+  _meta: {
+    ui: { resourceUri: GENERATION_WIDGET_URI },
+    [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI,
+  },
+} as const
+
 /** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
 export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
 
@@ -645,28 +668,38 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
    * resources simply never reads it, and the image and audio BLOCKS remain the fallback. That is why the
    * blocks stay rather than being replaced: two mechanisms, and the widget is the better one where it exists.
    */
-  const widgetHtml = (() => {
-    try {
-      return readFileSync(join(MODULE_DIR, 'widget', 'generation.html'), 'utf8')
-    } catch {
-      // Best-effort: a build that somehow shipped without the widget still serves every tool.
-      return null
-    }
-  })()
-
-  if (widgetHtml) {
-    server.registerResource(
-      'generation',
-      GENERATION_WIDGET_URI,
-      {
-        description: 'Shows what a generation produced: every variation, playable and downloadable.',
-        mimeType: RESOURCE_MIME_TYPE,
-      },
-      async () => ({
-        contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text: widgetHtml }],
-      }),
-    )
-  }
+  /**
+   * ⚠️⚠️ **REGISTERED UNCONDITIONALLY, AND READ LAZILY.**
+   *
+   * This used to read the bundle at startup and register the resource only if it was found. Two problems.
+   * A missing bundle produced a server that silently had no widget, which is the failure mode hardest to
+   * notice: every tool still worked and nothing rendered. And the resource then did not exist when running
+   * from `src/`, so the guard that checks tools point at a real resource could not run at all.
+   *
+   * ⭐ The resource is part of this server's contract. Advertising it always and throwing a NAMED error at
+   * read time turns "no widget, no reason" into one line that says exactly what is missing.
+   */
+  server.registerResource(
+    'generation',
+    GENERATION_WIDGET_URI,
+    {
+      description: 'Shows what a generation produced: every variation, playable and downloadable.',
+      mimeType: RESOURCE_MIME_TYPE,
+    },
+    async () => {
+      const path = join(MODULE_DIR, 'widget', 'generation.html')
+      let text: string
+      try {
+        text = readFileSync(path, 'utf8')
+      } catch {
+        throw new Error(
+          `The generation widget is missing at ${path}. It is built by \`npm run build\` ` +
+            '(`node widget/build.mjs`) and ships inside the package; a server running from source has not built it.',
+        )
+      }
+      return { contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text }] }
+    },
+  )
 
   const rawRegisterTool = server.registerTool.bind(server)
   server.registerTool = ((name: string, config: Record<string, unknown>, cb: unknown) => {
@@ -745,6 +778,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_image',
     {
+      ...RENDERS_GENERATION,
       title: 'Generate Image',
       annotations: WRITE,
       description:
@@ -813,6 +847,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_board',
     {
+      ...RENDERS_GENERATION,
       title: 'Generate Reference Board',
       annotations: WRITE,
       description:
@@ -877,6 +912,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_video',
     {
+      ...RENDERS_GENERATION,
       title: 'Generate Video',
       annotations: WRITE,
       description:
@@ -1090,6 +1126,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'upscale',
     {
+      ...RENDERS_GENERATION,
       title: 'Upscale',
       annotations: WRITE,
       description:
@@ -1134,6 +1171,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_lip_sync',
     {
+      ...RENDERS_GENERATION,
       title: 'Generate Lip Sync',
       annotations: WRITE,
       description:
@@ -2399,6 +2437,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'get_generation_status',
     {
+      ...RENDERS_GENERATION,
       title: 'Get Generation Status',
       annotations: READ,
       description:

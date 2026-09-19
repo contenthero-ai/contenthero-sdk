@@ -150,8 +150,21 @@ export function completedResult(
 ): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
-  const header = `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}):`
-  const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
+  /**
+   * ⚠️ **THE URLS ARE LISTED HERE ONLY WHEN NOTHING ELSE CARRIES THEM.**
+   *
+   * A `resource_link` already holds the uri, and a host renders it as `name: url`, so listing them in the
+   * text as well showed every url TWICE. Measured in Claude Desktop: four numbered urls followed by the same
+   * four again keyed by filename. Noise in the transcript, and paid for twice in the person's context.
+   *
+   * ⛔ THE FALLBACK IS NOT DROPPED. With no attachments (an older path, a content type with no link) the
+   * list is still the only way a caller learns where the asset is, so it stays.
+   */
+  const linked = attachments.some((a) => a.kind === 'link')
+  const header = linked
+    ? `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}), attached below.`
+    : `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}):`
+  const lines = linked ? [header] : [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
   const p = gen.placement
   if (p) {
     if (p.surface === 'canvas') {
@@ -166,7 +179,10 @@ export function completedResult(
     if (p.warnings?.length) lines.push(`Placement notes: ${p.warnings.join('; ')}`)
   }
 
-  const content: CallToolResult['content'] = [{ type: 'text', text: lines.join('\n') }]
+  // ⚠️ A TRAILING NEWLINE, because a host concatenates blocks without inserting one. Without it the last
+  // url ran straight into the next block's rendering, producing `...MBCo_Kkcfe3bafb-...-1.png: https://...`
+  // and a token that anything splitting on whitespace would read as part of the filename.
+  const content: CallToolResult['content'] = [{ type: 'text', text: lines.join('\n') + '\n' }]
   for (const a of attachments) {
     if (a.kind === 'bytes') {
       content.push({ type: a.type, data: a.data, mimeType: a.mimeType })
