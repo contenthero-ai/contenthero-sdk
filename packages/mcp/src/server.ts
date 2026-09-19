@@ -2463,7 +2463,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Card',
       annotations: WRITE,
       description:
-        "Create a card, the container in the content pipeline. A card holds the work (title, script, notes, cover) and the posts that publish it. Attach posts and media by passing `posts` and `assets` to update_card, then publish with publish_post. ⚠️ WITHOUT spaceId THIS LANDS ON THE ACCOUNT'S DEFAULT BOARD, which is rarely what you want once more than one space exists, so call list_spaces first. `stage` accepts a stage id/slug/name and DECIDES the space when it is an id; a spaceId that disagrees with it is rejected rather than guessed. Requires a key with the planner:write scope.",
+        "Create a card, the container in the content pipeline. A card holds the work (title, notes, cover) and the posts that publish it. Attach posts and media by passing `posts` and `assets` to update_card, then publish with publish_post. ⚠️ WITHOUT spaceId THIS LANDS ON THE ACCOUNT'S DEFAULT BOARD, which is rarely what you want once more than one space exists, so call list_spaces first. `stage` accepts a stage id/slug/name and DECIDES the space when it is an id; a spaceId that disagrees with it is rejected rather than guessed. Requires a key with the planner:write scope.",
       inputSchema: {
         title: z.string().describe('Post title (required).'),
         platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
@@ -2513,7 +2513,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Card',
       annotations: WRITE,
       description:
-        "Update a card: its fields (title, description, script, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, script, cover) still need exactly one. Requires the planner:write scope.",
+        "Update a card: its fields (title, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, cover) still need exactly one. WRITING notes REQUIRES expectedRevision: read the card first and pass the revision it reported, or the call is refused. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
         title: z.string().optional().describe('Rename the card. Keep it short: a long title wraps and makes the column unreadable.'),
@@ -2529,9 +2529,20 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe(
-            'Update several cards at once. Fields that describe ONE card (title, notes, script, cover) still require exactly one.',
+            'Update several cards at once. Fields that describe ONE card (title, notes, cover) still require exactly one.',
           ),
-        script: z.string().optional().describe('The spoken or written script for this card. The content itself, not a note about it.'),
+        expectedRevision: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            'REQUIRED when writing notes: the revision get_card reported for this card. A card\'s notes have four '
+            + 'independent writers, each reading the whole document and writing it back, so without this the last '
+            + 'writer silently erases the others and still gets a success. If the card changed since you read it, '
+            + 'the call fails with a conflict carrying the current notes and revision: merge onto those and retry '
+            + 'with the revision they came with. Never guess it or add one to it, because it only advances when '
+            + 'notes actually change.',
+          ),
         notes: z.string().optional().describe('Working notes on the card. Plain text or markdown; tables render here. No emojis.'),
         coverUrl: z.string().optional().describe('Public URL for the post cover.'),
         coverOutputId: z

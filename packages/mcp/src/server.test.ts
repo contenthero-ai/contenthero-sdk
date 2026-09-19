@@ -295,8 +295,8 @@ function fakeClient(overrides = {}) {
       createdAt: 't',
       updatedAt: 't',
       platforms: ['instagram'],
-      script: null,
       notes: null,
+      revision: 3,
       metadata: null,
       assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null, sortOrder: 0 }],
       posts: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
@@ -1639,6 +1639,50 @@ test('get_card returns the post with its posts and assets', async () => {
   assert.match(res.content[0].text, /settings: caption, mediaItems/)
   assert.match(res.content[0].text, /tags: contenthero, feature/)
   assert.match(res.content[0].text, /assets \(1\)/)
+})
+
+/**
+ * 🚨 **THE REVISION IS AN INPUT TO THE NEXT CALL, SO IT HAS TO SURVIVE THE FORMATTER.**
+ *
+ * `update_card` refuses a `notes` write that does not carry the revision the caller read. The only place
+ * an agent can learn it is this output. A formatter that dropped the line would leave the notes surface
+ * unreachable while every other assertion here stayed green, which is precisely how a card's `script`
+ * field went on being printed for months after the column stopped holding anything.
+ */
+test('get_card reports the revision, and says what it is for', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_card', arguments: { cardId: 'p1' } })
+  assert.match(res.content[0].text, /revision: 3/)
+  assert.match(res.content[0].text, /expectedRevision/)
+})
+
+/**
+ * ⛔ **0 IS A REAL REVISION AND MUST STILL PRINT.** A card nobody has edited sits at 0, and a formatter
+ * written with the usual `value ? line : null` idiom would omit exactly that case, so the first write to
+ * a fresh card would be the one with nothing to send.
+ */
+test('get_card reports revision 0 rather than omitting it', async () => {
+  const client = fakeClient()
+  const base = client.getCard
+  client.getCard = async (id: string) => ({ ...(await base(id)), revision: 0 })
+  const mcp = await connect(client)
+  const res = await mcp.callTool({ name: 'get_card', arguments: { cardId: 'p1' } })
+  assert.match(res.content[0].text, /revision: 0/)
+})
+
+/**
+ * ⛔ **`script` IS GONE FROM THE CARD.** The column never held content (one row, 170 characters, dropped
+ * 2026-09-19) and the panel stopped showing it long before that, but the tool schema still advertised it,
+ * so an agent could spend a write on a field that no longer existed and get a success.
+ */
+test('update_card no longer advertises the retired `script` field', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const updateCard = tools.find((t) => t.name === 'update_card')
+  assert.ok(updateCard, 'update_card must exist')
+  assert.ok(!('script' in (updateCard.inputSchema.properties ?? {})), 'script must not be a parameter')
+  assert.ok('expectedRevision' in (updateCard.inputSchema.properties ?? {}), 'expectedRevision must be')
+  assert.doesNotMatch(updateCard.description ?? '', /\bscript\b/)
 })
 
 test('create_card passes the title/platform/stage through and returns the new id', async () => {

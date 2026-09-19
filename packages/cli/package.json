@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "NO_COLOR=1 tsx --test \"src/**/*.test.ts\"",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "publishConfig": {

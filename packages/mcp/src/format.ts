@@ -916,8 +916,16 @@ export function cardResult(p: CardDetail): CallToolResult {
       p.scheduledAt ? `scheduled: ${p.scheduledAt}` : null,
       p.publishedAt ? `published: ${p.publishedAt}` : null,
       p.publishUrl ? `publish url: ${p.publishUrl}` : null,
-      p.script ? `script: ${p.script}` : null,
       p.notes ? `notes: ${p.notes}` : null,
+      /**
+       * ⭐⭐⭐ **PRINTED UNCONDITIONALLY, INCLUDING AT 0, BECAUSE IT IS AN INPUT TO THE NEXT CALL.**
+       *
+       * Every other line here is omitted when empty, which is right for a fact the agent merely reads.
+       * This one is a TOKEN the agent has to hand back: `update_card` refuses a `notes` write that does
+       * not carry the revision it read. Hiding it at 0 would make a never-edited card the single case
+       * where the agent has nothing to send, and 0 is a real revision, not an absence.
+       */
+      `revision: ${p.revision} (pass as expectedRevision to write notes)`,
       p.tags?.length ? `tags: ${p.tags.join(', ')}` : null,
       `posts (${p.posts.length}):`,
       ...p.posts.map((d) => {

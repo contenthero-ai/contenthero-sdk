@@ -48,6 +48,28 @@ function assertPlatform(value: string | undefined): void {
     throw new CliError(`Invalid platform "${value}". Expected one of: ${PLATFORMS.join(', ')}.`, EXIT.USAGE)
   }
 }
+/**
+ * ⭐ REFUSED HERE, IN THE CLI'S OWN VOCABULARY, RATHER THAN LETTING THE API SAY IT.
+ *
+ * The server refuses this too, and the server is the authority. But its message names `expectedRevision`,
+ * the FIELD, because that is what an SDK or MCP caller passes. A person at a terminal typed `--notes` and
+ * needs to hear about `--expected-revision`, the FLAG, and where to get it. Sending a request we already
+ * know will be refused also spends a round trip to learn something we knew locally.
+ *
+ * ⛔ **A BETTER MESSAGE, NOT A SECOND RULE.** Deleting this changes the wording a user sees and nothing
+ * about what is allowed, which is the test for whether a client-side check is a convenience or a
+ * duplicated decision. The compare-and-swap still happens in one place, in the database.
+ */
+export function assertNotesCarryRevision(cardId: string, notes: unknown, expectedRevision: unknown): void {
+  if (notes === undefined || expectedRevision !== undefined) return
+  throw new CliError(
+    `Writing --notes requires --expected-revision. Run \`contenthero card get ${cardId}\` and pass the ` +
+      'Revision it reports. A card\'s notes have several independent writers, so a write that cannot name ' +
+      'the revision it read would silently erase the others.',
+    EXIT.USAGE,
+  )
+}
+
 function summaryHuman(p: CardSummary, action?: string): string {
   return keyValues([
     ...(action ? [[action, p.title] as [string, string]] : [['Title', p.title] as [string, string]]),
@@ -140,7 +162,7 @@ export function registerCard(program: Command): void {
          * exist", and that is the reading that sent a whole investigation down the wrong path.
          *
          * ⚠️ WORDED IDENTICALLY TO `cardListResult` IN THE MCP. Two surfaces over one API should not
-         * describe the same fact two ways; a user moving between them should recognise the sentence.
+         * describe the same fact two ways; a user moving between them should recognize the sentence.
          */
         const where = r.space ? ` in ${r.space.name}` : ''
         if (!r.cards.length) return `No cards found${where}.`
@@ -168,6 +190,10 @@ export function registerCard(program: Command): void {
           // real per-destination publish state and a different thing entirely.
           ...(post.archivedAt ? [['Archived', post.archivedAt] as [string, string]] : []),
           ...(post.scheduledAt ? [['Scheduled', post.scheduledAt] as [string, string]] : []),
+          // ⭐ ALWAYS SHOWN, INCLUDING AT 0, because it is not a fact about the card so much as the token
+          // `card update --notes` requires. The rows above are conditional because they describe state;
+          // omitting this one would hide it exactly on a card nobody has edited yet.
+          ['Revision', String(post.revision)] as [string, string],
         ])
         const dests = post.posts.length
           ? '\n\nPosts:\n' +
@@ -225,9 +251,13 @@ export function registerCard(program: Command): void {
     .option('--platform <platform>')
     .option('--stage <stage>', 'move the post to this stage (id, slug, or name)')
     .option('--space <space>', "move the card to another space (id or slug); without --stage it lands in that space's matching stage, or its first")
-    .option('--also <id>', 'another card id to apply this to; repeatable. Fields describing ONE card (title, notes, script, cover) still need exactly one', collect)
-    .option('--script <text>')
-    .option('--notes <text>')
+    .option('--also <id>', 'another card id to apply this to; repeatable. Fields describing ONE card (title, notes, cover) still need exactly one', collect)
+    .option('--notes <text>', 'working notes; REQUIRES --expected-revision, from `card get`')
+    .option(
+      '--expected-revision <n>',
+      'the revision `card get` reported. Required with --notes: a card\'s notes have several independent writers, and a write that cannot name the revision it read would silently erase the others',
+      toInt,
+    )
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)')
@@ -236,14 +266,15 @@ export function registerCard(program: Command): void {
     .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
+      assertNotesCarryRevision(id, opts.notes, opts.expectedRevision)
       const { client, ctx } = makeClient(command)
       const input = compact<UpdateCardInput>({
         title: opts.title as string | undefined,
         platform: opts.platform as PostPlatform | undefined,
         stage: opts.stage as string | undefined,
         spaceId: opts.space as string | undefined,
-        script: opts.script as string | undefined,
         notes: opts.notes as string | undefined,
+        expectedRevision: opts.expectedRevision as number | undefined,
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
         tags: parseTagsOpt(opts.tags),

@@ -1358,8 +1358,24 @@ export interface Post {
 
 /** Full card detail as returned by `getCard`, with its assets and posts. */
 export interface CardDetail extends CardSummary {
-  script: string | null
   notes: string | null
+  /**
+   * The value to hand back as `expectedRevision` when writing `notes`.
+   *
+   * ⭐⭐⭐ **A CARD'S NOTES HAVE FOUR INDEPENDENT WRITERS** (the board's panel, this SDK, the CLI, and the
+   * in-app agent), and each of them reads the document, edits it, and writes it back WHOLE. Whoever wrote
+   * last used to win, silently, with a success response: measured 2026-09-19 with two writers holding one
+   * read, and the first writer's paragraph was simply gone while both calls returned 200.
+   *
+   * Read this, compose the new notes from what you read, and send it back. The write lands only if the
+   * card still carries it. If it does not, the server answers **409** with the current `notes` and
+   * `revision` in the body, which is everything needed to merge and retry without a second fetch.
+   *
+   * ⛔ **NEVER INFER THE NEXT VALUE BY ADDING ONE.** The revision advances only when `notes` actually
+   * changes, so a title edit or an identical save leaves it alone and a caller counting for itself would
+   * be permanently one ahead.
+   */
+  revision: number
   metadata: Record<string, unknown> | null
   assets: CardAsset[]
   /** ⚠️ `posts`, NOT `destinations`. The type was ALREADY `Post`; only the field name lagged.
@@ -1539,8 +1555,20 @@ export interface UpdateCardInput {
   scheduledAt?: string | null
   publishedAt?: string | null
   publishUrl?: string | null
-  script?: string | null
   notes?: string | null
+  /**
+   * The `revision` you read from `getCard` before composing `notes`. **REQUIRED whenever `notes` is
+   * present**, and the request is refused outright without it rather than defaulting to "whatever is
+   * there now", because a caller that cannot name a revision has not read the document.
+   *
+   * On a mismatch the server answers **409** carrying the current `notes` and `revision`, so the retry
+   * needs no extra fetch: merge your change onto what came back, then send it with the revision that
+   * came back.
+   *
+   * Only `notes` is guarded. Every other field on this input is last-write-wins, which is correct for a
+   * title or a status and wrong for a document people append to.
+   */
+  expectedRevision?: number
   metadata?: Record<string, unknown> | null
   /**
    * The card's posts. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no
