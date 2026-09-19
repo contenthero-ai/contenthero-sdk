@@ -481,6 +481,35 @@ test('advertises exactly the v1 tools, and every one of them is grouped', async 
   assertGroupsCoverTools(names)
 })
 
+/**
+ * 🚨 **EVERY TOOL DECLARES WHETHER IT IS READ-ONLY. TWO OF 88 DECLARED NOTHING.**
+ *
+ * MCP clients bucket a surface by `readOnlyHint`. A tool with NEITHER hint is not "safe by default", it is
+ * UNCLASSIFIED: Claude files it under "Other", and a host that treats unknown as permissive gets it wrong.
+ * `transcribe` and `create_preview` both shipped that way, each carrying a careful comment explaining they
+ * were NOT read-only. **The reasoning was written down and the annotation never was.**
+ *
+ * ⛔ **THE GUARD BELOW COULD NOT SEE THEM, AND THAT IS THE LESSON.** It filters
+ * `tools.filter(t => t.annotations?.readOnlyHint)` and asks "is anything wrongly marked read-only". A tool
+ * with no annotations object fails that filter and is never examined, so the check that existed to police
+ * this exact field was blind to the only two tools that got it wrong. A guard built from the surviving
+ * population cannot see the extinct one.
+ */
+test('🚨 every tool declares whether it is read-only', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+
+  const unannotated = tools
+    .filter((t) => typeof t.annotations?.readOnlyHint !== 'boolean')
+    .map((t) => t.name)
+
+  assert.deepEqual(
+    unannotated,
+    [],
+    `these tools declare no readOnlyHint, so clients cannot classify them: ${unannotated.join(', ')}`,
+  )
+})
+
 test('no tool that spends credits is advertised as read-only', async () => {
   // readOnlyHint is what a host uses to decide it may call a tool WITHOUT asking the user.
   // A metered tool marked read-only can therefore be run in a loop, unattended, spending
@@ -2422,9 +2451,9 @@ test('get_context render returns the composed-output as an inline image block', 
   assert.doesNotMatch((res.content[0]).text, /AQIDBA==/)
 })
 
-test('get_context filmstrip render returns one image block per frame', async () => {
+test('get_context returns one image block per frame across a range', async () => {
   const rendered = {
-    mode: 'filmstrip',
+    mode: 'image',
     fromFrame: 0,
     toFrame: 60,
     frames: [
@@ -2442,23 +2471,29 @@ test('get_context filmstrip render returns one image block per frame', async () 
       }),
     }),
   )
-  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, mode: 'filmstrip', fromFrame: 0, toFrame: 60 } })
+  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, mode: 'image', count: 3, fromFrame: 0, toFrame: 60 } })
   const images = res.content.filter((c) => c.type === 'image')
-  assert.equal(images.length, 3, 'expected one image block per filmstrip frame')
+  assert.equal(images.length, 3, 'expected one image block per frame in the range')
   assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB', 'CCCC'])
   // frame timing is kept in the JSON; the base64 payloads are stripped from the text.
   assert.match((res.content[0]).text, /"frame": 30/)
   assert.doesNotMatch((res.content[0]).text, /AAAA/)
 })
 
-test('create_preview returns the renderId handle; get_preview returns the url when done', async () => {
+/**
+ * ⭐ THE PREVIEW IS NOW A RUNG ON `get_context`, NOT ITS OWN TOOL. It used to be `create_preview`, split
+ * from the render ladder on HOW the result arrives (a job rather than inline images) rather than on what
+ * the caller is asking for. Both tools ended their descriptions telling the agent when to use the other,
+ * which is routing work the schema should do.
+ */
+test('get_context mode=video returns the renderId handle; get_preview returns the url when done', async () => {
   const mcp = await connect(
     fakeClient({
       createPreview: async (input) => ({ renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2, projectId: input.projectId }),
       getPreview: async () => ({ status: 'done', url: 'https://x/preview.mp4', estimatedCostUsd: 0.01 }),
     }),
   )
-  const start = await mcp.callTool({ name: 'create_preview', arguments: { projectId: 'p1' } })
+  const start = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', mode: 'video' } })
   assert.match((start.content[0]).text, /renderId="r1"/)
   assert.match((start.content[0]).text, /bucketName="b1"/)
   const poll = await mcp.callTool({ name: 'get_preview', arguments: { renderId: 'r1', bucketName: 'b1' } })

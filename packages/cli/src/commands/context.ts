@@ -26,7 +26,7 @@ function bufferFromDataUrl(dataUrl: unknown): Buffer | null {
   return b64 ? Buffer.from(b64, 'base64') : null
 }
 
-/** Insert `-N` before a path's extension, so filmstrip/clip frames save as file-1.jpg, file-2.jpg, ... */
+/** Insert `-N` before a path's extension, so multi-frame renders save as file-1.jpg, file-2.jpg, ... */
 function numberedPath(base: string, i: number): string {
   const dot = base.lastIndexOf('.')
   return dot > 0 ? `${base.slice(0, dot)}-${i}${base.slice(dot)}` : `${base}-${i}`
@@ -38,16 +38,16 @@ export function registerContext(program: Command): void {
     .description('Read what the user is currently viewing in the open app (requires context:read)')
     .option('--project <id>', 'scope to a specific project (editor/canvas)')
     .option('--capture', "also capture a fresh screenshot of the live viewport (the user's screen; slower)")
-    .option('--render', 'also render your work inline; ephemeral. Use --mode filmstrip for several frames')
-    .option('--mode <mode>', "render tier: still (default) | filmstrip")
-    .option('--frame <n>', 'still (editor): which timeline frame (omit for the current playhead)', (v) => parseInt(v, 10))
-    .option('--slide <id>', 'still (canvas): which slide id (omit for the focused slide)')
-    .option('--slide-index <n>', 'still (canvas): 1-based slide index (alternative to --slide)', (v) => parseInt(v, 10))
-    .option('--from-frame <n>', 'filmstrip: start timeline frame of the range', (v) => parseInt(v, 10))
-    .option('--to-frame <n>', 'filmstrip: end timeline frame of the range', (v) => parseInt(v, 10))
-    .option('--count <n>', 'filmstrip: how many frames', (v) => parseInt(v, 10))
+    .option('--render', 'also render your work inline; ephemeral. Add --count with a range for several frames')
+    .option('--mode <mode>', "what MEDIUM to render: image (default) | video. video is a job you poll")
+    .option('--frame <n>', 'image: which single timeline frame (omit for the current playhead)', (v) => parseInt(v, 10))
+    .option('--slide <id>', 'image (canvas): which slide id (omit for the focused slide)')
+    .option('--slide-index <n>', 'image (canvas): 1-based slide index (alternative to --slide)', (v) => parseInt(v, 10))
+    .option('--from-frame <n>', 'start timeline frame of the range (several frames, or a video)', (v) => parseInt(v, 10))
+    .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
+    .option('--count <n>', 'how many frames across the range (omit for one at the focus point)', (v) => parseInt(v, 10))
     .option('--width <n>', 'still: render at this DISPLAY width in px, to judge legibility at real size (height follows the aspect ratio)', (v) => parseInt(v, 10))
-    .option('--save <path>', 'write the produced image(s) to this file (filmstrip appends -1, -2, ...)')
+    .option('--save <path>', 'write the produced image(s) to this file (several frames append -1, -2, ...)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const render =
@@ -59,7 +59,7 @@ export function registerContext(program: Command): void {
         projectId: opts.project as string | undefined,
         capture,
         render: render || undefined,
-        mode: opts.mode as 'still' | 'filmstrip' | undefined,
+        mode: opts.mode as 'image' | 'video' | undefined,
         frame: opts.frame as number | undefined,
         slideId: opts.slide as string | undefined,
         slideIndex: opts.slideIndex as number | undefined,

@@ -2040,31 +2040,41 @@ export interface GetContextInput {
    */
   capture?: boolean
   /**
-   * Opt in to an inline render (never persisted), returned as image(s), so you can visually verify work while
-   * iterating. `true` renders the current focus point as a still; use `mode` + the params below for a filmstrip.
-   * Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip use `getMedia`
-   * with a video item; for a composed VIDEO of a range use `createPreview` / `getPreview` (a job).
+   * Opt in to an inline render (never persisted) so you can visually verify work while iterating. `true`
+   * renders the current focus point as one image; add `count` with `fromFrame`/`toFrame` for several across a
+   * range. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip use
+   * `getMedia` with a video item.
    */
   render?: boolean
   /**
-   * Render tier (inferred from the params when omitted): 'still' (one composed frame/slide) or 'filmstrip' (N
-   * composed frames across an editor range).
+   * What MEDIUM to render. Default `'image'`.
+   *
+   * ⭐⭐⭐ **RENAMED FROM `'still' | 'filmstrip'` ON 2026-09-19, AND THE OLD PAIR MIXED TWO AXES.** "Still"
+   * versus "filmstrip" is a COUNT distinction (one frame versus several) between two things that are both
+   * images, while `count` already existed as a parameter: `'still'` was literally `count: 1`. The medium is
+   * the real axis, so `mode` now names only that and `count` says how many.
+   *
+   * ⚠️ It also removed a vocabulary collision. `filmstrip` means something else entirely in this product:
+   * the strip of thumbnails drawn along a clip in the editor timeline, a stored derivative role with ~244
+   * references. One word, two unrelated meanings, and only one of them was agent-facing.
+   *
+   * `'video'` is a JOB: it returns a render handle to poll, because a clip has to be rendered.
    */
-  mode?: 'still' | 'filmstrip'
-  /** still (editor): which timeline frame. Omit to render the current playhead frame. */
+  mode?: 'image' | 'video'
+  /** mode='image' (editor): which single timeline frame. Omit to render the current playhead frame. */
   frame?: number
-  /** still (canvas): which slide (id). Omit to render the focused slide. */
+  /** mode='image' (canvas): which slide (id). Omit to render the focused slide. */
   slideId?: string
-  /** still (canvas): which slide (1-based index; alternative to `slideId`). */
+  /** mode='image' (canvas): which slide (1-based index; alternative to `slideId`). */
   slideIndex?: number
-  /** filmstrip: start timeline frame of the range (edit space). Omit to start at the beginning. */
+  /** Start timeline frame of the range (edit space), for several frames or a video. Omit to start at the beginning. */
   fromFrame?: number
-  /** filmstrip: end timeline frame of the range. Omit to run to the end. */
+  /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
-  /** filmstrip: how many frames to return. Omit for a proportional default. */
+  /** mode='image': how many frames across the range. Omit for one at the focus point, or a proportional default. */
   count?: number
   /**
-   * still: render at an explicit DISPLAY width in pixels, so you can judge legibility at the size the output
+   * mode='image': render at an explicit DISPLAY width in pixels, so you can judge legibility at the size the output
    * will actually be seen (a classroom tile, a thumbnail, a feed card) rather than at full resolution, where
    * small type always looks fine. Height is derived from the composition's aspect ratio and is deliberately
    * not a parameter. Clamped to a sane range; the size actually produced comes back on `rendered`.

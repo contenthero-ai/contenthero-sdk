@@ -71,8 +71,50 @@ export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
 }
 
-/** A finished image/video generation: list the asset URLs, plus the placement outcome when placed on a project. */
-export function completedResult(gen: Generation): CallToolResult {
+/**
+ * An attachment for a finished generation: the bytes to inline, or a link for the host to render.
+ *
+ * ⭐⭐⭐ **THE SHAPE FOLLOWS THE MEDIUM, NOT OUR PREFERENCE.** MCP's `ContentBlock` union is
+ * `text | image | audio | resource_link | resource`. Images and audio have first-class blocks and are small
+ * enough to carry as bytes, so they are EMBEDDED: that is what makes them render in the chat and what makes
+ * them outlive any URL. Video has no block of its own and would be megabytes of base64 inside a transcript,
+ * so it travels as a `resource_link`, which is exactly what a working implementation does (verified against
+ * the Higgsfield MCP, whose `job_display` returns `[Resource link: ....mp4]`).
+ */
+export type GeneratedAttachment =
+  | { kind: 'bytes'; type: 'image' | 'audio'; data: string; mimeType: string }
+  | { kind: 'link'; uri: string; mimeType: string; name: string }
+
+/**
+ * A finished generation: the asset URLs and placement outcome, plus the asset ITSELF.
+ *
+ * ## Why this used to be text only
+ *
+ * 🚨 **AN AGENT THAT GENERATES AN IMAGE COULD NOT SEE IT.** This returned a header, an outputId and a
+ * numbered list of urls, so the model had metadata and nothing else. Measured 2026-09-19 in a real ChatGPT
+ * and Claude session: Claude said "I can't see the image myself, only the metadata", and the link it
+ * surfaced was dead on arrival because ChatGPT had appended `utm_source=chatgpt.com` to a presigned URL and
+ * broken its signature.
+ *
+ * ⭐ The machinery already existed and was wired to the wrong tools: `mediaBatchResult` and
+ * `liveContextResult` have pushed image blocks for a while. Generation, the surface where a user most wants
+ * to SEE the result, was the one that did not.
+ *
+ * ## ⛔ THE AGENT CANNOT SEE WHAT IT MADE FROM THIS RESULT, AND THAT IS DELIBERATE
+ *
+ * An `image` block feeds the MODEL's vision; a `resource_link` gives the HOST something to render for the
+ * human. So the user sees every variation inline, and the model has a name and a url.
+ *
+ * ⭐ **`get_media` IS HOW A MODEL ACTUALLY LOOKS AT SOMETHING.** It embeds bytes as image blocks for exactly
+ * that purpose, so an agent that needs to judge a result (is the hand wrong, is the text legible, which of
+ * these four is best) calls it with the outputId. Embedding bytes HERE instead would spend the user's
+ * context on every generation to answer a question they may never ask, and a four-image batch would pay
+ * that cost four times over, repeated in every later turn.
+ *
+ * ⚠️ ATTACHMENTS ARE BUILT BY THE CALLER, not here. This module stays pure, the same split
+ * `mediaBatchResult` already uses: the handler decides, the formatter assembles.
+ */
+export function completedResult(gen: Generation, attachments: GeneratedAttachment[] = []): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
   const header = `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}):`
@@ -90,7 +132,18 @@ export function completedResult(gen: Generation): CallToolResult {
     }
     if (p.warnings?.length) lines.push(`Placement notes: ${p.warnings.join('; ')}`)
   }
-  return text(lines.join('\n'))
+
+  const content: CallToolResult['content'] = [{ type: 'text', text: lines.join('\n') }]
+  for (const a of attachments) {
+    if (a.kind === 'bytes') {
+      content.push({ type: a.type, data: a.data, mimeType: a.mimeType })
+    } else {
+      // A `resource_link` names the bytes without carrying them. The uri is a capability url, so it does not
+      // expire and appended query parameters cannot invalidate it.
+      content.push({ type: 'resource_link', uri: a.uri, name: a.name, mimeType: a.mimeType })
+    }
+  }
+  return { content, isError: false }
 }
 
 /** Suggested seconds to wait before re-polling a job, by content type. */

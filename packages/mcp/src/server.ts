@@ -50,6 +50,7 @@ import {
   type CardAssetInput,
   type UpdateAvatarRequest,
 
+  type Generation,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 import {
@@ -79,6 +80,7 @@ import {
   brandKnowledgeSearchResult,
   brandKnowledgeItemResult,
   completedResult,
+  type GeneratedAttachment,
   connectedAccountListResult,
   connectedAccountResult,
   costResult,
@@ -229,6 +231,74 @@ async function fetchSnapshotBase64(url: string): Promise<{ data: string; mimeTyp
 }
 
 /**
+ * The asset itself, ready to attach to a finished generation.
+ *
+ * ## The rule, per medium
+ *
+ * ⭐⭐⭐ **BYTES FOR WHAT MCP CAN CARRY, A LINK FOR WHAT IT CANNOT.** Images and audio have first-class
+ * content blocks and modest sizes, so they are embedded: that is what makes them render in the chat, and it
+ * is also what makes them permanent, because bytes in a transcript cannot expire. Video has no block of its
+ * own and a ten-second 1080p clip would be megabytes of base64 in every future turn of the conversation, so
+ * it travels as a `resource_link` pointing at a capability url.
+ *
+ * ⛔ **FAILING TO FETCH IS NOT AN ERROR.** A generation that succeeded must never be reported as failed
+ * because we could not inline a preview of it. Every failure path returns no attachment and the text result
+ * stands on its own, which is exactly what the caller got before this existed.
+ *
+ * ⚠️ ONLY THE FIRST OUTPUT IS EMBEDDED WHEN THERE ARE MANY. A four-image batch as four base64 payloads is a
+ * large multiple of the same conversation cost, and the urls for the rest are already in the text. The cap
+ * is stated here rather than left implicit, because a silent truncation reads as "that is all there was".
+ */
+/**
+ * ⭐⭐⭐ **EVERY OUTPUT, AS A LINK, NOT THE FIRST ONE AS BYTES.**
+ *
+ * The first version embedded base64 for images and audio and capped at one attachment. Both halves were
+ * wrong, and they were wrong together:
+ *
+ *   - **The cap made a four-variation batch show one variation.** Generating four and seeing one is not a
+ *     smaller version of the feature, it is a broken one: the whole point of a batch is to compare them.
+ *   - **Base64 is charged to the user's context on every subsequent turn.** A four-image batch embedded as
+ *     bytes is a large multiple of the same cost, repeated for the rest of the conversation.
+ *
+ * ⭐ A `resource_link` costs a URL and renders in the host's UI, so ALL of them can come back. Verified
+ * against a working implementation: the Higgsfield MCP returns `resource_link` for its media and it renders.
+ *
+ * ## ⛔ THE THING THIS DELIBERATELY GIVES UP, AND WHERE IT WENT INSTEAD
+ *
+ * An `image` block feeds the MODEL's vision; a `resource_link` gives the HOST something to render for the
+ * human. Measured in this very session: when a link came back from another MCP, the model received text and
+ * could not see the picture.
+ *
+ * So the model can no longer critique a generation it just made from this result alone. That is the correct
+ * trade, because **`get_media` already exists to embed bytes for exactly that purpose** and an agent calls
+ * it when it actually needs to look. Deciding on every generation that the model probably wants to look was
+ * the wrong default: it spent the user's context to answer a question nobody asked.
+ *
+ * ⚠️ NO SSRF FETCH HAPPENS HERE ANY MORE. Nothing is downloaded, so the allowlist that guards
+ * `fetchSnapshotBase64` is not on this path; the url is handed to the host to fetch under its own rules.
+ */
+const LINK_MIME: Record<string, string> = {
+  image: 'image/png',
+  video: 'video/mp4',
+  audio: 'audio/mpeg',
+}
+
+function attachmentsFor(gen: Generation): GeneratedAttachment[] {
+  const urls = (gen.outputUrls ?? []).filter((u) => typeof u === 'string' && u.length > 0)
+  const mimeType = LINK_MIME[gen.contentType]
+  if (!mimeType) return []
+
+  const ext = mimeType.split('/')[1]
+  return urls.map((uri, i) => ({
+    kind: 'link' as const,
+    uri,
+    mimeType,
+    // Named per output so a batch reads as four distinct things rather than four copies of one name.
+    name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}.${ext}`,
+  }))
+}
+
+/**
  * True when an image URL is safe to fetch into an image block. SSRF allowlist:
  * our storage hosts plus the finite set of generation-provider CDNs that our
  * finalize pipeline stores as video posters (fal, cloudinary). The values fed
@@ -242,6 +312,11 @@ function isAllowedImageHost(url: string): boolean {
     if (u.username || u.password) return false
     return (
       u.host === 'cloud.contenthero.ai' ||
+      // ⭐ THE MEDIA GATEWAY. Generated assets now address through it with a capability token rather than a
+      // presigned R2 url, so without this every inline attachment would be silently dropped by the SSRF
+      // allowlist and the agent would be back to a bare link.
+      u.host === 'media.contenthero.ai' ||
+      u.host === 'cdn.contenthero.ai' ||
       u.host.endsWith('.supabase.co') ||
       u.host.endsWith('.fal.media') ||
       u.host.endsWith('.cloudinary.com')
@@ -430,7 +505,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Image',
       annotations: WRITE,
       description:
-        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.image).describe(IMAGE_MODEL_GUIDANCE),
         prompt: z
@@ -479,7 +554,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen)
+        return completedResult(gen, attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -543,7 +618,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen)
+        return completedResult(gen, attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -562,7 +637,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Video',
       annotations: WRITE,
       description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.video).describe(VIDEO_MODEL_GUIDANCE),
         prompt: z
@@ -647,7 +722,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen)
+        return completedResult(gen, attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -666,7 +741,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Audio',
       annotations: WRITE,
       description:
-        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z.enum(models.audio).describe(AUDIO_MODEL_GUIDANCE),
         prompt: z.string().optional().describe('For music / sfx: what to generate.'),
@@ -800,7 +875,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen)
+        return completedResult(gen, attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -864,7 +939,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen)
+        return completedResult(gen, attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -881,6 +956,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'transcribe',
     {
       title: 'Transcribe Audio',
+      /*
+        ⭐ ANNOTATED, NOT JUST ARGUED FOR. The comment below has said "NOT read-only" since this tool
+        shipped, and nobody ever wrote the annotation, so the tool went out carrying NEITHER hint. Claude
+        files an unannotated tool under "Other", which is how 2 of 88 ended up unclassified: a comment
+        describing an enforcement nobody built reads exactly like one that was built.
+      */
+      annotations: WRITE,
       // NOT read-only, despite only returning text. readOnlyHint is a host's signal that a
       // tool is safe to call without asking the user, and this one is metered per minute of
       // audio: annotated READ, an agent could transcribe a two-hour file repeatedly,
@@ -3038,20 +3120,47 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       inputSchema: {
         projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere. Required for render when no session is live.'),
         capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport (their SCREEN), captured at read time. Default false returns structured context only. Request it only when the task depends on seeing the live, as-shown state including unsaved UI. To see the composed OUTPUT rather than the screen, use render instead."),
-        render: z.boolean().optional().describe('Also return an inline render (image[s]) of your work, so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as a still. Use mode=filmstrip for several frames across a range. Use this to check your work, not export_project. To watch a RAW source clip use get_media with a video item; for a composed VIDEO of a range use create_preview.'),
-        mode: z.enum(['still', 'filmstrip']).optional().describe("Render tier (inferred from the params if omitted): 'still' = one composed editor frame / canvas slide; 'filmstrip' = several composed frames across an editor range (judge motion / flow / cut placement)."),
-        frame: z.number().int().min(0).optional().describe('still (editor): which timeline frame to render. Omit to render the current playhead frame.'),
-        slideId: z.string().optional().describe('still (canvas): the id of the slide to render. Omit to render the focused slide.'),
-        slideIndex: z.number().int().min(1).optional().describe('still (canvas): the 1-based slide index to render (alternative to slideId).'),
-        fromFrame: z.number().int().min(0).optional().describe('filmstrip: start timeline frame of the range. Omit to start at the beginning.'),
-        toFrame: z.number().int().min(0).optional().describe('filmstrip: end timeline frame of the range. Omit to run to the end.'),
-        count: z.number().int().min(1).optional().describe('filmstrip: how many frames to return. Omit for a proportional default.'),
-        width: z.number().int().min(48).max(1440).optional().describe('still: render at an explicit DISPLAY width in pixels, to judge legibility at the size the output will actually be seen (a course tile, a thumbnail, a feed card) rather than at full resolution, where small type always looks fine. Height follows the composition aspect ratio and is not settable. Clamped; the size produced is reported back on rendered.'),
+        render: z.boolean().optional().describe('Also render your work so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as one image; add count with fromFrame/toFrame for several across a range; mode=video returns a short playable clip of that range. Use this to check your work, not export_project, which produces a file the user KEEPS. To watch a RAW source clip instead of your composition, use get_media with a video item.'),
+        mode: z.enum(['image', 'video']).optional().describe("What MEDIUM to render (default 'image'). 'image' returns composed frames INLINE: one by default, or several across a range when you pass count with fromFrame/toFrame, to judge motion, flow and cut placement. 'video' returns the range actually playing, as a short low-res composed clip, for timing a cut or a beat that separate frames cannot show; it is a JOB, returning a renderId to poll with get_preview, because it has to be rendered."),
+        frame: z.number().int().min(0).optional().describe("mode='image' (editor): which single timeline frame to render. Omit to render the current playhead frame."),
+        slideId: z.string().optional().describe("mode='image' (canvas): the id of the slide to render. Omit to render the focused slide."),
+        slideIndex: z.number().int().min(1).optional().describe("mode='image' (canvas): the 1-based slide index to render (alternative to slideId)."),
+        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames or a video. Omit to start at the beginning.'),
+        toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
+        count: z.number().int().min(1).optional().describe("mode='image': how many frames to return across the range. Omit for one frame at the focus point, or a proportional default when a range is given."),
+        width: z.number().int().min(48).max(1440).optional().describe("mode='image': render at an explicit DISPLAY width in pixels, to judge legibility at the size the output will actually be seen (a course tile, a thumbnail, a feed card) rather than at full resolution, where small type always looks fine. Height follows the composition aspect ratio and is not settable. Clamped; the size produced is reported back on rendered."),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
+        /*
+          ⭐⭐⭐ **`video` IS THE THIRD RUNG OF THIS LADDER, NOT A SEPARATE TOOL.** It used to be
+          `create_preview`, and the split was drawn on HOW the render is delivered (a job, not inline)
+          rather than on WHAT the caller is asking for. Both answers to "let me look at my own work,
+          ephemerally, without producing a deliverable" now live behind one question.
+
+          ⛔ THE EVIDENCE THE OLD BOUNDARY WAS WRONG WAS IN THE DESCRIPTIONS. `get_context` ended with
+          "for a composed VIDEO of a range use create_preview" and `create_preview` ended with "to see a
+          single frame or a few frames use get_context render". Two tools each telling the agent when to
+          use the other is routing work the schema should be doing. The CLI had already reached this
+          conclusion: it exposes `context preview`, a sibling of `context`, while export lives under
+          `project`.
+
+          ⚠️ THE TRANSPORT IS UNCHANGED. This is a facade over the same client call the old tool made, so
+          nothing moved server-side and the SDK needed no new field.
+        */
+        if (args.mode === 'video') {
+          const job = await client.createPreview({
+            projectId: args.projectId ?? '',
+            fromFrame: args.fromFrame,
+            toFrame: args.toFrame,
+          })
+          return text(
+            `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
+              `Poll get_preview with renderId="${job.renderId}" and bucketName="${job.bucketName}" until status is "done", then fetch the returned url.`,
+          )
+        }
         const result = await client.getContext({
           projectId: args.projectId,
           capture: args.capture,
@@ -3075,46 +3184,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   server.registerTool(
-    'create_preview',
-    {
-      title: 'Create Preview',
-      // NOT read-only. It does not charge the caller's credits (unlike transcribe), but it
-      // STARTS A RENDER JOB: it returns a renderId you then poll, which is state that did
-      // not exist before the call. readOnlyHint says a tool does not modify its
-      // environment, and dispatching a Lambda render does. get_preview, which only reads
-      // that job, stays READ.
-      description:
-        "Create an async PREVIEW of your work (ephemeral, never stored, not a deliverable). Currently a short low-res COMPOSED VIDEO of an editor range, so you can assess motion, cuts, transitions, and pacing that a still cannot show. This is a JOB: it returns a renderId + bucketName; poll get_preview with those until it is done, then fetch the returned url. To see a single frame or a few frames instead (cheaper, instant), use get_context render. Requires the context:read scope.",
-      inputSchema: {
-        projectId: z.string().describe('The editor project to preview.'),
-        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range. Omit to start at the beginning.'),
-        toFrame: z.number().int().min(0).optional().describe('End timeline frame. Omit to run to the end (capped to a short preview length).'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        const job = await client.createPreview({ projectId: args.projectId, fromFrame: args.fromFrame, toFrame: args.toFrame })
-        return text(
-          `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
-            `Poll get_preview with renderId="${job.renderId}" and bucketName="${job.bucketName}" until status is "done", then fetch the returned url.`,
-        )
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  server.registerTool(
     'get_preview',
     {
       title: 'Get Preview',
       annotations: READ,
       description:
-        'Poll a preview started with create_preview. While rendering, returns the progress; when done, returns a short-lived url to the ephemeral preview output (plus the estimated cost). Requires the context:read scope.',
+        'Poll a preview started by get_context with mode="video". While rendering, returns the progress; when done, returns a short-lived url to the ephemeral preview output (plus the estimated cost). Requires the context:read scope.',
       inputSchema: {
-        renderId: z.string().describe('The renderId returned by create_preview.'),
-        bucketName: z.string().describe('The bucketName returned by create_preview.'),
+        renderId: z.string().describe('The renderId returned by get_context with mode="video".'),
+        bucketName: z.string().describe('The bucketName returned by get_context with mode="video".'),
       },
     },
     async (args, extra) => {
