@@ -2801,3 +2801,63 @@ test('⛔ every variation of a batch gets its own block, not just the first', as
     globalThis.fetch = realFetch
   }
 })
+
+/**
+ * ⛔⛔⛔ **THE ENVELOPE, NOT THE ITEM. THIS DEFECT SHIPPED TWICE AT TWO LEVELS.**
+ *
+ * A host rejects a tool result over 1 MB outright ("Tool result is too large"), which fails the CALL: the
+ * generation is charged and unreachable. The cap was written PER ITEM, so four images at 600 KB each passed
+ * individually (822 KB encoded, under budget) and totalled 3.3 MB. `get_media` then repeated it one level
+ * up, fetching ten images in parallel with no bound at all.
+ *
+ * ⭐ Today's real assets are ~3.6 MB apiece and fail the per-item check anyway, so the batch case was safe
+ * BY ACCIDENT. A guard built only from the assets that exist cannot see the ones that will.
+ */
+test('a batch never exceeds the inline budget, however many outputs it has', async () => {
+  const realFetch = globalThis.fetch
+  // 600 KB each: comfortably under any per-item cap, catastrophically over the ceiling when there are four.
+  const SIX_HUNDRED_KB = 600_000
+  globalThis.fetch = (async () =>
+    new Response(Buffer.alloc(SIX_HUNDRED_KB), {
+      status: 200,
+      headers: { 'content-type': 'image/png', 'content-length': String(SIX_HUNDRED_KB) },
+    })) as typeof fetch
+  try {
+    const out = await attachmentsFor({
+      outputId: 'batch', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputUrls: ['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`),
+    } as never)
+
+    const inlined = out.filter((a) => a.kind === 'bytes') as Array<{ data: string }>
+    const totalChars = inlined.reduce((sum, a) => sum + a.data.length, 0)
+
+    // The whole point: the sum is bounded, not each item.
+    assert.ok(totalChars <= 900_000, `inlined ${totalChars} chars, which would blow the host's ceiling`)
+    // ⭐ And nothing is LOST: every output still has a link, so the widget renders all four regardless.
+    assert.equal(out.filter((a) => a.kind === 'link').length, 4, 'every variation keeps its link')
+    // A per-item cap would have inlined all four. This asserts it did not.
+    assert.ok(inlined.length < 4, 'a per-item cap would have inlined every one of them')
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('one output that fits is still inlined, so the common case keeps its fallback', async () => {
+  // The counterweight: a budget that protects the ceiling by inlining NOTHING would pass the test above and
+  // silently remove the fallback for every host without app support.
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response(Buffer.alloc(400_000), {
+      status: 200,
+      headers: { 'content-type': 'image/png', 'content-length': '400000' },
+    })) as typeof fetch
+  try {
+    const out = await attachmentsFor({
+      outputId: 'single', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    } as never)
+    assert.equal(out.filter((a) => a.kind === 'bytes').length, 1, 'a single fitting image MUST still inline')
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})

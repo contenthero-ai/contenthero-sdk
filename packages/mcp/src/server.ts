@@ -347,6 +347,19 @@ const LINK_MIME: Record<string, string> = {
  * unlocks this, and it is its own piece of work rather than a prerequisite for rendering.
  */
 export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachment[]> {
+  /**
+   * ⛔⛔⛔ **ONE BUDGET FOR THE WHOLE RESULT, BECAUSE THE HOST'S CEILING IS PER RESULT.**
+   *
+   * This was a PER-ITEM cap, which is the same defect one level up from the one it replaced. Four images at
+   * 600 KB each pass individually (822 KB encoded, under the budget) and total 3.3 MB, so the host rejects
+   * the call and the person pays for four generations they cannot reach. Today's assets are ~3.6 MB apiece
+   * and fail the per-item check anyway, so the batch case was safe BY ACCIDENT rather than by design.
+   *
+   * ⭐ Spending a single budget makes the envelope bounded no matter the count or the resolution: four 4K
+   * images, ten variations, a 60 second video. Whatever does not fit degrades to a link, and the widget
+   * renders it from a URL regardless, so nothing is lost but the fallback for hosts that cannot mount apps.
+   */
+  let budget = MAX_INLINE_BASE64_CHARS
   const urls = (gen.outputUrls ?? []).filter((u) => typeof u === 'string' && u.length > 0)
   const mimeType = LINK_MIME[gen.contentType]
   if (!mimeType) return []
@@ -364,14 +377,20 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
      * degrades to a link, which the widget renders anyway.
      */
     if (gen.contentType === 'audio') {
-      const bytes = await fetchAudioBytes(uri)
-      if (bytes) out.push({ kind: 'bytes', type: 'audio', data: bytes.data, mimeType: bytes.mimeType })
+      const bytes = await fetchAudioBytes(uri, budget)
+      if (bytes) {
+        budget -= bytes.data.length
+        out.push({ kind: 'bytes', type: 'audio', data: bytes.data, mimeType: bytes.mimeType })
+      }
     }
     if (gen.contentType === 'image') {
       // Best-effort: a miss (host not allowlisted, over the budget, network hiccup) degrades this one output
       // to a link instead of failing a generation the user already paid for.
-      const bytes = await fetchMediaImageBase64(uri)
-      if (bytes) out.push({ kind: 'bytes', type: 'image', data: bytes.data, mimeType: bytes.mimeType })
+      const bytes = await fetchMediaImageBase64(uri, budget)
+      if (bytes) {
+        budget -= bytes.data.length
+        out.push({ kind: 'bytes', type: 'image', data: bytes.data, mimeType: bytes.mimeType })
+      }
     }
     out.push({
       kind: 'link',
@@ -459,7 +478,7 @@ const MAX_INLINE_BASE64_CHARS = 900_000
  * ⚠️ SEPARATE RATHER THAN A `kind` PARAMETER because the content-type CHECK is the difference, and a single
  * function taking "which prefix do I accept" is the shape that eventually accepts the wrong one.
  */
-async function fetchAudioBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
+async function fetchAudioBytes(url: string, budget: number): Promise<{ data: string; mimeType: string } | null> {
   if (!isAllowedImageHost(url)) return null
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
@@ -469,16 +488,16 @@ async function fetchAudioBytes(url: string): Promise<{ data: string; mimeType: s
     // Base64 inflates by about a third, so the declared byte length is checked against the budget it will
     // BECOME rather than against itself.
     const declared = Number(res.headers.get('content-length') ?? '')
-    if (Number.isFinite(declared) && declared * 1.37 > MAX_INLINE_BASE64_CHARS) return null
+    if (Number.isFinite(declared) && declared * 1.37 > budget) return null
     const data = Buffer.from(await res.arrayBuffer()).toString('base64')
-    if (data.length > MAX_INLINE_BASE64_CHARS) return null
+    if (data.length > budget) return null
     return { data, mimeType }
   } catch {
     return null
   }
 }
 
-async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
+async function fetchImageBytes(url: string, budget: number): Promise<{ data: string; mimeType: string } | null> {
   if (!isAllowedImageHost(url)) return null
   try {
     /**
@@ -498,9 +517,9 @@ async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: s
     // Checked BEFORE reading the body where the server declares it, and again after, because
     // `content-length` is absent on a chunked response and a header is not a measurement.
     const declared = Number(res.headers.get('content-length') ?? '')
-    if (Number.isFinite(declared) && declared * 1.37 > MAX_INLINE_BASE64_CHARS) return null
+    if (Number.isFinite(declared) && declared * 1.37 > budget) return null
     const data = Buffer.from(await res.arrayBuffer()).toString('base64')
-    if (data.length > MAX_INLINE_BASE64_CHARS) return null
+    if (data.length > budget) return null
     return { data, mimeType }
   } catch {
     return null
@@ -513,13 +532,45 @@ async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: s
  * auto-upgrades as the optimization pipeline backfills derivatives, with no code
  * change here. Best-effort: any failure returns null and the item stays text-only.
  */
-async function fetchMediaImageBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+async function fetchMediaImageBase64(url: string, budget: number): Promise<{ data: string; mimeType: string } | null> {
   const optimized = optimizedImageSibling(url)
   if (optimized !== url) {
-    const hit = await fetchImageBytes(optimized)
+    const hit = await fetchImageBytes(optimized, budget)
     if (hit) return hit
   }
-  return fetchImageBytes(url)
+  return fetchImageBytes(url, budget)
+}
+
+
+/**
+ * ⭐⭐⭐ **THE ONE PLACE THAT DECIDES HOW MUCH OF A RESULT MAY BE BYTES.**
+ *
+ * Two call sites needed this and each had its own answer, which is how the same defect appeared twice at
+ * different levels: `attachmentsFor` capped PER ITEM while the host's ceiling is per RESULT, and `get_media`
+ * fetched up to TEN images in parallel with no cap at all (10 x 840 KB is 8 MB against a 1 MB limit).
+ *
+ * ⛔ SEQUENTIAL, DELIBERATELY. The budget is shared state, so a parallel fetch cannot know what the others
+ * already spent and every one of them would pass a check the set as a whole fails. Most calls carry one to
+ * three items, so the latency is small and the alternative is a ceiling that holds only by luck.
+ *
+ * Returns one entry per input, `null` where the asset did not fit or could not be read, so callers keep
+ * positional alignment with what they asked for.
+ */
+async function inlineImagesWithinBudget(
+  urls: readonly (string | null | undefined)[],
+): Promise<Array<{ data: string; mimeType: string } | null>> {
+  let budget = MAX_INLINE_BASE64_CHARS
+  const out: Array<{ data: string; mimeType: string } | null> = []
+  for (const url of urls) {
+    if (!url) {
+      out.push(null)
+      continue
+    }
+    const hit = await fetchMediaImageBase64(url, budget)
+    if (hit) budget -= hit.data.length
+    out.push(hit)
+  }
+  return out
 }
 
 /** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
@@ -2034,10 +2085,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // Image blocks are an MCP-layer concern: fetch the resolver-chosen still
         // (imageUrl) for each item that has one (images + video posters). audio /
         // transcript / posterless items stay text-only. See get-context §9.5.
-        const images = await Promise.all(
-          result.items.map((it) =>
-            it.ok && it.imageUrl ? fetchMediaImageBase64(it.imageUrl) : Promise.resolve(null),
-          ),
+        // ⚠️ Ten items at 840 KB each is 8 MB against a 1 MB ceiling, and this used to fetch them all in
+        // parallel with no bound. One shared budget, spent in order.
+        const images = await inlineImagesWithinBudget(
+          result.items.map((it) => (it.ok ? it.imageUrl : null)),
         )
         return mediaBatchResult(result, images)
       } catch (err) {
