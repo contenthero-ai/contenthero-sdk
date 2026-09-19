@@ -393,13 +393,14 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
         out.push({ kind: 'bytes', type: 'image', data: bytes.data, mimeType: bytes.mimeType })
       }
     }
-    out.push({
-      kind: 'link',
-      uri,
-      mimeType,
-      // Named per output so a batch reads as four distinct things rather than four copies of one name.
-      name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}.${ext}`,
-    })
+    /**
+     * ⛔ NO `resource_link` PER OUTPUT ANY MORE. It was a THIRD representation of a url the text list and the
+     * widget's `structuredContent` both already carry, and hosts render a run of them as `name: uri` with no
+     * separator, producing tokens that read as corrupted. The link added nothing the text did not, and cost
+     * a per-output block to say it.
+     */
+    void ext
+    void mimeType
   }
   return out
 }

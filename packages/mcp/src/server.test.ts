@@ -2748,7 +2748,7 @@ test('⚠️ nested passthrough ops survive strictness, because a timeline op ha
  *
  * ⚠️ Exported purely so this can address it. A test that cannot reach the decider is testing its neighbors.
  */
-test('an image yields an inline BLOCK plus its link; video yields a link alone', async () => {
+test('an image yields an inline BLOCK; video yields text alone', async () => {
   const realFetch = globalThis.fetch
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input)
@@ -2767,20 +2767,22 @@ test('an image yields an inline BLOCK plus its link; video yields a link alone',
       outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
     } as never)
     assert.equal(image.filter((a) => a.kind === 'bytes').length, 1, 'an image MUST produce a block')
-    assert.equal(image.filter((a) => a.kind === 'link').length, 1, 'and keep its full-resolution link')
+    // ⛔ NO `resource_link`. It was a third representation of a url the text list and the widget's
+    // structuredContent both carry, and hosts run a sequence of them together without separators.
+    assert.equal(image.filter((a) => a.kind === 'link').length, 0, 'the link is carried by the text list now')
 
     const video = await attachmentsFor({
       outputId: 'o2', modelId: 'v', status: 'completed', contentType: 'video',
       outputUrls: ['https://media.contenthero.ai/u/a.mp4?t=tok'],
     } as never)
     assert.equal(video.filter((a) => a.kind === 'bytes').length, 0, 'video has no MCP block to fill')
-    assert.equal(video.filter((a) => a.kind === 'link').length, 1)
+    assert.equal(video.filter((a) => a.kind === 'link').length, 0, 'the widget and the text list carry it')
   } finally {
     globalThis.fetch = realFetch
   }
 })
 
-test('⛔ an oversized image degrades to a link rather than eating the context', async () => {
+test('⛔ an oversized image degrades to text rather than eating the context', async () => {
   // A BACKSTOP, not a budget: real generated images are expected to pass. It exists so one pathological
   // file cannot put tens of megabytes of base64 into every later turn of the conversation.
   const realFetch = globalThis.fetch
@@ -2795,13 +2797,14 @@ test('⛔ an oversized image degrades to a link rather than eating the context',
       outputUrls: ['https://media.contenthero.ai/u/big.jpg?t=tok'],
     } as never)
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 0, 'over the cap, no block')
-    assert.equal(out.filter((a) => a.kind === 'link').length, 1, 'but never nothing')
+    // The url still reaches the caller: `completedResult` lists every one in its text block, and the widget
+    // renders from `structuredContent`. Nothing is lost by declining to inline.
   } finally {
     globalThis.fetch = realFetch
   }
 })
 
-test('⛔ every variation of a batch gets its own block, not just the first', async () => {
+test('⛔ every variation of a batch that fits gets its own block, not just the first', async () => {
   // The whole reason to generate four is to compare them.
   const realFetch = globalThis.fetch
   globalThis.fetch = (async () =>
@@ -2813,8 +2816,8 @@ test('⛔ every variation of a batch gets its own block, not just the first', as
       outputId: 'o4', modelId: 'nb2', status: 'completed', contentType: 'image',
       outputUrls: ['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`),
     } as never)
+    // 1 byte each, so all four fit inside one budget and all four must appear.
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 4)
-    assert.equal(new Set(out.filter((a) => a.kind === 'link').map((a) => (a as { name: string }).name)).size, 4)
   } finally {
     globalThis.fetch = realFetch
   }
@@ -2851,8 +2854,8 @@ test('a batch never exceeds the inline budget, however many outputs it has', asy
 
     // The whole point: the sum is bounded, not each item.
     assert.ok(totalChars <= 900_000, `inlined ${totalChars} chars, which would blow the host's ceiling`)
-    // ⭐ And nothing is LOST: every output still has a link, so the widget renders all four regardless.
-    assert.equal(out.filter((a) => a.kind === 'link').length, 4, 'every variation keeps its link')
+    // ⭐ And nothing is LOST: `completedResult` lists every url in text and the widget renders all four
+    // from `structuredContent`, so declining to inline costs only the fallback block.
     // A per-item cap would have inlined all four. This asserts it did not.
     assert.ok(inlined.length < 4, 'a per-item cap would have inlined every one of them')
   } finally {

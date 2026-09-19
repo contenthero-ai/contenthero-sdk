@@ -55,37 +55,62 @@ const styles = `
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-    color: var(--text-primary, CanvasText);
+    font: 14px/1.5 var(--font-sans, ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif);
+    color: var(--color-text-primary, CanvasText);
     background: transparent;
   }
-  .wrap { border: 1px solid var(--border-primary, color-mix(in srgb, CanvasText 14%, transparent));
-          border-radius: 12px; overflow: hidden; background: var(--bg-secondary, Canvas); }
-  .stage { position: relative; display: flex; align-items: center; justify-content: center;
-           background: color-mix(in srgb, CanvasText 6%, transparent); min-height: 180px; }
-  .stage img, .stage video { display: block; max-width: 100%; max-height: 60vh; height: auto; }
+  .wrap {
+    border: var(--border-width-regular, 1px) solid var(--color-border-primary, color-mix(in srgb, CanvasText 14%, transparent));
+    border-radius: var(--border-radius-lg, 12px);
+    overflow: hidden;
+    background: var(--color-background-secondary, Canvas);
+  }
+  /**
+   * ⚠️ HEIGHT IN PIXELS, NEVER vh. This was 'max-height: 60vh' and a PORTRAIT image came out postage-stamp
+   * sized. Inside an auto-resizing frame, vh resolves against a viewport the widget is itself shrinking, so
+   * the image caps against a height that keeps collapsing: a feedback loop that settles small.
+   */
+  .stage {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
+    min-height: 260px; padding: 8px;
+  }
+  .stage img, .stage video { display: block; max-width: 100%; max-height: 480px; width: auto; height: auto; }
+  .stage img { cursor: zoom-in; }
   .stage audio { width: 100%; padding: 28px 20px; }
-  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; flex-wrap: wrap;
-         border-top: 1px solid var(--border-primary, color-mix(in srgb, CanvasText 14%, transparent)); }
-  .model { font-weight: 600; letter-spacing: .01em; }
-  .muted { color: var(--text-secondary, color-mix(in srgb, CanvasText 55%, transparent)); }
+  /* Fullscreen: the host gives the frame the room, so the media should take it. */
+  .wrap.full { border: 0; border-radius: 0; height: 100vh; display: flex; flex-direction: column; }
+  .wrap.full .stage { flex: 1 1 auto; min-height: 0; }
+  .wrap.full .stage img, .wrap.full .stage video { max-height: 100%; max-width: 100%; }
+  .wrap.full .stage img { cursor: zoom-out; }
+  .bar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; flex-wrap: wrap;
+    border-top: 1px solid var(--color-border-primary, color-mix(in srgb, CanvasText 14%, transparent));
+  }
+  .model { font-weight: var(--font-weight-semibold, 600); letter-spacing: .01em; }
+  .muted { color: var(--color-text-secondary, color-mix(in srgb, CanvasText 55%, transparent)); }
   .spacer { flex: 1 1 auto; }
-  .btn { appearance: none; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-         background: transparent; color: inherit; font: inherit; padding: 5px 11px;
-         border-radius: 7px; cursor: pointer; }
+  .btn {
+    appearance: none; color: inherit; font: inherit; cursor: pointer;
+    border: 1px solid var(--color-border-secondary, color-mix(in srgb, CanvasText 18%, transparent));
+    background: transparent; padding: 5px 11px; border-radius: var(--border-radius-sm, 7px);
+  }
   .btn:hover { border-color: ${GOLD}; }
   .btn:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
-  .thumbs { display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto;
-            border-top: 1px solid var(--border-primary, color-mix(in srgb, CanvasText 14%, transparent)); }
-  .thumb { flex: 0 0 auto; width: 58px; height: 58px; border-radius: 8px; overflow: hidden;
-           border: 2px solid transparent; background: color-mix(in srgb, CanvasText 10%, transparent);
-           padding: 0; cursor: pointer; }
+  .thumbs {
+    display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto;
+    border-top: 1px solid var(--color-border-primary, color-mix(in srgb, CanvasText 14%, transparent));
+  }
+  .thumb {
+    flex: 0 0 auto; width: 58px; height: 58px; padding: 0; cursor: pointer;
+    border-radius: var(--border-radius-sm, 8px); overflow: hidden; border: 2px solid transparent;
+    background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 10%, transparent));
+  }
   .thumb[aria-current="true"] { border-color: ${GOLD}; }
   .thumb:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .prompt { padding: 0 12px 12px; }
   .fallback { padding: 16px; }
-  .fallback a { color: ${GOLD}; }
 `
 
 /**
@@ -112,6 +137,26 @@ function Widget() {
 
   const [data, setData] = useState<WidgetData | null>(null)
   const [index, setIndex] = useState(0)
+  const [full, setFull] = useState(false)
+
+  /**
+   * ⭐ CLICKING THE MEDIA ASKS THE HOST FOR ROOM, rather than building a lightbox inside a frame that is
+   * only as big as the host allows. `ui/request-display-mode` is the sanctioned way, and the host answers
+   * with the mode it actually granted, which is what we render against rather than what we asked for.
+   *
+   * ⚠️ Checked against `availableDisplayModes` first: a host that cannot go fullscreen should get no
+   * zoom affordance at all, instead of a cursor that promises something nothing happens on.
+   */
+  const canExpand = Boolean(app?.getHostContext?.()?.availableDisplayModes?.includes('fullscreen'))
+  const toggleFull = async () => {
+    if (!app || !canExpand) return
+    try {
+      const res = await app.requestDisplayMode({ mode: full ? 'inline' : 'fullscreen' })
+      setFull(res.mode === 'fullscreen')
+    } catch {
+      // A refusal is an answer; leave the layout exactly as it is.
+    }
+  }
 
   useEffect(() => {
     if (!app) return
@@ -141,8 +186,8 @@ function Widget() {
   const many = data.outputs.length > 1
 
   return (
-    <div className="wrap">
-      <div className="stage">
+    <div className={full ? 'wrap full' : 'wrap'}>
+      <div className="stage" onClick={data.contentType === 'image' && canExpand ? toggleFull : undefined}>
         <Media output={current} contentType={data.contentType} />
       </div>
 
@@ -174,6 +219,11 @@ function Widget() {
           {many ? `Variation ${index + 1} of ${data.outputs.length}` : data.contentType}
         </span>
         <span className="spacer" />
+        {canExpand && data.contentType === 'image' && (
+          <button className="btn" onClick={toggleFull}>
+            {full ? 'Close' : 'Expand'}
+          </button>
+        )}
         {/* ⭐ The host performs the download, so it lands wherever that person's downloads go and we never
             have to care whether the widget's sandbox can write a file. */}
         <button

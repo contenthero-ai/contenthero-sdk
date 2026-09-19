@@ -159,20 +159,22 @@ export function completedResult(
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
   /**
-   * ⚠️ **THE URLS ARE LISTED HERE ONLY WHEN NOTHING ELSE CARRIES THEM.**
+   * ⭐⭐ **ONE TEXT LIST, AND NO `resource_link` BLOCKS. THREE REPRESENTATIONS OF ONE URL WAS TWO TOO MANY.**
    *
-   * A `resource_link` already holds the uri, and a host renders it as `name: url`, so listing them in the
-   * text as well showed every url TWICE. Measured in Claude Desktop: four numbered urls followed by the same
-   * four again keyed by filename. Noise in the transcript, and paid for twice in the person's context.
+   * This went through both extremes before landing here. Listing the urls in prose AND attaching a link per
+   * output printed every url twice. Suppressing the prose left the links alone, and a host renders those as
+   * `name: uri` with NO SEPARATOR BETWEEN THEM, so url 1 ended flush against filename 2 and anything
+   * splitting on whitespace read a corrupted token. Measured at all three boundaries of a four-image batch.
    *
-   * ⛔ THE FALLBACK IS NOT DROPPED. With no attachments (an older path, a content type with no link) the
-   * list is still the only way a caller learns where the asset is, so it stays.
+   * ⛔ THE SEPARATOR WAS NEVER OURS TO ADD. Our text block ends with a newline; the run-together is the host
+   * concatenating sibling blocks, and no content we emit can put a break between two of them.
+   *
+   * ⭐ So the fallback is the thing we fully control: one newline-delimited list. The widget is the surface
+   * that renders, and this is what a host without app support (or a model reading the transcript) gets. It
+   * costs less than the links did and it cannot be run together by anybody.
    */
-  const linked = attachments.some((a) => a.kind === 'link')
-  const header = linked
-    ? `Done. ${urls.length} ${noun} from ${displayName ?? gen.modelId} (outputId ${gen.outputId}), attached below.`
-    : `Done. ${urls.length} ${noun} from ${displayName ?? gen.modelId} (outputId ${gen.outputId}):`
-  const lines = linked ? [header] : [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
+  const header = `Done. ${urls.length} ${noun} from ${displayName ?? gen.modelId} (outputId ${gen.outputId}):`
+  const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
   const p = gen.placement
   if (p) {
     if (p.surface === 'canvas') {

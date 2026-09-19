@@ -55,6 +55,15 @@ const EXPECTED = {
   video: { blocks: [], why: 'MCP has no video block; the widget is the only thing that can play it' },
 }
 
+/**
+ * ⛔ `resource_link` IS DELIBERATELY ABSENT FROM EVERY EXPECTATION ABOVE.
+ *
+ * It was a third representation of a url that the text list and the widget's `structuredContent` both
+ * already carry, and a host renders a run of them as `name: uri` with no separator, so url 1 ended flush
+ * against filename 2 and anything splitting on whitespace read a corrupted token. Asserting its presence
+ * would now pin the thing that was removed.
+ */
+
 function rpc(child, id, method, params) {
   return new Promise((resolve, reject) => {
     let buf = ''
