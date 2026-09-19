@@ -32,29 +32,26 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ENTRY = join(HERE, '..', 'dist', 'index.js')
 
 /**
- * What each medium MUST carry.
+ * What each medium MUST carry, in two layers.
  *
- * ⛔ A LINK ALONE IS A FAILURE, not a smaller success. That was the shipped behavior and the feature did not
- * work. MCP's content union is `text | image | audio | resource_link | resource`: image and audio have
- * first-class blocks, video has none, so a video's inline representation is its POSTER as an image block.
+ * ⭐⭐⭐ **THE WIDGET IS THE PRIMARY SURFACE, FOR EVERY MEDIUM.** MCP has no video block, so blocks alone can
+ * never render video. MCP Apps can, and one widget covering all three beats three special cases: the batch
+ * case is exactly where the block path was already wrong, showing one variation of four.
+ *
+ * ⚠️ **BLOCKS REMAIN THE FALLBACK AND ARE STILL CHECKED.** A host without app support gets them, so losing
+ * them would be a regression for those hosts. Image and audio have first-class blocks; video has none, so
+ * its block expectation is legitimately empty rather than a poster standing in for the thing itself.
+ *
+ * ⛔ An earlier version of this file demanded a POSTER IMAGE BLOCK for video. That was a goalpost move: a
+ * still frame is not a playing video, and treating it as equivalent would have declared the feature done
+ * while it was not.
  */
 const EXPECTED = {
-  image: { blocks: ['image'], why: 'an image block is the only thing a host renders' },
+  image: { blocks: ['image'], why: 'an image block is the fallback for hosts without app support' },
   audio: { blocks: ['audio'], why: 'MCP has a first-class audio block and it plays inline' },
-  video: { blocks: ['image'], why: 'MCP has no video block, so the poster frame stands in for it' },
+  video: { blocks: [], why: 'MCP has no video block; the widget is the only thing that can play it' },
 }
 
-/**
- * ⚠️⚠️ **A LINE-DELIMITED PROTOCOL NEEDS A LINE BUFFER, AND THIS DID NOT HAVE ONE.**
- *
- * The first version parsed each `data` chunk on its own. That works for small text replies, which arrive in
- * a single chunk, and breaks the moment a reply is big, because a base64 image spans many chunks and no
- * individual one is valid JSON. So the harness started timing out at exactly the point the feature it
- * verifies began working, and the symptom (a hang) pointed at the server rather than at the reader.
- *
- * ⭐ The accumulate-then-split version is also the only one that can report an inline size, which is the
- * number worth watching.
- */
 function rpc(child, id, method, params) {
   return new Promise((resolve, reject) => {
     let buf = ''
@@ -123,17 +120,27 @@ try {
     }
     const types = (res.content ?? []).map((c) => c.type)
     const want = EXPECTED[medium]
-    const has = want.blocks.every((b) => types.includes(b))
+    const hasBlocks = want.blocks.every((b) => types.includes(b))
     const bytes = (res.content ?? [])
       .filter((c) => typeof c.data === 'string')
       .reduce((a, c) => a + c.data.length, 0)
+    // ⭐ THE WIDGET IS THE PART THAT RENDERS VIDEO, so it is checked for EVERY medium, not just video.
+    // `structuredContent` is what the widget reads; `_meta` is what tells the host to mount it. One without
+    // the other renders nothing, and each fails silently on its own.
+    const meta = res._meta ?? {}
+    const boundTo = meta['ui/resourceUri'] ?? meta.ui?.resourceUri
+    const feeds = Array.isArray(res.structuredContent?.outputs) && res.structuredContent.outputs.length > 0
+    const hasWidget = Boolean(boundTo && feeds)
+    const has = hasWidget && hasBlocks
+    const widget = hasWidget ? 'widget' : boundTo ? 'BOUND BUT NO DATA' : feeds ? 'DATA BUT UNBOUND' : 'NO WIDGET'
     console.log(
       `  ${medium.padEnd(6)} ${has ? 'OK  ' : 'FAIL'}  blocks=[${types.join(', ')}]` +
-        `${bytes ? `  inline=${(bytes / 1024).toFixed(0)}KB` : ''}`,
+        `${bytes ? `  inline=${(bytes / 1024).toFixed(0)}KB` : ''}  ${widget}`,
     )
     if (!has) {
       failures += 1
-      console.log(`         expected a ${want.blocks.join(' + ')} block: ${want.why}`)
+      if (!hasWidget) console.log('         the WIDGET is missing: needs both _meta.ui.resourceUri and structuredContent.outputs')
+      if (!hasBlocks) console.log(`         fallback block missing (${want.blocks.join(' + ')}): ${want.why}`)
     }
   }
 } finally {

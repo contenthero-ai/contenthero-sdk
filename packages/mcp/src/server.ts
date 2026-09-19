@@ -34,6 +34,19 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+/**
+ * ⚠️⚠️ **THE CONSTANTS ONLY, NOT THE `./server` HELPERS, AND THAT IS DELIBERATE.**
+ *
+ * `@modelcontextprotocol/ext-apps@2` targets the SPLIT packages (`@modelcontextprotocol/server`), while this
+ * server is built on the monolithic `@modelcontextprotocol/sdk@1.26`. Its `registerAppResource` therefore
+ * typechecks against a different `ResourceMetadata` than ours and rejects `description`.
+ *
+ * ⭐ The helper is convenience over a two-line contract: a resource whose mimeType is the app profile, and a
+ * tool result whose `_meta` names it. Registering through OUR `server.registerResource` keeps one server
+ * abstraction instead of two, and the STRINGS still come from the package, so the part that must match the
+ * spec has a single source. Migrating to the split SDK is its own piece of work, not a prerequisite for this.
+ */
+import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
 import {
   ContentHero,
@@ -53,6 +66,12 @@ import {
   type Generation,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
+
+/** This module's own directory, so the widget is read from the PACKAGE rather than from the cwd. */
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url))
+
+export { GENERATION_WIDGET_URI } from './widget-uri.js'
+import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import {
   resolveModelEnums,
   type ResolvedModelEnums,
@@ -319,6 +338,19 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
   const ext = mimeType.split('/')[1]
   const out: GeneratedAttachment[] = []
   for (const [i, uri] of urls.entries()) {
+    /**
+     * ⭐ AUDIO HAS A FIRST-CLASS BLOCK TOO, and it plays inline exactly as an image draws. It is fetched the
+     * same best-effort way: a miss degrades this one output to a link rather than failing a generation the
+     * person already paid for.
+     *
+     * ⚠️ NO PREVIEW DERIVATIVE EXISTS FOR AUDIO, so this is the real file and the size cap is what stops a
+     * long track going into the transcript. A voiceover is small; an hour of music is not, and that one
+     * degrades to a link, which the widget renders anyway.
+     */
+    if (gen.contentType === 'audio') {
+      const bytes = await fetchAudioBytes(uri)
+      if (bytes) out.push({ kind: 'bytes', type: 'audio', data: bytes.data, mimeType: bytes.mimeType })
+    }
     if (gen.contentType === 'image') {
       // Best-effort: a miss (host not allowlisted, derivative absent and the original over the cap, network
       // hiccup) degrades this one output to a link instead of failing a generation the user already paid for.
@@ -403,6 +435,29 @@ function optimizedImageSibling(url: string): string {
  * `Generation`. That makes this cap irrelevant instead of load-bearing.
  */
 const MAX_INLINE_IMAGE_BYTES = 8_000_000
+
+/**
+ * The audio equivalent of `fetchImageBytes`, sharing its host allowlist, its size cap and its timeout.
+ *
+ * ⚠️ SEPARATE RATHER THAN A `kind` PARAMETER because the content-type CHECK is the difference, and a single
+ * function taking "which prefix do I accept" is the shape that eventually accepts the wrong one.
+ */
+async function fetchAudioBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
+  if (!isAllowedImageHost(url)) return null
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    const mimeType = res.headers.get('content-type') || 'audio/mpeg'
+    if (!mimeType.startsWith('audio/')) return null
+    const declared = Number(res.headers.get('content-length') ?? '')
+    if (Number.isFinite(declared) && declared > MAX_INLINE_IMAGE_BYTES) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.byteLength > MAX_INLINE_IMAGE_BYTES) return null
+    return { data: buf.toString('base64'), mimeType }
+  } catch {
+    return null
+  }
+}
 
 async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
   if (!isAllowedImageHost(url)) return null
@@ -501,6 +556,48 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
    * shape per op type. Strictness here applies to the TOP-LEVEL argument object only, so those keep taking
    * varied op payloads while still rejecting an undeclared top-level parameter.
    */
+  /**
+   * ⭐⭐⭐ **THE GENERATION WIDGET: THE ONLY THING THAT PUTS A PLAYING VIDEO IN A CONVERSATION.**
+   *
+   * MCP's content blocks are `text | image | audio | resource | resource_link`. **There is no video block**,
+   * so no arrangement of them can render video, and a `resource_link` renders as a hyperlink in ChatGPT and
+   * as NOTHING in Claude. Measured in production 2026-09-19.
+   *
+   * MCP Apps is the mechanism that works. The server publishes an HTML resource under `ui://`, the host
+   * mounts it, and the widget reads the tool's `structuredContent`. It is an open standard with an official
+   * SDK (`@modelcontextprotocol/ext-apps`), verified against a working implementation before adoption.
+   *
+   * ⚠️ **THE HTML IS READ FROM THE PACKAGE, NOT FETCHED.** It ships inside the published tarball, so a local
+   * install renders the same thing the hosted server does. Fetching it from our app would make the widget
+   * depend on a deploy and break every offline or self-hosted install.
+   *
+   * ⛔ **REGISTERING THIS COSTS NOTHING FOR HOSTS THAT DO NOT SUPPORT IT.** A client that ignores `ui://`
+   * resources simply never reads it, and the image and audio BLOCKS remain the fallback. That is why the
+   * blocks stay rather than being replaced: two mechanisms, and the widget is the better one where it exists.
+   */
+  const widgetHtml = (() => {
+    try {
+      return readFileSync(join(MODULE_DIR, 'widget', 'generation.html'), 'utf8')
+    } catch {
+      // Best-effort: a build that somehow shipped without the widget still serves every tool.
+      return null
+    }
+  })()
+
+  if (widgetHtml) {
+    server.registerResource(
+      'generation',
+      GENERATION_WIDGET_URI,
+      {
+        description: 'Shows what a generation produced: every variation, playable and downloadable.',
+        mimeType: RESOURCE_MIME_TYPE,
+      },
+      async () => ({
+        contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text: widgetHtml }],
+      }),
+    )
+  }
+
   const rawRegisterTool = server.registerTool.bind(server)
   server.registerTool = ((name: string, config: Record<string, unknown>, cb: unknown) => {
     const shape = config.inputSchema

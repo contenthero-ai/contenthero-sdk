@@ -13,7 +13,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node widget/build.mjs && tsc",
     "clean": "rm -rf dist",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "prepublishOnly": "npm run clean && npm run build",
@@ -43,11 +43,17 @@
   "private": false,
   "dependencies": {
     "@contenthero/sdk": "^0.4.6",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/sdk": "1.26.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.1",
+    "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "tsx": "^4.22.3"
   }
 }

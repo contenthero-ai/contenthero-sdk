@@ -5,6 +5,10 @@
  */
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+// The spec's own spelling of the key that binds a result to its widget. See `server.ts` for why only the
+// constants come from this package and not its server helpers.
+import { RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
+import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import type {
   Avatar,
   AvatarSummary,
@@ -114,7 +118,36 @@ export type GeneratedAttachment =
  * ⚠️ ATTACHMENTS ARE BUILT BY THE CALLER, not here. This module stays pure, the same split
  * `mediaBatchResult` already uses: the handler decides, the formatter assembles.
  */
-export function completedResult(gen: Generation, attachments: GeneratedAttachment[] = []): CallToolResult {
+/**
+ * What the generation WIDGET reads.
+ *
+ * ⭐⭐ `structuredContent` IS THE WIDGET'S ONLY INPUT. It is a separate channel from `content`: the blocks
+ * feed the model and any host without app support, this feeds the UI. Both are emitted, so nothing regresses
+ * where widgets are unsupported and nothing is duplicated where they are.
+ *
+ * ⚠️ URLS ONLY, NEVER BYTES. The widget runs in the host's frame and fetches media itself, and our
+ * capability urls carry their token in the QUERY STRING, so `<video src>` loads one directly with no header
+ * to set. Embedding base64 here would pay the context cost twice over.
+ */
+export function generationWidgetData(gen: Generation, posterUrls: readonly (string | null)[] = []) {
+  const urls = gen.outputUrls ?? []
+  return {
+    outputId: gen.outputId,
+    contentType: gen.contentType,
+    modelId: gen.modelId,
+    outputs: urls.map((url, i) => ({
+      url,
+      posterUrl: posterUrls[i] ?? null,
+      name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+    })),
+  }
+}
+
+export function completedResult(
+  gen: Generation,
+  attachments: GeneratedAttachment[] = [],
+  posterUrls: readonly (string | null)[] = [],
+): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
   const header = `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}):`
@@ -143,7 +176,20 @@ export function completedResult(gen: Generation, attachments: GeneratedAttachmen
       content.push({ type: 'resource_link', uri: a.uri, name: a.name, mimeType: a.mimeType })
     }
   }
-  return { content, isError: false }
+  /**
+   * ⭐⭐⭐ **THE `_meta` KEY IS WHAT MAKES A WIDGET APPEAR.** Without it the host has an HTML resource it was
+   * never told to mount, and the result renders as blocks alone. With it, a host that supports MCP Apps
+   * shows the widget and a host that does not ignores the key entirely.
+   *
+   * ⚠️ Emitted ALONGSIDE the blocks, never instead of them. Two mechanisms, one of which is better where it
+   * exists: ChatGPT and Claude get the widget, anything else still gets an image it can draw.
+   */
+  return {
+    content,
+    isError: false,
+    structuredContent: generationWidgetData(gen, posterUrls),
+    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+  }
 }
 
 /** Suggested seconds to wait before re-polling a job, by content type. */
