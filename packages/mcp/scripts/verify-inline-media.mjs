@@ -44,16 +44,33 @@ const EXPECTED = {
   video: { blocks: ['image'], why: 'MCP has no video block, so the poster frame stands in for it' },
 }
 
+/**
+ * ⚠️⚠️ **A LINE-DELIMITED PROTOCOL NEEDS A LINE BUFFER, AND THIS DID NOT HAVE ONE.**
+ *
+ * The first version parsed each `data` chunk on its own. That works for small text replies, which arrive in
+ * a single chunk, and breaks the moment a reply is big, because a base64 image spans many chunks and no
+ * individual one is valid JSON. So the harness started timing out at exactly the point the feature it
+ * verifies began working, and the symptom (a hang) pointed at the server rather than at the reader.
+ *
+ * ⭐ The accumulate-then-split version is also the only one that can report an inline size, which is the
+ * number worth watching.
+ */
 function rpc(child, id, method, params) {
   return new Promise((resolve, reject) => {
-    const onData = (buf) => {
-      for (const line of buf.toString().split('\n')) {
+    let buf = ''
+    const onData = (chunk) => {
+      buf += chunk
+      let nl
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl)
+        buf = buf.slice(nl + 1)
         if (!line.trim()) continue
         let msg
         try { msg = JSON.parse(line) } catch { continue }
         if (msg.id !== id) continue
         child.stdout.off('data', onData)
         msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result)
+        return
       }
     }
     child.stdout.on('data', onData)
@@ -74,11 +91,17 @@ const child = spawn('node', [ENTRY], {
 
 let failures = 0
 try {
+  // ⚠️⚠️ SETTLE BEFORE THE FIRST WRITE. The server prints its banner BEFORE attaching a stdin reader, so a
+  // request sent the instant it announces itself is dropped and every later call waits forever. That looked
+  // exactly like a hung server and cost two wrong hypotheses, including a fetch timeout added to fix a hang
+  // that was never there. (The timeout is worth keeping on its own merits; it just was not this.)
+  await new Promise((r) => setTimeout(r, 3000))
   await rpc(child, 1, 'initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
     clientInfo: { name: 'verify-inline-media', version: '1' },
   })
+  await new Promise((r) => setTimeout(r, 1500))
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
 
   let n = 10

@@ -228,8 +228,20 @@ export function costResult(est: CostEstimate): CallToolResult {
  * caller that stopped at a partial result believing it was complete would silently lose images,
  * which is the failure this is meant to prevent, not cause.
  */
-export function generationStatusResult(gen: Generation): CallToolResult {
-  if (gen.status === 'completed') return completedResult(gen)
+export function generationStatusResult(
+  gen: Generation,
+  attachments: GeneratedAttachment[] = [],
+): CallToolResult {
+  /**
+   * ⛔⛔ **THIS DROPPED THE ATTACHMENTS AND THEREFORE RENDERED NOTHING.** It called `completedResult(gen)`
+   * with no second argument, so POLLING returned text alone even after the generate handlers started
+   * attaching blocks. That is the path EVERY async generation takes, which is every video, so the common
+   * case stayed blank while the synchronous one worked.
+   *
+   * ⭐ Found by the `verify:inline` harness in its first run, minutes after it existed. The unit tests could
+   * not see it: they call `completedResult` directly and never go through here.
+   */
+  if (gen.status === 'completed') return completedResult(gen, attachments)
   if (gen.status === 'failed') {
     return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
   }
@@ -250,8 +262,14 @@ export function generationStatusResult(gen: Generation): CallToolResult {
 }
 
 /** One or more generations (snapshot or post-wait). Falls through to the single form for one id. */
-export function generationBatchResult(gens: Generation[]): CallToolResult {
-  if (gens.length === 1) return generationStatusResult(gens[0]!)
+export function generationBatchResult(
+  gens: Generation[],
+  attachmentsByOutputId: Record<string, GeneratedAttachment[]> = {},
+): CallToolResult {
+  // ⚠️ ONLY THE SINGLE FORM ATTACHES. A batch status covering ten generations would embed ten sets of
+  // bytes into one result, which is the context blow-up the link design was originally protecting against.
+  // The single form is what a caller polling one generation hits, and that is the case worth rendering.
+  if (gens.length === 1) return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
   const rows = gens.map((gen) => {
     if (gen.status === 'completed') {
       const urls = gen.outputUrls ?? []

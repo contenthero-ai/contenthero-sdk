@@ -407,7 +407,17 @@ const MAX_INLINE_IMAGE_BYTES = 8_000_000
 async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
   if (!isAllowedImageHost(url)) return null
   try {
-    const res = await fetch(url)
+    /**
+     * ⚠️⚠️ **A BARE `fetch` HAS NO TIMEOUT, AND THIS ONE IS ON THE PATH OF EVERY GENERATION RESULT.**
+     *
+     * One unresponsive asset would hang the whole tool call rather than degrading that item to a link, and
+     * the caller would see a dead generation they had already paid for. Found by `verify:inline` hanging on
+     * its first run after the status path started attaching.
+     *
+     * ⭐ Failing is CHEAP here and the fallback is good: no block, keep the link. Waiting is what is
+     * expensive, so the budget is deliberately short.
+     */
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const mimeType = res.headers.get('content-type') || 'image/jpeg'
     if (!mimeType.startsWith('image/')) return null
@@ -2260,7 +2270,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             }
           }),
         )
-        return generationBatchResult(gens)
+        // ⭐ Only the single-generation case is attached: a batch of ten would embed ten sets of bytes into
+        // one result. Polling ONE generation is the case a person is watching, and the one worth rendering.
+        const attachments =
+          gens.length === 1 && gens[0]
+            ? { [gens[0].outputId]: await attachmentsFor(gens[0]) }
+            : {}
+        return generationBatchResult(gens, attachments)
       } catch (err) {
         return errorResult(err)
       }
