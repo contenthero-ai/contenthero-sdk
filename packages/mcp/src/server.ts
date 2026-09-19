@@ -330,6 +330,22 @@ const LINK_MIME: Record<string, string> = {
  * ⚠️ VIDEO STAYS LINK-ONLY. MCP has no video content block, and base64 video in a transcript is not a
  * trade worth making. Audio likewise has no small derivative to send, so it stays a link too.
  */
+/**
+ * ⛔⛔ **THERE IS NO HOST DETECTION HERE, AND THAT IS NOT AN OVERSIGHT.**
+ *
+ * The obvious optimization is to skip the bytes when the host will mount the widget, since the widget loads
+ * media from a URL and the blocks are only a fallback. I wrote it, and it could never work: MCP Apps
+ * declares its support under `capabilities.extensions["io.modelcontextprotocol/ui"]`, and
+ * **`@modelcontextprotocol/sdk@1.26` does not know the word `extensions`** (measured: zero occurrences in
+ * its types). The schema strips it, so `getClientCapabilities()` returns the same answer for a host that
+ * mounts widgets and one that cannot, and the check silently reduced to a constant.
+ *
+ * ⭐ A CHECK THAT ALWAYS ANSWERS THE SAME WAY IS WORSE THAN NO CHECK: it reads as a decision being made.
+ * Deleted, and the budget below is what keeps every result under the host's ceiling on its own.
+ *
+ * ⏭️ The split packages (`@modelcontextprotocol/server@2`) carry the field. Migrating to them is what
+ * unlocks this, and it is its own piece of work rather than a prerequisite for rendering.
+ */
 export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachment[]> {
   const urls = (gen.outputUrls ?? []).filter((u) => typeof u === 'string' && u.length > 0)
   const mimeType = LINK_MIME[gen.contentType]
@@ -352,8 +368,8 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
       if (bytes) out.push({ kind: 'bytes', type: 'audio', data: bytes.data, mimeType: bytes.mimeType })
     }
     if (gen.contentType === 'image') {
-      // Best-effort: a miss (host not allowlisted, derivative absent and the original over the cap, network
-      // hiccup) degrades this one output to a link instead of failing a generation the user already paid for.
+      // Best-effort: a miss (host not allowlisted, over the budget, network hiccup) degrades this one output
+      // to a link instead of failing a generation the user already paid for.
       const bytes = await fetchMediaImageBase64(uri)
       if (bytes) out.push({ kind: 'bytes', type: 'image', data: bytes.data, mimeType: bytes.mimeType })
     }
@@ -414,27 +430,28 @@ function optimizedImageSibling(url: string): string {
 }
 
 /**
- * The most an inline image block may weigh. A BACKSTOP against something absurd, not a budget.
+ * ⛔⛔⛔ **A HOST ENFORCES A 1 MB CEILING ON A WHOLE TOOL RESULT, AND THIS IS SIZED AGAINST THAT.**
  *
- * ⚠️⚠️ **THIS WAS 1.5 MB FOR ONE ITERATION AND THAT WOULD HAVE REINTRODUCED THE BUG.** The reasoning was
- * that `fetchMediaImageBase64` prefers a small `.preview.webp` sibling. It cannot, for anything generated
- * today: `optimizedImageSibling` only rewrites urls containing `/object/public/studio-outputs/`, the OLD
- * Supabase storage path, and generated assets now address through `media.contenthero.ai`. So the fallback
- * IS the path, the original is what gets embedded, and a real 2736x1536 output would have sat over a 1.5 MB
- * cap and silently degraded back to a link.
+ * Claude Desktop rejects an oversized result outright with "Tool result is too large. Maximum size is 1MB",
+ * which fails the CALL rather than degrading the picture. Measured 2026-09-19 on a real `generate_image`:
+ * the generation succeeded and was charged, and the person could not retrieve it.
  *
- * ⛔ **A SIBLING CANNOT BE FETCHED WITH THIS TOKEN ANYWAY.** A capability url names ONE object in its `obj`
- * claim, which is exactly what makes it safe to hand to a third party, so a request for a neighboring key
- * is refused by the gateway. Any preview has to arrive as its OWN url with its own token.
+ * ⚠️ I SET THIS CAP WRONG TWICE BEFORE GETTING HERE. 1.5 MB was too low and would have silently degraded
+ * real outputs back to links; 8 MB was too high and broke the host. Both were reasoned from what the BYTES
+ * cost us. The number that actually governs belongs to the host, and it bounds the ENTIRE result: text,
+ * structured content, every block. So the budget is expressed in BASE64 LENGTH, which is what travels, and
+ * leaves room for everything else in the envelope.
  *
- * ⭐ Cost in practice is smaller than the byte count suggests: hosts downsample before tokenizing, so a
- * 2736x1536 image costs on the order of a thousand tokens rather than scaling with megabytes. `get_media`
- * has embedded originals at this size all along, and that is the path that demonstrably works.
+ * ⭐ Over budget, the item degrades to a link and the widget still renders it, because the widget loads from
+ * a url rather than from bytes.
  *
- * ⏭️ THE REAL FIX is a preview url per output, minted with its own capability token, returned by the API on
- * `Generation`. That makes this cap irrelevant instead of load-bearing.
+ * ⚠️ **DERIVED, NOT PICKED.** The ceiling is 1,000,000 bytes for the ENTIRE serialized result. Measured on a
+ * real one: text, `structuredContent` and the links together weigh about 2 KB. 900,000 base64 characters
+ * leaves roughly 100 KB of headroom, and admits a 657 KB source asset. A 613 KB PNG measured in production
+ * encodes to about 840 KB, so it fits with room to spare, where the 700,000 I first wrote would have thrown
+ * it away. That was the third time I set this number from reasoning instead of from a measurement.
  */
-const MAX_INLINE_IMAGE_BYTES = 8_000_000
+const MAX_INLINE_BASE64_CHARS = 900_000
 
 /**
  * The audio equivalent of `fetchImageBytes`, sharing its host allowlist, its size cap and its timeout.
@@ -449,11 +466,13 @@ async function fetchAudioBytes(url: string): Promise<{ data: string; mimeType: s
     if (!res.ok) return null
     const mimeType = res.headers.get('content-type') || 'audio/mpeg'
     if (!mimeType.startsWith('audio/')) return null
+    // Base64 inflates by about a third, so the declared byte length is checked against the budget it will
+    // BECOME rather than against itself.
     const declared = Number(res.headers.get('content-length') ?? '')
-    if (Number.isFinite(declared) && declared > MAX_INLINE_IMAGE_BYTES) return null
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.byteLength > MAX_INLINE_IMAGE_BYTES) return null
-    return { data: buf.toString('base64'), mimeType }
+    if (Number.isFinite(declared) && declared * 1.37 > MAX_INLINE_BASE64_CHARS) return null
+    const data = Buffer.from(await res.arrayBuffer()).toString('base64')
+    if (data.length > MAX_INLINE_BASE64_CHARS) return null
+    return { data, mimeType }
   } catch {
     return null
   }
@@ -479,10 +498,10 @@ async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: s
     // Checked BEFORE reading the body where the server declares it, and again after, because
     // `content-length` is absent on a chunked response and a header is not a measurement.
     const declared = Number(res.headers.get('content-length') ?? '')
-    if (Number.isFinite(declared) && declared > MAX_INLINE_IMAGE_BYTES) return null
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.byteLength > MAX_INLINE_IMAGE_BYTES) return null
-    return { data: buf.toString('base64'), mimeType }
+    if (Number.isFinite(declared) && declared * 1.37 > MAX_INLINE_BASE64_CHARS) return null
+    const data = Buffer.from(await res.arrayBuffer()).toString('base64')
+    if (data.length > MAX_INLINE_BASE64_CHARS) return null
+    return { data, mimeType }
   } catch {
     return null
   }

@@ -46,6 +46,9 @@ const ENTRY = join(HERE, '..', 'dist', 'index.js')
  * still frame is not a playing video, and treating it as equivalent would have declared the feature done
  * while it was not.
  */
+/** Measured from Claude Desktop's own refusal: "Tool result is too large. Maximum size is 1MB." */
+const HOST_RESULT_CEILING = 1_000_000
+
 const EXPECTED = {
   image: { blocks: ['image'], why: 'an image block is the fallback for hosts without app support' },
   audio: { blocks: ['audio'], why: 'MCP has a first-class audio block and it plays inline' },
@@ -130,17 +133,42 @@ try {
     const meta = res._meta ?? {}
     const boundTo = meta['ui/resourceUri'] ?? meta.ui?.resourceUri
     const feeds = Array.isArray(res.structuredContent?.outputs) && res.structuredContent.outputs.length > 0
+    /**
+     * ⛔⛔ THE SIZE OF THE WHOLE RESULT, MEASURED, NOT THE SIZE OF THE BLOCKS.
+     *
+     * Claude Desktop rejects a result over 1 MB outright with "Tool result is too large", which fails the
+     * CALL rather than degrading the picture: the generation is charged and unreachable. That happened in
+     * production on 2026-09-19 and no assertion here could see it, because every check was about which
+     * BLOCKS were present rather than how big the envelope was.
+     */
+    const wireBytes = Buffer.byteLength(JSON.stringify(res))
+    const overCeiling = wireBytes > HOST_RESULT_CEILING
     const hasWidget = Boolean(boundTo && feeds)
-    const has = hasWidget && hasBlocks
+    /**
+     * ⭐⭐ **WHAT ACTUALLY HAS TO HOLD: THE WIDGET RENDERS IT, AND THE RESULT FITS.**
+     *
+     * A fallback block is a BONUS for hosts that cannot mount an app, and for a large asset it legitimately
+     * cannot exist: a 2.4 MB voiceover encodes past any budget that fits inside a 1 MB result. Failing on
+     * that would be demanding the impossible, and a check that cannot be satisfied gets switched off.
+     *
+     * ⛔ The two real failures stay failures: no widget (nothing renders anywhere), and over the ceiling
+     * (the host REJECTS the call, so the person pays for a generation they cannot reach).
+     */
+    const has = hasWidget && !overCeiling
     const widget = hasWidget ? 'widget' : boundTo ? 'BOUND BUT NO DATA' : feeds ? 'DATA BUT UNBOUND' : 'NO WIDGET'
+    const note = has && want.blocks.length && !hasBlocks ? '  (link-only: too large to inline)' : ''
     console.log(
       `  ${medium.padEnd(6)} ${has ? 'OK  ' : 'FAIL'}  blocks=[${types.join(', ')}]` +
-        `${bytes ? `  inline=${(bytes / 1024).toFixed(0)}KB` : ''}  ${widget}`,
+        `  wire=${(wireBytes / 1024).toFixed(0)}KB${overCeiling ? ' OVER CEILING' : ''}  ${widget}${note}`,
     )
     if (!has) {
       failures += 1
+      if (overCeiling)
+        console.log(
+          `         ${(wireBytes / 1024).toFixed(0)}KB exceeds the ${(HOST_RESULT_CEILING / 1024).toFixed(0)}KB a host accepts; it will REJECT the call, not shrink it`,
+        )
       if (!hasWidget) console.log('         the WIDGET is missing: needs both _meta.ui.resourceUri and structuredContent.outputs')
-      if (!hasBlocks) console.log(`         fallback block missing (${want.blocks.join(' + ')}): ${want.why}`)
+      if (!hasBlocks) console.log(`         no ${want.blocks.join(' + ')} fallback: ${want.why}`)
     }
   }
 } finally {
