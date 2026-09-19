@@ -1598,7 +1598,7 @@ test('list_cards surfaces id and platform with pagination context', async () => 
   const res = await mcp.callTool({ name: 'list_cards', arguments: {} })
   assert.match(res.content[0].text, /Launch clip \(id p1\)/)
   assert.match(res.content[0].text, /instagram/)
-  // A live card must not be labelled archived, or the flag means nothing when it does appear.
+  // A live card must not be labeled archived, or the flag means nothing when it does appear.
   assert.ok(!/\[archived\]/.test(res.content[0].text))
   assert.ok(!res.isError)
 })
@@ -2066,7 +2066,7 @@ test('publish_post flags a total failure as an error result', async () => {
 
 // -- inspiration / research ---------------------------------------------------
 
-test('list_accounts returns BOTH kinds, each labelled', async () => {
+test('list_accounts returns BOTH kinds, each labeled', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_accounts', arguments: {} })
   // The whole point of merging the two list tools: one call answers both questions, and a reader can still

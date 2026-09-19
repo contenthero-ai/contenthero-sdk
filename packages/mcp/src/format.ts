@@ -1386,7 +1386,7 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
     `Project ${p.id}: "${p.title}" (${p.kind}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
       // The output resolution above is NOT the coordinate space layer geometry uses. Stating both, adjacent
-      // and labelled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large
+      // and labeled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large
       // and got no error for it, because an oversized box is valid input.
       (p.compositionSpace
         ? `Layer geometry is in composition space ${p.compositionSpace.width}x${p.compositionSpace.height} ` +

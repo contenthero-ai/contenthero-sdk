@@ -1423,7 +1423,7 @@ export interface CardListResult {
  * with no indication of whose they were.
  *
  * ⚠️ THE NAME CANNOT BE DERIVED FROM THE ROWS. A `Stage` carries its `spaceId`, so a populated list could
- * have been labelled from its first row. An EMPTY list carries nothing, and the empty case is the one that
+ * have been labeled from its first row. An EMPTY list carries nothing, and the empty case is the one that
  * misleads, so the scope is returned alongside rather than inferred from them.
  */
 export interface StageListResult {

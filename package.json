@@ -10,9 +10,11 @@
   "scripts": {
     "build": "npm run build --workspace @contenthero/sdk && npm run build --workspace @contenthero/mcp && npm run build --workspace @contenthero/cli",
     "clean": "npm run clean --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "check:spelling": "check-american-spelling"
   },
   "devDependencies": {
+    "@contenthero-ai/american-spelling": "0.1.1",
     "typescript": "^5.4.0"
   },
   "engines": {

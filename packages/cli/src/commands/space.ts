@@ -6,7 +6,7 @@
  *   space update <id> [--name --cover --no-cover]    rename or re-cover (a PATCH: omitted fields stay)
  *   space delete <id>                                delete an EMPTY space
  *
- * Favouriting and archiving a space are NOT here. They are cross-entity verbs:
+ * Favoriting and archiving a space are NOT here. They are cross-entity verbs:
  *   contenthero favorite space <id>
  *   contenthero archive space <id>
  * exactly as they work for posts, projects and brand kits.

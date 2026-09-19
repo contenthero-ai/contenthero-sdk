@@ -38,7 +38,7 @@ import { collect, toInt, toJson } from '../args.js'
  * extract from.
  *
  * The FIRST logo is the primary one (the kit's cover) because a list has to name one and position is the
- * only signal a flat flag carries. Anything richer (layout, colour mode, moving primary without reordering)
+ * only signal a flat flag carries. Anything richer (layout, color mode, moving primary without reordering)
  * is a JSON body through the API.
  */
 function mediaRefs(refs: string[] | undefined): Array<Record<string, unknown>> | undefined {

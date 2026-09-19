@@ -205,7 +205,7 @@ export function registerContent(program: Command): void {
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
-      // be honoured against flat text.
+      // be honored against flat text.
       const raw = opts.transcript
       let grain: 'none' | 'text' | 'segments' | undefined
       if (raw === true) grain = 'segments'

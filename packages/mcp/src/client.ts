@@ -37,7 +37,7 @@ export function getClient(): ContentHero {
   }
   // Announced once, on stderr so it never corrupts the stdio protocol stream. Which ACCOUNT an MCP server is
   // acting as is the single most consequential thing about it and was previously invisible: the only way to
-  // find out was to call get_balance and recognise the number.
+  // find out was to call get_balance and recognize the number.
   console.error(`[contenthero-mcp] authenticated from ${keySource} (config dir: ${configDir()})`)
   cached = new ContentHero({
     apiKey,

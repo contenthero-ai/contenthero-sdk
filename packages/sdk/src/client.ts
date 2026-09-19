@@ -1090,7 +1090,7 @@ export class ContentHero {
   // -------------------------------------------------------------------------
   // Spaces (the planner's top-level container: Space > Stage > Card > Post)
   //
-  // Favouriting and archiving a space are NOT here. They are cross-entity verbs
+  // Favoriting and archiving a space are NOT here. They are cross-entity verbs
   // reached through `favorite()` and `archive()` with assetType 'space', the
   // same way they work for posts, projects and brand kits.
   // -------------------------------------------------------------------------

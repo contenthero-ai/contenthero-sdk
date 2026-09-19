@@ -10,7 +10,7 @@ import { importedHuman } from './media.js'
  *
  * `media import` rendered through `uploadedHuman`, the upload formatter. An import is idempotent, so on a
  * duplicate `outputId` is null, and that formatter printed `Output id:` followed by nothing. A blank value
- * reads as a broken command, not as a deliberate no-op, which is worse than the behaviour it replaced.
+ * reads as a broken command, not as a deliberate no-op, which is worse than the behavior it replaced.
  *
  * The incident behind this: an editor export still was imported, became a row that owned no object, appeared
  * in Creations as though the studio had generated it, and could not be deleted. Printing "already imported"

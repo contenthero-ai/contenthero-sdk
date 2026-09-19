@@ -82,7 +82,7 @@ function uploadedHuman(m: UploadedMedia): string {
  *
  * `import_media` is idempotent: the same bytes twice give one library item, not two. Rendered through the
  * upload formatter, a duplicate printed `Output id:` followed by nothing, because `outputId` is null in that
- * case. That reads as a broken command rather than a deliberate no-op, which is worse than the behaviour it
+ * case. That reads as a broken command rather than a deliberate no-op, which is worse than the behavior it
  * replaced.
  *
  * Three cases, because what the operator can DO next differs:
