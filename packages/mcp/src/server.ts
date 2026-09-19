@@ -283,19 +283,57 @@ const LINK_MIME: Record<string, string> = {
   audio: 'audio/mpeg',
 }
 
-function attachmentsFor(gen: Generation): GeneratedAttachment[] {
+/**
+ * ⛔⛔⛔ **A `resource_link` DOES NOT RENDER. MEASURED IN BOTH HOSTS, IN PRODUCTION, 2026-09-19.**
+ *
+ * This returned `kind: 'link'` for every output, including images, and the result was the feature not
+ * working at all:
+ *
+ *   - **ChatGPT** showed the output id and a "View the generated image" hyperlink. Clicking it opened the
+ *     asset in a NEW TAB, which is the opposite of inline.
+ *   - **Claude** showed NOTHING. No image, no link, no output id.
+ *
+ * ⚠️ **THE FORMATTER COULD ALWAYS DO THIS AND NOTHING EVER ASKED IT TO.** `completedResult` has handled a
+ * `kind: 'bytes'` attachment since it was written, and its own docblock claims images get first-class
+ * blocks. This function never produced one, so the branch had no caller. Same shape as the capability-url
+ * no-op: a path that exists, typechecks, passes tests, and is unreachable.
+ *
+ * ⭐ **AN `image` BLOCK IS THE ONLY THING A HOST ACTUALLY RENDERS**, and it feeds the model's vision as
+ * well, so the earlier reasoning that `get_media` covers the looking case was answering a different
+ * question than the one the user asked: they wanted to SEE it.
+ *
+ * ## Both, not either
+ *
+ * Images get a block AND a link. The block is the small `.preview.webp` sibling, so inline display costs a
+ * few hundred tokens rather than the megabytes a 2736x1536 original would. The link is the capability url:
+ * permanent, full resolution, and the thing to click when the preview is not enough.
+ *
+ * ⚠️ VIDEO STAYS LINK-ONLY. MCP has no video content block, and base64 video in a transcript is not a
+ * trade worth making. Audio likewise has no small derivative to send, so it stays a link too.
+ */
+export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachment[]> {
   const urls = (gen.outputUrls ?? []).filter((u) => typeof u === 'string' && u.length > 0)
   const mimeType = LINK_MIME[gen.contentType]
   if (!mimeType) return []
 
   const ext = mimeType.split('/')[1]
-  return urls.map((uri, i) => ({
-    kind: 'link' as const,
-    uri,
-    mimeType,
-    // Named per output so a batch reads as four distinct things rather than four copies of one name.
-    name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}.${ext}`,
-  }))
+  const out: GeneratedAttachment[] = []
+  for (const [i, uri] of urls.entries()) {
+    if (gen.contentType === 'image') {
+      // Best-effort: a miss (host not allowlisted, derivative absent and the original over the cap, network
+      // hiccup) degrades this one output to a link instead of failing a generation the user already paid for.
+      const bytes = await fetchMediaImageBase64(uri)
+      if (bytes) out.push({ kind: 'bytes', type: 'image', data: bytes.data, mimeType: bytes.mimeType })
+    }
+    out.push({
+      kind: 'link',
+      uri,
+      mimeType,
+      // Named per output so a batch reads as four distinct things rather than four copies of one name.
+      name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}.${ext}`,
+    })
+  }
+  return out
 }
 
 /**
@@ -343,6 +381,29 @@ function optimizedImageSibling(url: string): string {
   return query ? `${rewritten}?${query}` : rewritten
 }
 
+/**
+ * The most an inline image block may weigh. A BACKSTOP against something absurd, not a budget.
+ *
+ * ⚠️⚠️ **THIS WAS 1.5 MB FOR ONE ITERATION AND THAT WOULD HAVE REINTRODUCED THE BUG.** The reasoning was
+ * that `fetchMediaImageBase64` prefers a small `.preview.webp` sibling. It cannot, for anything generated
+ * today: `optimizedImageSibling` only rewrites urls containing `/object/public/studio-outputs/`, the OLD
+ * Supabase storage path, and generated assets now address through `media.contenthero.ai`. So the fallback
+ * IS the path, the original is what gets embedded, and a real 2736x1536 output would have sat over a 1.5 MB
+ * cap and silently degraded back to a link.
+ *
+ * ⛔ **A SIBLING CANNOT BE FETCHED WITH THIS TOKEN ANYWAY.** A capability url names ONE object in its `obj`
+ * claim, which is exactly what makes it safe to hand to a third party, so a request for a neighboring key
+ * is refused by the gateway. Any preview has to arrive as its OWN url with its own token.
+ *
+ * ⭐ Cost in practice is smaller than the byte count suggests: hosts downsample before tokenizing, so a
+ * 2736x1536 image costs on the order of a thousand tokens rather than scaling with megabytes. `get_media`
+ * has embedded originals at this size all along, and that is the path that demonstrably works.
+ *
+ * ⏭️ THE REAL FIX is a preview url per output, minted with its own capability token, returned by the API on
+ * `Generation`. That makes this cap irrelevant instead of load-bearing.
+ */
+const MAX_INLINE_IMAGE_BYTES = 8_000_000
+
 async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: string } | null> {
   if (!isAllowedImageHost(url)) return null
   try {
@@ -350,8 +411,13 @@ async function fetchImageBytes(url: string): Promise<{ data: string; mimeType: s
     if (!res.ok) return null
     const mimeType = res.headers.get('content-type') || 'image/jpeg'
     if (!mimeType.startsWith('image/')) return null
-    const data = Buffer.from(await res.arrayBuffer()).toString('base64')
-    return { data, mimeType }
+    // Checked BEFORE reading the body where the server declares it, and again after, because
+    // `content-length` is absent on a chunked response and a header is not a measurement.
+    const declared = Number(res.headers.get('content-length') ?? '')
+    if (Number.isFinite(declared) && declared > MAX_INLINE_IMAGE_BYTES) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.byteLength > MAX_INLINE_IMAGE_BYTES) return null
+    return { data: buf.toString('base64'), mimeType }
   } catch {
     return null
   }
@@ -554,7 +620,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -618,7 +684,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -722,7 +788,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -875,7 +941,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -939,7 +1005,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;

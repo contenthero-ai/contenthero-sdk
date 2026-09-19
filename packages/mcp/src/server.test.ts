@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
-import { buildServer } from './server.js'
+import { buildServer, attachmentsFor } from './server.js'
 import { assertGroupsCoverTools, groupedToolNames } from './groups.js'
 
 /** A discovery-catalog entry, in the /api/v1/models projection shape. */
@@ -2717,4 +2717,87 @@ test('⚠️ nested passthrough ops survive strictness, because a timeline op ha
   assert.notEqual(res.isError, true, 'a varied op payload must still be accepted: ' + JSON.stringify(res.content))
   assert.equal(calls.length, 1)
   assert.equal(calls[0].ops[0].anythingElse.nested, true, 'the op payload must arrive intact')
+})
+
+// ── The DECIDER, which nothing tested until it shipped broken ────────────────────────────────────────────
+
+/**
+ * ⭐⭐⭐ **EVERY ATTACHMENT TEST IN `format.test.ts` HANDS THE FORMATTER AN ARRAY IT BUILT BY HAND.**
+ *
+ * That tests assembly, which was never wrong. The DECISION of block-versus-link lives in `attachmentsFor`,
+ * and nothing called it, so it returned `kind: 'link'` for images for as long as it existed while the
+ * formatter's `bytes` branch sat unreachable. The feature reached production not rendering in either host.
+ *
+ * ⚠️ Exported purely so this can address it. A test that cannot reach the decider is testing its neighbors.
+ */
+test('an image yields an inline BLOCK plus its link; video yields a link alone', async () => {
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    // ⚠️ THE RAW URL IS WHAT GETS FETCHED. `optimizedImageSibling` only rewrites the retired
+    // `/object/public/studio-outputs/` path, so for a gateway url there is no sibling to prefer, and a
+    // capability token could not read one anyway: it names a single object.
+    assert.ok(url.includes('media.contenthero.ai'), 'the capability url itself is fetched')
+    return new Response(Buffer.from('fake-image-bytes'), {
+      status: 200,
+      headers: { 'content-type': 'image/jpeg', 'content-length': '16' },
+    })
+  }) as typeof fetch
+  try {
+    const image = await attachmentsFor({
+      outputId: 'o1', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    } as never)
+    assert.equal(image.filter((a) => a.kind === 'bytes').length, 1, 'an image MUST produce a block')
+    assert.equal(image.filter((a) => a.kind === 'link').length, 1, 'and keep its full-resolution link')
+
+    const video = await attachmentsFor({
+      outputId: 'o2', modelId: 'v', status: 'completed', contentType: 'video',
+      outputUrls: ['https://media.contenthero.ai/u/a.mp4?t=tok'],
+    } as never)
+    assert.equal(video.filter((a) => a.kind === 'bytes').length, 0, 'video has no MCP block to fill')
+    assert.equal(video.filter((a) => a.kind === 'link').length, 1)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('⛔ an oversized image degrades to a link rather than eating the context', async () => {
+  // A BACKSTOP, not a budget: real generated images are expected to pass. It exists so one pathological
+  // file cannot put tens of megabytes of base64 into every later turn of the conversation.
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response(Buffer.alloc(9_000_000), {
+      status: 200,
+      headers: { 'content-type': 'image/jpeg', 'content-length': '9000000' },
+    })) as typeof fetch
+  try {
+    const out = await attachmentsFor({
+      outputId: 'o3', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputUrls: ['https://media.contenthero.ai/u/big.jpg?t=tok'],
+    } as never)
+    assert.equal(out.filter((a) => a.kind === 'bytes').length, 0, 'over the cap, no block')
+    assert.equal(out.filter((a) => a.kind === 'link').length, 1, 'but never nothing')
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('⛔ every variation of a batch gets its own block, not just the first', async () => {
+  // The whole reason to generate four is to compare them.
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response(Buffer.from('x'), {
+      status: 200, headers: { 'content-type': 'image/webp', 'content-length': '1' },
+    })) as typeof fetch
+  try {
+    const out = await attachmentsFor({
+      outputId: 'o4', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputUrls: ['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`),
+    } as never)
+    assert.equal(out.filter((a) => a.kind === 'bytes').length, 4)
+    assert.equal(new Set(out.filter((a) => a.kind === 'link').map((a) => (a as { name: string }).name)).size, 4)
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })

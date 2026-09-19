@@ -139,11 +139,12 @@ test('in-place enhancement hands back every outputId in one callable form', () =
  *
  * ## Why the mediums differ, and why that is not arbitrary
  *
- * MCP's content union is `text | image | audio | resource_link | resource`. Images and audio have
- * first-class blocks and modest sizes, so they are EMBEDDED, which is what makes them render AND what makes
- * them outlive any url. Video has no block of its own and would be megabytes of base64 repeated through the
- * rest of the conversation, so it is a `resource_link`. Verified against a working implementation: the
- * Higgsfield MCP returns exactly that for video.
+ * MCP's content union is `text | image | audio | resource_link | resource`.
+ *
+ * ⛔⛔ **ONLY A FIRST-CLASS BLOCK RENDERS. A `resource_link` DOES NOT**, measured in both ChatGPT and Claude
+ * in production on 2026-09-19. So an image is EMBEDDED (from its small `.preview.webp` sibling) and also
+ * linked for full resolution. Video has no block of its own and would be megabytes of base64 repeated
+ * through the rest of the conversation, so it is a link alone and the human clicks through.
  */
 
 const baseGen = {
@@ -174,24 +175,37 @@ test('🚨 EVERY variation in a batch comes back, not just the first', () => {
   assert.match(res.content[0].text, /outputId o1/)
 })
 
-test('⛔ media is LINKED, never embedded as base64', () => {
+test('⭐ an image comes back as a BLOCK AND a link; video links only', () => {
   /*
-    Base64 is charged to the user's context on every subsequent turn, so a four-image batch embedded as
-    bytes is a large multiple of the same cost repeated for the rest of the conversation.
+    ⛔⛔ THIS TEST ASSERTED THE OPPOSITE UNTIL 2026-09-19, under the name "media is LINKED, never embedded
+    as base64". The reasoning was that base64 is charged to the user's context on every later turn and
+    `get_media` already exists for when an agent needs to look. Both halves are true and neither answers the
+    question the user actually asked, which was to SEE the image.
 
-    ⚠️ THE TRADE THIS ACCEPTS: an `image` block feeds the MODEL's vision, a link does not. `get_media`
-    already exists to embed bytes when an agent actually needs to look, so deciding on every generation
-    that the model probably wants to look was spending the user's context to answer an unasked question.
+    🚨 MEASURED IN PRODUCTION, IN BOTH HOSTS: a `resource_link` DOES NOT RENDER. ChatGPT showed a "View the
+    generated image" hyperlink that opened a NEW TAB. Claude showed nothing at all: no image, no link, no
+    output id. The feature did not work.
+
+    ⭐ So an image gets BOTH: a block, built from the small `.preview.webp` sibling so it costs a few hundred
+    tokens rather than megabytes, and the capability link for full resolution. Video keeps link-only, since
+    MCP has no video block and base64 video in a transcript is not a trade worth making.
   */
-  for (const contentType of ['image', 'audio', 'video']) {
-    const res = completedResult(
-      { ...baseGen, contentType, outputUrls: ['https://media.contenthero.ai/u/a.bin?t=tok'] } as never,
-      [{ kind: 'link', uri: 'https://media.contenthero.ai/u/a.bin?t=tok', mimeType: 'image/png', name: 'o1.png' }],
-    )
-    assert.ok(!res.content.some((c) => c.type === 'image'), `${contentType} must not embed bytes`)
-    assert.ok(!res.content.some((c) => c.type === 'audio'), `${contentType} must not embed bytes`)
-    assert.ok(res.content.some((c) => c.type === 'resource_link'), `${contentType} must link`)
-  }
+  const imageRes = completedResult(
+    { ...baseGen, contentType: 'image', outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'] } as never,
+    [
+      { kind: 'bytes', type: 'image', data: 'AAAA', mimeType: 'image/webp' },
+      { kind: 'link', uri: 'https://media.contenthero.ai/u/a.png?t=tok', mimeType: 'image/png', name: 'o1.png' },
+    ],
+  )
+  assert.ok(imageRes.content.some((c) => c.type === 'image'), 'an image MUST render inline')
+  assert.ok(imageRes.content.some((c) => c.type === 'resource_link'), 'and keep its full-resolution link')
+
+  const videoRes = completedResult(
+    { ...baseGen, contentType: 'video', outputUrls: ['https://media.contenthero.ai/u/a.mp4?t=tok'] } as never,
+    [{ kind: 'link', uri: 'https://media.contenthero.ai/u/a.mp4?t=tok', mimeType: 'video/mp4', name: 'o1.mp4' }],
+  )
+  assert.ok(!videoRes.content.some((c) => c.type === 'image'), 'video must not embed bytes')
+  assert.ok(videoRes.content.some((c) => c.type === 'resource_link'))
 })
 
 test('⛔ video attaches as a resource_link, because MCP has no video block', () => {
