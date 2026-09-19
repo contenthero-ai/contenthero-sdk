@@ -64,6 +64,7 @@ import {
   type UpdateAvatarRequest,
 
   type Generation,
+  type ModelInfo,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 
@@ -596,6 +597,67 @@ const RENDERS_GENERATION = {
   },
 } as const
 
+
+/**
+ * ⛔⛔⛔ **WITHOUT THIS THE FRAME LOADS NOTHING, AND THE SPEC SAYS SO PLAINLY:**
+ * "Empty or omitted → no network resources (secure default)."
+ *
+ * Measured in Claude Desktop 2026-09-19: the widget mounted, the chrome rendered, the variation strip and
+ * the buttons worked, and every image was a broken icon showing its own filename. The frame was doing
+ * exactly what it was told, which was to permit nothing.
+ *
+ * `resourceDomains` maps to `img-src`, `media-src`, `script-src`, `style-src` and `font-src`, so it is the
+ * one field that decides whether an `<img>` or a `<video>` in this widget can reach our storage.
+ *
+ * ⚠️ NO `connectDomains`. The widget never calls `fetch`: it points element sources at urls and lets the
+ * browser load them. Granting network access it does not use would widen the sandbox for nothing.
+ *
+ * ⚠️ These are the hosts that actually serve generated media, which is a SMALLER set than the server's SSRF
+ * allowlist. That list governs what the SERVER may fetch and inline; this governs what the FRAME may load.
+ * Two different questions, deliberately not one constant.
+ */
+const WIDGET_CSP = {
+  _meta: {
+    ui: {
+      csp: {
+        resourceDomains: [
+          // Capability urls for generated assets: the token rides in the query string, so an element src
+          // loads one directly with no header to set.
+          'https://media.contenthero.ai',
+          // Public-class objects (posters, gallery, stock).
+          'https://cdn.contenthero.ai',
+        ],
+      },
+    },
+  },
+} as const
+
+
+/**
+ * `gpt-image-2` is an IDENTIFIER. `GPT Image 2` is what a person should read.
+ *
+ * ⛔ NOT TITLE-CASED FROM THE ID. Mechanically capitalising gives "Gpt Image 2", and any table mapping the
+ * two would be a second copy of a fact the registry already owns, drifting the moment an admin renames a
+ * model in the switchboard with no deploy. The catalog is the source of truth, so it is asked.
+ *
+ * ⭐ FETCHED ONCE PER PROCESS. The catalog is small and changes rarely, so one call serves every generation
+ * result afterwards. A failure returns the id, because a missing display name must never cost someone the
+ * result they paid for.
+ */
+let modelNames: Map<string, string> | null = null
+
+async function displayNameForModel(client: ContentHero, modelId: string): Promise<string> {
+  try {
+    if (!modelNames) {
+      const models = await client.listModels()
+      modelNames = new Map(models.map((m: ModelInfo) => [m.modelId, m.displayName]))
+    }
+    return modelNames.get(modelId) ?? modelId
+  } catch {
+    return modelId
+  }
+}
+
 /** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
 export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
 
@@ -685,6 +747,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     {
       description: 'Shows what a generation produced: every variation, playable and downloadable.',
       mimeType: RESOURCE_MIME_TYPE,
+      ...WIDGET_CSP,
     },
     async () => {
       const path = join(MODULE_DIR, 'widget', 'generation.html')
@@ -697,7 +760,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             '(`node widget/build.mjs`) and ships inside the package; a server running from source has not built it.',
         )
       }
-      return { contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text }] }
+      // ⚠️ REPEATED ON THE READ RESULT, not just the listing. The spec reads csp from the `resources/read`
+      // content item and treats the `resources/list` entry as a FALLBACK, so a host that only consults the
+      // read path would otherwise see no policy and apply the secure default of blocking everything.
+      return {
+        contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text, ...WIDGET_CSP }],
+      }
     },
   )
 
@@ -831,7 +899,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -896,7 +964,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1001,7 +1069,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1155,7 +1223,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1220,7 +1288,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen))
+        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -2482,7 +2550,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           gens.length === 1 && gens[0]
             ? { [gens[0].outputId]: await attachmentsFor(gens[0]) }
             : {}
-        return generationBatchResult(gens, attachments)
+        const name = gens.length === 1 && gens[0] ? await displayNameForModel(client, gens[0].modelId) : undefined
+        return generationBatchResult(gens, attachments, name)
       } catch (err) {
         return errorResult(err)
       }

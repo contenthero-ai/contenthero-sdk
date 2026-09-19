@@ -129,12 +129,19 @@ export type GeneratedAttachment =
  * capability urls carry their token in the QUERY STRING, so `<video src>` loads one directly with no header
  * to set. Embedding base64 here would pay the context cost twice over.
  */
-export function generationWidgetData(gen: Generation, posterUrls: readonly (string | null)[] = []) {
+export function generationWidgetData(
+  gen: Generation,
+  posterUrls: readonly (string | null)[] = [],
+  displayName?: string,
+) {
   const urls = gen.outputUrls ?? []
   return {
     outputId: gen.outputId,
     contentType: gen.contentType,
     modelId: gen.modelId,
+    // ⚠️ The NAME a person reads, resolved from the model catalog. Falls back to the id, which is at least
+    // true, rather than to a mechanical title-case that renders `gpt-image-2` as "Gpt Image 2".
+    modelName: displayName ?? gen.modelId,
     outputs: urls.map((url, i) => ({
       url,
       posterUrl: posterUrls[i] ?? null,
@@ -147,6 +154,7 @@ export function completedResult(
   gen: Generation,
   attachments: GeneratedAttachment[] = [],
   posterUrls: readonly (string | null)[] = [],
+  displayName?: string,
 ): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
@@ -162,8 +170,8 @@ export function completedResult(
    */
   const linked = attachments.some((a) => a.kind === 'link')
   const header = linked
-    ? `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}), attached below.`
-    : `Done. ${urls.length} ${noun} from ${gen.modelId} (outputId ${gen.outputId}):`
+    ? `Done. ${urls.length} ${noun} from ${displayName ?? gen.modelId} (outputId ${gen.outputId}), attached below.`
+    : `Done. ${urls.length} ${noun} from ${displayName ?? gen.modelId} (outputId ${gen.outputId}):`
   const lines = linked ? [header] : [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
   const p = gen.placement
   if (p) {
@@ -203,7 +211,7 @@ export function completedResult(
   return {
     content,
     isError: false,
-    structuredContent: generationWidgetData(gen, posterUrls),
+    structuredContent: generationWidgetData(gen, posterUrls, displayName),
     _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
   }
 }
@@ -293,6 +301,7 @@ export function costResult(est: CostEstimate): CallToolResult {
 export function generationStatusResult(
   gen: Generation,
   attachments: GeneratedAttachment[] = [],
+  displayName?: string,
 ): CallToolResult {
   /**
    * ⛔⛔ **THIS DROPPED THE ATTACHMENTS AND THEREFORE RENDERED NOTHING.** It called `completedResult(gen)`
@@ -303,7 +312,7 @@ export function generationStatusResult(
    * ⭐ Found by the `verify:inline` harness in its first run, minutes after it existed. The unit tests could
    * not see it: they call `completedResult` directly and never go through here.
    */
-  if (gen.status === 'completed') return completedResult(gen, attachments)
+  if (gen.status === 'completed') return completedResult(gen, attachments, [], displayName)
   if (gen.status === 'failed') {
     return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
   }
@@ -327,11 +336,13 @@ export function generationStatusResult(
 export function generationBatchResult(
   gens: Generation[],
   attachmentsByOutputId: Record<string, GeneratedAttachment[]> = {},
+  displayName?: string,
 ): CallToolResult {
   // ⚠️ ONLY THE SINGLE FORM ATTACHES. A batch status covering ten generations would embed ten sets of
   // bytes into one result, which is the context blow-up the link design was originally protecting against.
   // The single form is what a caller polling one generation hits, and that is the case worth rendering.
-  if (gens.length === 1) return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
+  if (gens.length === 1)
+    return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [], displayName)
   const rows = gens.map((gen) => {
     if (gen.status === 'completed') {
       const urls = gen.outputUrls ?? []

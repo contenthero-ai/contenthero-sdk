@@ -32,6 +32,8 @@ interface WidgetData {
   readonly outputId: string
   readonly contentType: 'image' | 'video' | 'audio'
   readonly modelId: string
+  /** What a person reads. Resolved from the model catalog server-side; falls back to the id. */
+  readonly modelName?: string
   readonly outputs: readonly Output[]
   readonly prompt?: string | null
 }
@@ -167,7 +169,7 @@ function Widget() {
       )}
 
       <div className="bar">
-        <span className="model">{data.modelId}</span>
+        <span className="model">{data.modelName ?? data.modelId}</span>
         <span className="muted">
           {many ? `Variation ${index + 1} of ${data.outputs.length}` : data.contentType}
         </span>
