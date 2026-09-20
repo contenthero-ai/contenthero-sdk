@@ -335,7 +335,13 @@ export function pendingResult(
   pollAfterSeconds = 15,
   shape?: PendingShape,
 ): CallToolResult {
-  const prose = `Still rendering (outputId ${outputId}). This is normal for video. Call ${getStatusCall([outputId])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`
+  /**
+   * ⚠️ THE REASSURANCE MUST MATCH THE MEDIUM. This said "This is normal for video" on every pending result,
+   * including image jobs, where it reads as the server describing something other than what was asked for.
+   * `shape` is present precisely when we know which medium it is.
+   */
+  const normal = shape?.contentType === 'image' ? '' : ' This is normal for video.'
+  const prose = `Still rendering (outputId ${outputId}).${normal} Call ${getStatusCall([outputId])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`
   if (!shape) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],

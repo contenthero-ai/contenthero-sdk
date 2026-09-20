@@ -2904,9 +2904,22 @@ test('every media tool declares the widget, and only media tools do', async () =
   const bound = tools.filter(declares).map((t) => t.name).sort()
   assert.deepEqual(
     bound,
-    ['generate_board', 'generate_image', 'generate_lip_sync', 'generate_video', 'get_generation_status', 'upscale'],
+    ['generate_board', 'generate_image', 'generate_lip_sync', 'generate_video', 'upscale'],
     'the set of tools that render a generation changed; add it here deliberately or it renders nothing',
   )
+
+  /**
+   * ⛔⛔ **`get_generation_status` IS DELIBERATELY ABSENT, AND REMOVING THIS ASSERTION WOULD BE THE BUG.**
+   *
+   * It used to declare the widget, and that produced TWO cards for one generation: `generate_image` returns
+   * a widget that draws placeholders and polls itself to completion, while its text separately tells the
+   * agent to poll, because a host without MCP Apps support has nothing else. The agent polls, this tool
+   * answers, and the host mounts a second card beside the one that just filled in.
+   *
+   * ⭐ The split is CREATE AND LOOK DISPLAY, QUERY REPORTS. Asserted rather than commented, because the
+   * obvious "fix" for someone who wants a widget on a status call is to add it back here.
+   */
+  assert.ok(!bound.includes('get_generation_status'), 'a status query must not mount a second widget')
 
   // ⚠️ A uri is an IDENTIFIER the host asks this server to resolve. Naming one nobody registered renders a
   // blank frame, which is worse than no widget at all.

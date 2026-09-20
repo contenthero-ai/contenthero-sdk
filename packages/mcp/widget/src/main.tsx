@@ -681,6 +681,8 @@ function Widget() {
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set())
   /** Why the last download failed, shown in the button's tooltip. Null when nothing has failed. */
   const [failReason, setFailReason] = useState<string | null>(null)
+  /** True once ANY tool result has been delivered, whether or not it was a generation. See `readResult`. */
+  const [answered, setAnswered] = useState(false)
 
   /**
    * ⚠️⚠️ REGISTERED IN `onAppCreated`, WHICH IS BEFORE THE HANDSHAKE COMPLETES.
@@ -693,8 +695,19 @@ function Widget() {
     const sc =
       (params as { structuredContent?: WidgetData } | null)?.structuredContent ??
       (params as { result?: { structuredContent?: WidgetData } } | null)?.result?.structuredContent
-    // ⚠️ A PENDING RESULT HAS NO OUTPUTS, so the old `outputs.length` guard dropped it and the frame sat
-    // on "Waiting for the generation result." forever. Accept anything that identifies a generation.
+    /**
+     * ⚠️ A PENDING RESULT HAS NO OUTPUTS, so an `outputs.length` guard dropped it and the frame sat on
+     * "Waiting for the generation result." forever. `outputId` is what identifies a generation at any stage.
+     *
+     * ⛔⛔ **AND A RESULT THAT IS NOT A GENERATION MUST COLLAPSE THE FRAME.**
+     *
+     * The widget is declared on the TOOL, so the host mounts it for EVERY result `generate_image` returns,
+     * including `getCost: true`, which is a one-line estimate with no generation in it. That rendered an
+     * empty card saying "Waiting for the generation result." on every preflight, waiting for something that
+     * was never coming. Recording that a result ARRIVED, separately from whether it was a generation, is
+     * what lets the frame render nothing instead of a lie.
+     */
+    setAnswered(true)
     if (sc?.outputId) {
       setData(sc)
       setIndex(0)
@@ -975,6 +988,12 @@ function Widget() {
   }
 
   if (!data) {
+    /**
+     * ⛔ NOTHING AT ALL once a result has arrived that was not a generation. A cost estimate is a legitimate
+     * answer from this tool, and the honest rendering of "this response has no media in it" is no card,
+     * not an empty one apologising for itself.
+     */
+    if (answered) return null
     return <div className="fallback muted">{isConnected ? 'Waiting for the generation result.' : 'Connecting.'}</div>
   }
 

@@ -457,3 +457,29 @@ test('the widget payload carries a studio url per output', () => {
   assert.equal(data.outputs[0]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=1')
   assert.equal(data.outputs[1]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=2')
 })
+
+
+/**
+ * ⚠️ THE REASSURANCE MUST MATCH THE MEDIUM.
+ *
+ * Every pending result said "This is normal for video", including image jobs, where it reads as the server
+ * describing something other than what was asked for. `shape` is present exactly when the medium is known.
+ */
+test('an image job is not told that slowness is normal for video', () => {
+  const img = pendingResult('o', 5, { contentType: 'image', modelId: 'gpt-image-2', expected: 3 })
+  assert.ok(!img.content[0].text.includes('normal for video'))
+  assert.match(img.content[0].text, /Still rendering \(outputId o\)\. Call/)
+})
+
+test('a video job still gets the reassurance, because for video it is true', () => {
+  const vid = pendingResult('o', 15, { contentType: 'video', modelId: 'seedance-2', expected: 1 })
+  assert.match(vid.content[0].text, /This is normal for video\./)
+})
+
+/**
+ * ⚠️ The shapeless form is what a host without app support sees, and it cannot know the medium, so it keeps
+ * the generic wording rather than silently dropping a reassurance that is usually right.
+ */
+test('with no shape the wording is unchanged', () => {
+  assert.match(pendingResult('o', 15).content[0].text, /This is normal for video\./)
+})

@@ -2561,7 +2561,21 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'get_generation_status',
     {
-      ...RENDERS_GENERATION,
+      /**
+       * ⛔⛔⛔ **THIS TOOL DOES NOT DECLARE THE WIDGET, AND THAT IS THE WHOLE POINT.**
+       *
+       * `generate_image` returns a widget that draws placeholders and then POLLS ITSELF to completion. Its
+       * text also tells the agent to poll, because a host without MCP Apps support has nothing else and an
+       * agent that stopped polling would leave a charged generation unclaimed. So the agent polls, this
+       * tool answers, and if it declared the widget the host would mount a SECOND card showing the same
+       * finished generation beside the one that just filled in.
+       *
+       * ⭐ Deterministic rather than instructional: the duplicate cannot happen, instead of relying on an
+       * agent reading prose that asks it not to poll. Create and look are DISPLAY; query is REPORT.
+       *
+       * ⏭️ `get_media` is the tool named "SEE specific media" and is where the look-at-an-existing-thing
+       * widget belongs. Until it binds one, inspecting an old generation is text only.
+       */
       title: 'Get Generation Status',
       annotations: READ,
       description:
