@@ -362,7 +362,8 @@ const styles = `
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
     border: 1px solid transparent; padding: 0; display: block; width: 100%;
   }
-  .tile.img { cursor: zoom-in; }
+  /* ⚠️ The cursor has to agree with the click handler: everything but audio opens a larger view now. */
+  .tile.img, .tile.video { cursor: zoom-in; }
   .tile:focus-within { outline: 2px solid ${GOLD}; outline-offset: 2px; }
   /**
    * THE HEIGHT CAP, AND WHY IT IS EXPRESSED AS A MAX-WIDTH.
@@ -1466,13 +1467,19 @@ function Widget() {
    * uniform case; anything else is honestly just "items".
    */
   const noun = data.contentType ?? (isUniform(items) ? items[0]?.contentType ?? 'item' : 'item')
-  const label = pending
+  /**
+   * ⚠️ SENTENCE CASE, because this is a line of prose under the set and not a data value. It read
+   * `video` in lower case next to `Making 3 images` and `15 items`, which is three different treatments
+   * of one line depending on how many things arrived.
+   */
+  const raw = pending
     ? stalled
       ? 'Still running. Ask me to check on it.'
       : `Making ${n} ${n === 1 ? noun : `${noun}s`}`
     : n === 1
       ? noun
       : `${n} ${noun}s`
+  const label = raw.charAt(0).toUpperCase() + raw.slice(1)
 
   /**
    * ⭐⭐ **MEASURED PIXELS BEAT THE REQUESTED RATIO, AND `displayAspect` SEEDS THE FIRST PAINT.**
@@ -1588,16 +1595,6 @@ function Widget() {
             {t('Edit')}
           </button>
         )}
-        {show('open') && o.openUrl && (
-          <button
-            className="pill neutral"
-            onClick={() => void app?.openLink({ url: o.openUrl! })}
-            data-tip={tip('Open')}
-          >
-            <IconOpen />
-            {t('Open')}
-          </button>
-        )}
         {/* ⭐ PER ITEM, so a mixed set offers it too. It used to read the payload's SHARED model and prompt,
             which are null the moment two items disagree, so a library set offered no Recreate at all even
             though every item knew its own. */}
@@ -1609,6 +1606,19 @@ function Widget() {
           >
             <IconRecreate />
             {t('Recreate')}
+          </button>
+        )}
+        {/* ⚠️ OPEN IS LAST, and the order is the point: Animate, Download, Edit and Recreate all act HERE,
+            while Open leaves for the product. Putting the one that navigates away in the middle of four
+            that do not made it the easiest of the five to hit by accident. */}
+        {show('open') && o.openUrl && (
+          <button
+            className="pill neutral"
+            onClick={() => void app?.openLink({ url: o.openUrl! })}
+            data-tip={tip('Open')}
+          >
+            <IconOpen />
+            {t('Open')}
           </button>
         )}
       </>
@@ -1713,7 +1723,7 @@ function Widget() {
           <div
             key={o.url}
             className={
-              `tile${o.contentType === 'image' ? ' img' : ''}` +
+              `tile${o.contentType === 'image' ? ' img' : ''}${o.contentType === 'video' ? ' video' : ''}` +
               `${o.contentType === 'audio' ? ' audio' : ''}` +
               ` ${(uniform ? aspect : o.displayAspect) ? 'shaped' : 'unshaped'}` +
               `${loaded.has(o.url) ? ' ready' : ''}`
@@ -1730,7 +1740,13 @@ function Widget() {
             })()}
             onClick={() => {
               setIndex(i)
-              if (o.contentType === 'image') void setMode(true)
+              /**
+               * ⚠️ AUDIO IS THE ONLY MEDIUM THAT DOES NOT OPEN. This was image-only, so a video tile
+               * swallowed every click and did nothing: a `video controls` element does not respond to a
+               * click on its picture area either, so there was no affordance at all. Audio stays out
+               * because its tile IS its player and there is nothing larger to show.
+               */
+              if (o.contentType !== 'audio') void setMode(true)
             }}
           >
             {o.contentType === 'image' ? (
