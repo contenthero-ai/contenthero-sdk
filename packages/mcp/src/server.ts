@@ -662,6 +662,19 @@ const WIDGET_CSP = {
           // Public-class objects (posters, gallery, stock).
           'https://cdn.contenthero.ai',
         ],
+        /**
+         * ⛔⛔ **A SEPARATE FIELD, AND OMITTING IT BLOCKS `fetch` ENTIRELY.**
+         *
+         * `resourceDomains` maps to `img-src`, `media-src` and friends, which is why the pictures render.
+         * `connectDomains` maps to `connect-src`, and the spec's default for an omitted list is "no network
+         * connections (secure default)". So the frame could DISPLAY our media and could not READ it, which
+         * is exactly the shape needed to save a file: downloading means holding the bytes.
+         *
+         * ⚠️ Same origins, deliberately repeated rather than shared with a constant. They answer different
+         * questions (may the frame paint this, may the frame read this) and a future answer to one is not
+         * automatically the answer to the other.
+         */
+        connectDomains: ['https://media.contenthero.ai', 'https://cdn.contenthero.ai'],
       },
     },
   },

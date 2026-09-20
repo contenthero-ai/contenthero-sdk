@@ -95,10 +95,12 @@ const styles = `
   :root {
     color-scheme: light dark;
     --chip-bg: ${OBSIDIAN};
+    --chip-bg-hover: #242424;
     --chip-fg: #ffffff;
   }
   :root[data-theme='light'] {
     --chip-bg: #f2f2f2;
+    --chip-bg-hover: #e6e6e6;
     --chip-fg: ${OBSIDIAN};
   }
   * { box-sizing: border-box; }
@@ -241,7 +243,12 @@ const styles = `
   .tile.audio .media { visibility: visible; }
 
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
-  .acts { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; z-index: 1; }
+  /* CENTERED on the tile's bottom edge. Left-aligned read as an overlay that had been pushed aside. */
+  .acts {
+    position: absolute; left: 0; right: 0; bottom: 10px; z-index: 1;
+    display: flex; gap: 6px; justify-content: center;
+    opacity: 0; transition: opacity .12s ease;
+  }
   .tile:hover .acts, .tile:focus-within .acts { opacity: 1; }
   @media (hover: none) { .acts { opacity: 1; } }
 
@@ -259,6 +266,14 @@ const styles = `
   }
   .pill.ghost:hover { border-color: ${GOLD}; }
   .pill.gold { background: ${GOLD}; color: ${OBSIDIAN}; }
+  /*
+   * ⚠️ EVERY ACTION NEEDS A SURFACE, NOT JUST THE PRIMARY ONE. Only Animate carried a background, so
+   * Download, Edit and Recreate read as bare text floating next to a button rather than as buttons. The
+   * neutral surface is theme-aware for the same reason the chip's is: a single fixed gray is unreadable
+   * against one of the two backgrounds, and the frame does not choose which.
+   */
+  .pill.neutral { background: var(--chip-bg); color: var(--chip-fg); }
+  .pill.neutral:hover { background: var(--chip-bg-hover); }
   .pill[disabled] { opacity: .6; cursor: default; }
   /* A refused download must not look like one that worked. Gold is the brand's attention color. */
   .pill.warn { border-color: ${GOLD}; color: ${GOLD}; }
@@ -268,11 +283,32 @@ const styles = `
    */
   .acts .pill { padding: 0; width: 30px; height: 30px; justify-content: center; border-radius: 999px; }
   .acts .pill.warn { width: auto; padding: 0 12px; }
-
   .bar {
     display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-wrap: wrap;
     border-top: 1px solid var(--color-border-primary, color-mix(in srgb, CanvasText 14%, transparent));
   }
+  /*
+   * OUR OWN TOOLTIP, NOT THE BROWSER'S.
+   *
+   * ⚠️ The title attribute took roughly a second to appear, rendered in the OS's own style, and could not
+   * be themed or positioned, so an icon-only button looked unlabelled for the whole time someone was
+   * deciding whether to click it. This one appears immediately and matches the chips.
+   *
+   * ⚠️ Pointer-events off, or the tooltip sits under the cursor and re-triggers the hover it came from,
+   * which flickers. It is also the reason the glyphs themselves are pointer-events: none.
+   */
+  [data-tip] { position: relative; }
+  [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    padding: 5px 9px; border-radius: 8px; white-space: nowrap;
+    font-size: 12px; font-weight: 500; line-height: 1.2;
+    background: var(--chip-bg); color: var(--chip-fg);
+    box-shadow: 0 2px 10px rgb(0 0 0 / .28);
+    opacity: 0; pointer-events: none; transition: opacity .1s ease; z-index: 3;
+  }
+  [data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; }
+
   .muted { color: var(--color-text-secondary, color-mix(in srgb, CanvasText 55%, transparent)); font-size: 13px; }
   .spacer { flex: 1 1 auto; }
   .fallback { padding: 18px; }
@@ -283,12 +319,22 @@ const styles = `
    * strip off the bottom of the frame. That is exactly the clipping reported before this comment existed.
    */
   /*
-   * ⚠️ 96px OF PADDING AT THE BOTTOM, ON THE CONTAINER. The host's composer floats over this frame, and
-   * everything inside used to compensate for it individually: the strip carried the whole 96px itself, so
-   * adding a foot below the strip put the foot back underneath the composer. Reserving the band ONCE, on
-   * the thing that owns the layout, means anything added at the bottom later is already clear of it.
+   * ⚠️⚠️ THE RESERVED BAND IS A VARIABLE, AND IT IS NOT A CONSTANT HEIGHT.
+   *
+   * The host's composer floats over this frame, and it GROWS: attach something or type a few lines and it
+   * is several times its resting height. A fixed 96px reserve was sized for the resting case, so a grown
+   * composer climbed over the thumbnail strip and made it unclickable. The strip is the only way to change
+   * variation, so that is not a cosmetic overlap.
+   *
+   * ⭐ --composer-band is measured at runtime from the frame's own height against the host's reported
+   * container height, and falls back to a generous 132px when the host reports nothing. Reserving too much
+   * costs a strip of empty background; reserving too little costs the controls.
    */
-  .full { position: fixed; inset: 0; display: flex; flex-direction: column; padding-bottom: 96px; background: var(--color-background-primary, Canvas); }
+  .full {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    padding-bottom: var(--composer-band, 132px);
+    background: var(--color-background-primary, Canvas);
+  }
   .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
   .full .stage img, .full .stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
   /* ⚠️ The host's composer overlays the bottom of a fullscreen frame, so the strip needs room BELOW it or
@@ -486,12 +532,23 @@ function mimeFor(o: Output, data: WidgetData): string | undefined {
  * agent is asked to do. Reading them side by side is the only way to see that each one is complete, which
  * is the property the whole design rests on (see `say`).
  */
+/**
+ * ⭐⭐⭐ **THE MESSAGES NAME AN OUTPUT ID, NOT A URL.**
+ *
+ * A capability url is ~500 characters and carries a signed token in its query string, so pasting one into
+ * the conversation dumped a JWT into the transcript and buried the instruction under it. `generate_image`'s
+ * own `referenceImages` already documents the alternative: "a URL or a previous output id (e.g. `<id>` or
+ * `<id>-2`)", and `<id>-2` is exactly what the widget already calls each output's `name`.
+ *
+ * ⚠️ So this is not a cosmetic shortening. The id is the token the API was designed to take, it survives
+ * the url being re-signed, and it keeps a credential out of the chat log.
+ */
 const ASK = {
-  animate: (url: string) =>
-    `Animate this image into a short video. Use it as the reference image: ${url}\n\n` +
+  animate: (ref: string) =>
+    `Animate this image into a short video. Use it as the reference image: ${ref}\n\n` +
     `Pick a suitable video model and tell me which one before you spend credits.`,
-  edit: (url: string) =>
-    `I want to edit this image: ${url}\n\n` +
+  edit: (ref: string) =>
+    `I want to edit this image: ${ref}\n\n` +
     `Ask me what change I want, then make it with an image-editing model. Do not generate anything yet.`,
   /**
    * ⚠️ `model: ${d.modelId}` IS THE RAW ID ON PURPOSE. This message's reader is the agent, which needs the
@@ -539,6 +596,8 @@ function Widget() {
   const [stalled, setStalled] = useState(false)
   /** Urls whose media has pixels on screen. Drives the laurel-to-media cross-fade, per tile. */
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set())
+  /** Why the last download failed, shown in the button's tooltip. Null when nothing has failed. */
+  const [failReason, setFailReason] = useState<string | null>(null)
 
   /**
    * ⚠️⚠️ REGISTERED IN `onAppCreated`, WHICH IS BEFORE THE HANDSHAKE COMPLETES.
@@ -606,13 +665,45 @@ function Widget() {
    */
   useEffect(() => {
     if (!app) return
-    const apply = (theme?: string) => {
-      document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark'
+    const apply = (
+      ctx:
+        | {
+            theme?: string
+            displayMode?: string
+            containerDimensions?: { height?: number; maxHeight?: number }
+          }
+        | undefined,
+    ) => {
+      document.documentElement.dataset.theme = ctx?.theme === 'light' ? 'light' : 'dark'
+      /**
+       * ⛔⛔⛔ **THE HOST OWNS THE DISPLAY MODE. OUR STATE WAS A SECOND SOURCE OF TRUTH FOR IT.**
+       *
+       * `full` was set only from the result of our own `requestDisplayMode`, so a mode change the host
+       * made ON ITS OWN never reached us. Closing fullscreen with the host's X is exactly that: the host
+       * returns the frame to inline and we keep rendering the `.full` tree, which is `position: fixed;
+       * inset: 0` inside a frame that is now inline-sized. The result is a widget that VANISHES from the
+       * conversation, with nothing broken enough to log.
+       *
+       * ⭐ Reading `displayMode` off the host context makes the host authoritative in both directions:
+       * our request still asks, and this answers.
+       */
+      if (ctx?.displayMode) setFull(ctx.displayMode === 'fullscreen')
+      /**
+       * ⚠️ THE COMPOSER GROWS, so the band it overlays cannot be a constant. The host reports the container
+       * it gave us; the part of the viewport BELOW that is what the composer occupies, plus a margin so
+       * the strip is not merely touching it. Clamped to a sane range because a host that reports something
+       * unexpected must not be able to push the whole layout off screen.
+       */
+      const dims = ctx?.containerDimensions
+      const given = dims?.height ?? dims?.maxHeight
+      if (given && window.innerHeight) {
+        const band = Math.min(220, Math.max(112, window.innerHeight - given + 24))
+        document.documentElement.style.setProperty('--composer-band', `${Math.round(band)}px`)
+      }
     }
-    apply(app.getHostContext?.()?.theme)
-    const onChange = (ctx: { theme?: string } | undefined) => apply(ctx?.theme)
-    app.addEventListener?.('hostcontextchanged', onChange)
-    return () => app.removeEventListener?.('hostcontextchanged', onChange)
+    apply(app.getHostContext?.())
+    app.addEventListener?.('hostcontextchanged', apply)
+    return () => app.removeEventListener?.('hostcontextchanged', apply)
   }, [app])
 
   /**
@@ -706,17 +797,60 @@ function Widget() {
     }
   }, [app, data])
 
+  /**
+   * ⭐⭐⭐ **WE HOLD THE BYTES. THE HOST IS NOT ASKED TO GO AND GET THEM.**
+   *
+   * This sent a `resource_link` and the host answered `isError`, twice, with no way to tell refusal from
+   * failure. A link hands the host a job it may not be able to do: our urls are capability urls whose
+   * token rides in the query string, and nothing in the protocol says a host will fetch one, from where,
+   * or with what. The reference implementation's own `resource_link` was rejected outright elsewhere in
+   * this project with "Resource links are not currently supported".
+   *
+   * ⭐ An embedded resource removes the question. The frame fetches the object itself, which it can do now
+   * that `connectDomains` is declared, and hands over bytes the host only has to write to disk. Nothing
+   * depends on host behavior we cannot observe from in here.
+   *
+   * ⚠️ THE LINK REMAINS AS A FALLBACK, and only for the case that is genuinely different: a fetch blocked
+   * by CSP or a network failure means we have no bytes to offer, so asking the host to try is strictly
+   * better than giving up. Any failure now carries its reason to the button.
+   */
   const download = async (o: Output) => {
     // ⚠️ `data` is narrowed below, but this closure is defined above that point, so the guard is restated.
     if (!app || !data) return
     setBusy(o.url)
+    setFailed(null)
+    setFailReason(null)
+    const name = fileNameFor(o, data)
+    const mimeType = mimeFor(o, data)
     try {
-      const res = await app.downloadFile({
-        contents: [{ type: 'resource_link', uri: o.url, name: fileNameFor(o, data), mimeType: mimeFor(o, data) }],
-      })
-      setFailed(res?.isError ? o.url : null)
-    } catch {
+      let sent: { isError?: boolean } | undefined
+      try {
+        const res = await fetch(o.url)
+        if (!res.ok) throw new Error(`the media responded ${res.status}`)
+        const buf = new Uint8Array(await res.arrayBuffer())
+        // ⚠️ CHUNKED. `String.fromCharCode(...buf)` on a multi-megabyte image blows the argument limit and
+        // throws a RangeError that reads like an unrelated crash.
+        let binary = ''
+        for (let i = 0; i < buf.length; i += 0x8000) {
+          binary += String.fromCharCode(...buf.subarray(i, i + 0x8000))
+        }
+        sent = await app.downloadFile({
+          contents: [{ type: 'resource', resource: { uri: o.url, mimeType, blob: btoa(binary) } }],
+        })
+      } catch (err) {
+        // No bytes to offer. Ask the host to fetch rather than giving up.
+        sent = await app.downloadFile({
+          contents: [{ type: 'resource_link', uri: o.url, name, mimeType }],
+        })
+        if (sent?.isError) setFailReason(err instanceof Error ? err.message : 'could not read the file')
+      }
+      if (sent?.isError) {
+        setFailed(o.url)
+        setFailReason((r) => r ?? 'the host declined to save it')
+      }
+    } catch (err) {
       setFailed(o.url)
+      setFailReason(err instanceof Error ? err.message : 'the download failed')
     } finally {
       setBusy(null)
     }
@@ -798,22 +932,22 @@ function Widget() {
     return (
       <>
         {isImage && (
-          <button className="pill gold" onClick={() => void say(ASK.animate(o.url))} title="Animate">
+          <button className="pill gold" onClick={() => void say(ASK.animate(o.name))} data-tip="Animate">
             <IconAnimate />
             {t('Animate')}
           </button>
         )}
         <button
-          className={`pill${refused ? ' warn' : ''}`}
+          className={`pill neutral${refused ? ' warn' : ''}`}
           onClick={() => void download(o)}
           disabled={busy === o.url}
-          title={refused ? 'The host refused that download' : 'Download'}
+          data-tip={refused ? failReason || 'The host refused that download' : 'Download'}
         >
           <IconDownload />
           {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
         </button>
         {isImage && (
-          <button className="pill" onClick={() => void say(ASK.edit(o.url))} title="Edit">
+          <button className="pill neutral" onClick={() => void say(ASK.edit(o.name))} data-tip="Edit">
             <IconEdit />
             {t('Edit')}
           </button>
@@ -864,7 +998,7 @@ function Widget() {
         )}
         <div className="foot">
           {actions(current, { labels: true })}
-          <button className="pill" onClick={() => void say(ASK.recreate(data))} title="Recreate">
+          <button className="pill neutral" onClick={() => void say(ASK.recreate(data))} data-tip="Recreate">
             <IconRecreate />
             Recreate
           </button>
@@ -981,7 +1115,7 @@ function Widget() {
         {/* Recreate acts on the GENERATION, not one output, which is why it sits under the set rather than
             on a tile. It carries the prompt and settings, so it needs no follow-up to be actionable. */}
         {!pending && (
-          <button className="pill ghost" onClick={() => void say(ASK.recreate(data))}>
+          <button className="pill neutral" data-tip="Recreate" onClick={() => void say(ASK.recreate(data))}>
             <IconRecreate />
             Recreate
           </button>
