@@ -395,7 +395,7 @@ const styles = `
    * ⚠️ INHERIT THE RADIUS, OR THE CORNERS SHOW THEIR POINTS.
    *
    * The tile rounds its corners and this fills the tile edge to edge with its own background, so a square
-   * overlay inside a rounded box leaves four visible triangles of skeleton colour poking past the curve.
+   * overlay inside a rounded box leaves four visible triangles of skeleton color poking past the curve.
    * Only noticeable against the tile's own background, which is exactly when a skeleton is on screen.
    *
    * The tile's overflow is visible now (so a tooltip can escape it), which means the tile is no longer
@@ -565,7 +565,7 @@ const styles = `
    * corner buttons (z-index 2), because the whole row is below them. The Animate and Recreate tooltips kept
    * rendering behind Download and Open after the button itself was lifted, which is what that looks like.
    *
-   * ⭐ THE ZONE IS WHAT HAS TO RISE. Hovering anywhere in a zone lifts the zone above its neighbours, and
+   * ⭐ THE ZONE IS WHAT HAS TO RISE. Hovering anywhere in a zone lifts the zone above its neighbors, and
    * the tooltip rides with it. This is the same mistake as the tile clipping its own tooltip, one level
    * further out: the fix is never on the thing you can see, it is on the box that contains it.
    */
