@@ -353,8 +353,13 @@ const styles = `
    * disagree, cover crops silently. The fallback below is contain for exactly that case: a missing
    * displayAspect means we do not know the shape, and cropping on a guess is worse than a bar.
    */
+  /**
+   * ⛔⛔ AN overflow-hidden TILE CLIPPED ITS OWN TOOLTIP, and a tile at the grid edge is exactly where a
+   * tooltip is most needed. The rounded corner is what the clip was FOR, so it moved onto the media, which
+   * is the only child that needs clipping. The tile itself now lets an overlay escape its bounds.
+   */
   .tile {
-    position: relative; overflow: hidden; border-radius: var(--border-radius-md, 14px);
+    position: relative; overflow: visible; border-radius: var(--border-radius-md, 14px);
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
     border: 1px solid transparent; padding: 0; display: block; width: 100%;
   }
@@ -405,20 +410,34 @@ const styles = `
    * the image only appears once it has decoded. This keeps the studio's instant swap and removes the gap,
    * by holding the laurel until the pixels exist rather than until the status changes.
    */
+  /* The clip that used to live on the tile. The media fills the tile, so the rounded look is identical. */
+  .tile .media { border-radius: inherit; }
   .tile .media { visibility: hidden; }
   .tile.ready .media { visibility: visible; }
   /* Audio has no decode event worth waiting on and no picture to hide, so it is ready on arrival. */
   .tile.audio .media { visibility: visible; }
 
-  /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
-  /* CENTERED on the tile's bottom edge. Left-aligned read as an overlay that had been pushed aside. */
+  /**
+   * Actions live ON the thing they act on. Hidden until hover, never unreachable by keyboard.
+   *
+   * ## ⭐⭐ THREE ZONES, BECAUSE FIVE IN A ROW READ AS ONE UNDIFFERENTIATED CLUMP
+   *
+   * The creative verbs (Animate, Edit, Recreate) are the choice someone is making, so they stay centered
+   * where the eye already is. Download and Open are EXITS: they leave the picture or leave the
+   * conversation, and pinning them to opposite corners separates them from the choice rather than hiding
+   * them in the middle of it.
+   */
   .acts {
     position: absolute; left: 0; right: 0; bottom: 10px; z-index: 1;
     display: flex; gap: 6px; justify-content: center;
     opacity: 0; transition: opacity .12s ease;
   }
-  .tile:hover .acts, .tile:focus-within .acts { opacity: 1; }
-  @media (hover: none) { .acts { opacity: 1; } }
+  .corner { position: absolute; top: 8px; z-index: 2; opacity: 0; transition: opacity .12s ease; }
+  .corner.tl { left: 8px; }
+  .corner.tr { right: 8px; }
+  .tile:hover .acts, .tile:focus-within .acts,
+  .tile:hover .corner, .tile:focus-within .corner { opacity: 1; }
+  @media (hover: none) { .acts, .corner { opacity: 1; } }
 
   .pill {
     appearance: none; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
@@ -462,7 +481,7 @@ const styles = `
    * A pill with only a glyph in it is a CIRCLE. The reference draws squircles; fully round reads as an
    * action rather than a small panel, and it is the shape the rest of this widget already uses.
    */
-  .acts .pill { padding: 0; width: 30px; height: 30px; justify-content: center; border-radius: 999px; }
+  .acts .pill, .corner .pill { padding: 0; width: 30px; height: 30px; justify-content: center; border-radius: 999px; }
   .acts .pill.warn { width: auto; padding: 0 12px; }
   .bar {
     display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-wrap: wrap;
@@ -483,8 +502,8 @@ const styles = `
    * says Recreate tells you what it says, which is noise wearing the costume of help. The selector is the
    * enforcement: there is no way to attach one to a labeled button without moving it into the hover row.
    */
-  .acts [data-tip] { position: relative; }
-  .acts [data-tip]::after {
+  .acts [data-tip], .corner [data-tip] { position: relative; }
+  .acts [data-tip]::after, .corner [data-tip]::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
     /* Fully round, like every other control here. A rounded rectangle was the odd one out. */
@@ -494,7 +513,14 @@ const styles = `
     box-shadow: 0 2px 10px rgb(0 0 0 / .28);
     opacity: 0; pointer-events: none; transition: opacity .1s ease; z-index: 3;
   }
-  .acts [data-tip]:hover::after, .acts [data-tip]:focus-visible::after { opacity: 1; }
+  /**
+   * ⚠️ THE CORNER TOOLTIPS OPEN DOWNWARD. A tooltip above a button that is itself 8px from the top of the
+   * frame is drawn outside the widget, where the host clips it and nothing is readable. Direction is a
+   * property of WHERE the button is, so it belongs on the zone rather than on each button.
+   */
+  .corner [data-tip]::after { bottom: auto; top: calc(100% + 8px); }
+  .acts [data-tip]:hover::after, .acts [data-tip]:focus-visible::after,
+  .corner [data-tip]:hover::after, .corner [data-tip]:focus-visible::after { opacity: 1; }
 
   .muted { color: var(--color-text-secondary, color-mix(in srgb, CanvasText 55%, transparent)); font-size: 13px; }
   .spacer { flex: 1 1 auto; }
@@ -530,11 +556,22 @@ const styles = `
     padding-bottom: var(--composer-band, 184px);
     background: var(--color-background-primary, Canvas);
   }
-  .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .full .stage img, .full .stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+  .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px 16px; }
+  /**
+   * ⭐⭐ THE STAGE IS THE POINT OF THIS VIEW, SO THE PICTURE SHOULD USE IT.
+   *
+   * These were max-width and max-height with auto sizing, which bounds an image DOWNWARD and never scales
+   * it up. Anything whose natural size was smaller than the stage drew at its natural size and left the
+   * rest of the frame empty, which is the unused space below the picture.
+   *
+   * ⚠️ Filling the box and letting object-fit: contain do the fitting keeps the ratio exactly as before:
+   * contain never crops. The only change is that a small source now scales UP to the space available,
+   * which is what someone who opened a detail view asked for.
+   */
+  .full .stage img, .full .stage video { width: 100%; height: 100%; object-fit: contain; }
   /* ⚠️ The host's composer overlays the bottom of a fullscreen frame, so the strip needs room BELOW it or
      it sits behind the message box. Measured: clipped by roughly a composer's height. */
-  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 16px 14px; overflow-x: auto; justify-content: center; }
+  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 8px 16px 10px; overflow-x: auto; justify-content: center; }
   .full .strip .t { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; background: none; flex: 0 0 auto; }
   .full .strip .t[aria-current="true"] { border-color: ${GOLD}; }
   .full .strip .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -544,7 +581,7 @@ const styles = `
    * the picture above them. The strip already reserves 96px below itself for the same reason; the foot
    * sits inside that reserved band, which is why its own bottom padding is zero when a strip is present.
    */
-  .full .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 16px 28px; flex-wrap: wrap; }
+  .full .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 16px 16px; flex-wrap: wrap; }
   .full .strip + .foot { padding-bottom: 0; }
 `
 
@@ -1293,7 +1330,20 @@ function Widget() {
    * RECREATE needs a model and a prompt, so it is offered only for a CREATION that carries both. An upload
    * was never generated, and "generate this again" is an instruction the agent cannot carry out.
    */
-  const actions = (o: Item, opts: { labels: boolean }) => {
+  /**
+   * ⭐⭐⭐ ONE VERB LIST, THREE ZONES, AND THE ZONE IS AN ARGUMENT RATHER THAN A SECOND LIST.
+   *
+   * `zone` selects which verbs to draw: `'center'` is the creative choice (Animate, Edit, Recreate),
+   * `'download'` and `'open'` are the two exits that sit in the tile's corners, and `'all'` is the detail
+   * view's single labeled row.
+   *
+   * ⛔ THE ALTERNATIVE WAS A SECOND COPY PER ZONE, and this file already carries the scar: the detail foot
+   * grew its own Open and its own Recreate, so once those verbs were added to the shared list the foot
+   * rendered BOTH and someone saw two Open buttons side by side. One list cannot disagree with itself.
+   */
+  const actions = (o: Item, opts: { labels: boolean; zone?: 'all' | 'center' | 'download' | 'open' }) => {
+    const zone = opts.zone ?? 'all'
+    const show = (z: 'center' | 'download' | 'open') => zone === 'all' || zone === z
     const isImage = o.contentType === 'image'
     /** Verbs that must name this item to the API. See `Item.reference`. */
     const canReference = Boolean(o.reference)
@@ -1304,12 +1354,13 @@ function Widget() {
     const refused = failed === o.url
     return (
       <>
-        {isImage && canReference && (
+        {show('center') && isImage && canReference && (
           <button className="pill gold" onClick={() => void say(ASK.animate(o.reference!))} data-tip={tip('Animate')}>
             <IconAnimate />
             {t('Animate')}
           </button>
         )}
+        {show('download') && (
         <button
           className={`pill neutral${refused ? ' warn' : ''}`}
           onClick={() => void download(o)}
@@ -1319,7 +1370,8 @@ function Widget() {
           <IconDownload />
           {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
         </button>
-        {canReference && o.contentType !== 'audio' && (
+        )}
+        {show('center') && canReference && o.contentType !== 'audio' && (
           <button
             className="pill neutral"
             onClick={() => void say(ASK.edit(o.reference!, o.contentType))}
@@ -1329,7 +1381,7 @@ function Widget() {
             {t('Edit')}
           </button>
         )}
-        {o.openUrl && (
+        {show('open') && o.openUrl && (
           <button
             className="pill neutral"
             onClick={() => void app?.openLink({ url: o.openUrl! })}
@@ -1342,7 +1394,7 @@ function Widget() {
         {/* ⭐ PER ITEM, so a mixed set offers it too. It used to read the payload's SHARED model and prompt,
             which are null the moment two items disagree, so a library set offered no Recreate at all even
             though every item knew its own. */}
-        {ASK.canRecreateItem(o) && (
+        {show('center') && ASK.canRecreateItem(o) && (
           <button
             className="pill neutral"
             onClick={() => void say(ASK.recreateItem(o))}
@@ -1425,24 +1477,13 @@ function Widget() {
           </div>
         )}
         <div className="foot">
+          {/**
+            * ⛔ THE ONLY VERB SOURCE. This used to be the shared list PLUS a hand-rolled Open and a
+            * hand-rolled Recreate, which was invisible until those two verbs joined the shared list and
+            * the foot started drawing each of them twice. A second copy of a list is a duplicate waiting
+            * for the first thing to be added to the other one.
+            */}
           {actions(current, { labels: true })}
-          {ASK.canRecreate(data) && (
-            <button className="pill neutral" onClick={() => void say(ASK.recreate(data))}>
-              <IconRecreate />
-              Recreate
-            </button>
-          )}
-          {/* Leaving the conversation is a deliberate choice, so it sits here rather than in the hover row,
-              which stays the three fast verbs. */}
-          {current.openUrl && (
-            <button
-              className="pill neutral"
-              onClick={() => void app?.openLink({ url: current.openUrl! })}
-            >
-              <IconOpen />
-              Open
-            </button>
-          )}
           <span className="spacer" />
           {badges}
           {/* ⭐ "Variation X of Y" IS GENERATION VOCABULARY. True for variations of one generation, false
@@ -1533,9 +1574,15 @@ function Widget() {
                 <Skeleton />
               </div>
             )}
-            {/* ⚠️ stopPropagation, or every action also opens the lightbox underneath it. */}
+            {/* ⚠️ stopPropagation on EVERY zone, or an action also opens the lightbox underneath it. */}
+            <div className="corner tl" onClick={(e) => e.stopPropagation()}>
+              {actions(o, { labels: false, zone: 'download' })}
+            </div>
+            <div className="corner tr" onClick={(e) => e.stopPropagation()}>
+              {actions(o, { labels: false, zone: 'open' })}
+            </div>
             <div className="acts" onClick={(e) => e.stopPropagation()}>
-              {actions(o, { labels: false })}
+              {actions(o, { labels: false, zone: 'center' })}
             </div>
           </div>
   )
