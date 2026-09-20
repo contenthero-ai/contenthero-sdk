@@ -167,43 +167,88 @@ export function studioUrlFor(baseUrl: string, outputId: string, index: number, t
   return `${root}/studio?output=${encodeURIComponent(outputId)}${variation}`
 }
 
+/**
+ * What the widget is handed, for ANY media this server produces.
+ *
+ * ## ⭐⭐⭐ ONE BUILDER, BECAUSE "WHAT DOES THE WIDGET SHOW" IS ONE QUESTION
+ *
+ * The payload used to be derivable only from a `Generation`, so every tool that produced media by another
+ * route had no way to render at all. `generate_audio` and `edit_audio` returned plain text, which is why
+ * audio has been invisible in a chat for this entire feature. That was not a decision anybody made; it is
+ * what happens when the only door into the widget is shaped like one caller.
+ *
+ * ⚠️ Everything past `outputId`, `contentType` and `urls` is OPTIONAL, because a caller that genuinely has
+ * no model, prompt or aspect must be able to render rather than invent them. The widget already renders
+ * nothing for a null chip.
+ */
+export interface MediaWidgetInput {
+  outputId: string
+  contentType: 'image' | 'video' | 'audio'
+  urls: readonly string[]
+  modelId?: string
+  modelDisplayName?: string | null
+  modelBrandColor?: string | null
+  modelIconKey?: string | null
+  displayAspect?: string | null
+  prompt?: string | null
+  posterUrls?: readonly (string | null)[]
+  baseUrl?: string
+}
+
+export function mediaWidgetData(input: MediaWidgetInput) {
+  const { outputId, contentType, urls, posterUrls = [], baseUrl = DEFAULT_APP_URL } = input
+  return {
+    outputId,
+    contentType,
+    modelId: input.modelId ?? '',
+    /**
+     * ⛔⛔ **NULL WHEN THERE IS NOTHING TO NAME, AND THE WIDGET MUST RENDER NO CHIP.**
+     *
+     * This used to be `displayName ?? modelId`, fed by a catalog fetch with a `catch` that returned the id.
+     * The id reads like a label, so a failed fetch showed as a chip flickering between kebab case and title
+     * case rather than as a failure. The name now arrives on the row.
+     *
+     * ⚠️ It is not always the producing model: an upload names itself, and a look names the model that made
+     * the image it was assembled from.
+     */
+    modelName: input.modelDisplayName ?? null,
+    /** Hex brand accent from the registry, or null. The widget colors its chip with it. */
+    modelBrandColor: input.modelBrandColor ?? null,
+    /** Brand family key (e.g. `"openai"`) for choosing a glyph. NOT the model id. */
+    modelIconKey: input.modelIconKey ?? null,
+    /** `"W:H"`, or null for audio. Drives the column count and the tile's own shape. */
+    displayAspect: input.displayAspect ?? null,
+    /** Verbatim. Some prompts are JSON-shaped because the person authored one; that object IS the prompt. */
+    prompt: input.prompt ?? null,
+    outputs: urls.map((url, i) => ({
+      url,
+      posterUrl: posterUrls[i] ?? null,
+      name: `${outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+      /** Where the Open button goes: this asset, in the studio, with its siblings and every action. */
+      studioUrl: studioUrlFor(baseUrl, outputId, i, urls.length),
+    })),
+  }
+}
+
+/** A generation's widget payload. A thin adapter over {@link mediaWidgetData}, not a second builder. */
 export function generationWidgetData(
   gen: Generation,
   posterUrls: readonly (string | null)[] = [],
   baseUrl = DEFAULT_APP_URL,
 ) {
-  const urls = gen.outputUrls ?? []
-  return {
+  return mediaWidgetData({
     outputId: gen.outputId,
     contentType: gen.contentType,
+    urls: gen.outputUrls ?? [],
     modelId: gen.modelId,
-    /**
-     * ⛔⛔ **NULL WHEN THERE IS NOTHING TO NAME, AND THE WIDGET MUST RENDER NO CHIP.**
-     *
-     * This used to be `displayName ?? gen.modelId`, fed by a catalog fetch in the server with a `catch`
-     * that returned the id. The id reads like a label, so a failed fetch showed as a chip flickering
-     * between kebab case and title case rather than as a failure. The name now arrives on the row.
-     *
-     * ⚠️ It is not always this generation's own model: an upload names itself, and a look names the model
-     * that produced the image it was assembled from.
-     */
-    modelName: gen.modelDisplayName ?? null,
-    /** Hex brand accent from the registry, or null. The widget colors its chip with it. */
-    modelBrandColor: gen.modelBrandColor ?? null,
-    /** Brand family key (e.g. `"openai"`) for choosing a glyph. NOT the model id. */
-    modelIconKey: gen.modelIconKey ?? null,
-    /** `"W:H"`, or null for audio. Drives the column count and the tile's own shape. */
-    displayAspect: gen.displayAspect ?? null,
-    /** Verbatim. Some prompts are JSON-shaped because the person authored one; that object IS the prompt. */
-    prompt: gen.prompt ?? null,
-    outputs: urls.map((url, i) => ({
-      url,
-      posterUrl: posterUrls[i] ?? null,
-      name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
-      /** Where the Open button goes: this asset, in the studio, with its siblings and every action. */
-      studioUrl: studioUrlFor(baseUrl, gen.outputId, i, urls.length),
-    })),
-  }
+    modelDisplayName: gen.modelDisplayName,
+    modelBrandColor: gen.modelBrandColor,
+    modelIconKey: gen.modelIconKey,
+    displayAspect: gen.displayAspect,
+    prompt: gen.prompt,
+    posterUrls,
+    baseUrl,
+  })
 }
 
 export function completedResult(
@@ -365,10 +410,38 @@ export function pendingResult(
 }
 
 /** Synchronous audio result (already complete on submit). */
-export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
+/**
+ * Synchronous audio: already complete when the call returns.
+ *
+ * ## ⛔⛔⛔ THIS RENDERED NOTHING FOR THE ENTIRE LIFE OF THE WIDGET
+ *
+ * Audio has a first-class MCP block AND the widget plays it, and neither reached anyone, because this
+ * builder returned plain text and `generate_audio` was never added to the hand-maintained list of tools
+ * that declare a widget. Nobody decided audio should be invisible; it is what an allowlist does to
+ * anything nobody remembered to add.
+ *
+ * ⚠️ No model name, brand or aspect here: a synchronous result carries none of them, and inventing them
+ * would be worse than a chip that renders nothing. Audio has no shape, so `displayAspect` is genuinely
+ * null rather than unknown.
+ */
+export function audioResult(
+  result: GenerateResult | EditAudioResult,
+  baseUrl = DEFAULT_APP_URL,
+): CallToolResult {
   const urls = result.outputUrls ?? []
   const header = `Done. Audio generated (outputId ${result.outputId}):`
-  return text([header, ...urls.map((u, i) => `${i + 1}. ${u}`)].join('\n'))
+  const prose = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)].join('\n')
+  if (!urls.length) return text(prose)
+  return {
+    content: [{ type: 'text', text: prose }],
+    structuredContent: mediaWidgetData({
+      outputId: result.outputId,
+      contentType: 'audio',
+      urls,
+      baseUrl,
+    }),
+    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+  }
 }
 
 /**
@@ -436,7 +509,21 @@ export function generationStatusResult(
    * ⭐ Found by the `verify:inline` harness in its first run, minutes after it existed. The unit tests could
    * not see it: they call `completedResult` directly and never go through here.
    */
-  if (gen.status === 'completed') return completedResult(gen, attachments, [], baseUrl)
+  if (gen.status === 'completed') {
+    const res = completedResult(gen, attachments, [], baseUrl)
+    /**
+     * ⛔⛔ **A REPORT CARRIES NO DISPLAY PAYLOAD, AND STRIPPING IT IS NOT COSMETIC.**
+     *
+     * This tool does not declare the widget, because `generate_*` already returns one that polls itself to
+     * completion and a second card for the same generation is the duplicate we removed. A result that still
+     * carried `structuredContent` and `_meta` would be ignored by the host, but it would also make
+     * "emits widget data" and "declares the widget" disagree, and that equivalence is exactly what the
+     * completeness guard checks in both directions. An invariant with an exemption is a list again.
+     */
+    delete (res as { structuredContent?: unknown }).structuredContent
+    delete (res as { _meta?: unknown })._meta
+    return res
+  }
   if (gen.status === 'failed') {
     return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
   }

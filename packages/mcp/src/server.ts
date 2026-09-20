@@ -1140,6 +1140,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'generate_audio',
     {
       title: 'Generate Audio',
+      ...RENDERS_GENERATION,
       annotations: WRITE,
       description:
         'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
@@ -1178,7 +1179,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const result = await client.generate(request)
-        return audioResult(result)
+        return audioResult(result, client.baseUrl)
       } catch (err) {
         return errorResult(err)
       }
@@ -1190,6 +1191,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'edit_audio',
     {
       title: 'Edit Audio',
+      ...RENDERS_GENERATION,
       annotations: WRITE,
       description:
         'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST on outputs, one job per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
@@ -1237,7 +1239,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (result.outputs) return enhanceClipsResult(result)
         // Enhancement is async (status 'processing'); isolation returns URLs inline.
         if (result.status === 'processing') return pendingResult(result.outputId)
-        return audioResult(result)
+        return audioResult(result, client.baseUrl)
       } catch (err) {
         return errorResult(err)
       }

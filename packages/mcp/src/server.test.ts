@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
@@ -2901,26 +2902,6 @@ test('every media tool declares the widget, and only media tools do', async () =
   const declares = (t: { _meta?: Record<string, unknown> }) =>
     Boolean((t._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri || t._meta?.['ui/resourceUri'])
 
-  const bound = tools.filter(declares).map((t) => t.name).sort()
-  assert.deepEqual(
-    bound,
-    ['generate_board', 'generate_image', 'generate_lip_sync', 'generate_video', 'upscale'],
-    'the set of tools that render a generation changed; add it here deliberately or it renders nothing',
-  )
-
-  /**
-   * ⛔⛔ **`get_generation_status` IS DELIBERATELY ABSENT, AND REMOVING THIS ASSERTION WOULD BE THE BUG.**
-   *
-   * It used to declare the widget, and that produced TWO cards for one generation: `generate_image` returns
-   * a widget that draws placeholders and polls itself to completion, while its text separately tells the
-   * agent to poll, because a host without MCP Apps support has nothing else. The agent polls, this tool
-   * answers, and the host mounts a second card beside the one that just filled in.
-   *
-   * ⭐ The split is CREATE AND LOOK DISPLAY, QUERY REPORTS. Asserted rather than commented, because the
-   * obvious "fix" for someone who wants a widget on a status call is to add it back here.
-   */
-  assert.ok(!bound.includes('get_generation_status'), 'a status query must not mount a second widget')
-
   // ⚠️ A uri is an IDENTIFIER the host asks this server to resolve. Naming one nobody registered renders a
   // blank frame, which is worse than no widget at all.
   const uris = new Set(resources.resources.map((r) => r.uri))
@@ -2930,6 +2911,51 @@ test('every media tool declares the widget, and only media tools do', async () =
       (t._meta?.['ui/resourceUri'] as string)
     assert.ok(uris.has(uri), `${t.name} points at ${uri}, which no resource serves`)
   }
+})
+
+/**
+ * ⛔⛔⛔ **THE COMPLETENESS GUARD: DECLARING THE WIDGET AND EMITTING ITS PAYLOAD MUST AGREE, BOTH WAYS.**
+ *
+ * The binding used to be five hand-placed spreads, which is an allowlist, and an allowlist is wrong in two
+ * directions at once. It was attached where display was unwanted (a cost preflight rendered an empty card)
+ * and MISSING where it was wanted: `generate_audio` and `edit_audio` produced media that never rendered
+ * anywhere, for the entire life of this widget. Nobody decided audio should be invisible. It is what
+ * happens to anything nobody remembers to add to a list.
+ *
+ * ⭐ So this asserts an INVARIANT rather than a membership: a tool declares the widget exactly when its
+ * handler can return a result carrying the payload. Adding a tool that produces media and forgetting the
+ * binding now fails here, by name, without anyone having to notice.
+ *
+ * ⚠️ NO EXEMPTIONS, deliberately. `get_generation_status` reports rather than displays, so its result
+ * builder strips the payload; that is why it can sit on the false side of the equivalence honestly instead
+ * of as a special case. An invariant with an exemption is a list again.
+ */
+test('a tool declares the widget exactly when it can emit one', () => {
+  const src = readFileSync(new URL('./server.ts', import.meta.url), 'utf8')
+
+  /** Result builders that attach the widget `_meta` and `structuredContent`. */
+  const EMITTERS = ['completedResult', 'pendingResult', 'audioResult', 'mediaWidgetData']
+
+  const blocks = [...src.matchAll(/server\.registerTool\(\s*'([a-z_]+)'/g)]
+  assert.ok(blocks.length > 20, 'the tool scan found almost nothing; the registration shape changed')
+
+  const problems: string[] = []
+  for (let i = 0; i < blocks.length; i += 1) {
+    const name = blocks[i]![1]!
+    const start = blocks[i]!.index!
+    const end = i + 1 < blocks.length ? blocks[i + 1]!.index! : src.length
+    const body = src.slice(start, end)
+    const declares = body.includes('...RENDERS_GENERATION')
+    const emits = EMITTERS.some((fn) => new RegExp(`\\b${fn}\\(`).test(body))
+    if (declares !== emits) {
+      problems.push(`${name}: declares=${declares} emits=${emits}`)
+    }
+  }
+  assert.deepEqual(
+    problems,
+    [],
+    'a tool that can return widget data must declare the widget, and only those may declare it',
+  )
 })
 
 test('the widget binding is emitted in BOTH the modern and legacy spellings', async () => {
