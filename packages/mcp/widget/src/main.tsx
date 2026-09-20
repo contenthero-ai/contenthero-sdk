@@ -400,9 +400,12 @@ const styles = `
    * The tile's overflow is visible now (so a tooltip can escape it), which means the tile is no longer
    * clipping this for us. Every child that paints to the edge has to round itself.
    */
-  /* The pre-result frame: a shaped box so the card has a size before it has content. */
-  .fallback { position: relative; aspect-ratio: 16 / 9; border-radius: var(--border-radius-md, 14px); }
-  .fallback.pad { aspect-ratio: auto; padding: 18px; }
+  /*
+   * ⚠️ NO RESERVED BOX HERE, DELIBERATELY. A shaped frame was tried and is worse: it promises a size that
+   * the real card will not have, so the first thing you see is a rectangle nothing ever occupies. Text
+   * claims no layout, so the card that replaces it does not have to snap out of one.
+   */
+  .fallback { padding: 18px; }
   .laurel-wrap {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
@@ -977,6 +980,13 @@ function Widget() {
   const [failed, setFailed] = useState<string | null>(null)
   /** True once polling has given up. A spinner that never resolves is worse than saying so. */
   const [stalled, setStalled] = useState(false)
+  /**
+   * The line shown before any result exists, naming the tool the host says is running.
+   *
+   * ⚠️ A SENTENCE, NOT A SHAPE. Whatever fills this frame afterwards has its own dimensions, and text
+   * claims none, so nothing snaps when the real card replaces it.
+   */
+  const [waitingLine, setWaitingLine] = useState('Waiting for the result.')
   /** Urls whose media has pixels on screen. Drives the laurel-to-media cross-fade, per tile. */
   const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set())
   /** Why the last download failed, shown in the button's tooltip. Null when nothing has failed. */
@@ -1039,6 +1049,13 @@ function Widget() {
     }
   }, [])
 
+  /**
+   * What the host says is running, taken from the tool's own declared title.
+   *
+   * ⛔ NO MAP OF TOOL NAMES TO PHRASES IN HERE. Every tool already carries a human title in its
+   * annotations; a second list would be one more copy to keep in step with a surface that grows, and this
+   * file has already paid for that pattern with the laurel paths and the model catalog.
+   */
   const { app, isConnected } = useApp({
     appInfo: { name: 'contenthero-generation', version: '1' },
     capabilities: {},
@@ -1139,6 +1156,29 @@ function Widget() {
         const band = Math.min(240, Math.max(132, window.innerHeight - given + 24))
         document.documentElement.style.setProperty('--composer-band', `${Math.round(band)}px`)
       }
+      /**
+       * ⭐⭐ THE TOOL NAMES ITSELF, so the waiting line does not have to guess.
+       *
+       * `toolInfo.tool` is the tool DEFINITION the host is running, annotations and all, which means the
+       * title is the same string the tool already advertises. That is why there is no phrase table in
+       * here: adding a tool gives it a correct waiting line for free, and renaming one cannot leave a
+       * stale copy behind.
+       *
+       * ⚠️ FALLS BACK TO THE NEUTRAL SENTENCE, never to a guess. A host that sends no `toolInfo` gets
+       * "Waiting for the result", which is true of everything that mounts this frame.
+       */
+      const info = (ctx as {
+        toolInfo?: { tool?: { name?: string; title?: string; annotations?: { title?: string } } }
+      })?.toolInfo?.tool
+      /**
+       * ⚠️ `tool.title` IS THE FIELD, not `annotations.title`. Verified against a real `tools/list`:
+       * every tool carries `title: "Generate Image"` at the top level and `annotations.title` is
+       * undefined on all of them. Reading the wrong one falls back to the snake_case NAME, which is what
+       * an agent addresses the tool by, not what a person should be shown.
+       */
+      const title = info?.title ?? info?.annotations?.title
+      // An ellipsis is what makes a label read as an action in progress rather than as a button.
+      if (title) setWaitingLine(`${title}\u2026`)
     }
     apply(app.getHostContext?.())
     app.addEventListener?.('hostcontextchanged', apply)
@@ -1368,17 +1408,25 @@ function Widget() {
      */
     /**
      * ⚠️ NOT CONNECTED IS A DIFFERENT STATE FROM NOT YET ANSWERED, and only one of them resolves on its
-     * own. A laurel for a frame that never reached the host would spin forever with nothing to explain it,
-     * so that one keeps its words.
+     * own. A frame that never reached the host does not fix itself, so that one keeps its words.
      */
-    if (!isConnected) return <div className="fallback muted pad">Connecting.</div>
-    return (
-      <div className="fallback">
-        <div className="laurel-wrap">
-          <Skeleton />
-        </div>
-      </div>
-    )
+    if (!isConnected) return <div className="fallback muted">Connecting.</div>
+    /**
+     * ⛔⛔ **A BIG LAUREL IN AN EMPTY BOX IS NOT A BRIDGE, IT IS A FAKE TILE.**
+     *
+     * I filled this gap with one large laurel in a 16:9 frame. For a request of four portrait variations
+     * that then snapped to four portrait skeletons, which is a worse transition than the text it replaced:
+     * the laurel's job is to sit INSIDE a tile while that tile loads, and borrowing it to stand in for the
+     * whole widget makes the first thing you see a shape that nothing will ever occupy.
+     *
+     * ⭐ A LINE OF TEXT IS THE HONEST BRIDGE. It claims no layout, so nothing has to snap.
+     *
+     * ⭐⭐ AND IT NAMES THE ACTUAL TOOL, from `toolInfo.tool`, which the host hands us. The line used to
+     * read "Waiting for the generation result" for every tool that declares this widget, including
+     * `show_media` and `get_media`, which generate nothing. The title comes from the tool's own
+     * annotations, so it cannot drift from the surface the way a list in here would.
+     */
+    return <div className="fallback muted">{waitingLine}</div>
   }
 
   /** True while the server has told us a job is running and nothing has landed yet. */

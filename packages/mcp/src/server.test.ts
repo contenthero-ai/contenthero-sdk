@@ -3052,3 +3052,29 @@ test('the widget uri carries the package version, so a publish can never be serv
   const { contents } = await mcp.readResource({ uri: GENERATION_WIDGET_URI })
   assert.equal(contents[0]?.uri, GENERATION_WIDGET_URI)
 })
+
+test('every widget-bearing tool carries a human title, which is the waiting line', async () => {
+  /**
+   * ⛔⛔ THE FRAME SHOWS THIS STRING BEFORE ANY RESULT EXISTS.
+   *
+   * The host mounts a widget when the CALL starts, so what a person reads first comes from the tool's own
+   * `title`. It used to be a hardcoded "Waiting for the generation result", which greeted `show_media`,
+   * `get_media`, an import and an upload too: a message about generating, from tools that generate
+   * nothing.
+   *
+   * ⚠️ `title`, NOT `annotations.title`. I read the wrong one first and every line silently fell back to
+   * the snake_case NAME, which is how an agent addresses a tool and not what a person should be shown.
+   * This asserts the field the widget actually reads is populated and is not just the name again.
+   */
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const bearing = tools.filter((t) => Boolean(t._meta?.['ui/resourceUri']))
+  assert.ok(bearing.length > 5, `expected several widget-bearing tools, found ${bearing.length}`)
+
+  const missing = bearing.filter((t) => !t.title).map((t) => t.name)
+  assert.deepEqual(missing, [], `these mount a widget with no title to show while it loads: ${missing}`)
+
+  // A title that IS the name has not been written, it has been defaulted.
+  const undressed = bearing.filter((t) => t.title === t.name).map((t) => t.name)
+  assert.deepEqual(undressed, [], `title is just the tool name, so the waiting line reads as code: ${undressed}`)
+})
