@@ -13,7 +13,7 @@
  * and a manual test in two hosts. This speaks real MCP to the real built server against the real API, so the
  * same question is answered in about ten seconds from a rebuild.
  *
- * ⚠️ **IT SPENDS NO CREDITS.** It reads generations that already exist by id, through `get_generation_status`,
+ * ⚠️ **IT SPENDS NO CREDITS.** It reads generations that already exist by id, through `get_media`,
  * which is the same formatter path a fresh generation returns. Verifying the output shape must never cost
  * money, or it stops being run.
  *
@@ -117,12 +117,21 @@ try {
   for (const [medium, outputId] of Object.entries(ids)) {
     if (!outputId) { console.log(`  ${medium.padEnd(6)} SKIPPED (no id given)`); continue }
     const res = await rpc(child, n++, 'tools/call', {
-      name: 'get_generation_status',
-      // ⚠️ `outputIds`, PLURAL. The first version of this script passed `outputId` and the server answered
-      // with a validation error that the script then reported as "no blocks", which looks identical to the
-      // defect it exists to find. A harness that cannot tell a wrong call from a real failure is worse than
-      // none, so the text of any non-media result is printed below rather than summarized away.
-      arguments: { outputIds: [outputId] },
+      /**
+      * ⛔⛔ **`get_media`, NOT `get_generation_status`. THIS HARNESS WAS ASKING THE WRONG TOOL.**
+      *
+      * A status call REPORTS: it deliberately declares no widget, because the generate call already returns
+      * one that polls itself to completion and a second card for the same generation is a duplicate. So
+      * this ran green for weeks and then reported FAIL on three correct mediums the day the split landed.
+      * A harness that fails on correct behavior is worse than none, because it teaches you to ignore it.
+      *
+      * ⭐ `get_media` is the tool whose job is showing an existing thing, which is the question this script
+      * asks. It also spends no credits, which is why this instrument gets run at all.
+      */
+      name: 'get_media',
+      // ⚠️ A harness that cannot tell a WRONG CALL from a real failure is worse than none, so the text of
+      // any non-media result is printed below rather than summarized away.
+      arguments: { items: [{ mediaId: outputId }] },
     })
     const firstText = (res.content ?? []).find((c) => c.type === 'text')?.text ?? ''
     if (/^MCP error|validation error/i.test(firstText)) {
@@ -141,7 +150,9 @@ try {
     // the other renders nothing, and each fails silently on its own.
     const meta = res._meta ?? {}
     const boundTo = meta['ui/resourceUri'] ?? meta.ui?.resourceUri
-    const feeds = Array.isArray(res.structuredContent?.outputs) && res.structuredContent.outputs.length > 0
+    // ⚠️ `items`, not `outputs`. The payload became a SET OF ITEMS so anything but a generation could
+    // render, and this script kept reading the old field and reported a missing widget on a working one.
+    const feeds = Array.isArray(res.structuredContent?.items) && res.structuredContent.items.length > 0
     /**
      * ⛔⛔ THE SIZE OF THE WHOLE RESULT, MEASURED, NOT THE SIZE OF THE BLOCKS.
      *
@@ -178,10 +189,17 @@ try {
      * expected reading until the app ships, not a regression to chase.
      */
     const sc = res.structuredContent ?? {}
+    /**
+     * ⚠️ READ OFF THE FIRST ITEM, not the payload. The shared fields are only populated when every item
+     * agrees, which is a generation; a mixed set carries its medium, shape and destination per tile, and a
+     * harness reading the top level would report "-" for all of them and look like a regression.
+     */
+    const first = sc.items?.[0] ?? {}
     const chip =
-      `chip=${sc.modelName ?? '-'}${sc.modelBrandColor ? ` ${sc.modelBrandColor}` : ''}` +
-      `${sc.modelIconKey ? `/${sc.modelIconKey}` : ''}` +
-      `  ar=${sc.displayAspect ?? '-'}  prompt=${sc.prompt ? `${String(sc.prompt).length}ch` : '-'}`
+      `chip=${sc.modelName ?? '-'}` +
+      `  ar=${first.displayAspect ?? sc.displayAspect ?? '-'}` +
+      `  ref=${first.reference ? 'yes' : 'no'}` +
+      `  open=${first.openUrl ? 'yes' : 'no'}`
     console.log(
       `  ${medium.padEnd(6)} ${has ? 'OK  ' : 'FAIL'}  blocks=[${types.join(', ')}]` +
         `  wire=${(wireBytes / 1024).toFixed(0)}KB${overCeiling ? ' OVER CEILING' : ''}  ${widget}  ${chip}${note}`,
@@ -192,7 +210,7 @@ try {
         console.log(
           `         ${(wireBytes / 1024).toFixed(0)}KB exceeds the ${(HOST_RESULT_CEILING / 1024).toFixed(0)}KB a host accepts; it will REJECT the call, not shrink it`,
         )
-      if (!hasWidget) console.log('         the WIDGET is missing: needs both _meta.ui.resourceUri and structuredContent.outputs')
+      if (!hasWidget) console.log('         the WIDGET is missing: needs both _meta.ui.resourceUri and structuredContent.items')
       if (!hasBlocks) console.log(`         no ${want.blocks.join(' + ')} fallback: ${want.why}`)
     }
   }
