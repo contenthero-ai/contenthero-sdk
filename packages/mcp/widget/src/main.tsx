@@ -390,9 +390,20 @@ const styles = `
    * A PLACEHOLDER IS THE SAME TILE, so it occupies exactly the space its output will. Anything else makes
    * the grid jump when the media lands, which reads as a glitch rather than as an arrival.
    */
+  /*
+   * ⚠️ INHERIT THE RADIUS, OR THE CORNERS SHOW THEIR POINTS.
+   *
+   * The tile rounds its corners and this fills the tile edge to edge with its own background, so a square
+   * overlay inside a rounded box leaves four visible triangles of skeleton colour poking past the curve.
+   * Only noticeable against the tile's own background, which is exactly when a skeleton is on screen.
+   *
+   * The tile's overflow is visible now (so a tooltip can escape it), which means the tile is no longer
+   * clipping this for us. Every child that paints to the edge has to round itself.
+   */
   .laurel-wrap {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
+    border-radius: inherit;
   }
   .laurel-wrap .laurel { width: 38%; max-width: 72px; height: auto; }
 
@@ -432,6 +443,32 @@ const styles = `
     opacity: 0; transition: opacity .12s ease;
   }
   .corner { position: absolute; top: 8px; z-index: 2; opacity: 0; transition: opacity .12s ease; }
+  /**
+   * ⛔⛔ **AN AUDIO TILE IS A CONTROL SURFACE, SO THE ACTIONS MUST NOT COVER IT.**
+   *
+   * Every other medium is a picture with an overlay on top, which is fine because the picture does nothing
+   * when you click it. An audio tile is a transport: play, scrub, volume. The acts row sat 10px from the
+   * bottom, directly over those controls, so hovering to press play summoned buttons that took the click
+   * instead. Reported as audio that "just doesn't really do anything".
+   *
+   * ⭐ Moving them to the TOP of the tile leaves the transport clear. The corners already sit there, so an
+   * audio tile reserves a little more height for the row to live in rather than overlapping either one.
+   */
+  .tile.audio {
+    /* Tall enough for a transport and a row of verbs to sit apart rather than on top of each other. */
+    min-height: 116px;
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 8px;
+  }
+  /* The transport gets the top, where nothing is ever drawn over it. */
+  .tile.audio .media { width: 100%; }
+  .tile.audio .acts {
+    top: auto;
+    bottom: 10px;
+    /* Always visible: there is no picture here that an overlay would obscure. */
+    opacity: 1;
+  }
   .corner.tl { left: 8px; }
   .corner.tr { right: 8px; }
   .tile:hover .acts, .tile:focus-within .acts,
@@ -512,8 +549,21 @@ const styles = `
    * included, above every sibling in the row.
    */
   .acts [data-tip], .corner [data-tip] { position: relative; }
-  .acts [data-tip]:hover, .acts [data-tip]:focus-visible,
-  .corner [data-tip]:hover, .corner [data-tip]:focus-visible { z-index: 6; }
+  /**
+   * ⛔⛔⛔ **RAISING THE BUTTON WAS STILL NOT ENOUGH, AND THE REASON IS ONE LEVEL UP.**
+   *
+   * A z-index only orders an element against its siblings INSIDE its nearest stacking context. The acts row
+   * and each corner are themselves positioned with their own z-index, so each one IS such a context: a
+   * button inside the acts row (z-index 1) can be raised to any number at all and still paint under the
+   * corner buttons (z-index 2), because the whole row is below them. The Animate and Recreate tooltips kept
+   * rendering behind Download and Open after the button itself was lifted, which is what that looks like.
+   *
+   * ⭐ THE ZONE IS WHAT HAS TO RISE. Hovering anywhere in a zone lifts the zone above its neighbours, and
+   * the tooltip rides with it. This is the same mistake as the tile clipping its own tooltip, one level
+   * further out: the fix is never on the thing you can see, it is on the box that contains it.
+   */
+  .tile .acts:hover, .tile .acts:focus-within,
+  .tile .corner:hover, .tile .corner:focus-within { z-index: 8; }
   .acts [data-tip]::after, .corner [data-tip]::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
@@ -1145,7 +1195,12 @@ function Widget() {
    * flight would otherwise schedule one more round against a widget that is gone.
    */
   useEffect(() => {
-    if (!app || !data || data.status !== 'processing' || itemsOf(data).length > 0) return
+    /**
+     * ⛔⛔ **`itemsOf(data).length > 0` USED TO STOP THE POLL, WHICH IS WRONG NOW THAT A PARTIAL ANSWERS
+     * WITH ITS PART.** Two of three ready has items AND is still processing; stopping there would freeze
+     * the card at two tiles forever. `status` is the only thing that says whether more is coming.
+     */
+    if (!app || !data || data.status !== 'processing') return
     const everySeconds = Math.max(3, data.pollAfterSeconds ?? 10)
     const deadline = 20 * 60
     let cancelled = false
@@ -1162,10 +1217,29 @@ function Widget() {
         })
         if (cancelled) return
         const sc = (res as { structuredContent?: WidgetData }).structuredContent
-        if (sc?.outputs?.length) {
-          setData(sc)
+        /**
+         * ⛔⛔⛔ **THIS READ `sc.outputs`, A FIELD RENAMED TO `items`, SO IT NEVER SAW A FINISHED JOB.**
+         *
+         * Combined with the status tool having its `structuredContent` deleted, the poll was reading an
+         * absent field off an absent payload. It never matched, so the card sat on its skeletons until the
+         * twenty-minute deadline while the images were visibly finished in the studio. Two independent
+         * breakages of one path, each invisible on its own.
+         *
+         * ⭐ `itemsOf` normalizes both spellings, which is the same function the render path uses, so
+         * there is one answer to "what tiles does this payload have" rather than a second opinion here.
+         */
+        const got = sc ? itemsOf(sc) : []
+        if (got.length > 0) {
+          /**
+           * ⭐⭐ MERGED, NOT REPLACED. The poll's answer knows the items; only the ORIGINAL pending result
+           * knew how many were asked for. Replacing wholesale would drop `expected` and the remaining
+           * skeletons would vanish the moment the first tile landed, which reads as "finished" when it is
+           * not.
+           */
+          setData((prev) => ({ ...prev, ...sc, expected: prev?.expected ?? sc?.expected }))
           setRatio(null)
-          return
+          // Still processing means more are coming, so keep polling rather than returning.
+          if (sc?.status !== 'processing') return
         }
       } catch {
         /* A transient failure is not a finished job. Fall through and try again on the next tick. */
@@ -1282,9 +1356,31 @@ function Widget() {
   }
 
   /** True while the server has told us a job is running and nothing has landed yet. */
-  const pending = data.status === 'processing' && items.length === 0
+  /**
+   * ⭐⭐⭐ **STILL WORKING IS NOT THE SAME AS HAVING NOTHING, AND CONFLATING THEM IS WHY A CARD WAITED FOR
+   * THE WHOLE BATCH.**
+   *
+   * `pending` used to mean "processing AND no items", so the first tile to land flipped it false and every
+   * remaining skeleton vanished at once: the card showed two tiles and looked finished while a third was
+   * still rendering. The studio has always resolved each card the moment its own image exists, and this
+   * was the one surface that could not.
+   *
+   * `working` is the honest question (is more coming), and `awaiting` is how many placeholders are left to
+   * draw beside whatever has already arrived.
+   */
+  const working = data.status === 'processing'
 
-  const n = pending ? Math.max(1, data.expected ?? 1) : items.length
+  /**
+   * ⚠️ `expected` COMES FROM THE JOB THAT STARTED IT, never from a poll: a partial answer knows how many
+   * exist so far, not how many were asked for. Falling back to what we have means a payload with no
+   * expected count draws no phantom placeholders.
+   */
+  const expected = Math.max(items.length, working ? (data.expected ?? items.length ?? 1) : items.length)
+  const awaiting = Math.max(0, expected - items.length)
+  /** Layout still reasons about the FULL set, so tiles do not resize as the last ones arrive. */
+  const n = Math.max(1, expected)
+  /** Nothing has arrived yet: the card is only skeletons, which is what suppresses the set noun and verbs. */
+  const pending = working && items.length === 0
   /**
    * ⚠️ A MIXED SET HAS NO SINGLE NOUN. "4 images" is only true when every item is an image, which is the
    * uniform case; anything else is honestly just "items".
@@ -1606,15 +1702,30 @@ function Widget() {
               </div>
             )}
             {/* ⚠️ stopPropagation on EVERY zone, or an action also opens the lightbox underneath it. */}
-            <div className="corner tl" onClick={(e) => e.stopPropagation()}>
-              {actions(o, { labels: false, zone: 'download' })}
-            </div>
-            <div className="corner tr" onClick={(e) => e.stopPropagation()}>
-              {actions(o, { labels: false, zone: 'open' })}
-            </div>
-            <div className="acts" onClick={(e) => e.stopPropagation()}>
-              {actions(o, { labels: false, zone: 'center' })}
-            </div>
+            {/**
+              * ⭐⭐ AUDIO PUTS EVERY VERB IN ONE ROW, because the corners exist to keep exits off a picture
+              * and an audio tile has no picture: it has a TRANSPORT. Pinning buttons to the edges of a
+              * short box puts them straight back onto the play and scrub controls they were moved away
+              * from, which is what made audio tiles unclickable. Every verb still renders, in one place,
+              * below the control rather than over it.
+              */}
+            {o.contentType === 'audio' ? (
+              <div className="acts" onClick={(e) => e.stopPropagation()}>
+                {actions(o, { labels: false, zone: 'all' })}
+              </div>
+            ) : (
+              <>
+                <div className="corner tl" onClick={(e) => e.stopPropagation()}>
+                  {actions(o, { labels: false, zone: 'download' })}
+                </div>
+                <div className="corner tr" onClick={(e) => e.stopPropagation()}>
+                  {actions(o, { labels: false, zone: 'open' })}
+                </div>
+                <div className="acts" onClick={(e) => e.stopPropagation()}>
+                  {actions(o, { labels: false, zone: 'center' })}
+                </div>
+              </>
+            )}
           </div>
   )
 
@@ -1647,8 +1758,11 @@ function Widget() {
       )}
 
       <div className={uniform ? 'grid' : 'grid mixed'} style={{ ['--cols' as string]: String(cols) }}>
-        {pending &&
-          Array.from({ length: n }, (_, i) => (
+        {/* ⭐ DRAWN AFTER THE REAL TILES BELOW WOULD PUT THEM IN THE WRONG ORDER, so the placeholders for
+            what is still coming are rendered FIRST only while nothing has arrived. Once tiles exist they
+            follow them, which matches the order the slots will fill. */}
+        {awaiting > 0 && items.length === 0 &&
+          Array.from({ length: awaiting }, (_, i) => (
             // ⚠️ A placeholder is ALWAYS shaped: `shapeOf` bottoms out at 1:1, matching the studio's own
             // aspect resolver. There is no media to crop yet, so a square beats an arbitrary fixed height
             // that the real tile would then jump away from.
@@ -1669,6 +1783,8 @@ function Widget() {
           * The lightbox and the strip both index into `items`, so a per-column index would open the
           * wrong picture from the second column onward.
           */}
+        {/* ⭐ THE TILES THAT HAVE LANDED, then a placeholder for each slot still working, so a set fills in
+            one at a time exactly as the studio's grid does. */}
         {uniform
           ? items.map((o, i) => renderTile(o, i))
           : packIntoColumns(
@@ -1680,6 +1796,14 @@ function Widget() {
                 {col.map((e) => renderTile(e.o, e.i))}
               </div>
             ))}
+        {awaiting > 0 && items.length > 0 &&
+          Array.from({ length: awaiting }, (_, i) => (
+            <div key={`awaiting-${i}`} className="tile shaped" style={shapeOf(aspect ?? '1:1')}>
+              <div className="laurel-wrap">
+                <Skeleton />
+              </div>
+            </div>
+          ))}
       </div>
 
       <div className="bar">

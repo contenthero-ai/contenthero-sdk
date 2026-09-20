@@ -638,15 +638,22 @@ export function generationStatusResult(
   if (gen.status === 'completed') {
     const res = completedResult(gen, attachments, [], baseUrl)
     /**
-     * ⛔⛔ **A REPORT CARRIES NO DISPLAY PAYLOAD, AND STRIPPING IT IS NOT COSMETIC.**
+     * ⛔⛔⛔ **`_meta` IS WHAT MOUNTS A WIDGET. `structuredContent` IS JUST DATA, AND DELETING IT BROKE THE
+     * ONE THING THAT MAKES A GENERATION CARD FINISH.**
      *
-     * This tool does not declare the widget, because `generate_*` already returns one that polls itself to
-     * completion and a second card for the same generation is the duplicate we removed. A result that still
-     * carried `structuredContent` and `_meta` would be ignored by the host, but it would also make
-     * "emits widget data" and "declares the widget" disagree, and that equivalence is exactly what the
-     * completeness guard checks in both directions. An invariant with an exemption is a list again.
+     * This tool must not DECLARE the widget: `generate_*` already returns one that polls itself, and a
+     * second card for the same generation is the duplicate we removed. That is a statement about `_meta`.
+     *
+     * Deleting `structuredContent` as well looked harmless, and was not. The widget polls by calling this
+     * tool through `callServerTool` and reading the payload OUT of the result; that call is answered to the
+     * WIDGET, never rendered by the host, so there was never a second card to prevent. With the payload
+     * gone the poll read `undefined` on every tick and the card sat on its skeletons until the twenty
+     * minute deadline, while the studio showed the images finished. Reported 2026-09-21 as a widget that
+     * "never resolves"; the images had been ready for over a minute.
+     *
+     * ⭐ The completeness guard already draws the line in the right place: it excludes any builder that
+     * deletes `_meta`, which is exactly the distinction between "shows a card" and "answers with data".
      */
-    delete (res as { structuredContent?: unknown }).structuredContent
     delete (res as { _meta?: unknown })._meta
     return res
   }
@@ -660,13 +667,39 @@ export function generationStatusResult(
     return text(`Generation ${gen.outputId} is still ${gen.status}. ${poll}.`)
   }
   const noun = ready.length === 1 ? gen.contentType : `${gen.contentType}s`
-  return text(
-    [
-      `Partial. ${ready.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
-      ...ready.map((u, i) => `${i + 1}. ${u}`),
-      `NOT the full set. ${poll} for the rest.`,
-    ].join('\n'),
-  )
+  const prose = [
+    `Partial. ${ready.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
+    ...ready.map((u, i) => `${i + 1}. ${u}`),
+    `NOT the full set. ${poll} for the rest.`,
+  ].join('\n')
+  /**
+   * ⭐⭐⭐ **A PARTIAL ANSWER CARRIES THE PART IT HAS, SO A TILE CAN RESOLVE ALONE.**
+   *
+   * This returned prose only, so the widget's poll learned nothing until the LAST variation landed and then
+   * swapped all of them at once. The studio has always filled each card the moment its own image exists,
+   * and the card in a chat sat on three skeletons while two of the three were visibly done next to it.
+   *
+   * ⚠️ `status` STAYS `processing`, which is what keeps the poll running and keeps the remaining skeletons
+   * on screen. `expected` is what says how many are still coming; without it the widget would render two
+   * tiles and look finished.
+   *
+   * ⛔ NO `_meta` HERE EITHER. Same rule as the completed branch: this answers the widget's own question and
+   * must not mount a second card.
+   */
+  return {
+    content: [{ type: 'text', text: prose }],
+    structuredContent: {
+      ...generationWidgetData(gen, [], baseUrl),
+      status: 'processing',
+      /**
+       * ⚠️ NO `expected` HERE, DELIBERATELY. A `Generation` does not carry how many were ASKED for, only
+       * how many exist so far, so anything this put here would be `ready.length` wearing the name of a
+       * total. The widget was told the real number by `pendingResult` when the job started and keeps it
+       * across polls, which is the one place that actually knows.
+       */
+      pollAfterSeconds: secs,
+    },
+  }
 }
 
 /** One or more generations (snapshot or post-wait). Falls through to the single form for one id. */
