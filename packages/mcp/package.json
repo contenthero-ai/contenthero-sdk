@@ -42,7 +42,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@contenthero-ai/brand-ui": "0.1.0",
+    "@contenthero-ai/brand-ui": "0.1.1",
     "@contenthero/sdk": "^0.4.6",
     "@lobehub/icons": "5.10.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",

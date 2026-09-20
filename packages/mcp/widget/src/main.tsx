@@ -28,6 +28,8 @@ import {
   columnsForAspect,
   aspectToCss,
   parseAspectRatio,
+  laurelKeyframes,
+  laurelLeafClass,
   LAUREL_PATHS,
   LAUREL_VIEW_BOX,
   LAUREL_GOLD,
@@ -55,6 +57,16 @@ interface WidgetData {
   readonly displayAspect?: string | null
   readonly outputs: readonly Output[]
   readonly prompt?: string | null
+  /**
+   * ⭐ `'processing'` is what makes the placeholders possible. A generation that outran the server's smart
+   * wait used to come back as one sentence of prose asking the agent to poll, which is every video, so the
+   * person who waited longest saw the least.
+   */
+  readonly status?: 'processing' | 'completed'
+  /** How many outputs were asked for. Drives how many placeholders are drawn. */
+  readonly expected?: number
+  /** Seconds the server suggests waiting between polls. Images finish faster than video. */
+  readonly pollAfterSeconds?: number
 }
 
 /**
@@ -200,6 +212,15 @@ const styles = `
   .tile.unshaped img, .tile.unshaped video { display: block; width: 100%; height: auto; max-height: 260px; object-fit: contain; }
   .tile audio { width: 100%; padding: 22px 14px; }
 
+  /*
+   * A PLACEHOLDER IS THE SAME TILE, so it occupies exactly the space its output will. Anything else makes
+   * the grid jump when the media lands, which reads as a glitch rather than as an arrival.
+   */
+  .tile.pending { display: flex; align-items: center; justify-content: center; }
+  .tile.pending .laurel { width: 38%; max-width: 72px; height: auto; }
+  /* An unshaped placeholder has no ratio to hold it open, so it needs a height of its own. */
+  .tile.pending.unshaped { min-height: 132px; }
+
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
   .acts { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; z-index: 1; }
   .tile:hover .acts, .tile:focus-within .acts { opacity: 1; }
@@ -293,6 +314,28 @@ function Mark({ size = 18 }: { size?: number }) {
  * currentColor so they follow the pill they sit in, in either theme.
  */
 const ICON = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+
+/**
+ * A placeholder card: the laurel assembling itself, at the shape the finished output will be.
+ *
+ * ⭐⭐ THE ANIMATION IS NOT DRAWN HERE. `laurelKeyframes` comes from `@contenthero-ai/brand-ui`, so the
+ * laurel assembles in a chat exactly the way it does in the studio. Re-deriving the timing would have
+ * produced a laurel that moves differently in the two places, which nobody reading either file would catch.
+ *
+ * ⚠️ The keyframes are injected ONCE for the whole widget rather than per card. Nine `@keyframes` blocks
+ * repeated across four placeholders is the same CSS four times, and every copy after the first is ignored.
+ */
+const LAUREL_CSS = laurelKeyframes({ prefix: 'ch', durationSecs: 2 })
+
+function Skeleton() {
+  return (
+    <svg viewBox={LAUREL_VIEW_BOX} className="laurel" aria-hidden="true">
+      {LAUREL_PATHS.map((d, i) => (
+        <path key={d} d={d} fill={LAUREL_GOLD} className={laurelLeafClass(i, 'ch')} />
+      ))}
+    </svg>
+  )
+}
 
 function IconAnimate() {
   return (
@@ -432,6 +475,8 @@ function Widget() {
   /** The url currently downloading, and the url whose download was refused. Both are transient UI only. */
   const [busy, setBusy] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  /** True once polling has given up. A spinner that never resolves is worse than saying so. */
+  const [stalled, setStalled] = useState(false)
 
   /**
    * ⚠️⚠️ REGISTERED IN `onAppCreated`, WHICH IS BEFORE THE HANDSHAKE COMPLETES.
@@ -444,10 +489,13 @@ function Widget() {
     const sc =
       (params as { structuredContent?: WidgetData } | null)?.structuredContent ??
       (params as { result?: { structuredContent?: WidgetData } } | null)?.result?.structuredContent
-    if (sc?.outputs?.length) {
+    // ⚠️ A PENDING RESULT HAS NO OUTPUTS, so the old `outputs.length` guard dropped it and the frame sat
+    // on "Waiting for the generation result." forever. Accept anything that identifies a generation.
+    if (sc?.outputId) {
       setData(sc)
       setIndex(0)
       setRatio(null)
+      setStalled(false)
     }
   }, [])
 
@@ -534,6 +582,68 @@ function Widget() {
     return () => window.removeEventListener('keydown', onKey)
   }, [full, data])
 
+  /**
+   * ⭐⭐⭐ **THE WIDGET POLLS ITSELF WHILE A GENERATION IS STILL RUNNING.**
+   *
+   * The server answers a slow job with `status: 'processing'` and no urls, and calls
+   * `get_generation_status` from in here until the outputs arrive. Without this the placeholders would sit
+   * there forever waiting for a human to ask the agent to check.
+   *
+   * ⚠️ **THE AGENT IS STILL TOLD TO POLL, IN THE TEXT BLOCK.** These two are not redundant: the text is
+   * what a host without app support renders and what the model reads, and an agent that stopped polling
+   * because prose was swapped for a payload it cannot see would leave the generation unclaimed. Both
+   * converge on the same completed row, and `get_generation_status` is a read, so the duplicate costs a
+   * request and nothing else.
+   *
+   * ⚠️ **BOUNDED.** A job that never finishes must not poll forever in someone's chat window. Twenty
+   * minutes of attempts at the server's suggested cadence, then it stops and says so, because a spinner
+   * that never resolves is a worse answer than "this is taking too long".
+   *
+   * ⚠️ `cancelled` is checked after every await. An unmount or a completed swap while a request is in
+   * flight would otherwise schedule one more round against a widget that is gone.
+   */
+  useEffect(() => {
+    if (!app || !data || data.status !== 'processing' || data.outputs.length > 0) return
+    const everySeconds = Math.max(3, data.pollAfterSeconds ?? 10)
+    const deadline = 20 * 60
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let elapsed = 0
+
+    const tick = async () => {
+      if (cancelled) return
+      try {
+        const res = await app.callServerTool({
+          name: 'get_generation_status',
+          // ⚠️ `outputIds`, PLURAL, and an array even for one. The singular spelling is a validation error.
+          arguments: { outputIds: [data.outputId] },
+        })
+        if (cancelled) return
+        const sc = (res as { structuredContent?: WidgetData }).structuredContent
+        if (sc?.outputs?.length) {
+          setData(sc)
+          setRatio(null)
+          return
+        }
+      } catch {
+        /* A transient failure is not a finished job. Fall through and try again on the next tick. */
+      }
+      if (cancelled) return
+      elapsed += everySeconds
+      if (elapsed >= deadline) {
+        setStalled(true)
+        return
+      }
+      timer = setTimeout(() => void tick(), everySeconds * 1000)
+    }
+
+    timer = setTimeout(() => void tick(), everySeconds * 1000)
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [app, data])
+
   const download = async (o: Output) => {
     // ⚠️ `data` is narrowed below, but this closure is defined above that point, so the guard is restated.
     if (!app || !data) return
@@ -576,12 +686,22 @@ function Widget() {
     }
   }
 
-  if (!data || !current) {
+  if (!data) {
     return <div className="fallback muted">{isConnected ? 'Waiting for the generation result.' : 'Connecting.'}</div>
   }
 
-  const n = data.outputs.length
-  const label = n === 1 ? data.contentType : `${n} ${data.contentType}s`
+  /** True while the server has told us a job is running and no outputs have landed yet. */
+  const pending = data.status === 'processing' && data.outputs.length === 0
+
+  const n = pending ? Math.max(1, data.expected ?? 1) : data.outputs.length
+  const noun = data.contentType
+  const label = pending
+    ? stalled
+      ? 'Still running. Ask me to check on it.'
+      : `Making ${n} ${n === 1 ? noun : `${noun}s`}`
+    : n === 1
+      ? noun
+      : `${n} ${noun}s`
 
   /**
    * ⭐⭐ **MEASURED PIXELS BEAT THE REQUESTED RATIO, AND `displayAspect` SEEDS THE FIRST PAINT.**
@@ -656,7 +776,7 @@ function Widget() {
     </>
   )
 
-  if (full) {
+  if (full && current) {
     return (
       <div className="full">
         {/* ⛔ NO HEADER HERE. The host already frames a fullscreen app with its own title and close control,
@@ -717,6 +837,23 @@ function Widget() {
       )}
 
       <div className="grid" style={{ ['--cols' as string]: String(cols) }}>
+        {pending &&
+          Array.from({ length: n }, (_, i) => (
+            <div
+              key={`pending-${i}`}
+              className={`tile pending ${aspect ? 'shaped' : 'unshaped'}`}
+              style={
+                aspect
+                  ? ({
+                      ['--ar']: aspectToCss(aspect),
+                      ['--ar-num']: String(parseAspectRatio(aspect) ?? 1),
+                    } as CSSProperties)
+                  : undefined
+              }
+            >
+              <Skeleton />
+            </div>
+          ))}
         {data.outputs.map((o, i) => (
           <div
             key={o.url}
@@ -770,11 +907,13 @@ function Widget() {
         <span className="spacer" />
         {/* Recreate acts on the GENERATION, not one output, which is why it sits under the set rather than
             on a tile. It carries the prompt and settings, so it needs no follow-up to be actionable. */}
-        <button className="pill ghost" onClick={() => void say(ASK.recreate(data))}>
-          <IconRecreate />
-          Recreate
-        </button>
-        {canExpand && data.contentType === 'image' && (
+        {!pending && (
+          <button className="pill ghost" onClick={() => void say(ASK.recreate(data))}>
+            <IconRecreate />
+            Recreate
+          </button>
+        )}
+        {!pending && canExpand && data.contentType === 'image' && (
           <button className="pill ghost" onClick={() => void setMode(true)}>Expand</button>
         )}
       </div>
@@ -783,7 +922,8 @@ function Widget() {
 }
 
 const style = document.createElement('style')
-style.textContent = styles
+// The laurel's keyframes ship alongside the stylesheet: one injection for every placeholder on the page.
+style.textContent = styles + LAUREL_CSS
 document.head.appendChild(style)
 
 const root = document.createElement('div')

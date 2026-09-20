@@ -132,6 +132,8 @@ import {
   outlierListResult,
   enhanceClipsResult,
   pendingResult,
+  pollAfterSecondsFor,
+  type PendingShape,
   stageListResult,
   stageResult,
   stageDeletedResult,
@@ -181,6 +183,39 @@ const POST_PLATFORMS = [
  * than tripping the client's timeout.
  */
 const SMART_WAIT_MS = 50_000
+
+/**
+ * What a still-running generation can already say about the shape of its own result, read from the tool's
+ * own ARGUMENTS.
+ *
+ * ⚠️ **FROM `args`, NOT FROM THE BUILT REQUEST.** Every one of these sites builds its request inside a
+ * `try`, so the request is out of scope in the `catch` where a pending outputId surfaces. `args` is the
+ * handler's parameter and is always in scope, and it is also the more honest source: it is what the caller
+ * asked for, which is exactly what the placeholders should depict.
+ *
+ * ⚠️ Read defensively because the count is spelled `numImages` on some tools and `numGenerations` on
+ * others. A widened type here would be a third spelling; reading both is the whole reconciliation.
+ *
+ * ⛔ `auto` and `adaptive` are legal aspect inputs meaning "the model decides", so they are NOT ratios.
+ * Passing one through would have the widget lay placeholders out against a string it cannot parse. Null
+ * lets it fall back to its unshaped box, which is the honest state while nothing is known.
+ */
+function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio'): PendingShape {
+  const a = (args ?? {}) as {
+    modelId?: string
+    aspectRatio?: string
+    numImages?: number
+    numGenerations?: number
+  }
+  const ar = a.aspectRatio
+  const displayAspect = !ar || ar === 'auto' || ar === 'adaptive' || !ar.includes(':') ? null : ar
+  return {
+    contentType,
+    modelId: a.modelId ?? '',
+    displayAspect,
+    expected: a.numImages ?? a.numGenerations ?? 1,
+  }
+}
 
 /**
  * Tool annotations drive how MCP clients group the surface. readOnlyHint=true
@@ -901,7 +936,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
         const pending = pendingOutputId(err)
-        if (pending) return pendingResult(pending)
+        if (pending)
+          return pendingResult(pending, pollAfterSecondsFor('image'), pendingShapeFrom(args, 'image'))
         return errorResult(err)
       }
     },
@@ -966,7 +1002,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
         const pending = pendingOutputId(err)
-        if (pending) return pendingResult(pending)
+        if (pending)
+          return pendingResult(pending, pollAfterSecondsFor('image'), pendingShapeFrom(args, 'image'))
         return errorResult(err)
       }
     },
@@ -1071,7 +1108,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
         const pending = pendingOutputId(err)
-        if (pending) return pendingResult(pending)
+        if (pending)
+          return pendingResult(pending, pollAfterSecondsFor('video'), pendingShapeFrom(args, 'video'))
         return errorResult(err)
       }
     },
@@ -1225,7 +1263,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
         const pending = pendingOutputId(err)
-        if (pending) return pendingResult(pending)
+        if (pending)
+          return pendingResult(pending, pollAfterSecondsFor('image'), pendingShapeFrom(args, 'image'))
         return errorResult(err)
       }
     },
@@ -1290,7 +1329,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
         const pending = pendingOutputId(err)
-        if (pending) return pendingResult(pending)
+        if (pending)
+          return pendingResult(pending, pollAfterSecondsFor('video'), pendingShapeFrom(args, 'video'))
         return errorResult(err)
       }
     },

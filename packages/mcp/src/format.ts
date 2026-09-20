@@ -251,11 +251,65 @@ export function getStatusCall(outputIds: readonly string[]): string {
   return `get_generation_status { outputIds: [${outputIds.map((id) => `"${id}"`).join(', ')}] }`
 }
 
-/** A slow job that did not finish within the smart-wait window. */
-export function pendingResult(outputId: string, pollAfterSeconds = 15): CallToolResult {
-  return text(
-    `Still rendering (outputId ${outputId}). This is normal for video. Call ${getStatusCall([outputId])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`,
-  )
+/** What a still-running generation already knows about the shape of its own result. */
+export interface PendingShape {
+  contentType: 'image' | 'video' | 'audio'
+  modelId: string
+  /** `"W:H"` as requested. Absent for audio and for `auto`/`adaptive`. */
+  displayAspect?: string | null
+  /** How many outputs were asked for, so the widget draws that many placeholders. */
+  expected?: number
+}
+
+/**
+ * A slow job that did not finish within the smart-wait window.
+ *
+ * ## ⭐⭐⭐ THIS IS WHERE THE SKELETONS COME FROM, AND WHY IT IS THE ONLY PLACE THEY COULD
+ *
+ * A generation returns one of two ways: it finished inside the smart wait, in which case there is nothing
+ * to show a spinner for, or it did not, and until now that produced ONE SENTENCE of prose asking the agent
+ * to poll. Every video takes that path. So the person who waited longest got the least: a paragraph, while
+ * the same job in the studio shows placeholder cards filling in.
+ *
+ * ⛔ **THE FIX IS NOT TO MAKE `generate_*` RETURN EARLY.** That would hand every host the pending path,
+ * including hosts with no MCP Apps support, which would lose the inline image they get today. The pending
+ * path already exists and already reaches exactly the people who are waiting.
+ *
+ * ⚠️ **THE TEXT STAYS, WORD FOR WORD.** It is what a host without app support renders, and it is what the
+ * AGENT reads to know it must poll. The widget is added ALONGSIDE it, not instead of it: an agent that
+ * stopped polling because the prose was replaced by a payload it cannot see would leave the generation
+ * unclaimed.
+ *
+ * ⚠️ No model NAME here, and that is deliberate. Resolving one would mean a second network call from
+ * inside a `catch`, which is the exact shape that produced a chip flickering between kebab case and title
+ * case. The widget polls `get_generation_status`, and the name arrives with the first response.
+ */
+export function pendingResult(
+  outputId: string,
+  pollAfterSeconds = 15,
+  shape?: PendingShape,
+): CallToolResult {
+  const prose = `Still rendering (outputId ${outputId}). This is normal for video. Call ${getStatusCall([outputId])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`
+  if (!shape) return text(prose)
+  return {
+    content: [{ type: 'text', text: prose }],
+    structuredContent: {
+      outputId,
+      status: 'processing',
+      contentType: shape.contentType,
+      modelId: shape.modelId,
+      modelName: null,
+      modelBrandColor: null,
+      modelIconKey: null,
+      displayAspect: shape.displayAspect ?? null,
+      prompt: null,
+      /** At least one, or the widget renders a grid with nothing in it and looks broken rather than busy. */
+      expected: Math.max(1, shape.expected ?? 1),
+      pollAfterSeconds,
+      outputs: [],
+    },
+    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+  }
 }
 
 /** Synchronous audio result (already complete on submit). */

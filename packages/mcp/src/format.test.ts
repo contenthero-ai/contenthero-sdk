@@ -8,6 +8,7 @@ import {
   enhanceClipsResult,
   completedResult,
   generationWidgetData,
+  pollAfterSecondsFor,
 } from './format.js'
 
 /**
@@ -332,4 +333,76 @@ test('a resolved name reaches the text header too', () => {
     modelDisplayName: 'GPT Image 2',
   } as never)
   assert.match(res.content[0].text, /from GPT Image 2/)
+})
+
+
+// ---------------------------------------------------------------------------
+// The pending state
+// ---------------------------------------------------------------------------
+
+/**
+ * ⭐⭐⭐ **A SLOW GENERATION SHOWS PLACEHOLDERS INSTEAD OF A PARAGRAPH.**
+ *
+ * A job that outran the smart wait used to return one sentence asking the agent to poll. Every video takes
+ * that path, so the person who waited longest got the least. It now also carries a widget payload the
+ * frame can draw placeholder cards from, at the right shape and the right count.
+ */
+test('a pending generation binds the widget and says how many are coming', () => {
+  const res = pendingResult('o-slow', 15, {
+    contentType: 'video',
+    modelId: 'seedance-2',
+    displayAspect: '9:16',
+    expected: 4,
+  })
+  const sc = res.structuredContent as Record<string, unknown>
+  assert.equal(sc.status, 'processing')
+  assert.equal(sc.expected, 4)
+  assert.equal(sc.displayAspect, '9:16')
+  assert.deepEqual(sc.outputs, [], 'nothing has landed yet')
+  assert.ok(res._meta?.['ui/resourceUri'], 'the widget must be bound or nothing renders')
+})
+
+/**
+ * ⛔⛔ **THE PROSE MUST SURVIVE, WORD FOR WORD.**
+ *
+ * It is what a host without MCP Apps renders, and it is what the AGENT reads to know it has to poll. An
+ * agent that stopped polling because the sentence was replaced by a payload it cannot see would leave a
+ * charged generation unclaimed. The widget is added ALONGSIDE it, never instead of it.
+ */
+test('the pending text still tells the agent to poll', () => {
+  const withWidget = pendingResult('o-slow', 15, { contentType: 'video', modelId: 'seedance-2', expected: 1 })
+  const textOnly = pendingResult('o-slow', 15)
+  assert.equal(withWidget.content[0].type, 'text')
+  assert.equal(
+    withWidget.content[0].text,
+    textOnly.content[0].text,
+    'adding the widget must not change one character of what the agent reads',
+  )
+  assert.match(withWidget.content[0].text, /get_generation_status \{ outputIds: \["o-slow"\] \}/)
+})
+
+/**
+ * ⚠️ A count of zero would draw a grid with nothing in it, which reads as broken rather than busy.
+ */
+test('at least one placeholder is always promised', () => {
+  const sc = pendingResult('o', 15, { contentType: 'image', modelId: 'm', expected: 0 })
+    .structuredContent as Record<string, unknown>
+  assert.equal(sc.expected, 1)
+})
+
+/**
+ * ⛔ NO MODEL NAME ON THE PENDING PATH, DELIBERATELY. Resolving one would mean a network call from inside
+ * a catch block, which is the exact shape that produced a chip flickering between kebab case and title
+ * case. The widget polls and the name arrives with the first response.
+ */
+test('the pending chip is empty rather than guessed', () => {
+  const sc = pendingResult('o', 15, { contentType: 'image', modelId: 'gpt-image-2', expected: 2 })
+    .structuredContent as Record<string, unknown>
+  assert.equal(sc.modelName, null)
+  assert.notEqual(sc.modelName, 'gpt-image-2')
+  assert.equal(sc.modelId, 'gpt-image-2', 'the id still travels; it is just not a label')
+})
+
+test('video is polled less often than image, because it takes longer', () => {
+  assert.ok(pollAfterSecondsFor('video') > pollAfterSecondsFor('image'))
 })
