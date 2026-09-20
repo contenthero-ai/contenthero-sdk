@@ -143,8 +143,28 @@ const styles = `
   }
   .wrap > * { position: relative; z-index: 1; }
 
+  /*
+   * ⚠️ THE HEAD AND THE GRID SHARE THEIR HORIZONTAL PADDING, WHICH IS WHAT ALIGNS THE MARK.
+   *
+   * Measured: the mark's right edge and the rightmost tile's right edge are the same pixel, and the mark's
+   * vertical center matches the chips' to the pixel. Both fall out of the shared 12px and align-items
+   * center; neither is a coincidence to preserve by hand, but both break the moment these two rules
+   * disagree about padding.
+   */
   .head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
-  .head .mark { width: 18px; height: 18px; flex: 0 0 auto; }
+  /*
+   * ⛔ CSS OWNS THE SIZE. The component passed size={20} and this rule said 18px, so the attribute lost
+   * silently and the real size was in neither place a reader would look first.
+   *
+   * ⚠️ 26px MATCHES THE CHIP HEIGHT EXACTLY, so the mark reads as a peer of the metadata rather than as a
+   * decoration tucked into a corner. At 18px it was two thirds of the chips beside it.
+   *
+   * ⚠️ The artwork fills 93.84 of its 100-unit viewBox horizontally and 88.17 vertically, anchored top
+   * left, so the painted leaves stop about 1.6px short of the element's right edge at this size. That is
+   * the shape's own whitespace, not a layout error, and correcting for it with a negative margin would
+   * make the mark disagree with every other surface that draws it.
+   */
+  .head .mark { width: 26px; height: 26px; flex: 0 0 auto; }
   .head .title { font-weight: var(--font-weight-semibold, 600); }
   /* The brand's only flourish: a gold hairline that fades out rather than a full-width rule. */
   .rule { height: 1px; background: linear-gradient(90deg, ${GOLD}, transparent 65%); }
@@ -406,9 +426,9 @@ const styles = `
  * which ships data and pure functions only: this bundle must contain everything it draws, so a package
  * exporting React components could not have solved it.
  */
-function Mark({ size = 18 }: { size?: number }) {
+function Mark() {
   return (
-    <svg viewBox={LAUREL_VIEW_BOX} width={size} height={size} className="mark" aria-hidden="true">
+    <svg viewBox={LAUREL_VIEW_BOX} className="mark" aria-hidden="true">
       {LAUREL_PATHS.map((d) => (
         <path key={d} d={d} fill={LAUREL_GOLD} />
       ))}
@@ -1086,7 +1106,8 @@ function Widget() {
       <div className="head">
         <div className="badges">{badges}</div>
         <span className="spacer" />
-        <Mark size={20} />
+        {/* Size comes from `.head .mark`, deliberately: see the rule for why it is not passed here. */}
+        <Mark />
       </div>
 
       {data.prompt && (
