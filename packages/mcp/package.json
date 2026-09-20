@@ -42,7 +42,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@contenthero/sdk": "^0.4.7",
+    "@contenthero/sdk": "^0.4.8",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/sdk": "1.26.0",
     "zod": "^4.3.6"
