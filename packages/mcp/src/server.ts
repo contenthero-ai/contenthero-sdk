@@ -160,6 +160,7 @@ import {
   timelineTypesResult,
   editorTranscriptResult,
   exportJobResult,
+  completedExportResult,
   exportFormatsResult,
   trackedAccountListResult,
   transcriptResult,
@@ -3775,6 +3776,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'export_project',
     {
       title: 'Export Project',
+      ...RENDERS_GENERATION,
       annotations: WRITE,
       description:
         "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use get_context with render (ephemeral, stored nowhere). format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both surfaces too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. Resolution and watermark apply to EVERY format, not just mp4: a free account never exports above 720p and never removes the watermark, on any format or surface. `quality` is mp4 only. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
@@ -3792,7 +3794,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const { projectId, ...input } = args
         const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: SMART_WAIT_MS })
-        return exportJobResult(job)
+        // ⚠️ The FORMAT is what makes an export renderable, and only this handler knows it: `get_export`
+        // polls by exportId alone, so a poll legitimately reports rather than displays.
+        return completedExportResult(job, input.format ?? 'mp4', client.baseUrl)
       } catch (err) {
         if (err instanceof GenerationTimeoutError) {
           return exportJobResult({ exportId: err.outputId, status: 'rendering' })

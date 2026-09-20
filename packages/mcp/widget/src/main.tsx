@@ -52,6 +52,14 @@ interface Item {
    * field at all. Absent means there is nowhere to go and the Open button does not render.
    */
   readonly openUrl?: string | null
+  /**
+   * The token the API accepts for this item.
+   *
+   * ⛔ ITS ABSENCE HIDES ANIMATE AND EDIT. Both end in a tool call that must NAME this thing, and a project
+   * export has an exportId no generate tool resolves. Offering a verb that cannot work is worse than not
+   * offering it, because the failure lands on the agent and reads as the agent's fault.
+   */
+  readonly reference?: string | null
   readonly modelName?: string | null
   readonly modelBrandColor?: string | null
   readonly modelIconKey?: string | null
@@ -711,6 +719,12 @@ const ASK = {
    * token it can pass to a tool, not the display name a person reads. The chip is the opposite case and
    * renders nothing rather than an id; both are deliberate and stated in `format.ts` for the same reason.
    */
+  /**
+   * ⚠️ ONLY OFFERED WHEN THERE IS SOMETHING TO REPEAT. This emits `model:` and `prompt:` lines, and a
+   * payload carrying neither (audio, an export, a mixed library set) produced a message with holes in it
+   * that an agent would act on anyway.
+   */
+  canRecreate: (d: WidgetData) => Boolean(d.modelId && d.prompt),
   recreate: (d: WidgetData) => {
     const lines = [
       'Generate this again with the same settings.',
@@ -1147,6 +1161,8 @@ function Widget() {
    */
   const actions = (o: Item, opts: { labels: boolean }) => {
     const isImage = o.contentType === 'image'
+    /** Verbs that must name this item to the API. See `Item.reference`. */
+    const canReference = Boolean(o.reference)
     const t = (s: string) => (opts.labels ? s : null)
     // ⛔ A LABELED BUTTON GETS NO TOOLTIP. It already says what it does, and repeating that on hover is
     // noise. `tip` is undefined in the labeled variant so the attribute is absent, not empty.
@@ -1154,8 +1170,8 @@ function Widget() {
     const refused = failed === o.url
     return (
       <>
-        {isImage && (
-          <button className="pill gold" onClick={() => void say(ASK.animate(o.name))} data-tip={tip('Animate')}>
+        {isImage && canReference && (
+          <button className="pill gold" onClick={() => void say(ASK.animate(o.reference!))} data-tip={tip('Animate')}>
             <IconAnimate />
             {t('Animate')}
           </button>
@@ -1169,8 +1185,8 @@ function Widget() {
           <IconDownload />
           {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
         </button>
-        {isImage && (
-          <button className="pill neutral" onClick={() => void say(ASK.edit(o.name))} data-tip={tip('Edit')}>
+        {isImage && canReference && (
+          <button className="pill neutral" onClick={() => void say(ASK.edit(o.reference!))} data-tip={tip('Edit')}>
             <IconEdit />
             {t('Edit')}
           </button>
@@ -1221,10 +1237,12 @@ function Widget() {
         )}
         <div className="foot">
           {actions(current, { labels: true })}
-          <button className="pill neutral" onClick={() => void say(ASK.recreate(data))}>
-            <IconRecreate />
-            Recreate
-          </button>
+          {ASK.canRecreate(data) && (
+            <button className="pill neutral" onClick={() => void say(ASK.recreate(data))}>
+              <IconRecreate />
+              Recreate
+            </button>
+          )}
           {/* Leaving the conversation is a deliberate choice, so it sits here rather than in the hover row,
               which stays the three fast verbs. */}
           {current.openUrl && (
@@ -1363,7 +1381,7 @@ function Widget() {
         <span className="spacer" />
         {/* Recreate acts on the GENERATION, not one output, which is why it sits under the set rather than
             on a tile. It carries the prompt and settings, so it needs no follow-up to be actionable. */}
-        {!pending && (
+        {!pending && ASK.canRecreate(data) && (
           <button className="pill neutral" onClick={() => void say(ASK.recreate(data))}>
             <IconRecreate />
             Recreate

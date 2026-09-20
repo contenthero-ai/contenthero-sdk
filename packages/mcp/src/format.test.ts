@@ -11,6 +11,8 @@ import {
   pollAfterSecondsFor,
   studioUrlFor,
   audioResult,
+  completedExportResult,
+  exportJobResult,
 } from './format.js'
 
 /**
@@ -566,4 +568,50 @@ test('the old outputs shape still yields items', () => {
   assert.equal(items[0]!.contentType, 'image')
   assert.equal(items[0]!.displayAspect, '16:9')
   assert.equal(items[0]!.openUrl, '/studio?output=o1')
+})
+
+
+/**
+ * ⛔⛔ **AN EXPORT RENDERS, AND IT IS NOT REFERENCEABLE.**
+ *
+ * Someone waited for a render, so they should see it. But an exportId is not an outputId: no generate tool
+ * resolves one, so Animate, Edit and Recreate would emit messages the agent cannot act on and a person
+ * cannot tell were never going to work. The ABSENCE of `reference` is what hides those verbs, so it is
+ * asserted rather than left to be added later by someone tidying up.
+ */
+test('a completed mp4 export renders, with no reference and no destination', () => {
+  const res = completedExportResult(
+    { exportId: 'exp-1', status: 'completed', outputUrl: 'https://media.contenthero.ai/e.mp4' },
+    'mp4',
+  )
+  const sc = res.structuredContent as { items: Array<{ contentType: string; reference?: unknown; openUrl?: unknown }> }
+  assert.ok(res._meta?.['ui/resourceUri'], 'a finished render must be visible')
+  assert.equal(sc.items[0]!.contentType, 'video')
+  assert.equal(sc.items[0]!.reference, null, 'an exportId is not something generate_* can name')
+  assert.equal(sc.items[0]!.openUrl, null, "an export's home is a download, not a library detail view")
+})
+
+/**
+ * ⚠️ pdf and pptx have no element, and a multi-slide png export comes back as a ZIP. A tile for any of them
+ * shows a broken picture where the text already gives a working download link.
+ */
+test('formats the widget cannot draw stay text', () => {
+  for (const fmt of ['pdf', 'pptx']) {
+    const res = completedExportResult(
+      { exportId: 'exp-1', status: 'completed', outputUrl: 'https://media.contenthero.ai/e.pdf' },
+      fmt,
+    )
+    assert.equal(res._meta, undefined, `${fmt} must not claim a widget`)
+  }
+})
+
+/**
+ * ⛔ `get_export` POLLS BY ID ALONE, so it cannot know the format and can never render. That is why the two
+ * builders are separate names rather than one with a flag: the completeness guard reads a shared builder as
+ * "this tool emits a widget", and an invariant that has to be argued with is not one.
+ */
+test('a poll reports and never displays', () => {
+  const res = exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.mp4' })
+  assert.equal(res._meta, undefined)
+  assert.equal((res as { structuredContent?: unknown }).structuredContent, undefined)
 })

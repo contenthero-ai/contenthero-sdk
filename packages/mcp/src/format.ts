@@ -202,6 +202,20 @@ export interface MediaWidgetItem {
    * ⚠️ Optional. Absent means there is nowhere to go, and the Open button does not render.
    */
   openUrl?: string
+  /**
+   * The token the API accepts for this item: `<outputId>` or `<outputId>-<n>`, one-based.
+   *
+   * ## ⛔⛔ ITS ABSENCE IS WHAT HIDES ANIMATE, EDIT AND RECREATE
+   *
+   * Those verbs all end in a tool call that has to NAME this thing: `referenceImages` takes "a URL or a
+   * previous output id". A project export has an exportId, which no generate tool resolves, so offering to
+   * animate one produces a message the agent cannot act on and a person cannot tell was never going to
+   * work. Download is always offered, because a file is always a file.
+   *
+   * ⚠️ This was already wrong for audio the moment it started rendering: Recreate emitted `model:` and
+   * `prompt:` with nothing after them, from a payload that carries neither.
+   */
+  reference?: string
   /** Per-item chip, for a mixed set where the items do not share one model. */
   modelName?: string | null
   modelBrandColor?: string | null
@@ -266,6 +280,7 @@ export function mediaWidgetData(input: MediaWidgetInput) {
       contentType: it.contentType,
       displayAspect: it.displayAspect ?? null,
       openUrl: it.openUrl ?? null,
+      reference: it.reference ?? null,
       modelName: it.modelName ?? null,
       modelBrandColor: it.modelBrandColor ?? null,
       modelIconKey: it.modelIconKey ?? null,
@@ -302,6 +317,8 @@ export function generationWidgetData(
       displayAspect: gen.displayAspect ?? null,
       // A generation lives in the studio. Another producer supplies its own destination.
       openUrl: studioUrlFor(baseUrl, gen.outputId, i, urls.length),
+      // Every generation output is referenceable by id, which is what makes Animate and Edit meaningful.
+      reference: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
     })),
   })
 }
@@ -1000,6 +1017,10 @@ function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidget
       posterUrl: it.type === 'video' ? it.imageUrl : null,
       /** The reference the API takes: `<id>` or `<id>-<n>`, one-based, matching what a person reads. */
       name: it.mediaId ? `${it.mediaId}${it.variation && it.variation > 1 ? `-${it.variation}` : ''}` : it.url,
+      // ⚠️ Only a mediaId is referenceable. A raw url resolved here is not a library item the API can name.
+      reference: it.mediaId
+        ? `${it.mediaId}${it.variation && it.variation > 1 ? `-${it.variation}` : ''}`
+        : undefined,
       contentType: it.type,
       // MEASURED, from the storage spine. Null when nothing measured it, which the tile handles.
       displayAspect: g ? aspectLabel(g.width, g.height) : null,
@@ -1942,6 +1963,58 @@ export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
 }
 
 /** A completed export -> the download URL; an in-flight one -> the exportId to poll. */
+/**
+ * Which formats the widget can actually draw.
+ *
+ * ⚠️ `pdf` and `pptx` have no element, and a multi-slide `png`/`jpg` export comes back as a ZIP rather than
+ * an image. Rendering a tile for any of them would show a broken picture where the text already gives a
+ * working download link, so they stay text.
+ */
+const EXPORT_MEDIUM: Record<string, 'image' | 'video'> = { mp4: 'video', png: 'image', jpg: 'image' }
+
+/**
+ * An export, DISPLAYED. Separate from {@link exportJobResult} by name, not by a flag.
+ *
+ * ## ⛔⛔ ONLY THE TOOL THAT STARTED THE EXPORT KNOWS ITS FORMAT
+ *
+ * `get_export` polls by exportId alone, so it cannot know whether the file is an mp4 or a pptx and can
+ * never render one. Leaving both paths inside one builder made the completeness guard read `get_export` as
+ * a tool that emits a widget, which it does not, and an invariant that has to be argued with is not one.
+ * Two names, each true on its own.
+ */
+export function completedExportResult(
+  job: ExportJob,
+  format: string,
+  baseUrl = DEFAULT_APP_URL,
+): CallToolResult {
+  const prose = `Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`
+  const medium = EXPORT_MEDIUM[format]
+  if (job.status !== 'completed' || !job.outputUrl || !medium) return exportJobResult(job)
+  {
+    /**
+     * ## ⛔⛔ AN EXPORT RENDERS, AND IT IS NOT REFERENCEABLE
+     *
+     * Someone waited for a render, so they should see it. But an `exportId` is not an `outputId`: no
+     * generate tool resolves one, so Animate, Edit and Recreate would emit messages the agent cannot act
+     * on. Omitting `reference` is what hides them, and Download, the verb that actually applies to a
+     * rendered file, stays.
+     *
+     * ⚠️ NO `openUrl` EITHER, and not because it is hard to compute. An export's home is a download; the
+     * project it came from is a different destination with a different meaning, and `/editor/{id}` versus
+     * `/canvas/{id}` is not knowable from here anyway.
+     */
+    return {
+      content: [{ type: 'text', text: prose }],
+      structuredContent: mediaWidgetData({
+        contentType: medium,
+        items: [{ url: job.outputUrl, name: job.exportId, contentType: medium }],
+      }),
+      _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+    }
+  }
+}
+
+/** An export, REPORTED. No widget: a poll does not know the format, so it cannot draw the file. */
 export function exportJobResult(job: ExportJob): CallToolResult {
   if (job.status === 'completed') {
     return text(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`)
