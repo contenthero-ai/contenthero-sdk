@@ -219,25 +219,26 @@ const styles = `
   .laurel-wrap {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
-    transition: opacity .35s ease;
   }
   .laurel-wrap .laurel { width: 38%; max-width: 72px; height: auto; }
 
   /*
-   * ⭐⭐⭐ THE HANDOFF: THE LAUREL STAYS UNTIL THE PIXELS ARE ACTUALLY THERE.
+   * ⭐⭐⭐ THE HANDOFF: THE LAUREL STAYS UNTIL THE PIXELS ARE THERE, THEN THE MEDIA REPLACES IT AT ONCE.
    *
-   * Swapping the placeholder for an img the moment the poll returns urls leaves the tile EMPTY for however
-   * long the download takes, so the sequence reads laurel, blank card, pop. The studio does not do that: it
-   * holds its skeleton until the media reports ready and then cross-fades opacity only.
+   * ⛔ **NO CROSS-FADE, AND NO FADE AT ALL.** Read the studio before assuming otherwise, because its own
+   * comment says "skeleton->resolve crossfade" and the code does not do that. In BOTH studio views the
+   * skeleton and the media are never on screen together: the masonry view swaps component types across a
+   * ternary, and the row view swaps a motion.div wrapper for a plain div, so React unmounts the skeleton
+   * and mounts a fresh card whose reveal starts from opacity 0.
    *
-   * So the media mounts UNDERNEATH at opacity 0 with the laurel over it, and one class flips on load. They
-   * cross-fade in place and nothing moves, because the tile already has its final shape.
+   * ⚠️ Which means the studio has a GAP: the skeleton is gone the moment the row flips to completed, and
+   * the image only appears once it has decoded. This keeps the studio's instant swap and removes the gap,
+   * by holding the laurel until the pixels exist rather than until the status changes.
    */
-  .tile .media { opacity: 0; transition: opacity .35s ease; }
-  .tile.ready .media { opacity: 1; }
-  .tile.ready .laurel-wrap { opacity: 0; pointer-events: none; }
-  /* Audio has no decode event worth waiting on and no picture to fade, so it is ready on arrival. */
-  .tile.audio .media { opacity: 1; }
+  .tile .media { visibility: hidden; }
+  .tile.ready .media { visibility: visible; }
+  /* Audio has no decode event worth waiting on and no picture to hide, so it is ready on arrival. */
+  .tile.audio .media { visibility: visible; }
 
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
   .acts { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; z-index: 1; }
