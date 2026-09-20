@@ -203,7 +203,7 @@ function Media({ output, kind }: { output: Output; kind: WidgetData['contentType
   return <img src={output.url} alt={output.name} loading="lazy" />
 }
 
-/** Reduce measured pixels to the ratio a person recognises, so 2736x1536 reads as `16:9`. */
+/** Reduce measured pixels to the ratio a person recognizes, so 2736x1536 reads as `16:9`. */
 function ratioLabel(w: number, h: number): string {
   const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a)
   const g = gcd(w, h) || 1
