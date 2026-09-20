@@ -1033,23 +1033,50 @@ function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidget
   return items
 }
 
+/**
+ * One inlined image, or the reason there is none.
+ *
+ * ⭐⭐⭐ **THE REASON TRAVELS WITH THE SLOT, BECAUSE A COUNT IS NOT A DIAGNOSIS.** "0 image(s) attached" was
+ * true for a week across two unrelated defects and could not distinguish either from a network blip.
+ */
+export interface InlinedImageSlot {
+  image: { data: string; mimeType: string } | null
+  skipped?: string
+  /** Machine-readable cause, so advice about the CALL is said once rather than once per item. */
+  reason?: string
+}
+
 export function mediaBatchResult(
   result: MediaBatchResult,
-  images: Array<{ data: string; mimeType: string } | null>,
+  images: InlinedImageSlot[],
   baseUrl = DEFAULT_APP_URL,
 ): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
   const keyframeCount = items.reduce((n, it) => n + (it.keyframes?.length ?? 0), 0)
-  const shownImages = images.filter(Boolean).length + keyframeCount
+  const shownImages = images.filter((s) => s?.image).length + keyframeCount
+  /**
+   * ⚠️ REPORTED ONCE PER DISTINCT CAUSE, not once per item. Eight items failing the same way is one fact,
+   * and printing it eight times buries the item lines that carry the urls.
+   */
+  const reasons = [...new Set(images.map((s) => s?.skipped).filter((r): r is string => !!r))]
+  /**
+   * ⭐ ADVICE ABOUT THE CALL, SAID ONCE. Three items crowded out of one budget is ONE fact with three
+   * measurements, and repeating the remedy beside each of them buries the item lines that carry the urls.
+   */
+  const crowdedOut = images.some((s) => s?.reason === 'budget-spent')
   const summary =
     `Resolved ${okCount}/${items.length} media item(s); ${shownImages} image(s) attached below` +
     (keyframeCount > 0 ? ` (incl. ${keyframeCount} video keyframe(s))` : '') +
+    (reasons.length > 0 ? `; not attached: ${reasons.join('; ')}` : '') +
+    (crowdedOut ? '. Ask for fewer items per call to see the rest' : '') +
     `.\n\n` +
-    items.map((it, i) => batchItemLine(it, i, Boolean(images[i]) || (it.keyframes?.length ?? 0) > 0)).join('\n')
+    items
+      .map((it, i) => batchItemLine(it, i, Boolean(images[i]?.image) || (it.keyframes?.length ?? 0) > 0))
+      .join('\n')
   const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
   items.forEach((it, i) => {
-    const img = images[i]
+    const img = images[i]?.image
     if (img) {
       content.push({ type: 'text', text: `Image for item [${i + 1}]:` })
       content.push({ type: 'image', data: img.data, mimeType: img.mimeType })

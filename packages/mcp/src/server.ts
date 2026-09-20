@@ -424,12 +424,23 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
       }
     }
     if (gen.contentType === 'image') {
-      // Best-effort: a miss (host not allowlisted, over the budget, network hiccup) degrades this one output
-      // to a link instead of failing a generation the user already paid for.
-      const bytes = await fetchMediaImageBase64(uri, budget)
-      if (bytes) {
-        budget -= bytes.data.length
-        out.push({ kind: 'bytes', type: 'image', data: bytes.data, mimeType: bytes.mimeType })
+      /**
+       * ⭐ THE PREVIEW IS TRIED FIRST, AND THE SERVER DECIDED ITS ADDRESS.
+       *
+       * `previewUrls` is index-aligned with `outputUrls`, so the derivative for THIS output is at THIS index.
+       * Without it the master is the only candidate, and a master has been too large to inline since image
+       * models started returning multi-megabyte PNGs: every `generate_image` returned a link and the model
+       * could not see what it had just made.
+       *
+       * ⚠️ Optional on the type, so an older server simply yields `undefined` and the master path is taken
+       * exactly as before. Best-effort throughout: a miss degrades this one output to a link instead of
+       * failing a generation the person already paid for.
+       */
+      const previewUri = gen.previewUrls?.[i] ?? null
+      const hit = await fetchDisplayImage(uri, previewUri, budget)
+      if (hit.ok) {
+        budget -= hit.image.data.length
+        out.push({ kind: 'bytes', type: 'image', data: hit.image.data, mimeType: hit.image.mimeType })
       }
     }
     /**
@@ -473,21 +484,26 @@ function isAllowedImageHost(url: string): boolean {
 }
 
 /**
- * The optimized `.preview.webp` sibling of a studio-outputs image object, or the
- * url unchanged. Mirrors the app's previewImageSrc convention so we can prefer
- * the light derivative when it exists (and fall back to the raw when it does not,
- * e.g. an uploaded image or a not-yet-optimized video thumbnail). Pure string rule.
+ * ⛔⛔⛔ **THERE WAS A `optimizedImageSibling` HERE. IT COULD NOT WORK, AND DELETING IT IS THE FIX.**
+ *
+ * It rewrote a master's url into its `.preview.webp` sibling as a pure string rule, mirroring what the app's
+ * `previewImageSrc` does in a BROWSER. That rule is sound there and unsound here, and it failed twice over:
+ *
+ * 1. **It had silently stopped firing.** It was gated on the url containing `/object/public/studio-outputs/`,
+ *    a marker the R2 and gateway migration removed from every address we serve. So it returned every modern
+ *    url unchanged and this path had been fetching FULL-RESOLUTION MASTERS for as long as the gateway existed.
+ * 2. **Widening the gate would have made it 403.** The urls we now hold are CAPABILITY urls whose token names
+ *    one object in its `obj` claim. Rewriting the path invalidates the signature. Measured 2026-09-20 against
+ *    the live gateway: every derived sibling refused.
+ *
+ * ⭐ **A CALLER CANNOT MINT ITSELF PERMISSION FOR AN OBJECT IT WAS NOT GIVEN**, so the address has to come
+ * from the server, which knows both whether the derivative exists and what url this audience may read it
+ * from. That is `previewUrl` on a resolved media item and `previewUrls` on a generation.
+ *
+ * ⚠️ The consequence of the two dead ends was identical and invisible: masters are 1.7 to 2.6 MB, base64
+ * inflates a third, the budget is 900,000 characters, so EVERY image was rejected as over budget and every
+ * result said "0 image(s) attached" with no reason. Do not reintroduce a path rule here in any form.
  */
-function optimizedImageSibling(url: string): string {
-  if (!url.includes('/object/public/studio-outputs/')) return url
-  if (url.includes('.preview.webp')) return url
-  const qIdx = url.indexOf('?')
-  const path = qIdx < 0 ? url : url.slice(0, qIdx)
-  const query = qIdx < 0 ? '' : url.slice(qIdx + 1)
-  const rewritten = path.replace(/\.(png|jpe?g|webp|gif|avif|tiff?)$/i, '.preview.webp')
-  if (rewritten === path) return url
-  return query ? `${rewritten}?${query}` : rewritten
-}
 
 /**
  * ⛔⛔⛔ **A HOST ENFORCES A 1 MB CEILING ON A WHOLE TOOL RESULT, AND THIS IS SIZED AGAINST THAT.**
@@ -538,8 +554,73 @@ async function fetchAudioBytes(url: string, budget: number): Promise<{ data: str
   }
 }
 
-async function fetchImageBytes(url: string, budget: number): Promise<{ data: string; mimeType: string } | null> {
-  if (!isAllowedImageHost(url)) return null
+/**
+ * ⭐⭐⭐ **WHY AN IMAGE WAS NOT ATTACHED, AS A VALUE RATHER THAN AS SILENCE.**
+ *
+ * `fetchImageBytes` returned `null` for five genuinely different reasons and the summary line reported one
+ * number: "0 image(s) attached below". That cost a week. Two separate defects were live at once (a rewrite
+ * rule that had stopped firing, and masters that outgrew every budget) and the result could not distinguish
+ * them from a network blip, so every theory was equally consistent with the evidence.
+ *
+ * ⛔ **A COUNT IS NOT A DIAGNOSIS.** Whatever replaces this must keep naming the cause. The rule the codebase
+ * keeps relearning: a sentinel that collapses distinct failures into one value moves the defect into every
+ * caller, and here the caller was a person reading a transcript.
+ */
+type ImageSkipReason =
+  | 'host-not-allowed'
+  | 'fetch-failed'
+  | 'not-ok'
+  | 'not-an-image'
+  /** Bigger than the whole per-result allowance: it would never have fit, at any position in the call. */
+  | 'over-budget'
+  /**
+   * Small enough on its own, but the earlier items in this call had already spent the shared allowance.
+   *
+   * ⭐ DISTINCT FROM `over-budget` BECAUSE THE FIX IS DIFFERENT AND THE READER CAN ACT ON IT. "Too large"
+   * invites resizing an asset that is already small; "ask for fewer items" is the actual remedy, and it is
+   * the reading that tells you the tail of a long batch was truncated rather than broken.
+   */
+  | 'budget-spent'
+
+interface FetchedImage {
+  data: string
+  mimeType: string
+}
+
+type ImageFetch = { ok: true; image: FetchedImage } | { ok: false; reason: ImageSkipReason; detail?: string }
+
+/** Human-readable, and deliberately short: it rides in a tool result a person reads. */
+function skipLabel(reason: ImageSkipReason, detail?: string): string {
+  switch (reason) {
+    case 'host-not-allowed':
+      return 'host not allowed'
+    case 'fetch-failed':
+      return `fetch failed${detail ? ` (${detail})` : ''}`
+    case 'not-ok':
+      return `refused${detail ? ` (HTTP ${detail})` : ''}`
+    case 'not-an-image':
+      return `not an image${detail ? ` (${detail})` : ''}`
+    case 'over-budget':
+      return `too large to inline${detail ? ` (${detail})` : ''}`
+    case 'budget-spent':
+      return `no room left in this result${detail ? ` (${detail})` : ''}`
+  }
+}
+
+/**
+ * Over the REMAINING budget, or over the whole allowance? The two look identical at the fetch and are not.
+ *
+ * ⚠️ Compared against `MAX_INLINE_BASE64_CHARS` rather than against the budget it was handed, because that
+ * constant is what "could this ever have fit" means. An item that fits the allowance and not the remainder
+ * was crowded out by its neighbors, which is a property of the CALL, not of the asset.
+ */
+function budgetReason(encodedLength: number): ImageSkipReason {
+  return encodedLength > MAX_INLINE_BASE64_CHARS ? 'over-budget' : 'budget-spent'
+}
+
+async function fetchImage(url: string, budget: number): Promise<ImageFetch> {
+  if (!isAllowedImageHost(url)) return { ok: false, reason: 'host-not-allowed' }
+  let res: Response
   try {
     /**
      * ⚠️⚠️ **A BARE `fetch` HAS NO TIMEOUT, AND THIS ONE IS ON THE PATH OF EVERY GENERATION RESULT.**
@@ -551,35 +632,60 @@ async function fetchImageBytes(url: string, budget: number): Promise<{ data: str
      * ⭐ Failing is CHEAP here and the fallback is good: no block, keep the link. Waiting is what is
      * expensive, so the budget is deliberately short.
      */
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-    if (!res.ok) return null
-    const mimeType = res.headers.get('content-type') || 'image/jpeg'
-    if (!mimeType.startsWith('image/')) return null
-    // Checked BEFORE reading the body where the server declares it, and again after, because
-    // `content-length` is absent on a chunked response and a header is not a measurement.
-    const declared = Number(res.headers.get('content-length') ?? '')
-    if (Number.isFinite(declared) && declared * 1.37 > budget) return null
-    const data = Buffer.from(await res.arrayBuffer()).toString('base64')
-    if (data.length > budget) return null
-    return { data, mimeType }
-  } catch {
-    return null
+    res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+  } catch (err) {
+    return { ok: false, reason: 'fetch-failed', detail: err instanceof Error ? err.name : undefined }
   }
+  if (!res.ok) return { ok: false, reason: 'not-ok', detail: String(res.status) }
+  const mimeType = res.headers.get('content-type') || 'image/jpeg'
+  if (!mimeType.startsWith('image/')) return { ok: false, reason: 'not-an-image', detail: mimeType }
+  // Checked BEFORE reading the body where the server declares it, and again after, because
+  // `content-length` is absent on a chunked response and a header is not a measurement.
+  const declared = Number(res.headers.get('content-length') ?? '')
+  if (Number.isFinite(declared) && declared * 1.37 > budget) {
+    return { ok: false, reason: budgetReason(declared * 1.37), detail: `${Math.round(declared / 1024)} KB` }
+  }
+  let data: string
+  try {
+    data = Buffer.from(await res.arrayBuffer()).toString('base64')
+  } catch (err) {
+    return { ok: false, reason: 'fetch-failed', detail: err instanceof Error ? err.name : undefined }
+  }
+  if (data.length > budget) {
+    return { ok: false, reason: budgetReason(data.length), detail: `${Math.round((data.length * 3) / 4096)} KB` }
+  }
+  return { ok: true, image: { data, mimeType } }
 }
 
 /**
- * Fetch a still image URL for an image content block, preferring the optimized
- * `.preview.webp` sibling and falling back to the raw url if that is missing. This
- * auto-upgrades as the optimization pipeline backfills derivatives, with no code
- * change here. Best-effort: any failure returns null and the item stays text-only.
+ * The bytes for one image content block: the server-minted preview when there is one, else the master.
+ *
+ * ⭐ **THE ORDER IS THE WHOLE POINT, AND NEITHER ADDRESS IS COMPUTED HERE.** `preview` arrives from the API
+ * already minted against a derivative it confirmed exists. `master` is the fallback for an asset that has no
+ * derivative yet, and it is genuinely a fallback: it succeeds only for assets small enough to inline, which
+ * today means older ones.
+ *
+ * ⚠️ **THE REPORTED REASON IS THE BEST CANDIDATE'S, NOT THE LAST ONE TRIED.** When a preview exists it is
+ * the only candidate that realistically fits, so its failure is what decided the outcome. Reporting the
+ * master's instead printed "too large to inline (2,890 KB)" for an item whose real problem was a 288 KB
+ * preview meeting an allowance three earlier items had already spent. Both numbers are true; only one tells
+ * the reader to ask for fewer items rather than to go resize an asset that is already small.
  */
-async function fetchMediaImageBase64(url: string, budget: number): Promise<{ data: string; mimeType: string } | null> {
-  const optimized = optimizedImageSibling(url)
-  if (optimized !== url) {
-    const hit = await fetchImageBytes(optimized, budget)
-    if (hit) return hit
+async function fetchDisplayImage(
+  master: string | null | undefined,
+  preview: string | null | undefined,
+  budget: number,
+): Promise<ImageFetch> {
+  let previewMiss: ImageFetch | null = null
+  if (preview && preview !== master) {
+    const hit = await fetchImage(preview, budget)
+    if (hit.ok) return hit
+    previewMiss = hit
   }
-  return fetchImageBytes(url, budget)
+  if (!master) return previewMiss ?? { ok: false, reason: 'fetch-failed' }
+  const hit = await fetchImage(master, budget)
+  if (hit.ok) return hit
+  return previewMiss ?? hit
 }
 
 
@@ -594,22 +700,38 @@ async function fetchMediaImageBase64(url: string, budget: number): Promise<{ dat
  * already spent and every one of them would pass a check the set as a whole fails. Most calls carry one to
  * three items, so the latency is small and the alternative is a ceiling that holds only by luck.
  *
- * Returns one entry per input, `null` where the asset did not fit or could not be read, so callers keep
- * positional alignment with what they asked for.
+ * Returns one entry per input, positionally aligned with what was asked for. An entry that did not attach
+ * carries WHY, because the count alone is not diagnosable: see `ImageSkipReason`.
  */
+export interface InlinedImage {
+  image: { data: string; mimeType: string } | null
+  /** Set only when `image` is null. Short enough to print in a result line. */
+  skipped?: string
+  /**
+   * The machine-readable cause, so a formatter can decide what to SAY about a set of them without parsing
+   * the sentence it is about to print. "Ask for fewer items" is advice about the whole call, so it belongs
+   * once at the end rather than repeated per item.
+   */
+  reason?: ImageSkipReason
+}
+
 async function inlineImagesWithinBudget(
-  urls: readonly (string | null | undefined)[],
-): Promise<Array<{ data: string; mimeType: string } | null>> {
+  items: readonly { url: string | null | undefined; previewUrl?: string | null }[],
+): Promise<InlinedImage[]> {
   let budget = MAX_INLINE_BASE64_CHARS
-  const out: Array<{ data: string; mimeType: string } | null> = []
-  for (const url of urls) {
-    if (!url) {
-      out.push(null)
+  const out: InlinedImage[] = []
+  for (const item of items) {
+    if (!item.url && !item.previewUrl) {
+      out.push({ image: null })
       continue
     }
-    const hit = await fetchMediaImageBase64(url, budget)
-    if (hit) budget -= hit.data.length
-    out.push(hit)
+    const hit = await fetchDisplayImage(item.url, item.previewUrl, budget)
+    if (hit.ok) {
+      budget -= hit.image.data.length
+      out.push({ image: hit.image })
+    } else {
+      out.push({ image: null, skipped: skipLabel(hit.reason, hit.detail), reason: hit.reason })
+    }
   }
   return out
 }
@@ -2261,8 +2383,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // transcript / posterless items stay text-only. See get-context §9.5.
         // ⚠️ Ten items at 840 KB each is 8 MB against a 1 MB ceiling, and this used to fetch them all in
         // parallel with no bound. One shared budget, spent in order.
+        // ⭐ `previewUrl` is preferred inside, and it is the difference between the agent seeing these and
+        // not: an image master is routinely 1.7 to 2.6 MB, which no budget under a 1 MB ceiling can admit.
         const images = await inlineImagesWithinBudget(
-          result.items.map((it) => (it.ok ? it.imageUrl : null)),
+          result.items.map((it) =>
+            it.ok ? { url: it.imageUrl, previewUrl: it.previewUrl } : { url: null },
+          ),
         )
         return mediaBatchResult(result, images, client.baseUrl)
       } catch (err) {

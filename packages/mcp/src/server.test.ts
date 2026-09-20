@@ -5,6 +5,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
 import { buildServer, attachmentsFor } from './server.js'
+import { GENERATION_WIDGET_URI } from './widget-uri.js'
+import { PACKAGE_VERSION } from './widget/generation.js'
 import { assertGroupsCoverTools, groupedToolNames } from './groups.js'
 
 /** A discovery-catalog entry, in the /api/v1/models projection shape. */
@@ -3002,6 +3004,28 @@ test('the widget binding is emitted in BOTH the modern and legacy spellings', as
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const gen = tools.find((t) => t.name === 'generate_image')
-  assert.equal((gen?._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri, 'ui://contenthero/generation.html')
-  assert.equal(gen?._meta?.['ui/resourceUri'], 'ui://contenthero/generation.html')
+  // IMPORTED, not restated. A copy of the string here would keep passing while the server advertised a
+  // different name, which is the same blindness the guard tests exist to remove.
+  assert.equal((gen?._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri, GENERATION_WIDGET_URI)
+  assert.equal(gen?._meta?.['ui/resourceUri'], GENERATION_WIDGET_URI)
+})
+
+test('the widget uri carries the package version, so a publish can never be served from cache', async () => {
+  /**
+   * ⭐ THE REAL INVARIANT, asserted rather than the literal. A host caches a widget resource by its uri, so a
+   * name that is the same across builds means new bytes are never fetched and a shipped fix stays invisible.
+   * The name was fixed for this server's entire life, which is how a corrected widget could be published,
+   * pinned and deployed while the frame kept rendering the old one.
+   */
+  assert.ok(
+    GENERATION_WIDGET_URI.includes(PACKAGE_VERSION),
+    `widget uri "${GENERATION_WIDGET_URI}" must contain the package version "${PACKAGE_VERSION}"`,
+  )
+  // And it must still be a `ui://` identifier, which is what makes the host ask this server for its contents.
+  assert.ok(GENERATION_WIDGET_URI.startsWith('ui://'))
+
+  // The resource the server actually serves must answer to that exact name, or the frame loads nothing at all.
+  const mcp = await connect(fakeClient())
+  const { contents } = await mcp.readResource({ uri: GENERATION_WIDGET_URI })
+  assert.equal(contents[0]?.uri, GENERATION_WIDGET_URI)
 })

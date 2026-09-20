@@ -375,6 +375,20 @@ export interface Generation {
   modelId: string
   /** Output asset URLs. Empty until the generation completes. */
   outputUrls: string[]
+  /**
+   * The small `preview.webp` derivative of each entry in `outputUrls`, INDEX-ALIGNED, `null` where none exists.
+   *
+   * ⭐⭐⭐ **ANYTHING READING BYTES TO SHOW A MODEL SHOULD READ THIS FIRST.** A master is routinely 1.7 to
+   * 2.6 MB, and base64 inflates it by a third against a 1 MB ceiling on an entire MCP tool result, so a master
+   * cannot be inlined at all. Reading it is how an agent ends up with no vision of what it just generated.
+   *
+   * ⛔ **NEVER DERIVE THIS FROM `outputUrls` BY REWRITING THE PATH.** These are capability URLs whose token
+   * names ONE object; a rewritten path is refused with 403. The server mints this against a derivative it has
+   * confirmed exists, which is the only way a caller gets an address it may actually read.
+   *
+   * ⚠️ Absent on an older server. Treat a missing array as "no previews", never as an error.
+   */
+  previewUrls?: (string | null)[]
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
   createdAt: string
@@ -965,6 +979,18 @@ export interface ResolvedMediaBatchItem {
    * this into an image block; SDK/CLI just surface the URL.
    */
   imageUrl: string | null
+  /**
+   * The same picture as `imageUrl` as its small pre-generated `preview.webp` derivative, when one exists.
+   *
+   * ⭐⭐⭐ **FETCH THIS BEFORE `imageUrl`, AND NEVER COMPUTE IT.** A master is routinely two to three
+   * megabytes, which no inline-image budget can admit against a 1 MB host result ceiling, so reading the
+   * master is how an agent ends up with no vision at all. Deriving the path yourself does not work either:
+   * these are capability URLs whose token names ONE object, so a rewritten path is refused with 403. The
+   * server mints this against a derivative it has confirmed exists.
+   *
+   * Null when no derivative has been written, in which case `imageUrl` is the only answer.
+   */
+  previewUrl: string | null
   type: MediaType | null
   model: string | null
   prompt: string | null

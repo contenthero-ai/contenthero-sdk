@@ -49,10 +49,36 @@ const ENTRY = join(HERE, '..', 'dist', 'index.js')
 /** Measured from Claude Desktop's own refusal: "Tool result is too large. Maximum size is 1MB." */
 const HOST_RESULT_CEILING = 1_000_000
 
+/**
+ * `required` separates "this block is a bonus" from "its absence is the defect".
+ *
+ * ⭐⭐⭐ **AN IMAGE BLOCK IS REQUIRED, AND TREATING IT AS OPTIONAL HID THE BUG FOR A WEEK.** This harness
+ * printed `OK ... (link-only: too large to inline)` for a result carrying NO pixels, on the reasoning that a
+ * large asset legitimately cannot be inlined. That reasoning is true for AUDIO, which has no derivative: an
+ * hour of music cannot fit under a 1 MB ceiling and demanding it would be a check nobody can satisfy.
+ *
+ * It was never true for an IMAGE. Every image master has a `preview.webp` of 55 to 216 KB, so "too large"
+ * means the preview was not reached, which is precisely the failure. The note read as an explanation and was
+ * in fact the symptom, printed next to the word OK.
+ *
+ * ⛔ A check that passes when the feature is off is not a check.
+ */
 const EXPECTED = {
-  image: { blocks: ['image'], why: 'an image block is the fallback for hosts without app support' },
-  audio: { blocks: ['audio'], why: 'MCP has a first-class audio block and it plays inline' },
-  video: { blocks: [], why: 'MCP has no video block; the widget is the only thing that can play it' },
+  image: {
+    blocks: ['image'],
+    required: true,
+    why: 'a preview derivative always fits, so link-only means the preview was never reached',
+  },
+  audio: {
+    blocks: ['audio'],
+    required: false,
+    why: 'MCP has a first-class audio block, but a long track has no derivative and legitimately will not fit',
+  },
+  video: {
+    blocks: [],
+    required: false,
+    why: 'MCP has no video block; the widget is the only thing that can play it',
+  },
 }
 
 /**
@@ -174,9 +200,15 @@ try {
      * ⛔ The two real failures stay failures: no widget (nothing renders anywhere), and over the ceiling
      * (the host REJECTS the call, so the person pays for a generation they cannot reach).
      */
-    const has = hasWidget && !overCeiling
+    // ⛔ A REQUIRED BLOCK IS PART OF THE VERDICT, NOT A FOOTNOTE. See EXPECTED.
+    const blocksSatisfied = hasBlocks || !want.required
+    const has = hasWidget && !overCeiling && blocksSatisfied
     const widget = hasWidget ? 'widget' : boundTo ? 'BOUND BUT NO DATA' : feeds ? 'DATA BUT UNBOUND' : 'NO WIDGET'
-    const note = has && want.blocks.length && !hasBlocks ? '  (link-only: too large to inline)' : ''
+    const note = want.blocks.length && !hasBlocks
+      ? want.required
+        ? `  NO ${want.blocks.join('/')} BLOCK: ${want.why}`
+        : '  (link-only: too large to inline)'
+      : ''
     /**
      * ⭐⭐ THE CHIP, PRINTED RATHER THAN INFERRED.
      *
