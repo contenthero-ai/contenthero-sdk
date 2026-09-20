@@ -91,6 +91,11 @@ const styles = `
    * two upward. A lone third tile CENTERS under the pair rather than leaving a hole, which reads as a
    * deliberate arrangement instead of a missing item.
    */
+  /**
+   * ⚠️ THE WHOLE SET HAS TO FIT ON SCREEN, OR THE GRID BUYS NOTHING. A 2x2 of portrait images ran taller
+   * than the viewport, so comparing variation 1 with variation 4 meant scrolling, which is exactly the
+   * serial comparison the grid replaced the carousel to avoid. Capping each tile keeps the set visible.
+   */
   .grid { display: grid; gap: 8px; padding: 10px 12px; }
   .grid.n1 { grid-template-columns: 1fr; }
   .grid.n2, .grid.n3, .grid.n4 { grid-template-columns: 1fr 1fr; }
@@ -105,7 +110,8 @@ const styles = `
   .tile.img { cursor: zoom-in; }
   .tile.sel { border-color: ${GOLD}; }
   .tile:focus-within { outline: 2px solid ${GOLD}; outline-offset: 2px; }
-  .tile img, .tile video { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; }
+  .tile img, .tile video { display: block; width: 100%; height: auto; max-height: 220px; object-fit: contain; }
+  .grid.n1 img, .grid.n1 video { max-height: 420px; }
   .tile audio { width: 100%; padding: 22px 14px; }
 
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
@@ -144,19 +150,46 @@ const styles = `
   .full { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--color-background-primary, Canvas); }
   .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
   .full .stage img, .full .stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
-  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; justify-content: center; }
+  /* ⚠️ The host's composer overlays the bottom of a fullscreen frame, so the strip needs room BELOW it or
+     it sits behind the message box. Measured: clipped by roughly a composer's height. */
+  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 16px 96px; overflow-x: auto; justify-content: center; }
   .full .strip .t { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; background: none; flex: 0 0 auto; }
   .full .strip .t[aria-current="true"] { border-color: ${GOLD}; }
   .full .strip .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .full .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 16px 16px; flex-wrap: wrap; }
+  .full .strip + .foot { padding-bottom: 0; }
 `
 
-/** The mark, inline: the frame may fetch nothing that is not already inside this document. */
-function Mark() {
+/**
+ * The ContentHero laurel, the REAL one.
+ *
+ * ⛔ This replaced a hand-drawn placeholder I invented, which looked like a generic hexagon and had nothing
+ * to do with the brand. Path data copied verbatim from `components/chat/LaurelStatic.tsx` in the app.
+ *
+ * ⚠️ COPIED, NOT IMPORTED, AND THAT IS FORCED. This bundle ships inside the published MCP package and must
+ * contain everything it draws; it cannot reach into the app repo. The app's own file already carries the
+ * same note about its relationship to `LaurelLoader`, so the copy is the third instance of one shape rather
+ * than the second. ⏭️ Publishing the mark as a tiny shared package is the convergence, once more than these
+ * two need it.
+ */
+const LAUREL = [
+  'M11.15,47.67l6.07-1.67c3.58-.98,6.21-3.75,7.02-7.6l1.4-6.65-4.42,1.12c-3.69.94-7.74,3.92-9.46,7.77.03-4.07-4.23-7.74-7.63-9.28l-4.13-1.88.08,6.78c.05,3.92,2.1,7.11,5.43,8.7l5.64,2.7Z',
+  'M23.89,60.4c2.99-2.1,4.45-5.57,3.8-9.45l-1.12-6.7-3.74,2.52c-3.12,2.1-5.82,6.23-6.02,10.42-1.46-3.82-6.8-5.85-10.55-6.18l-4.56-.4,2.56,6.33c1.48,3.66,4.57,5.97,8.27,6.36l6.28.67,5.08-3.57Z',
+  'M14.43,17.52l-.48-6.01c-.29-3.54,1.52-6.7,5.04-8.46l6.08-3.05.44,4.36c.38,3.72-.44,7.4-4.21,9.44l-6.87,3.72Z',
+  'M81.48,31.59l-6.18-1.26c-3.64-.75-6.47-3.33-7.55-7.12l-1.88-6.54,4.49.83c3.75.69,8,3.4,10,7.13-.32-4.05,3.66-8,6.94-9.76l3.98-2.15.41,6.77c.24,3.92-1.58,7.23-4.78,9.03l-5.43,3.07Z',
+  'M82.69,47.67l-6.07-1.67c-3.58-.98-6.21-3.75-7.02-7.6l-1.4-6.65,4.42,1.12c3.69.94,7.74,3.92,9.46,7.77-.03-4.07,4.23-7.74,7.63-9.28l4.13-1.88-.08,6.78c-.05,3.92-2.1,7.11-5.43,8.7l-5.64,2.7Z',
+  'M69.95,60.4c-2.99-2.1-4.45-5.57-3.8-9.45l1.12-6.7,3.74,2.52c3.12,2.1,5.82,6.23,6.02,10.42,1.46-3.82,6.8-5.85,10.55-6.18l4.56-.4-2.56,6.33c-1.48,3.66-4.57,5.97-8.27,6.36l-6.28.67-5.08-3.57Z',
+  'M39.41,88.17l-1.89-2.36-2.12-2.64c2.61-2.85,5.43-5.02,8.29-6.79-1.44-.96-2.92-1.7-4.36-2.08-2.56-.68-5.26-.56-7.82.51l-1.16.48c-3.41,1.42-7.3.9-10.5-1.56l-5.55-4.26,4.15-1.83c3.42-1.51,9.11-2.29,12.38.32-2.02-3.72-1.86-8.58-.27-11.89l1.91-3.96,4.49,5.26c2.6,3.04,3.16,6.74,1.68,9.99l-1.23,2.69c2.93,1.37,6.19,2.72,9.51,4.47,3.32-1.75,6.58-3.1,9.51-4.47l-1.23-2.69c-1.48-3.25-.92-6.94,1.68-9.99l4.49-5.26,1.91,3.96c1.59,3.3,1.76,8.17-.27,11.89,3.27-2.61,8.96-1.83,12.38-.32l4.15,1.83-5.55,4.26c-3.21,2.46-7.09,2.99-10.5,1.56l-1.16-.48c-2.57-1.07-5.27-1.19-7.82-.51-1.45.38-2.92,1.12-4.36,2.08,2.86,1.77,5.68,3.95,8.29,6.79l-2.12,2.64-1.89,2.36c-1.38-2.49-4.2-6.22-7.52-9.24-3.32,3.01-6.14,6.75-7.52,9.24Z',
+  'M79.42,17.52l.48-6.01c.29-3.54-1.52-6.7-5.04-8.46l-6.08-3.05-.44,4.36c-.38,3.72.44,7.4,4.21,9.44l6.87,3.72Z',
+  'M12.36,31.59l6.18-1.26c3.64-.75,6.47-3.33,7.55-7.12l1.88-6.54-4.49.83c-3.75.69-8,3.4-10,7.13.32-4.05-3.66-8-6.94-9.76l-3.98-2.15-.41,6.77c-.24,3.92,1.58,7.23,4.78,9.03l5.43,3.07Z',
+] as const
+
+function Mark({ size = 18 }: { size?: number }) {
   return (
-    <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M12 7v10M8 9.5v5M16 9.5v5" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" />
+    <svg viewBox="0 0 100 100" width={size} height={size} className="mark" aria-hidden="true">
+      {LAUREL.map((d) => (
+        <path key={d} d={d} fill={GOLD} />
+      ))}
     </svg>
   )
 }
@@ -263,13 +296,8 @@ function Widget() {
   if (full) {
     return (
       <div className="full">
-        <div className="head">
-          <Mark />
-          <span className="title">ContentHero</span>
-          <span className="spacer" />
-          <button className="pill ghost" onClick={() => void setMode(false)}>Close</button>
-        </div>
-        <div className="rule" />
+        {/* ⛔ NO HEADER HERE. The host already frames a fullscreen app with its own title and close control,
+            so drawing ours produced two of each stacked on top of one another. */}
         <div className="stage">
           <Media output={current} kind={data.contentType} />
         </div>
@@ -302,16 +330,16 @@ function Widget() {
 
   return (
     <div className="wrap">
+      {/* ⭐ METADATA LEFT, MARK RIGHT. The wordmark and the count both went: the host already shows which
+          connector answered, and the count is said once at the bottom instead of twice. */}
       <div className="head">
-        <Mark />
-        <span className="title">ContentHero</span>
+        <div className="badges">{badges}</div>
         <span className="spacer" />
-        <span className="muted">{label}</span>
+        <Mark size={20} />
       </div>
-      <div className="rule" />
 
-      <div className="meta">
-        {data.prompt && (
+      {data.prompt && (
+        <div className="meta">
           <p
             className={openPrompt ? 'prompt' : 'prompt clamped'}
             onClick={() => setOpenPrompt((v) => !v)}
@@ -319,15 +347,14 @@ function Widget() {
           >
             {data.prompt}
           </p>
-        )}
-        <div className="badges">{badges}</div>
-      </div>
+        </div>
+      )}
 
       <div className={gridClass}>
         {data.outputs.map((o, i) => (
           <div
             key={o.url}
-            className={`tile${data.contentType === 'image' ? ' img' : ''}${i === index ? ' sel' : ''}`}
+            className={`tile${data.contentType === 'image' ? ' img' : ''}`}
             onClick={() => {
               setIndex(i)
               if (data.contentType === 'image') void setMode(true)
@@ -351,7 +378,7 @@ function Widget() {
             )}
             <div className="acts">
               <button className="pill" onClick={(e) => { e.stopPropagation(); download(o) }}>Download</button>
-              <button className="pill ghost" onClick={(e) => { e.stopPropagation(); open(o) }}>Open</button>
+              <button className="pill" onClick={(e) => { e.stopPropagation(); open(o) }}>Open</button>
             </div>
           </div>
         ))}
@@ -359,7 +386,7 @@ function Widget() {
 
       {canExpand && data.contentType === 'image' && (
         <div className="bar">
-          <span className="muted">{n > 1 ? `Variation ${index + 1} of ${n}` : ''}</span>
+          <span className="muted">{label}</span>
           <span className="spacer" />
           <button className="pill ghost" onClick={() => void setMode(true)}>Expand</button>
         </div>
