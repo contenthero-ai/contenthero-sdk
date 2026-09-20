@@ -152,7 +152,13 @@ function fakeClient(overrides = {}) {
       inspirationAccounts: [],
       knowledge: [{ id: 'kn1', title: 'Origin', sourceType: 'note', sourceUrl: null, contentPreview: 'We started...' }],
     }),
-    generate: async () => ({ outputId: 'aud1', status: 'completed', outputUrls: ['https://cdn/a.mp3'] }),
+    /**
+     * ⚠️ `generate` IS THE GENERATE_* PATH NOW as well as the audio one: image, video, upscale and lip
+     * sync submit and return a pollable pending result rather than waiting. They read only `outputId`
+     * from this, so the completed audio shape serves both without a second fake.
+     */
+    generate: async () => ({ outputId: 'gen1', status: 'completed', outputUrls: ['https://cdn/a.mp3'] }),
+    /** Still the path for `generate_audio` and anything else that genuinely waits for its result. */
     generateAndWait: async () => ({
       outputId: 'gen1',
       status: 'completed',
@@ -619,20 +625,32 @@ test('get_balance formats balance, tier, and top-up state', async () => {
   assert.match(out, /auto top-up: on/)
 })
 
-test('generate_image returns the image URLs on completion', async () => {
+test('generate_image submits and hands back a pollable id, rather than waiting', async () => {
+  /**
+   * ⭐⭐⭐ THE CONTRACT CHANGED ON PURPOSE, AND THIS IS THE ASSERTION THAT SAYS SO.
+   *
+   * It used to wait inline for up to 50 seconds and return finished urls. A widget mounts when the TOOL
+   * RESULT arrives, so any job finishing inside that window produced a card that was already full: the
+   * skeletons and the fill-in were unreachable for every generation fast enough to matter. Submitting and
+   * returning means the card exists while there is progress to show.
+   */
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
     name: 'generate_image',
     arguments: { modelId: 'nano-banana-2', prompt: 'a cat' },
   })
-  assert.match(urlsIn(res), /https:\/\/cdn\/x\.png/)
   assert.ok(!res.isError)
+  // The id is what makes it resumable: the job is running and charged whether or not anyone polls.
+  assert.match(res.content[0].text, /gen1/)
+  assert.match(res.content[0].text, /get_generation_status/)
+  // And the payload the widget draws its placeholders from.
+  assert.equal((res.structuredContent as { status?: string })?.status, 'processing')
 })
 
 test('generate_video surfaces a smart-wait timeout as a pollable pending result', async () => {
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async () => {
+      generate: async () => {
         throw new GenerationTimeoutError('pending-99')
       },
     }),
@@ -698,7 +716,7 @@ test('generate_image forwards mode via the parameters passthrough', async () => 
   let captured
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async (req) => {
+      generate: async (req) => {
         captured = req
         return {
           outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
@@ -727,7 +745,7 @@ test('generate_image forwards avatarId, so a generation can file itself as a loo
   let captured
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async (req) => {
+      generate: async (req) => {
         captured = req
         return {
           outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
@@ -767,7 +785,7 @@ test('generate_video forwards wan multiShot and reference audio', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async (req) => {
+      generate: async (req) => {
         captured = req
         return {
           outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast',
@@ -812,7 +830,7 @@ test('generate_audio returns the audio URL synchronously', async () => {
 test('insufficient credits comes back as an isError result with detail', async () => {
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async () => {
+      generate: async () => {
         throw new InsufficientCreditsError('Insufficient credits', { balance: 2, required: 10 })
       },
     }),
@@ -832,7 +850,7 @@ test('rejects an unknown model at the schema boundary', async () => {
   // mean the enum guardrail held and the handler was not invoked.
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async () => {
+      generate: async () => {
         throw new Error('handler should not be reached for an invalid modelId')
       },
     }),
@@ -934,7 +952,10 @@ test('upscale accepts an upscale model and returns the result', async () => {
     arguments: { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' },
   })
   assert.ok(!res.isError, 'a valid upscale call should succeed')
-  assert.match(urlsIn(res), /https:\/\/cdn\/x\.png/)
+  // ⚠️ SUBMITS AND RETURNS, like every other generate_* tool: an upscale is work in progress, and its card
+  // should exist while the work is happening rather than appearing already finished.
+  assert.match(res.content[0].text, /gen1/)
+  assert.match(res.content[0].text, /get_generation_status/)
 })
 
 test('upscale rejects a non-upscale model (enum filter)', async () => {
@@ -956,7 +977,7 @@ test('generate_lip_sync (script mode) builds a portrait + script request and ret
   let captured
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async (request) => {
+      generate: async (request) => {
         captured = request
         return {
           outputId: 'ls1',
@@ -983,7 +1004,9 @@ test('generate_lip_sync (script mode) builds a portrait + script request and ret
     },
   })
   assert.ok(!res.isError)
-  assert.match(urlsIn(res), /https:\/\/cdn\/talk\.mp4/)
+  // ⚠️ The REQUEST is what this test is about, and it still is. The result is now a pollable pending id
+  // rather than a finished url, because the card has to exist while the work is happening.
+  assert.match(res.content[0].text, /get_generation_status/)
   // The portrait rides in references.images; the motion prompt in `prompt`.
   assert.deepEqual(captured.references.images, ['https://cdn/face.png'])
   assert.equal(captured.references.audio, undefined)
@@ -997,7 +1020,7 @@ test('generate_lip_sync (audio mode) routes audioUrl into references.audio', asy
   let captured
   const mcp = await connect(
     fakeClient({
-      generateAndWait: async (request) => {
+      generate: async (request) => {
         captured = request
         return {
           outputId: 'ls2',

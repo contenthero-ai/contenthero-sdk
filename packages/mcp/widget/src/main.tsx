@@ -400,6 +400,9 @@ const styles = `
    * The tile's overflow is visible now (so a tooltip can escape it), which means the tile is no longer
    * clipping this for us. Every child that paints to the edge has to round itself.
    */
+  /* The pre-result frame: a shaped box so the card has a size before it has content. */
+  .fallback { position: relative; aspect-ratio: 16 / 9; border-radius: var(--border-radius-md, 14px); }
+  .fallback.pad { aspect-ratio: auto; padding: 18px; }
   .laurel-wrap {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
@@ -587,7 +590,6 @@ const styles = `
 
   .muted { color: var(--color-text-secondary, color-mix(in srgb, CanvasText 55%, transparent)); font-size: 13px; }
   .spacer { flex: 1 1 auto; }
-  .fallback { padding: 18px; }
 
   /**
    * FULLSCREEN. ⚠️⚠️ "min-height: 0" ON THE MEDIA ROW IS LOAD-BEARING. A flex child defaults to
@@ -1352,7 +1354,31 @@ function Widget() {
      * not an empty one apologising for itself.
      */
     if (answered) return null
-    return <div className="fallback muted">{isConnected ? 'Waiting for the generation result.' : 'Connecting.'}</div>
+    /**
+     * ⛔⛔ **THIS SAID "Waiting for the generation result" FOR EVERY TOOL THAT DECLARES THIS WIDGET.**
+     *
+     * The host mounts the frame when the CALL starts, before any result exists, so this is what a person
+     * sees during `show_media`, `get_media`, an import and an upload as well: a message about generating
+     * something, from a tool that generates nothing. It was written when a generation was the only thing
+     * that could render here.
+     *
+     * ⭐ The frame does not know what it is waiting for, so it says nothing and shows the mark instead.
+     * A laurel is true for every producer, and it is the same shape the tiles fall back to, so the wait
+     * and the thing being waited for look like one object rather than two.
+     */
+    /**
+     * ⚠️ NOT CONNECTED IS A DIFFERENT STATE FROM NOT YET ANSWERED, and only one of them resolves on its
+     * own. A laurel for a frame that never reached the host would spin forever with nothing to explain it,
+     * so that one keeps its words.
+     */
+    if (!isConnected) return <div className="fallback muted pad">Connecting.</div>
+    return (
+      <div className="fallback">
+        <div className="laurel-wrap">
+          <Skeleton />
+        </div>
+      </div>
+    )
   }
 
   /** True while the server has told us a job is running and nothing has landed yet. */

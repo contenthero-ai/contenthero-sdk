@@ -1073,8 +1073,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           playheadFrame: args.playheadFrame,
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
-        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
+        /**
+         * ⭐⭐⭐ **SUBMIT AND RETURN. THE CARD IS THE PROGRESS INDICATOR, SO IT HAS TO EXIST WHILE THERE IS
+         * PROGRESS TO SHOW.**
+         *
+         * This waited inline for up to 50 seconds. A widget mounts when the TOOL RESULT arrives, so a job
+         * finishing in forty seconds returned a COMPLETED result and the card appeared already full: the
+         * skeletons, the laurel and the fill-in existed but were unreachable for every generation fast
+         * enough to matter. They only ever showed when a job ran past the wait, which is the one case
+         * nobody is watching. Reported 2026-09-21: "the widget only rendered after the image was already
+         * generated, which defeats the purpose".
+         *
+         * ⚠️ THE COST IS AN EXTRA CALL, STATED PLAINLY. A caller that used to get final urls in one round
+         * trip now polls, which the result text has always instructed it to do and which the widget does
+         * on its own. In exchange the person sees the work start immediately, every time, rather than
+         * watching a spinner with no shape to it.
+         *
+         * ⛔ ERRORS STILL SURFACE. A request rejected before submission (a bad model, no credits) throws
+         * here and is reported; only the WAITING is gone, not the reporting.
+         */
+        const submitted = await client.generate(request)
+        return pendingResult(
+          submitted.outputId,
+          pollAfterSecondsFor('image'),
+          pendingShapeFrom(args, 'image'),
+        )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1245,8 +1268,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           playheadFrame: args.playheadFrame,
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
-        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
+        /**
+         * ⭐⭐⭐ **SUBMIT AND RETURN. THE CARD IS THE PROGRESS INDICATOR, SO IT HAS TO EXIST WHILE THERE IS
+         * PROGRESS TO SHOW.**
+         *
+         * This waited inline for up to 50 seconds. A widget mounts when the TOOL RESULT arrives, so a job
+         * finishing in forty seconds returned a COMPLETED result and the card appeared already full: the
+         * skeletons, the laurel and the fill-in existed but were unreachable for every generation fast
+         * enough to matter. They only ever showed when a job ran past the wait, which is the one case
+         * nobody is watching. Reported 2026-09-21: "the widget only rendered after the image was already
+         * generated, which defeats the purpose".
+         *
+         * ⚠️ THE COST IS AN EXTRA CALL, STATED PLAINLY. A caller that used to get final urls in one round
+         * trip now polls, which the result text has always instructed it to do and which the widget does
+         * on its own. In exchange the person sees the work start immediately, every time, rather than
+         * watching a spinner with no shape to it.
+         *
+         * ⛔ ERRORS STILL SURFACE. A request rejected before submission (a bad model, no credits) throws
+         * here and is reported; only the WAITING is gone, not the reporting.
+         */
+        const submitted = await client.generate(request)
+        return pendingResult(
+          submitted.outputId,
+          pollAfterSecondsFor('video'),
+          pendingShapeFrom(args, 'video'),
+        )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1402,8 +1448,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           references: isVideo ? { videos: [args.sourceUrl] } : { images: [args.sourceUrl] },
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
-        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
+        /**
+         * ⭐⭐⭐ **SUBMIT AND RETURN. THE CARD IS THE PROGRESS INDICATOR, SO IT HAS TO EXIST WHILE THERE IS
+         * PROGRESS TO SHOW.**
+         *
+         * This waited inline for up to 50 seconds. A widget mounts when the TOOL RESULT arrives, so a job
+         * finishing in forty seconds returned a COMPLETED result and the card appeared already full: the
+         * skeletons, the laurel and the fill-in existed but were unreachable for every generation fast
+         * enough to matter. They only ever showed when a job ran past the wait, which is the one case
+         * nobody is watching. Reported 2026-09-21: "the widget only rendered after the image was already
+         * generated, which defeats the purpose".
+         *
+         * ⚠️ THE COST IS AN EXTRA CALL, STATED PLAINLY. A caller that used to get final urls in one round
+         * trip now polls, which the result text has always instructed it to do and which the widget does
+         * on its own. In exchange the person sees the work start immediately, every time, rather than
+         * watching a spinner with no shape to it.
+         *
+         * ⛔ ERRORS STILL SURFACE. A request rejected before submission (a bad model, no credits) throws
+         * here and is reported; only the WAITING is gone, not the reporting.
+         */
+        const submitted = await client.generate(request)
+        return pendingResult(
+          submitted.outputId,
+          pollAfterSecondsFor('image'),
+          pendingShapeFrom(args, 'image'),
+        )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1468,8 +1537,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           }),
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
-        const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
+        /**
+         * ⭐⭐⭐ **SUBMIT AND RETURN. THE CARD IS THE PROGRESS INDICATOR, SO IT HAS TO EXIST WHILE THERE IS
+         * PROGRESS TO SHOW.**
+         *
+         * This waited inline for up to 50 seconds. A widget mounts when the TOOL RESULT arrives, so a job
+         * finishing in forty seconds returned a COMPLETED result and the card appeared already full: the
+         * skeletons, the laurel and the fill-in existed but were unreachable for every generation fast
+         * enough to matter. They only ever showed when a job ran past the wait, which is the one case
+         * nobody is watching. Reported 2026-09-21: "the widget only rendered after the image was already
+         * generated, which defeats the purpose".
+         *
+         * ⚠️ THE COST IS AN EXTRA CALL, STATED PLAINLY. A caller that used to get final urls in one round
+         * trip now polls, which the result text has always instructed it to do and which the widget does
+         * on its own. In exchange the person sees the work start immediately, every time, rather than
+         * watching a spinner with no shape to it.
+         *
+         * ⛔ ERRORS STILL SURFACE. A request rejected before submission (a bad model, no credits) throws
+         * here and is reported; only the WAITING is gone, not the reporting.
+         */
+        const submitted = await client.generate(request)
+        return pendingResult(
+          submitted.outputId,
+          pollAfterSecondsFor('video'),
+          pendingShapeFrom(args, 'video'),
+        )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
