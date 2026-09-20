@@ -807,7 +807,18 @@ function Widget() {
      * what lets the frame render nothing instead of a lie.
      */
     setAnswered(true)
-    if (sc?.outputId) {
+    /**
+     * ⛔⛔ **A MIXED SET HAS NO `outputId`, AND THIS GUARD REQUIRED ONE.**
+     *
+     * The payload generalized from a generation to a set of items, and `outputId` became optional for
+     * exactly the case it was meant to support: `get_media` returns tiles from many generations, so it
+     * sends null. This guard then dropped the whole payload and `answered` made the frame render nothing,
+     * so a working widget with eight resolved items displayed as an empty space and the agent, reading its
+     * own successful tool result, reported that it had rendered.
+     *
+     * ⭐ The real question is "is there anything to show", which is items, or a job that will produce them.
+     */
+    if (sc && (sc.items?.length || sc.outputs?.length || sc.status === 'processing')) {
       setData(sc)
       setIndex(0)
       setRatio(null)
