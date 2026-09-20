@@ -2934,22 +2934,46 @@ test('a tool declares the widget exactly when it can emit one', () => {
   const src = readFileSync(new URL('./server.ts', import.meta.url), 'utf8')
 
   /**
-   * ⭐⭐ **THE EMITTER SET IS DERIVED, NOT LISTED.**
+   * ⭐⭐ **THE EMITTER SET IS DERIVED, AND THE DERIVATION FOLLOWS CALLS.**
    *
    * A hand-written list of result builders is the same allowlist this guard replaced, one level up: adding
-   * `mediaBatchResult` made this test fail for the wrong reason, because the test had not heard of it. A
-   * builder attaches the widget exactly when its own body names `RESOURCE_URI_META_KEY`, which is a fact
-   * `format.ts` already carries, so read it from there.
+   * `mediaBatchResult` made this fail for the wrong reason, because the test had not heard of it.
+   *
+   * ⚠️ AND IT HAS TO BE TRANSITIVE. `importedMediaResult` attaches the widget through a shared private
+   * helper, so a scan that only looked for `RESOURCE_URI_META_KEY` inside each exported body declared it a
+   * non-emitter and flagged a correct binding as wrong. "Can this path attach the meta" is a reachability
+   * question, so it is answered by closing over calls until nothing new is found.
    */
   const fmt = readFileSync(new URL('./format.ts', import.meta.url), 'utf8')
-  const fnStarts = [...fmt.matchAll(/export function ([a-zA-Z]+)\(/g)]
-  const EMITTERS = fnStarts
-    .filter((m, i) => {
-      const body = fmt.slice(m.index!, i + 1 < fnStarts.length ? fnStarts[i + 1]!.index! : fmt.length)
-      return body.includes('RESOURCE_URI_META_KEY')
-    })
-    .map((m) => m[1]!)
-  assert.ok(EMITTERS.length >= 3, `only found ${EMITTERS.length} widget-emitting builders; the scan broke`)
+  const fns = [...fmt.matchAll(/(?:export )?function ([a-zA-Z]+)\(/g)]
+  const bodyOf = new Map<string, string>()
+  fns.forEach((m, i) => {
+    bodyOf.set(m[1]!, fmt.slice(m.index!, i + 1 < fns.length ? fns[i + 1]!.index! : fmt.length))
+  })
+
+  /**
+   * ⛔ A BUILDER THAT STRIPS THE META IS NOT AN EMITTER, WHATEVER IT CALLS.
+   *
+   * `generationStatusResult` calls `completedResult` and then deletes its `_meta`, because a status query
+   * reports rather than displays. Reachability alone would call it an emitter and flag a correct absence,
+   * so the closure reads the deletion, which is a fact the source already states outright.
+   */
+  const strips = (body: string) => /delete\s*\(res as[^)]*\)\._meta/.test(body)
+
+  const emitters = new Set<string>()
+  for (const [name, body] of bodyOf) {
+    if (!strips(body) && body.includes('RESOURCE_URI_META_KEY')) emitters.add(name)
+  }
+  for (;;) {
+    const before = emitters.size
+    for (const [name, body] of bodyOf) {
+      if (emitters.has(name) || strips(body)) continue
+      if ([...emitters].some((e) => new RegExp(`\\b${e}\\(`).test(body))) emitters.add(name)
+    }
+    if (emitters.size === before) break
+  }
+  const EMITTERS = [...emitters]
+  assert.ok(EMITTERS.length >= 4, `only found ${EMITTERS.length} widget-emitting builders; the scan broke`)
 
   const blocks = [...src.matchAll(/server\.registerTool\(\s*'([a-z_]+)'/g)]
   assert.ok(blocks.length > 20, 'the tool scan found almost nothing; the registration shape changed')

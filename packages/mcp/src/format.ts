@@ -1098,10 +1098,60 @@ export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
 }
 
 /** A finalized upload or import: a first-class media output. */
-export function uploadedMediaResult(r: UploadedMedia): CallToolResult {
-  return text(
-    `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
-  )
+/**
+ * Media the person's own bytes just became.
+ *
+ * ## ⭐ AN UPLOAD IS NEW MEDIA IN THEIR LIBRARY, SO IT DISPLAYS
+ *
+ * The rule is that a tool returning newly created or newly acquired media shows it, and an upload is the
+ * second. Confirmation is the value: a thumbnail says the right file landed, where a line of text says
+ * only that something did.
+ *
+ * ⛔ This could not render at all until the API started returning `contentType`. Guessing image from a
+ * url's extension is what renders a video as a broken image, so text was the honest answer while the type
+ * was unknown, and it remains the answer for a `document`, which has no element.
+ *
+ * ⚠️ Referenceable, unlike an export: `outputId` is exactly what `generate_*` accepts, which is what the
+ * prose has always told the caller.
+ */
+export function uploadedMediaResult(r: UploadedMedia, baseUrl = DEFAULT_APP_URL): CallToolResult {
+  const prose = `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`
+  return renderableMedia(prose, r.outputId, r.url, r.contentType, baseUrl)
+}
+
+/**
+ * The shared tail of every "here is one new library item" result.
+ *
+ * ⚠️ ONE PLACE, because an upload and an import differ in their prose and in nothing else that matters
+ * here. Written twice they would drift the first time one of them learned something the other did not.
+ */
+function renderableMedia(
+  prose: string,
+  outputId: string | null,
+  url: string,
+  contentType: string | undefined,
+  baseUrl: string,
+): CallToolResult {
+  const medium =
+    contentType === 'image' || contentType === 'video' || contentType === 'audio' ? contentType : undefined
+  if (!outputId || !medium) return text(prose)
+  return {
+    content: [{ type: 'text', text: prose }],
+    structuredContent: mediaWidgetData({
+      outputId,
+      contentType: medium,
+      items: [
+        {
+          url,
+          name: outputId,
+          contentType: medium,
+          reference: outputId,
+          openUrl: studioUrlFor(baseUrl, outputId, 0, 1),
+        },
+      ],
+    }),
+    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+  }
 }
 
 /**
@@ -1121,10 +1171,14 @@ export function uploadedMediaResult(r: UploadedMedia): CallToolResult {
  * Saying "already imported" without naming what it is would send someone hunting for a library item that
  * does not exist. That is the exact confusion this whole fix came from.
  */
-export function importedMediaResult(r: ImportedMedia): CallToolResult {
+export function importedMediaResult(r: ImportedMedia, baseUrl = DEFAULT_APP_URL): CallToolResult {
   if (!r.alreadyExisted) {
-    return text(
+    return renderableMedia(
       `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
+      r.outputId,
+      r.url,
+      r.contentType,
+      baseUrl,
     )
   }
   if (r.outputId) {

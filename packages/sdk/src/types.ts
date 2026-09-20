@@ -1178,6 +1178,14 @@ export interface ImportMediaInput {
 export interface UploadedMedia {
   outputId: string
   url: string
+  /**
+   * What the bytes ARE: `'image' | 'video' | 'audio' | 'document'`.
+   *
+   * ⚠️ Without this a caller cannot tell an mp4 from a png, so anything wanting to SHOW what landed has to
+   * guess from the url's extension, and that guess renders a video as a broken image. Absent from older
+   * servers, which is why it is optional rather than required.
+   */
+  contentType?: string
 }
 
 /**
@@ -1201,6 +1209,14 @@ export interface ImportedMedia {
   alreadyExisted: boolean
   /** What the bytes already ARE, when `alreadyExisted`, so a caller can say which thing rather than "duplicate". */
   existing?: { objectName: string; role: string | null; ownedBy: string | null }
+  /**
+   * What the bytes ARE: `'image' | 'video' | 'audio' | 'document'`.
+   *
+   * ⚠️ ABSENT ON THE DUPLICATE PATH. Nothing was created, so the bytes may belong to something that is not
+   * a library item at all, and asserting a type for a thing we did not make would be a guess. Also absent
+   * from older servers.
+   */
+  contentType?: string
 }
 
 /** The operation a model performs within its content type. */

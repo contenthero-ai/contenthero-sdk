@@ -2306,6 +2306,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'complete_media_upload',
     {
       title: 'Complete Media Upload',
+      ...RENDERS_GENERATION,
       annotations: WRITE,
       description:
         'Finalize a media upload (phase 2 of 2) after the file bytes were PUT to the signed uploadUrl from create_media_upload. Publishes the media and returns its outputId + public URL. Requires the assets:write scope.',
@@ -2316,7 +2317,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return uploadedMediaResult(await client.completeMediaUpload(args.outputId))
+        return uploadedMediaResult(await client.completeMediaUpload(args.outputId), client.baseUrl)
       } catch (err) {
         return errorResult(err)
       }
@@ -2328,6 +2329,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'import_media',
     {
       title: 'Import Media',
+      ...RENDERS_GENERATION,
       annotations: WRITE,
       description:
         'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
@@ -2346,6 +2348,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             contentType: args.contentType,
             fileName: args.fileName,
           }),
+          client.baseUrl,
         )
       } catch (err) {
         return errorResult(err)
