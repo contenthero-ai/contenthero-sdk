@@ -943,7 +943,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [])
+        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1009,7 +1009,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [])
+        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1115,7 +1115,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [])
+        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1270,7 +1270,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [])
+        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1336,7 +1336,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [])
+        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -2599,7 +2599,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           gens.length === 1 && gens[0]
             ? { [gens[0].outputId]: await attachmentsFor(gens[0]) }
             : {}
-        return generationBatchResult(gens, attachments)
+        return generationBatchResult(gens, attachments, client.baseUrl)
       } catch (err) {
         return errorResult(err)
       }

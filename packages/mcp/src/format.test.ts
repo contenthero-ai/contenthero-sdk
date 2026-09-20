@@ -9,6 +9,7 @@ import {
   completedResult,
   generationWidgetData,
   pollAfterSecondsFor,
+  studioUrlFor,
 } from './format.js'
 
 /**
@@ -405,4 +406,51 @@ test('the pending chip is empty rather than guessed', () => {
 
 test('video is polled less often than image, because it takes longer', () => {
   assert.ok(pollAfterSecondsFor('video') > pollAfterSecondsFor('image'))
+})
+
+
+/**
+ * ⭐ THE OPEN BUTTON'S URL.
+ *
+ * ⛔ This asserts the real `studioUrlFor`, not a copy of its arithmetic. An earlier version of this test
+ * restated the index conversion inline, which cannot fail when the function is wrong: it only proves the
+ * test agrees with itself.
+ *
+ * ⚠️ ONE-BASED IN THE NAME, ZERO-BASED IN THE URL. `<id>-3` is what a person reads as "variation 3" and
+ * `variation=2` is the studio's slot. Getting it wrong opens the WRONG PICTURE, which reads as a broken
+ * link rather than an off-by-one.
+ */
+test('a batch maps each output to its zero-based studio variation', () => {
+  const id = 'cfe3bafb-ddc5-4e51-bae6-68ec61112a23'
+  const base = 'https://app.contenthero.ai'
+  assert.equal(studioUrlFor(base, id, 0, 4), `${base}/studio?output=${id}&variation=0`)
+  assert.equal(studioUrlFor(base, id, 3, 4), `${base}/studio?output=${id}&variation=3`)
+})
+
+test('a single output names no variation, because there was no choice to record', () => {
+  const id = 'fff25b52-2974-4594-892e-39310475e760'
+  assert.equal(studioUrlFor('https://app.contenthero.ai', id, 0, 1), `https://app.contenthero.ai/studio?output=${id}`)
+})
+
+test('a trailing slash on the base url does not produce a double slash', () => {
+  assert.match(studioUrlFor('https://app.contenthero.ai/', 'o', 0, 1), /^https:\/\/app\.contenthero\.ai\/studio\?/)
+})
+
+/**
+ * ⚠️ The base url is a PARAMETER so a local server deep-links to itself. Hardcoding production meant Open
+ * always left for the live app even while testing against localhost.
+ */
+test('the widget payload carries a studio url per output', () => {
+  const data = generationWidgetData(
+    {
+      ...baseGen,
+      outputId: 'o1',
+      contentType: 'image',
+      outputUrls: ['https://media.contenthero.ai/a.png', 'https://media.contenthero.ai/b.png'],
+    } as never,
+    [],
+    'http://localhost:3000',
+  )
+  assert.equal(data.outputs[0]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=0')
+  assert.equal(data.outputs[1]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=1')
 })

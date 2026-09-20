@@ -129,7 +129,37 @@ export type GeneratedAttachment =
  * capability urls carry their token in the QUERY STRING, so `<video src>` loads one directly with no header
  * to set. Embedding base64 here would pay the context cost twice over.
  */
-export function generationWidgetData(gen: Generation, posterUrls: readonly (string | null)[] = []) {
+/**
+ * Where one output lives in the product.
+ *
+ * ## ⭐⭐⭐ COMPUTED HERE, NOT IN THE WIDGET, BECAUSE HERE THE INDEX IS ALREADY A NUMBER
+ *
+ * The widget's first version parsed the slot back out of the output's NAME (`<id>-3` means slot 2), which
+ * is a derivation of something this function has in its hand. Parsing a number out of a string we formatted
+ * two lines earlier is how an off-by-one gets in, and the symptom would be "Open shows the wrong picture",
+ * which reads as a broken link rather than an index bug.
+ *
+ * ⚠️ **ONE-BASED IN THE NAME, ZERO-BASED IN THE URL.** `<id>-3` is what a person reads as "variation 3",
+ * and `variation=2` is the studio's `imageIndex`, which is slot space. Both conventions are correct in
+ * their own place and the conversion belongs at exactly one boundary, which is this one.
+ *
+ * ⚠️ A single-output generation gets NO `variation`. There is no variation to name, and passing 0 would
+ * imply there was a choice.
+ */
+/** Where a deep link points when no client base url was threaded through. */
+export const DEFAULT_APP_URL = 'https://app.contenthero.ai'
+
+export function studioUrlFor(baseUrl: string, outputId: string, index: number, total: number): string {
+  const root = baseUrl.replace(/\/+$/, '')
+  const variation = total > 1 ? `&variation=${index}` : ''
+  return `${root}/studio?output=${encodeURIComponent(outputId)}${variation}`
+}
+
+export function generationWidgetData(
+  gen: Generation,
+  posterUrls: readonly (string | null)[] = [],
+  baseUrl = DEFAULT_APP_URL,
+) {
   const urls = gen.outputUrls ?? []
   return {
     outputId: gen.outputId,
@@ -158,6 +188,8 @@ export function generationWidgetData(gen: Generation, posterUrls: readonly (stri
       url,
       posterUrl: posterUrls[i] ?? null,
       name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+      /** Where the Open button goes: this asset, in the studio, with its siblings and every action. */
+      studioUrl: studioUrlFor(baseUrl, gen.outputId, i, urls.length),
     })),
   }
 }
@@ -166,6 +198,8 @@ export function completedResult(
   gen: Generation,
   attachments: GeneratedAttachment[] = [],
   posterUrls: readonly (string | null)[] = [],
+  /** The server this client talks to, so Open deep-links to it rather than always to production. */
+  baseUrl?: string,
 ): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
@@ -229,7 +263,7 @@ export function completedResult(
   return {
     content,
     isError: false,
-    structuredContent: generationWidgetData(gen, posterUrls),
+    structuredContent: generationWidgetData(gen, posterUrls, baseUrl),
     _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
   }
 }
@@ -373,6 +407,7 @@ export function costResult(est: CostEstimate): CallToolResult {
 export function generationStatusResult(
   gen: Generation,
   attachments: GeneratedAttachment[] = [],
+  baseUrl?: string,
 ): CallToolResult {
   /**
    * ⛔⛔ **THIS DROPPED THE ATTACHMENTS AND THEREFORE RENDERED NOTHING.** It called `completedResult(gen)`
@@ -383,7 +418,7 @@ export function generationStatusResult(
    * ⭐ Found by the `verify:inline` harness in its first run, minutes after it existed. The unit tests could
    * not see it: they call `completedResult` directly and never go through here.
    */
-  if (gen.status === 'completed') return completedResult(gen, attachments, [])
+  if (gen.status === 'completed') return completedResult(gen, attachments, [], baseUrl)
   if (gen.status === 'failed') {
     return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
   }
@@ -407,12 +442,13 @@ export function generationStatusResult(
 export function generationBatchResult(
   gens: Generation[],
   attachmentsByOutputId: Record<string, GeneratedAttachment[]> = {},
+  baseUrl?: string,
 ): CallToolResult {
   // ⚠️ ONLY THE SINGLE FORM ATTACHES. A batch status covering ten generations would embed ten sets of
   // bytes into one result, which is the context blow-up the link design was originally protecting against.
   // The single form is what a caller polling one generation hits, and that is the case worth rendering.
   if (gens.length === 1)
-    return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
+    return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [], baseUrl)
   const rows = gens.map((gen) => {
     if (gen.status === 'completed') {
       const urls = gen.outputUrls ?? []

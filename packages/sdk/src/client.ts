@@ -142,7 +142,15 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed'])
 
 export class ContentHero {
   private readonly apiKey: string
-  private readonly baseUrl: string
+  /**
+   * The resolved API base url: explicit option, then CONTENTHERO_BASE_URL, then the stored config, then
+   * production.
+   *
+   * ⚠️ PUBLIC so callers can build links against the SAME server this client talks to. The MCP widget's
+   * Open button needs it, and resolving it a second time from the environment would disagree the moment
+   * someone is authenticated through the config file rather than an env var.
+   */
+  readonly baseUrl: string
   private readonly fetchImpl: FetchLike
   /** Per-project last-touched timestamp (ms). Presence is lit SERVER-SIDE (every project-scoped route broadcasts
    *  the badge), so this no longer drives per-call pings; it records which projects this client operated on so

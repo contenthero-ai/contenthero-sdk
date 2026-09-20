@@ -39,6 +39,14 @@ interface Output {
   readonly url: string
   readonly posterUrl?: string | null
   readonly name: string
+  /**
+   * Where this asset lives in the product, computed by the server.
+   *
+   * ⛔ NOT DERIVED HERE. The first version parsed the slot back out of `name` (`<id>-3` means slot 2),
+   * which re-derives something the server had as a number. Absent on an older server, in which case there
+   * is nothing to open and the button does not render.
+   */
+  readonly studioUrl?: string
 }
 
 interface WidgetData {
@@ -322,7 +330,7 @@ const styles = `
    * OUR OWN TOOLTIP, NOT THE BROWSER'S.
    *
    * ⚠️ The title attribute took roughly a second to appear, rendered in the OS's own style, and could not
-   * be themed or positioned, so an icon-only button looked unlabelled for the whole time someone was
+   * be themed or positioned, so an icon-only button looked unlabeled for the whole time someone was
    * deciding whether to click it. This one appears immediately and matches the chips.
    *
    * ⚠️ Pointer-events off, or the tooltip sits under the cursor and re-triggers the hover it came from,
@@ -331,7 +339,7 @@ const styles = `
   /*
    * ⛔ SCOPED TO .acts, WHICH IS THE ONLY PLACE A BUTTON HAS NO LABEL. A tooltip on a button that already
    * says Recreate tells you what it says, which is noise wearing the costume of help. The selector is the
-   * enforcement: there is no way to attach one to a labelled button without moving it into the hover row.
+   * enforcement: there is no way to attach one to a labeled button without moving it into the hover row.
    */
   .acts [data-tip] { position: relative; }
   .acts [data-tip]::after {
@@ -469,6 +477,16 @@ function IconEdit() {
     <svg {...ICON} aria-hidden="true">
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function IconOpen() {
+  return (
+    <svg {...ICON} aria-hidden="true">
+      <path d="M14 4h6v6" />
+      <path d="M20 4 11 13" />
+      <path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
     </svg>
   )
 }
@@ -965,8 +983,8 @@ function Widget() {
   const actions = (o: Output, opts: { labels: boolean }) => {
     const isImage = data.contentType === 'image'
     const t = (s: string) => (opts.labels ? s : null)
-    // ⛔ A LABELLED BUTTON GETS NO TOOLTIP. It already says what it does, and repeating that on hover is
-    // noise. `tip` is undefined in the labelled variant so the attribute is absent, not empty.
+    // ⛔ A LABELED BUTTON GETS NO TOOLTIP. It already says what it does, and repeating that on hover is
+    // noise. `tip` is undefined in the labeled variant so the attribute is absent, not empty.
     const tip = (s: string) => (opts.labels ? undefined : s)
     const refused = failed === o.url
     return (
@@ -1042,6 +1060,17 @@ function Widget() {
             <IconRecreate />
             Recreate
           </button>
+          {/* Leaving the conversation is a deliberate choice, so it sits here rather than in the hover row,
+              which stays the three fast verbs. */}
+          {current.studioUrl && (
+            <button
+              className="pill neutral"
+              onClick={() => void app?.openLink({ url: current.studioUrl! })}
+            >
+              <IconOpen />
+              Open
+            </button>
+          )}
           <span className="spacer" />
           {badges}
           {n > 1 && <span className="muted">Variation {index + 1} of {n}</span>}
