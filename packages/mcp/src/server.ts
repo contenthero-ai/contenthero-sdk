@@ -753,12 +753,33 @@ async function inlineImagesWithinBudget(
  * ⭐ Spread into the tools whose results are MEDIA. Not onto all 87: a tool that returns a card or a folder
  * has nothing for this widget to show, and claiming otherwise would put an empty frame under every call.
  */
-const RENDERS_GENERATION = {
-  _meta: {
-    ui: { resourceUri: GENERATION_WIDGET_URI },
-    [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI,
-  },
-} as const
+function renders(progress: string) {
+  return {
+    _meta: {
+      ui: { resourceUri: GENERATION_WIDGET_URI },
+      [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI,
+      /**
+       * ⭐⭐⭐ **WHAT THE FRAME SAYS BEFORE THERE IS ANYTHING TO SHOW, AS A PRESENT PARTICIPLE.**
+       *
+       * A host mounts the widget when the CALL starts, so this is the first thing a person reads. It has
+       * to describe an action IN PROGRESS, which the tool's `title` does not: "Generate Image" is an
+       * imperative and reads as a button.
+       *
+       * ⛔⛔ **STATED, NOT DERIVED, AND THE VERB LIST IS WHY.** The obvious rule is "drop a trailing e,
+       * else add ing", and it is already wrong for one of the eight verbs we ship today: Get becomes
+       * Geting, not Getting. English doubles that consonant based on where the STRESS falls, which is why
+       * Import becomes Importing and Submit becomes Submitting, and stress is not something a function can
+       * recover from a string. A heuristic here would be right most of the time and silently wrong
+       * forever on whichever verb comes next.
+       *
+       * ⭐ IT IS AN ARGUMENT RATHER THAN A LOOKUP TABLE, which is the part that makes it hold. There is no
+       * list to forget to update: a tool cannot declare this widget without saying what it is doing,
+       * because saying so is how you declare it.
+       */
+      'ui/progressLabel': progress,
+    },
+  } as const
+}
 
 
 /**
@@ -1021,7 +1042,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_image',
     {
-      ...RENDERS_GENERATION,
+      ...renders('Generating images'),
       title: 'Generate Image',
       annotations: WRITE,
       description:
@@ -1114,7 +1135,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_board',
     {
-      ...RENDERS_GENERATION,
+      ...renders('Generating a board'),
       title: 'Generate Reference Board',
       annotations: WRITE,
       description:
@@ -1180,7 +1201,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_video',
     {
-      ...RENDERS_GENERATION,
+      ...renders('Generating video'),
       title: 'Generate Video',
       annotations: WRITE,
       description:
@@ -1310,7 +1331,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'generate_audio',
     {
       title: 'Generate Audio',
-      ...RENDERS_GENERATION,
+      ...renders('Generating audio'),
       annotations: WRITE,
       description:
         'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
@@ -1361,7 +1382,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'edit_audio',
     {
       title: 'Edit Audio',
-      ...RENDERS_GENERATION,
+      ...renders('Editing audio'),
       annotations: WRITE,
       description:
         'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST on outputs, one job per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
@@ -1420,7 +1441,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'upscale',
     {
-      ...RENDERS_GENERATION,
+      ...renders('Upscaling'),
       title: 'Upscale',
       annotations: WRITE,
       description:
@@ -1489,7 +1510,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'generate_lip_sync',
     {
-      ...RENDERS_GENERATION,
+      ...renders('Generating lip sync'),
       title: 'Generate Lip Sync',
       annotations: WRITE,
       description:
@@ -2441,7 +2462,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        * ⭐ It still DISPLAYS what it attaches, because the agent is already looking and showing the person
        * the same thing costs nothing. Reach for `show_media` when the person is the audience.
        */
-      ...RENDERS_GENERATION,
+      ...renders('Getting media'),
       annotations: READ,
       description:
         'SEE specific media, up to 5 items. Use this when YOU need to look at the pixels: judge a face, check legibility, compare variations. To show a person a larger set without looking at it yourself, use show_media instead, which takes up to 100 and costs almost no context. Pass a batch of items to view at once, rendered together for the user AND returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
@@ -2516,7 +2537,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        * thing, whether bytes are fetched; a second resolution path would be a second answer to "what is
        * this item" and the widget would render two subtly different shapes depending on the verb used.
        */
-      ...RENDERS_GENERATION,
+      ...renders('Showing media'),
       annotations: READ,
       description:
         'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or an { mediaId, variation? }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
@@ -2596,7 +2617,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'complete_media_upload',
     {
       title: 'Complete Media Upload',
-      ...RENDERS_GENERATION,
+      ...renders('Completing the upload'),
       annotations: WRITE,
       description:
         'Finalize a media upload (phase 2 of 2) after the file bytes were PUT to the signed uploadUrl from create_media_upload. Publishes the media and returns its outputId + public URL. Requires the assets:write scope.',
@@ -2619,7 +2640,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'import_media',
     {
       title: 'Import Media',
-      ...RENDERS_GENERATION,
+      ...renders('Importing media'),
       annotations: WRITE,
       description:
         'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
@@ -4069,7 +4090,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'export_project',
     {
       title: 'Export Project',
-      ...RENDERS_GENERATION,
+      ...renders('Exporting the project'),
       annotations: WRITE,
       description:
         "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use get_context with render (ephemeral, stored nowhere). format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both surfaces too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. Resolution and watermark apply to EVERY format, not just mp4: a free account never exports above 720p and never removes the watermark, on any format or surface. `quality` is mp4 only. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",

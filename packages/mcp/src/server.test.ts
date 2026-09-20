@@ -3009,7 +3009,9 @@ test('a tool declares the widget exactly when it can emit one', () => {
     const start = blocks[i]!.index!
     const end = i + 1 < blocks.length ? blocks[i + 1]!.index! : src.length
     const body = src.slice(start, end)
-    const declares = body.includes('...RENDERS_GENERATION')
+    // ⚠️ MATCHES THE HELPER, NOT A CONSTANT. Declaring the widget is now a CALL that takes the progress
+    // label, so a tool cannot mount this frame without saying what it is doing.
+    const declares = /\.\.\.renders\(/.test(body)
     const emits = EMITTERS.some((fn) => new RegExp(`\\b${fn}\\(`).test(body))
     if (declares !== emits) {
       problems.push(`${name}: declares=${declares} emits=${emits}`)
@@ -3053,28 +3055,39 @@ test('the widget uri carries the package version, so a publish can never be serv
   assert.equal(contents[0]?.uri, GENERATION_WIDGET_URI)
 })
 
-test('every widget-bearing tool carries a human title, which is the waiting line', async () => {
+test('every widget-bearing tool states what it is DOING, as a present participle', async () => {
   /**
    * ⛔⛔ THE FRAME SHOWS THIS STRING BEFORE ANY RESULT EXISTS.
    *
-   * The host mounts a widget when the CALL starts, so what a person reads first comes from the tool's own
-   * `title`. It used to be a hardcoded "Waiting for the generation result", which greeted `show_media`,
-   * `get_media`, an import and an upload too: a message about generating, from tools that generate
-   * nothing.
+   * A host mounts the widget when the CALL starts, so this is the first thing a person reads. It used to
+   * be a hardcoded "Waiting for the generation result", which greeted `show_media`, `get_media`, an
+   * import and an upload too: a message about generating, from tools that generate nothing.
    *
-   * ⚠️ `title`, NOT `annotations.title`. I read the wrong one first and every line silently fell back to
-   * the snake_case NAME, which is how an agent addresses a tool and not what a person should be shown.
-   * This asserts the field the widget actually reads is populated and is not just the name again.
+   * ⛔ IT IS STATED RATHER THAN DERIVED FROM THE TITLE, and the verb list is why. "Drop a trailing e,
+   * else add ing" is already wrong for one of the eight verbs shipped today (Get becomes Geting), and
+   * English decides that doubling by word STRESS, which a function cannot recover from a string.
+   *
+   * ⭐ `renders()` takes the label as an ARGUMENT, so there is no list to forget: a tool cannot declare
+   * this widget without saying what it is doing. This asserts the outcome anyway, because a helper is
+   * only a guarantee until somebody adds a second way to declare one.
    */
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const bearing = tools.filter((t) => Boolean(t._meta?.['ui/resourceUri']))
   assert.ok(bearing.length > 5, `expected several widget-bearing tools, found ${bearing.length}`)
 
-  const missing = bearing.filter((t) => !t.title).map((t) => t.name)
-  assert.deepEqual(missing, [], `these mount a widget with no title to show while it loads: ${missing}`)
+  const labelOf = (t: (typeof bearing)[number]) => t._meta?.['ui/progressLabel'] as string | undefined
 
-  // A title that IS the name has not been written, it has been defaulted.
-  const undressed = bearing.filter((t) => t.title === t.name).map((t) => t.name)
-  assert.deepEqual(undressed, [], `title is just the tool name, so the waiting line reads as code: ${undressed}`)
+  const missing = bearing.filter((t) => !labelOf(t)).map((t) => t.name)
+  assert.deepEqual(missing, [], `mounts a widget with nothing to say while it loads: ${missing}`)
+
+  // A label that is not a present participle reads as an imperative, which is what a button says.
+  const notProgressive = bearing
+    .filter((t) => !/^[A-Z][a-z]+ing\b/.test(labelOf(t) ?? ''))
+    .map((t) => `${t.name}: ${labelOf(t)}`)
+  assert.deepEqual(notProgressive, [], `not an action in progress: ${notProgressive.join(', ')}`)
+
+  // And it must not simply restate the imperative title, which is the failure that looks like success.
+  const echoesTitle = bearing.filter((t) => labelOf(t) === t.title).map((t) => t.name)
+  assert.deepEqual(echoesTitle, [], `progress label is just the title again: ${echoesTitle}`)
 })

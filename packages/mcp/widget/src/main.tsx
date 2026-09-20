@@ -1168,17 +1168,23 @@ function Widget() {
        * "Waiting for the result", which is true of everything that mounts this frame.
        */
       const info = (ctx as {
-        toolInfo?: { tool?: { name?: string; title?: string; annotations?: { title?: string } } }
+        toolInfo?: { tool?: { name?: string; title?: string; _meta?: Record<string, unknown> } }
       })?.toolInfo?.tool
       /**
-       * ⚠️ `tool.title` IS THE FIELD, not `annotations.title`. Verified against a real `tools/list`:
-       * every tool carries `title: "Generate Image"` at the top level and `annotations.title` is
-       * undefined on all of them. Reading the wrong one falls back to the snake_case NAME, which is what
-       * an agent addresses the tool by, not what a person should be shown.
+       * ⭐ THE PROGRESS LABEL FIRST, because it is the only one written as an action in progress. A tool's
+       * `title` is an imperative ("Generate Image") and reads as a button; the label is what the tool says
+       * it is DOING ("Generating images").
+       *
+       * ⚠️ `tool.title` IS THE FALLBACK FIELD, not `annotations.title`. Verified against a real
+       * `tools/list`: every tool carries `title` at the top level and `annotations.title` is undefined on
+       * all of them, so reading the wrong one falls through to the snake_case NAME, which is how an agent
+       * addresses a tool and not what a person should be shown.
        */
-      const title = info?.title ?? info?.annotations?.title
-      // An ellipsis is what makes a label read as an action in progress rather than as a button.
-      if (title) setWaitingLine(`${title}\u2026`)
+      const label = typeof info?._meta?.['ui/progressLabel'] === 'string'
+        ? (info._meta['ui/progressLabel'] as string)
+        : info?.title
+      // An ellipsis is what makes a label read as an action in progress rather than as a finished one.
+      if (label) setWaitingLine(`${label}\u2026`)
     }
     apply(app.getHostContext?.())
     app.addEventListener?.('hostcontextchanged', apply)
