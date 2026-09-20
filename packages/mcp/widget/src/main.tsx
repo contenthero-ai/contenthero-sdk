@@ -452,7 +452,6 @@ const styles = `
     border-color: var(--color-border-secondary, color-mix(in srgb, CanvasText 20%, transparent));
   }
   .pill.ghost:hover { border-color: ${GOLD}; }
-  .pill.gold { background: ${GOLD}; color: ${OBSIDIAN}; }
   /*
    * ⚠️ EVERY ACTION NEEDS A SURFACE, NOT JUST THE PRIMARY ONE. Only Animate carried a background, so
    * Download, Edit and Recreate read as bare text floating next to a button rather than as buttons. The
@@ -502,7 +501,20 @@ const styles = `
    * says Recreate tells you what it says, which is noise wearing the costume of help. The selector is the
    * enforcement: there is no way to attach one to a labeled button without moving it into the hover row.
    */
+  /**
+   * ⛔⛔⛔ THE z-index ON THE TOOLTIP IS NOT WHAT DECIDES THIS, AND THAT IS WHY IT LOOKED IGNORED.
+   *
+   * A pseudo-element is painted inside its own element's box. Raising its z-index orders it against that
+   * element's other children, never against the element's SIBLINGS, so the Animate tooltip was drawn under
+   * the Download button simply because Download comes later in the DOM. Measured: the tooltip rendered,
+   * in the right place, behind a button.
+   *
+   * ⭐ THE HOVERED BUTTON IS WHAT HAS TO RISE. Lifting the button lifts everything it paints, tooltip
+   * included, above every sibling in the row.
+   */
   .acts [data-tip], .corner [data-tip] { position: relative; }
+  .acts [data-tip]:hover, .acts [data-tip]:focus-visible,
+  .corner [data-tip]:hover, .corner [data-tip]:focus-visible { z-index: 6; }
   .acts [data-tip]::after, .corner [data-tip]::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
@@ -514,11 +526,13 @@ const styles = `
     opacity: 0; pointer-events: none; transition: opacity .1s ease; z-index: 3;
   }
   /**
-   * ⚠️ THE CORNER TOOLTIPS OPEN DOWNWARD. A tooltip above a button that is itself 8px from the top of the
-   * frame is drawn outside the widget, where the host clips it and nothing is readable. Direction is a
-   * property of WHERE the button is, so it belongs on the zone rather than on each button.
+   * ⚠️ ONE DIRECTION FOR EVERY TOOLTIP: UPWARD.
+   *
+   * These opened downward, on the reasoning that a tooltip above a button 8px from the frame's top would
+   * be clipped. That reasoning was written before the tile stopped clipping its own overlay, and the grid
+   * carries a header above it, so there is room. A tooltip that points the other way from every other one
+   * reads as a different control, which costs more than the edge case it was guarding.
    */
-  .corner [data-tip]::after { bottom: auto; top: calc(100% + 8px); }
   .acts [data-tip]:hover::after, .acts [data-tip]:focus-visible::after,
   .corner [data-tip]:hover::after, .corner [data-tip]:focus-visible::after { opacity: 1; }
 
@@ -548,12 +562,18 @@ const styles = `
    * buttons that highlight sometimes and summon the host's arrow other times, which is exactly what a
    * transparent overlay catching hover looks like from the inside.
    *
-   * ⚠️ So the FLOOR covers the composer plus that arrow, not just the composer. We cannot query the host's
-   * chrome and we cannot make it not overlap; the only lever from in here is to stand further back.
+   * ⚠️ THAT SYMPTOM WAS REPORTED AGAINST THE INLINE FRAME, and this band is only ever applied to the
+   * FULLSCREEN one. Measured 2026-09-21: a fullscreen capture shows the composer and no arrow, while an
+   * inline capture from the same session shows both. So the arrow's extra reach was being paid here for
+   * an obstruction that is not present, and that is the empty space under the action row.
+   *
+   * ⭐ The floor now covers the composer plus a margin. If an arrow ever does appear over a fullscreen
+   * frame the symptom is specific: a button that responds only when the cursor is slightly off it. Raise
+   * the floor, do not move the button.
    */
   .full {
     position: fixed; inset: 0; display: flex; flex-direction: column;
-    padding-bottom: var(--composer-band, 184px);
+    padding-bottom: var(--composer-band, 132px);
     background: var(--color-background-primary, Canvas);
   }
   .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px 16px; }
@@ -1051,15 +1071,24 @@ function Widget() {
       const given = dims?.height ?? dims?.maxHeight
       if (given && window.innerHeight) {
         /**
-         * ⚠️ THE FLOOR IS 184px, NOT THE COMPOSER'S HEIGHT.
+         * ⚠️ THE FLOOR CAME DOWN FROM 184px TO 132px, AND THE ARROW IS WHY IT WAS EVER 184.
          *
-         * The composer alone is about 90px, and a band that size put our action row exactly where the
-         * host floats its scroll-to-bottom arrow. That arrow is the host's, it sits over our frame, and it
-         * takes the pointer, so a button under it highlights only when the cursor misses the arrow. There
-         * is nothing to query and nothing to disable from inside a sandboxed frame; standing further back
-         * is the whole of the fix.
+         * The composer is about 90px. The extra reach was for the host's scroll-to-bottom arrow, which
+         * floats over our frame and TAKES THE POINTER, so a button under it highlights only when the
+         * cursor misses the arrow. There is nothing to query and nothing to disable from inside a
+         * sandboxed frame, so standing further back was the whole of the fix.
+         *
+         * ⛔ THAT WAS MEASURED AGAINST THE INLINE FRAME. In fullscreen, which is the only thing that
+         * consumes this, the host draws no arrow: measured 2026-09-21 from a fullscreen capture showing
+         * the composer and no arrow, against an inline capture in the same session showing both. So 184
+         * reserved an arrow's worth of emptiness under the action row for an arrow that is not there, and
+         * that gap is exactly the unused space below the picture.
+         *
+         * ⚠️ 132 IS THE COMPOSER PLUS A MARGIN, NOT A GUESS AT THE ARROW. If an arrow ever does appear
+         * over a fullscreen frame, the symptom is specific and immediate: a button that only responds when
+         * the cursor is slightly off it. Raise this, do not chase the button.
          */
-        const band = Math.min(240, Math.max(184, window.innerHeight - given + 24))
+        const band = Math.min(240, Math.max(132, window.innerHeight - given + 24))
         document.documentElement.style.setProperty('--composer-band', `${Math.round(band)}px`)
       }
     }
@@ -1355,7 +1384,13 @@ function Widget() {
     return (
       <>
         {show('center') && isImage && canReference && (
-          <button className="pill gold" onClick={() => void say(ASK.animate(o.reference!))} data-tip={tip('Animate')}>
+          /**
+           * ⚠️ NEUTRAL, NOT GOLD. Animate carried the brand fill as the "primary" verb, which is a claim
+           * about what someone wants that we are in no position to make: on a library set the likely verb
+           * is Download, and on a fresh generation it may be Recreate. One treatment across every button
+           * in both the hover row and the detail foot, so nothing is emphasized by accident.
+           */
+          <button className="pill neutral" onClick={() => void say(ASK.animate(o.reference!))} data-tip={tip('Animate')}>
             <IconAnimate />
             {t('Animate')}
           </button>
