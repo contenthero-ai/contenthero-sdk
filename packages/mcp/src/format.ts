@@ -220,6 +220,35 @@ export interface MediaWidgetItem {
   modelName?: string | null
   modelBrandColor?: string | null
   modelIconKey?: string | null
+  /**
+   * ⭐⭐⭐ **THE SMALL PICTURE, WHICH IS WHAT A TILE MUST PAINT.**
+   *
+   * The tile used to point `<img src>` at `url`, the master. Masters are 1.7 to 2.9 MB, so ten tiles is
+   * about 25 MB over a browser's ~6 connections per origin: measured as five to ten minutes of Laurel
+   * skeletons, with some tiles never arriving at all.
+   *
+   * ⛔⛔ **PAINTING ONLY. NEVER SAVED, NEVER DOWNLOADED.** A preview is 1600px at WebP quality 80. Handing
+   * it to someone who asked to download their asset is a silent quality downgrade, so Download stays on
+   * `url` and the detail view uses this only as its first paint before the master arrives.
+   *
+   * Null when no derivative exists, in which case the master is the only address there is.
+   */
+  previewUrl?: string | null
+  /**
+   * Which library this came from, so the widget knows whether Recreate applies.
+   *
+   * ⚠️ Only a CREATION was ever generated. Offering "generate this again" on an upload or a stock clip is
+   * an action the agent cannot carry out, which is the same defect as offering Animate on an export.
+   */
+  source?: 'creations' | 'uploads' | 'stock' | null
+  /**
+   * PER ITEM, because a mixed set has no shared model or prompt and Recreate needs both.
+   *
+   * ⚠️ `modelId` IS THE RAW ID ON PURPOSE, unlike `modelName`. Its reader is the agent, which needs the
+   * token it can pass to a tool; the chip is the opposite case and renders nothing rather than an id.
+   */
+  modelId?: string | null
+  prompt?: string | null
 }
 
 /**
@@ -284,6 +313,10 @@ export function mediaWidgetData(input: MediaWidgetInput) {
       modelName: it.modelName ?? null,
       modelBrandColor: it.modelBrandColor ?? null,
       modelIconKey: it.modelIconKey ?? null,
+      previewUrl: it.previewUrl ?? null,
+      source: it.source ?? null,
+      modelId: it.modelId ?? null,
+      prompt: it.prompt ?? null,
     })),
   }
 }
@@ -319,6 +352,15 @@ export function generationWidgetData(
       openUrl: studioUrlFor(baseUrl, gen.outputId, i, urls.length),
       // Every generation output is referenceable by id, which is what makes Animate and Edit meaningful.
       reference: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+      /**
+       * INDEX-ALIGNED with `outputUrls`, so the derivative for THIS output is at THIS index. Undefined on an
+       * older server, which simply means the tile paints the master exactly as it did before.
+       */
+      previewUrl: gen.previewUrls?.[i] ?? null,
+      // A generation is, by definition, something that was generated.
+      source: 'creations' as const,
+      modelId: gen.modelId,
+      prompt: gen.prompt,
     })),
   })
 }
@@ -1028,6 +1070,16 @@ function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidget
         ? `${baseUrl.replace(/\/+$/, '')}/studio?output=${encodeURIComponent(it.mediaId)}` +
           (it.variation && it.variation > 1 ? `&variation=${it.variation}` : '')
         : undefined,
+      // The small picture for the tile. The master stays on `url` for download.
+      previewUrl: it.previewUrl ?? null,
+      source: it.source ?? null,
+      /**
+       * ⭐ PER ITEM, WHICH IS WHAT MAKES RECREATE WORK FOR A MIXED SET. These were only ever read from the
+       * payload's SHARED fields, which are null the moment two items disagree, so a library set offered no
+       * Recreate at all even though every item knew its own model and prompt.
+       */
+      modelId: it.model ?? null,
+      prompt: it.prompt ?? null,
     })
   }
   return items

@@ -991,6 +991,13 @@ export interface ResolvedMediaBatchItem {
    * Null when no derivative has been written, in which case `imageUrl` is the only answer.
    */
   previewUrl: string | null
+  /**
+   * Which library this item came from: `creations`, `uploads` or `stock`. Null when nothing maps.
+   *
+   * ⭐ Resolved from the storage spine, so a raw `{ url }` item carries it too. A consumer needs it to decide
+   * whether "generate this again" is a sensible offer: only a creation was ever generated.
+   */
+  source: 'creations' | 'uploads' | 'stock' | null
   type: MediaType | null
   model: string | null
   prompt: string | null

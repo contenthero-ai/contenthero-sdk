@@ -34,6 +34,7 @@ import {
   LAUREL_PATHS,
   LAUREL_VIEW_BOX,
   LAUREL_GOLD,
+  packIntoColumns,
 } from '@contenthero-ai/brand-ui'
 
 /** One tile. Everything past the url is optional, because a producer may genuinely not know it. */
@@ -63,6 +64,23 @@ interface Item {
   readonly modelName?: string | null
   readonly modelBrandColor?: string | null
   readonly modelIconKey?: string | null
+  /**
+   * ⭐⭐⭐ **THE SMALL PICTURE. TILES PAINT THIS; NOTHING SAVES IT.**
+   *
+   * A tile used to load `url`, the master, at 1.7 to 2.9 MB apiece. Ten of those is about 25 MB over a
+   * browser's ~6 connections per origin, which is the five to ten minutes of Laurel skeletons and the tiles
+   * that never arrived.
+   *
+   * ⛔ A PREVIEW IS 1600px AT QUALITY 80, so handing it to someone who asked to DOWNLOAD their asset is a
+   * silent quality downgrade. Download stays on `url`; the detail view paints this first and swaps to the
+   * master when it lands.
+   */
+  readonly previewUrl?: string | null
+  /** Which library this came from. Only a CREATION can be generated again, so this gates Recreate. */
+  readonly source?: 'creations' | 'uploads' | 'stock' | null
+  /** PER ITEM, so Recreate works for a mixed set where no shared model or prompt exists. */
+  readonly modelId?: string | null
+  readonly prompt?: string | null
 }
 
 interface WidgetData {
@@ -280,21 +298,44 @@ const styles = `
    * the column count comes from the width instead. Both rules live in the shared package, so the same
    * media lands the same way in the studio and in a chat.
    *
-   * ⚠️ Columns rather than a real masonry algorithm: CSS columns keep each tile's natural height with no
-   * measurement pass and no layout thrash as images decode at different times. The cost is reading order
-   * running down each column rather than across, which for a set nobody is reading in order is not a cost.
+   * ⛔⛔⛔ **NOT column-count. IT READS DOWN, AND A SET OF MEDIA READS ACROSS.**
+   *
+   * CSS multi-column fills each column top to bottom before starting the next, so item 2 lands BELOW item 1
+   * rather than beside it, and a set arrives in one order and reads in another. That is what multi-column
+   * MEANS; no styling fixes it. The note that used to sit here called the reading order an acceptable cost
+   * "for a set nobody is reading in order", which was a guess about the reader. The reader said otherwise.
+   *
+   * ⭐ So columns are assigned in JS by packIntoColumns (shortest column first, by relative height) and each
+   * is rendered as its own flex stack. That is the rule the studio masonry already uses, shared from the
+   * brand-ui package so the product and a chat arrange the same media the same way.
+   *
+   * ⚠️ Keeping each tile's NATURAL height is still the point: no measurement pass, no layout thrash as
+   * images decode at different times. Assigning columns up front is what buys that without the reading order.
    */
   .grid.mixed {
-    display: block;
-    column-count: var(--cols, 3);
-    column-gap: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
   }
-  .grid.mixed > .tile {
-    /* ⚠️ Without this a tile can be split across a column break, which slices an image in half. */
-    break-inside: avoid;
-    margin-bottom: 8px;
+  .grid.mixed > .col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Equal share of the row, and min-width 0 so a wide tile cannot push its column past its share. */
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .grid.mixed .tile {
     /* A mixed tile is sized by its own ratio, so it must not also be bounded by the row cap. */
     max-width: none;
+  }
+  .t-glyph {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.45);
   }
 
   /**
@@ -611,16 +652,32 @@ function IconRecreate() {
   )
 }
 
-/** ⚠️ `preload="metadata"`: fetching whole videos for a result nobody played is a cost on someone else's bill. */
+/**
+ * ⚠️ `preload="metadata"`: fetching whole videos for a result nobody played is a cost on someone else's bill.
+ *
+ * ## ⭐⭐⭐ `quality` IS WHICH FILE, AND IT IS NEVER WHICH FILE YOU DOWNLOAD
+ *
+ * `'preview'` paints the small derivative and `'master'` paints the real thing. A grid tile is 200 to 400
+ * CSS px and a master is 1.7 to 2.9 MB, so a grid of masters is tens of megabytes over a browser's ~6
+ * connections per origin: measured as five to ten minutes of skeletons with some tiles never arriving.
+ *
+ * ⛔ DOWNLOAD IS NOT A CONSUMER OF THIS. It reads `output.url` directly, because a preview is 1600px at
+ * quality 80 and giving that to someone who asked for their asset is a downgrade they cannot see until
+ * later. The distinction lives here as an explicit parameter precisely so no future caller has to infer it.
+ */
 function Media({
   output,
   kind,
   onReady,
+  quality = 'master',
 }: {
   output: Item
   kind: WidgetData['contentType']
   onReady?: () => void
+  quality?: 'preview' | 'master'
 }) {
+  // A video's POSTER is already a small still, so the preview question does not arise for it.
+  const src = quality === 'preview' ? (output.previewUrl ?? output.url) : output.url
   if (kind === 'video') {
     return (
       <video
@@ -638,7 +695,33 @@ function Media({
     )
   }
   if (kind === 'audio') return <audio className="media" src={output.url} controls preload="metadata" />
-  return <img className="media" src={output.url} alt={output.name} onLoad={onReady} onError={onReady} />
+  return <img className="media" src={src} alt={output.name} onLoad={onReady} onError={onReady} />
+}
+
+/**
+ * The small still that represents an item in a strip, or null when none can exist.
+ *
+ * ⚠️ ORDER MATTERS AND IS NOT ARBITRARY. A video's representative image is its POSTER; an image's is its
+ * own preview. `url` is deliberately absent from this chain: for a video it is an `.mp4`, and putting that
+ * in an `<img>` is exactly what drew the broken-image icons.
+ */
+function thumbFor(o: Item): string | null {
+  if (o.contentType === 'video') return o.posterUrl ?? null
+  if (o.contentType === 'audio') return null
+  return o.previewUrl ?? o.url
+}
+
+/**
+ * What to CALL a set whose items do not share a shape.
+ *
+ * ⚠️ DERIVED FROM THE ITEMS, never a constant. A set is only "Creations" when every item actually is one;
+ * the moment an upload or a stock clip joins, the honest word is the one that covers all of them. Absent
+ * `source` counts as "not known to be a creation", so an older payload reads as Media rather than claiming
+ * something it never stated.
+ */
+function setNoun(items: readonly Item[]): string {
+  if (items.length === 0) return 'Media'
+  return items.every((it) => it.source === 'creations') ? 'Creations' : 'Media'
 }
 
 /** Reduce measured pixels to the ratio a person recognizes, so 2736x1536 reads as `16:9`. */
@@ -711,9 +794,15 @@ const ASK = {
   animate: (ref: string) =>
     `Animate this image into a short video. Use it as the reference image: ${ref}\n\n` +
     `Pick a suitable video model and tell me which one before you spend credits.`,
-  edit: (ref: string) =>
-    `I want to edit this image: ${ref}\n\n` +
-    `Ask me what change I want, then make it with an image-editing model. Do not generate anything yet.`,
+  /**
+   * ⚠️ NAMES THE MEDIUM, NEVER A MODEL. "an image-editing model" was hardcoded, which is both wrong for a
+   * video and a frozen claim about a roster that changes with no deploy. `features.edit` in the registry is
+   * the live answer, and the agent is the one that can read it.
+   */
+  edit: (ref: string, medium: 'image' | 'video' | 'audio') =>
+    `I want to edit this ${medium}: ${ref}\n\n` +
+    `Ask me what change I want. Then find a model that can edit a ${medium} (check the registry rather than ` +
+    `assuming one) and tell me which you picked before you spend credits. Do not generate anything yet.`,
   /**
    * ⚠️ `model: ${d.modelId}` IS THE RAW ID ON PURPOSE. This message's reader is the agent, which needs the
    * token it can pass to a tool, not the display name a person reads. The chip is the opposite case and
@@ -725,6 +814,25 @@ const ASK = {
    * that an agent would act on anyway.
    */
   canRecreate: (d: WidgetData) => Boolean(d.modelId && d.prompt),
+  /**
+   * ⭐ THE PER-ITEM TWIN, for a set whose items share no model or prompt.
+   *
+   * ⚠️ `source === 'creations'` IS PART OF THE TEST, not just the presence of a model. An upload can carry
+   * a model id (something generated it elsewhere) and still not be a thing this product can generate again.
+   */
+  canRecreateItem: (o: Item) => Boolean(o.source === 'creations' && o.modelId && o.prompt),
+  recreateItem: (o: Item) =>
+    [
+      'Generate this again with the same settings.',
+      '',
+      `type: ${o.contentType}`,
+      `model: ${o.modelId}`,
+      ...(o.displayAspect ? [`aspect_ratio: ${o.displayAspect}`] : []),
+      'count: 1',
+      '',
+      'prompt:',
+      o.prompt ?? '',
+    ].join('\n'),
   recreate: (d: WidgetData) => {
     const lines = [
       'Generate this again with the same settings.',
@@ -1167,8 +1275,23 @@ function Widget() {
    * ⭐ ONE ACTION SET, RENDERED TWICE. The hover overlay and the fullscreen foot offer the same verbs, so
    * they are built from one function: two lists would drift the first time a verb is added to one of them.
    *
-   * ⚠️ WHICH VERBS APPLY IS A PROPERTY OF THE MEDIUM. Animate and Edit are image-only: there is nothing to
-   * animate about a video and no image-editing model takes audio. Recreate and Download apply to all three.
+   * ## ⚠️ WHICH VERBS APPLY, AND WHY EDIT IS NOT IMAGE-ONLY
+   *
+   * Download and Open apply to everything: a file is always a file, and everything lives somewhere.
+   *
+   * ANIMATE is genuinely image-only. It turns a still into motion, so there is nothing to animate about a
+   * video and nothing to see in audio.
+   *
+   * ⭐⭐ EDIT APPLIES TO VIDEO TOO, and gating it on the medium was a guess this codebase can check:
+   * `features.edit: true` is a real flag in `model_provider_capabilities`, and `seedance-2` carries it with
+   * `videoRef` among its input types. Video editing is a capability we already sell.
+   *
+   * ⛔⛔ THE WIDGET MUST NOT ENCODE WHICH MODELS CAN EDIT. The registry changes with no deploy, so a list
+   * here would be stale the week after it is written. The message names the MEDIUM and the agent resolves a
+   * model at call time, which is the same rule that keeps the model roster out of the skill.
+   *
+   * RECREATE needs a model and a prompt, so it is offered only for a CREATION that carries both. An upload
+   * was never generated, and "generate this again" is an instruction the agent cannot carry out.
    */
   const actions = (o: Item, opts: { labels: boolean }) => {
     const isImage = o.contentType === 'image'
@@ -1196,10 +1319,37 @@ function Widget() {
           <IconDownload />
           {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
         </button>
-        {isImage && canReference && (
-          <button className="pill neutral" onClick={() => void say(ASK.edit(o.reference!))} data-tip={tip('Edit')}>
+        {canReference && o.contentType !== 'audio' && (
+          <button
+            className="pill neutral"
+            onClick={() => void say(ASK.edit(o.reference!, o.contentType))}
+            data-tip={tip('Edit')}
+          >
             <IconEdit />
             {t('Edit')}
+          </button>
+        )}
+        {o.openUrl && (
+          <button
+            className="pill neutral"
+            onClick={() => void app?.openLink({ url: o.openUrl! })}
+            data-tip={tip('Open')}
+          >
+            <IconOpen />
+            {t('Open')}
+          </button>
+        )}
+        {/* ⭐ PER ITEM, so a mixed set offers it too. It used to read the payload's SHARED model and prompt,
+            which are null the moment two items disagree, so a library set offered no Recreate at all even
+            though every item knew its own. */}
+        {ASK.canRecreateItem(o) && (
+          <button
+            className="pill neutral"
+            onClick={() => void say(ASK.recreateItem(o))}
+            data-tip={tip('Recreate')}
+          >
+            <IconRecreate />
+            {t('Recreate')}
           </button>
         )}
       </>
@@ -1218,7 +1368,22 @@ function Widget() {
           {data.modelName}
         </span>
       )}
-      {aspect && <span className="badge">{aspect}</span>}
+      {/**
+        * ⭐⭐⭐ A RATIO DESCRIBES A SHAPE, SO IT MAY ONLY LABEL A SET THAT HAS ONE.
+        *
+        * `aspect` falls back to the FIRST loaded image's measured ratio, which is correct for a generation
+        * (every variation shares it by construction) and a lie for a library set: a grid of 1:1 flowers,
+        * 16:9 terraces and a portrait clip was labeled "1:1" because item one happened to be square.
+        *
+        * A mixed set gets a NOUN instead. "Creations" when every item is one, "Media" when the set spans
+        * libraries, because an upload was never created here and calling it a creation is the same class of
+        * wrong as the ratio.
+        */}
+      {uniform && aspect ? (
+        <span className="badge">{aspect}</span>
+      ) : (
+        !pending && <span className="badge">{setNoun(items)}</span>
+      )}
     </>
   )
 
@@ -1228,7 +1393,10 @@ function Widget() {
         {/* ⛔ NO HEADER HERE. The host already frames a fullscreen app with its own title and close control,
             so drawing ours produced two of each stacked on top of one another. */}
         <div className="stage">
-          <Media output={current} kind={current.contentType} />
+          {/* ⭐ THE MASTER, because this is the view someone opened to LOOK at the thing, and a 1600px
+              preview is soft at 2600 device px on a retina display. The tile they clicked is already
+              painted underneath, so this is a swap rather than a blank frame. */}
+          <Media output={current} kind={current.contentType} quality="master" />
         </div>
         {n > 1 && (
           <div className="strip" role="tablist" aria-label="Variations">
@@ -1238,10 +1406,20 @@ function Widget() {
                 className="t"
                 role="tab"
                 aria-current={i === index}
-                aria-label={`Variation ${i + 1} of ${n}`}
+                aria-label={`${i + 1} of ${n}`}
                 onClick={() => setIndex(i)}
               >
-                <img src={o.posterUrl ?? o.url} alt="" />
+                {thumbFor(o) ? (
+                  <img src={thumbFor(o)!} alt="" />
+                ) : (
+                  /**
+                   * ⚠️ A GLYPH ONLY WHERE NO STILL CAN EXIST. Audio has no frame to show, so this is the
+                   * honest answer rather than a placeholder standing in for a picture we failed to fetch.
+                   * A video reaching this branch means its poster is genuinely missing and needs a backfill,
+                   * not a read-side workaround.
+                   */
+                  <span className="t-glyph" aria-hidden>♪</span>
+                )}
               </button>
             ))}
           </div>
@@ -1267,11 +1445,100 @@ function Widget() {
           )}
           <span className="spacer" />
           {badges}
-          {n > 1 && <span className="muted">Variation {index + 1} of {n}</span>}
+          {/* ⭐ "Variation X of Y" IS GENERATION VOCABULARY. True for variations of one generation, false
+              for a library set spanning many, where item 3 is not a variation of anything. */}
+          {n > 1 && (
+            <span className="muted">
+              {uniform ? `Variation ${index + 1} of ${n}` : `${index + 1} of ${n}`}
+            </span>
+          )}
         </div>
       </div>
     )
   }
+
+  /**
+   * ⭐ ONE TILE, RENDERED FROM ONE PLACE, so the uniform row and the masonry columns cannot drift. The
+   * two layouts differ only in how tiles are GROUPED; a tile is the same thing in both.
+   */
+  const renderTile = (o: Item, i: number) => (
+          <div
+            key={o.url}
+            className={
+              `tile${o.contentType === 'image' ? ' img' : ''}` +
+              `${o.contentType === 'audio' ? ' audio' : ''}` +
+              ` ${(uniform ? aspect : o.displayAspect) ? 'shaped' : 'unshaped'}` +
+              `${loaded.has(o.url) ? ' ready' : ''}`
+            }
+            // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
+            /**
+             * ⚠️ THE TILE'S OWN SHAPE IN A MIXED SET, the shared one when the set is uniform. Using the
+             * shared value for a mixed set would crop every item that disagreed with the first one,
+             * silently, because object-fit: cover trims against whatever ratio the tile was given.
+             */
+            style={(() => {
+              const a = uniform ? aspect : (o.displayAspect ?? null)
+              return a ? shapeOf(a) : undefined
+            })()}
+            onClick={() => {
+              setIndex(i)
+              if (o.contentType === 'image') void setMode(true)
+            }}
+          >
+            {o.contentType === 'image' ? (
+              <img
+                className="media"
+                /**
+                 * ⭐⭐⭐ THE PREVIEW, NOT THE MASTER. A tile is 200 to 400 CSS px and a master is 1.7 to
+                 * 2.9 MB; a grid of them is tens of megabytes over ~6 connections. Download still reads
+                 * `o.url`, so nobody receives the small file as their asset.
+                 */
+                src={o.previewUrl ?? o.url}
+                alt={o.name}
+                /**
+                 * ⛔ NOT `loading="lazy"`. These tiles are the point of the message and they are all above
+                 * the fold, and a lazy image that never enters the viewport never fires `onLoad`, which is
+                 * now the signal that retires the laurel. A placeholder that never resolves would be worse
+                 * than an eager fetch of four images somebody just paid to generate.
+                 */
+                onLoad={(e) => {
+                  // The handoff signal: this tile has pixels, so its laurel can go.
+                  setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))
+                  /**
+                   * ⭐⭐ MEASURED FROM THE REAL PIXELS, WHICH DRIVES THE LAYOUT AND NOT JUST THE BADGE.
+                   *
+                   * A model does not always return the shape it was asked for, and object-fit: cover crops
+                   * against whatever ratio the tile was given, so laying out by the REQUESTED ratio would
+                   * silently trim any output that came back different. The server's displayAspect seeds
+                   * the first paint; this corrects it the moment a real decode can answer.
+                   */
+                  if (i !== 0) return
+                  const el = e.currentTarget
+                  if (el.naturalWidth && el.naturalHeight) setRatio(ratioLabel(el.naturalWidth, el.naturalHeight))
+                }}
+                // A broken image must not leave a laurel spinning over it forever.
+                onError={() => setLoaded((prev) => new Set(prev).add(o.url))}
+              />
+            ) : (
+              <Media
+                output={o}
+                kind={o.contentType}
+                quality="preview"
+                onReady={() => setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))}
+              />
+            )}
+            {/* The laurel sits ON the media until it has pixels, then the two cross-fade. See .tile .media. */}
+            {!loaded.has(o.url) && o.contentType !== 'audio' && (
+              <div className="laurel-wrap">
+                <Skeleton />
+              </div>
+            )}
+            {/* ⚠️ stopPropagation, or every action also opens the lightbox underneath it. */}
+            <div className="acts" onClick={(e) => e.stopPropagation()}>
+              {actions(o, { labels: false })}
+            </div>
+          </div>
+  )
 
   return (
     <div className="wrap">
@@ -1313,78 +1580,28 @@ function Widget() {
               </div>
             </div>
           ))}
-        {items.map((o, i) => (
-          <div
-            key={o.url}
-            className={
-              `tile${o.contentType === 'image' ? ' img' : ''}` +
-              `${o.contentType === 'audio' ? ' audio' : ''}` +
-              ` ${(uniform ? aspect : o.displayAspect) ? 'shaped' : 'unshaped'}` +
-              `${loaded.has(o.url) ? ' ready' : ''}`
-            }
-            // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
-            /**
-             * ⚠️ THE TILE'S OWN SHAPE IN A MIXED SET, the shared one when the set is uniform. Using the
-             * shared value for a mixed set would crop every item that disagreed with the first one,
-             * silently, because object-fit: cover trims against whatever ratio the tile was given.
-             */
-            style={(() => {
-              const a = uniform ? aspect : (o.displayAspect ?? null)
-              return a ? shapeOf(a) : undefined
-            })()}
-            onClick={() => {
-              setIndex(i)
-              if (o.contentType === 'image') void setMode(true)
-            }}
-          >
-            {o.contentType === 'image' ? (
-              <img
-                className="media"
-                src={o.url}
-                alt={o.name}
-                /**
-                 * ⛔ NOT `loading="lazy"`. These tiles are the point of the message and they are all above
-                 * the fold, and a lazy image that never enters the viewport never fires `onLoad`, which is
-                 * now the signal that retires the laurel. A placeholder that never resolves would be worse
-                 * than an eager fetch of four images somebody just paid to generate.
-                 */
-                onLoad={(e) => {
-                  // The handoff signal: this tile has pixels, so its laurel can go.
-                  setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))
-                  /**
-                   * ⭐⭐ MEASURED FROM THE REAL PIXELS, WHICH DRIVES THE LAYOUT AND NOT JUST THE BADGE.
-                   *
-                   * A model does not always return the shape it was asked for, and object-fit: cover crops
-                   * against whatever ratio the tile was given, so laying out by the REQUESTED ratio would
-                   * silently trim any output that came back different. The server's displayAspect seeds
-                   * the first paint; this corrects it the moment a real decode can answer.
-                   */
-                  if (i !== 0) return
-                  const el = e.currentTarget
-                  if (el.naturalWidth && el.naturalHeight) setRatio(ratioLabel(el.naturalWidth, el.naturalHeight))
-                }}
-                // A broken image must not leave a laurel spinning over it forever.
-                onError={() => setLoaded((prev) => new Set(prev).add(o.url))}
-              />
-            ) : (
-              <Media
-                output={o}
-                kind={o.contentType}
-                onReady={() => setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))}
-              />
-            )}
-            {/* The laurel sits ON the media until it has pixels, then the two cross-fade. See .tile .media. */}
-            {!loaded.has(o.url) && o.contentType !== 'audio' && (
-              <div className="laurel-wrap">
-                <Skeleton />
+        {/**
+          * ⭐⭐⭐ UNIFORM FLOWS; MIXED IS PACKED INTO COLUMNS.
+          *
+          * A uniform set is a ROW, so its tiles are siblings and the grid arranges them. A mixed set
+          * needs each column to be its own stack, because that is the only way the reading order runs
+          * ACROSS rather than down: multi-column fills a column before starting the next, by definition.
+          *
+          * ⚠️ THE INDEX PASSED TO renderTile IS THE INDEX IN `items`, not the position within a column.
+          * The lightbox and the strip both index into `items`, so a per-column index would open the
+          * wrong picture from the second column onward.
+          */}
+        {uniform
+          ? items.map((o, i) => renderTile(o, i))
+          : packIntoColumns(
+              items.map((o, i) => ({ o, i })),
+              cols,
+              (e) => e.o.displayAspect,
+            ).map((col, ci) => (
+              <div className="col" key={`col-${ci}`}>
+                {col.map((e) => renderTile(e.o, e.i))}
               </div>
-            )}
-            {/* ⚠️ stopPropagation, or every action also opens the lightbox underneath it. */}
-            <div className="acts" onClick={(e) => e.stopPropagation()}>
-              {actions(o, { labels: false })}
-            </div>
-          </div>
-        ))}
+            ))}
       </div>
 
       <div className="bar">
