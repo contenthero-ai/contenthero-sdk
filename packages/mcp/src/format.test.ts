@@ -420,11 +420,14 @@ test('video is polled less often than image, because it takes longer', () => {
  * `variation=2` is the studio's slot. Getting it wrong opens the WRONG PICTURE, which reads as a broken
  * link rather than an off-by-one.
  */
-test('a batch maps each output to its zero-based studio variation', () => {
+test('the url names the variation a PERSON reads, which is one-based', () => {
   const id = 'cfe3bafb-ddc5-4e51-bae6-68ec61112a23'
   const base = 'https://app.contenthero.ai'
-  assert.equal(studioUrlFor(base, id, 0, 4), `${base}/studio?output=${id}&variation=0`)
-  assert.equal(studioUrlFor(base, id, 3, 4), `${base}/studio?output=${id}&variation=3`)
+  // Output 0 is "Variation 1 of 4" in the detail view and `<id>-1` in a reference. The url must agree.
+  assert.equal(studioUrlFor(base, id, 0, 4), `${base}/studio?output=${id}&variation=1`)
+  assert.equal(studioUrlFor(base, id, 3, 4), `${base}/studio?output=${id}&variation=4`)
+  // ⛔ Zero must never appear: it is slot space, and slot space is not a number to show anyone.
+  assert.ok(!studioUrlFor(base, id, 0, 4).includes('variation=0'))
 })
 
 test('a single output names no variation, because there was no choice to record', () => {
@@ -451,6 +454,6 @@ test('the widget payload carries a studio url per output', () => {
     [],
     'http://localhost:3000',
   )
-  assert.equal(data.outputs[0]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=0')
-  assert.equal(data.outputs[1]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=1')
+  assert.equal(data.outputs[0]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=1')
+  assert.equal(data.outputs[1]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=2')
 })

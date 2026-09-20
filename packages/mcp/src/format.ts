@@ -151,7 +151,19 @@ export const DEFAULT_APP_URL = 'https://app.contenthero.ai'
 
 export function studioUrlFor(baseUrl: string, outputId: string, index: number, total: number): string {
   const root = baseUrl.replace(/\/+$/, '')
-  const variation = total > 1 ? `&variation=${index}` : ''
+  /**
+   * ⭐⭐⭐ **ONE-BASED, BECAUSE EVERY OTHER THING A PERSON SEES IS.**
+   *
+   * The reference they copy is `<id>-1`. The detail view says "Variation 1 of 4". A url saying
+   * `variation=0` for that same picture made three surfaces disagree, and the one that disagreed was the
+   * only one anybody would ever paste into a message or a bug report.
+   *
+   * ⛔ The studio's `imageIndex` is a ZERO-BASED slot and stays that way. Slot space is an internal fact
+   * about `task_outcomes` and `item_statuses`, not a number to show anyone. The app subtracts one when it
+   * reads this parameter, so the conversion sits at the boundary where the two vocabularies meet rather
+   * than leaking slot space into a shareable link.
+   */
+  const variation = total > 1 ? `&variation=${index + 1}` : ''
   return `${root}/studio?output=${encodeURIComponent(outputId)}${variation}`
 }
 

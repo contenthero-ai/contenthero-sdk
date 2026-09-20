@@ -392,12 +392,20 @@ const styles = `
    * variation, so that is not a cosmetic overlap.
    *
    * ⭐ --composer-band is measured at runtime from the frame's own height against the host's reported
-   * container height, and falls back to a generous 132px when the host reports nothing. Reserving too much
-   * costs a strip of empty background; reserving too little costs the controls.
+   * container height. Reserving too much costs a strip of empty background; reserving too little costs the
+   * controls, which is not a symmetric trade.
+   *
+   * ⛔⛔ **THE COMPOSER IS NOT THE ONLY THING DOWN THERE.** The host also floats a scroll-to-bottom arrow
+   * ABOVE its composer, and that arrow sits over our frame and eats the pointer. The reported symptom was
+   * buttons that highlight sometimes and summon the host's arrow other times, which is exactly what a
+   * transparent overlay catching hover looks like from the inside.
+   *
+   * ⚠️ So the FLOOR covers the composer plus that arrow, not just the composer. We cannot query the host's
+   * chrome and we cannot make it not overlap; the only lever from in here is to stand further back.
    */
   .full {
     position: fixed; inset: 0; display: flex; flex-direction: column;
-    padding-bottom: var(--composer-band, 132px);
+    padding-bottom: var(--composer-band, 184px);
     background: var(--color-background-primary, Canvas);
   }
   .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -772,7 +780,16 @@ function Widget() {
       const dims = ctx?.containerDimensions
       const given = dims?.height ?? dims?.maxHeight
       if (given && window.innerHeight) {
-        const band = Math.min(220, Math.max(112, window.innerHeight - given + 24))
+        /**
+         * ⚠️ THE FLOOR IS 184px, NOT THE COMPOSER'S HEIGHT.
+         *
+         * The composer alone is about 90px, and a band that size put our action row exactly where the
+         * host floats its scroll-to-bottom arrow. That arrow is the host's, it sits over our frame, and it
+         * takes the pointer, so a button under it highlights only when the cursor misses the arrow. There
+         * is nothing to query and nothing to disable from inside a sandboxed frame; standing further back
+         * is the whole of the fix.
+         */
+        const band = Math.min(240, Math.max(184, window.innerHeight - given + 24))
         document.documentElement.style.setProperty('--composer-band', `${Math.round(band)}px`)
       }
     }
@@ -1115,7 +1132,12 @@ function Widget() {
           <p
             className={openPrompt ? 'prompt' : 'prompt clamped'}
             onClick={() => setOpenPrompt((v) => !v)}
-            title={openPrompt ? 'Show less' : 'Show more'}
+            /**
+             * ⛔ NO `title` HERE ANY MORE. The native tooltip is the host OS's, appears after about a
+             * second, cannot be themed, and is the same mechanism that made the icon buttons look
+             * unlabelled. The clamp plus the pointer cursor already say the text is expandable, and the
+             * one tooltip treatment in this widget is scoped to buttons that genuinely have no label.
+             */
           >
             {data.prompt}
           </p>
