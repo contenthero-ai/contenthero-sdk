@@ -13,7 +13,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node widget/build.mjs && tsc",
+    "build": "tsc --noEmit -p widget/tsconfig.json && node widget/build.mjs && tsc",
     "clean": "rm -rf dist",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "prepublishOnly": "npm run clean && npm run build",
@@ -44,6 +44,7 @@
   "dependencies": {
     "@contenthero-ai/brand-ui": "0.1.0",
     "@contenthero/sdk": "^0.4.6",
+    "@lobehub/icons": "5.10.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/sdk": "1.26.0",
     "zod": "^4.3.6"

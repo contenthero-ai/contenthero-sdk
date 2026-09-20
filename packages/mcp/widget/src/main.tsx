@@ -20,9 +20,18 @@
  * carousel is a concession to horizontal space, not a thing to inherit.
  */
 import { createRoot } from 'react-dom/client'
-import { useCallback, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useApp } from '@modelcontextprotocol/ext-apps/react'
-import { columnsForAspect, aspectToCss, LAUREL_PATHS, LAUREL_VIEW_BOX, LAUREL_GOLD } from '@contenthero-ai/brand-ui'
+import { ModelGlyph } from './model-icon.js'
+import {
+  columnsForAspect,
+  aspectToCss,
+  parseAspectRatio,
+  LAUREL_PATHS,
+  LAUREL_VIEW_BOX,
+  LAUREL_GOLD,
+} from '@contenthero-ai/brand-ui'
 
 interface Output {
   readonly url: string
@@ -63,7 +72,23 @@ const GOLD = '#d4af37'
 const OBSIDIAN = '#121212'
 
 const styles = `
-  :root { color-scheme: light dark; }
+  /**
+   * THE TWO CHIP TOKENS, SET FROM THE HOST'S REPORTED THEME.
+   *
+   * The defaults here are the DARK treatment, which is also what an absent theme gets: a host that reports
+   * nothing is more likely dark than light in these clients, and a near-black pill with white content is
+   * legible against a light background too, where the inverse is not. data-theme is stamped on <html> from
+   * the host context, so a toggle repaints without remounting anything.
+   */
+  :root {
+    color-scheme: light dark;
+    --chip-bg: ${OBSIDIAN};
+    --chip-fg: #ffffff;
+  }
+  :root[data-theme='light'] {
+    --chip-bg: #f2f2f2;
+    --chip-fg: ${OBSIDIAN};
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -87,14 +112,33 @@ const styles = `
   .meta { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 8px; }
   .prompt { margin: 0; cursor: pointer; color: var(--color-text-secondary, color-mix(in srgb, CanvasText 60%, transparent)); }
   .prompt.clamped { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  /**
+   * THE MODEL PILL, AND WHY IT CARRIES ITS OWN SURFACE.
+   *
+   * A brand glyph is a single-color shape. Drawn straight onto the host's background it is invisible in one
+   * of the two themes, and the frame has no say over which theme that is. So the pill paints a surface it
+   * controls and the glyph inherits the pill's own text color through currentColor, which is the whole
+   * reason the Mono variant is imported instead of the colored one.
+   *
+   * ⭐⭐ IT FLIPS WITH THE HOST RATHER THAN COMMITTING TO ONE. The host reports theme on its context and
+   * fires hostcontextchanged when a person toggles, so dark mode gets a near-black pill with white content
+   * and light mode gets a near-white pill with near-black content. Committing to a dark pill in both would
+   * have been the fallback, and it is still what an absent theme gets, by way of the defaults below.
+   *
+   * ⚠️ The BRAND COLOR stays on the dot and never becomes the pill's background. Sixty-six registry colors
+   * chosen to read against the app's own surfaces cannot all clear a contrast bar against text in someone
+   * else's chat, and a pill nobody can read is worse than one that is merely plain.
+   */
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .badge {
-    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px;
-    border-radius: 999px; font-size: 12px;
-    background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 8%, transparent));
-    color: var(--color-text-secondary, color-mix(in srgb, CanvasText 62%, transparent));
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border-radius: 999px; font-size: 12px; font-weight: 500;
+    background: var(--chip-bg); color: var(--chip-fg);
   }
-  .badge .dot { width: 6px; height: 6px; border-radius: 999px; background: ${GOLD}; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 999px; background: ${GOLD}; flex: 0 0 auto; }
+  /* The glyph is already the brand's mark, so a colored dot beside it says the same thing twice. */
+  .badge.model .dot { display: none; }
+  .badge.model.no-glyph .dot { display: block; }
 
   /**
    * ⭐ A GRID, NOT A CAROUSEL. The reference uses one horizontal row with arrows, which makes comparison
@@ -134,7 +178,23 @@ const styles = `
   }
   .tile.img { cursor: zoom-in; }
   .tile:focus-within { outline: 2px solid ${GOLD}; outline-offset: 2px; }
-  .tile.shaped { aspect-ratio: var(--ar); }
+  /**
+   * THE HEIGHT CAP, AND WHY IT IS EXPRESSED AS A MAX-WIDTH.
+   *
+   * A single 9:16 output at full column width is over 1000px tall in a chat, which is the opposite problem
+   * from the letterboxing. But capping the HEIGHT of a box that already has a definite width and an
+   * aspect-ratio does not shrink it: both axes are then constrained, the ratio is dropped, and
+   * object-fit: cover silently CROPS the picture. That trades a visible bar for an invisible loss.
+   *
+   * Bounding the WIDTH keeps the ratio authoritative. --ar-num is the same ratio as a plain number, so the
+   * widest a tile may be is cap times ratio, and its height therefore lands at or under the cap by
+   * construction. A tall tile narrows and centers; a wide one is untouched because the bound never binds.
+   */
+  .tile.shaped {
+    aspect-ratio: var(--ar);
+    max-width: calc(420px * var(--ar-num, 1));
+    margin-inline: auto;
+  }
   .tile.shaped img, .tile.shaped video { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* Shape unknown: contain inside a bounded box, because cropping on a guess is worse than a bar. */
   .tile.unshaped img, .tile.unshaped video { display: block; width: 100%; height: auto; max-height: 260px; object-fit: contain; }
@@ -285,6 +345,31 @@ function Widget() {
     [app, canExpand],
   )
 
+  /**
+   * ⭐⭐ THE HOST'S THEME, FOLLOWED RATHER THAN GUESSED.
+   *
+   * `prefers-color-scheme` inside a sandboxed frame reports the OPERATING SYSTEM, not the theme the person
+   * chose in the chat client, and those disagree the moment anyone sets the client to dark on a light
+   * machine. The host tells us directly on its context and notifies on change, so that is what is read.
+   *
+   * ⚠️ Stamped on the DOCUMENT ELEMENT rather than held in React state and threaded through className, so
+   * the CSS custom properties cascade to every subtree including the fullscreen tree, which is a sibling of
+   * the inline one rather than a child.
+   *
+   * ⚠️ `?? 'dark'` is the stated fallback, matching the token defaults. A host that reports no theme gets
+   * the dark treatment, which stays legible on a light background where the inverse would not.
+   */
+  useEffect(() => {
+    if (!app) return
+    const apply = (theme?: string) => {
+      document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark'
+    }
+    apply(app.getHostContext?.()?.theme)
+    const onChange = (ctx: { theme?: string } | undefined) => apply(ctx?.theme)
+    app.addEventListener?.('hostcontextchanged', onChange)
+    return () => app.removeEventListener?.('hostcontextchanged', onChange)
+  }, [app])
+
   const download = (o: Output) =>
     void app?.downloadFile({ contents: [{ type: 'resource_link', uri: o.url, name: o.name }] })
   const open = (o: Output) => void app?.openLink({ url: o.url })
@@ -320,7 +405,9 @@ function Widget() {
       {/* ⛔ No `?? data.modelId`. A null name means the server could not resolve one, and the id reads
           enough like a label that printing it turns that into a cosmetic bug nobody can diagnose. */}
       {data.modelName && (
-        <span className="badge">
+        <span className={`badge model${data.modelIconKey ? '' : ' no-glyph'}`}>
+          {/* The glyph IS the brand mark, so the dot only appears when there is no glyph to stand in for. */}
+          <ModelGlyph iconKey={data.modelIconKey} />
           <span className="dot" style={{ background: data.modelBrandColor || GOLD }} />
           {data.modelName}
         </span>
@@ -392,7 +479,14 @@ function Widget() {
             key={o.url}
             className={`tile${data.contentType === 'image' ? ' img' : ''} ${aspect ? 'shaped' : 'unshaped'}`}
             // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
-            style={aspect ? { ['--ar' as string]: aspectToCss(aspect) } : undefined}
+            style={
+              aspect
+                ? ({
+                    ['--ar']: aspectToCss(aspect),
+                    ['--ar-num']: String(parseAspectRatio(aspect) ?? 1),
+                  } as CSSProperties)
+                : undefined
+            }
             onClick={() => {
               setIndex(i)
               if (data.contentType === 'image') void setMode(true)
@@ -403,8 +497,14 @@ function Widget() {
                 src={o.url}
                 alt={o.name}
                 loading="lazy"
-                // ⭐ MEASURED FROM THE REAL PIXELS rather than declared, so the badge cannot disagree with
-                // what is on screen the way a parameter threaded through three layers can.
+                /**
+                 * ⭐⭐ MEASURED FROM THE REAL PIXELS, WHICH NOW DRIVES THE LAYOUT AND NOT JUST THE BADGE.
+                 *
+                 * A model does not always return the shape it was asked for, and object-fit: cover crops
+                 * against whatever ratio the tile was given, so laying out by the REQUESTED ratio would
+                 * silently trim any output that came back different. The server's displayAspect seeds the
+                 * first paint; this corrects it the moment a real decode can answer.
+                 */
                 onLoad={(e) => {
                   if (i !== 0) return
                   const el = e.currentTarget
