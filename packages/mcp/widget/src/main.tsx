@@ -201,7 +201,7 @@ const styles = `
   .tile audio { width: 100%; padding: 22px 14px; }
 
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
-  .acts { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; }
+  .acts { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; z-index: 1; }
   .tile:hover .acts, .tile:focus-within .acts { opacity: 1; }
   @media (hover: none) { .acts { opacity: 1; } }
 
@@ -219,6 +219,15 @@ const styles = `
   }
   .pill.ghost:hover { border-color: ${GOLD}; }
   .pill.gold { background: ${GOLD}; color: ${OBSIDIAN}; }
+  .pill[disabled] { opacity: .6; cursor: default; }
+  /* A refused download must not look like one that worked. Gold is the brand's attention color. */
+  .pill.warn { border-color: ${GOLD}; color: ${GOLD}; }
+  /*
+   * A pill with only a glyph in it is a CIRCLE. The reference draws squircles; fully round reads as an
+   * action rather than a small panel, and it is the shape the rest of this widget already uses.
+   */
+  .acts .pill { padding: 0; width: 30px; height: 30px; justify-content: center; border-radius: 999px; }
+  .acts .pill.warn { width: auto; padding: 0 12px; }
 
   .bar {
     display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-wrap: wrap;
@@ -233,16 +242,28 @@ const styles = `
    * "min-height: auto", so a tall image refuses to shrink below its content size and pushes the thumbnail
    * strip off the bottom of the frame. That is exactly the clipping reported before this comment existed.
    */
-  .full { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--color-background-primary, Canvas); }
+  /*
+   * ⚠️ 96px OF PADDING AT THE BOTTOM, ON THE CONTAINER. The host's composer floats over this frame, and
+   * everything inside used to compensate for it individually: the strip carried the whole 96px itself, so
+   * adding a foot below the strip put the foot back underneath the composer. Reserving the band ONCE, on
+   * the thing that owns the layout, means anything added at the bottom later is already clear of it.
+   */
+  .full { position: fixed; inset: 0; display: flex; flex-direction: column; padding-bottom: 96px; background: var(--color-background-primary, Canvas); }
   .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
   .full .stage img, .full .stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
   /* ⚠️ The host's composer overlays the bottom of a fullscreen frame, so the strip needs room BELOW it or
      it sits behind the message box. Measured: clipped by roughly a composer's height. */
-  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 16px 96px; overflow-x: auto; justify-content: center; }
+  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px 16px 14px; overflow-x: auto; justify-content: center; }
   .full .strip .t { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; background: none; flex: 0 0 auto; }
   .full .strip .t[aria-current="true"] { border-color: ${GOLD}; }
   .full .strip .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .full .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 16px 16px; flex-wrap: wrap; }
+  /*
+   * ⚠️ THE HOST'S COMPOSER OVERLAYS THE BOTTOM OF A FULLSCREEN FRAME. The foot was pressed flat against it
+   * with no breathing room, so the actions read as squeezed against the message box rather than as part of
+   * the picture above them. The strip already reserves 96px below itself for the same reason; the foot
+   * sits inside that reserved band, which is why its own bottom padding is zero when a strip is present.
+   */
+  .full .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 16px 28px; flex-wrap: wrap; }
   .full .strip + .foot { padding-bottom: 0; }
 `
 
@@ -260,6 +281,54 @@ function Mark({ size = 18 }: { size?: number }) {
       {LAUREL_PATHS.map((d) => (
         <path key={d} d={d} fill={LAUREL_GOLD} />
       ))}
+    </svg>
+  )
+}
+
+/**
+ * The action glyphs.
+ *
+ * ⛔ Drawn here rather than pulled from an icon set: four 16px shapes do not justify another dependency in
+ * a bundle that ships as one string and is already paid for by everyone who installs the server. They use
+ * currentColor so they follow the pill they sit in, in either theme.
+ */
+const ICON = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+
+function IconAnimate() {
+  return (
+    <svg {...ICON} aria-hidden="true">
+      <rect x="2" y="5" width="14" height="14" rx="2" />
+      <path d="m22 8-6 4 6 4V8Z" />
+    </svg>
+  )
+}
+
+function IconDownload() {
+  return (
+    <svg {...ICON} aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="m7 11 5 5 5-5" />
+      <path d="M4 20h16" />
+    </svg>
+  )
+}
+
+function IconEdit() {
+  return (
+    <svg {...ICON} aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function IconRecreate() {
+  return (
+    <svg {...ICON} aria-hidden="true">
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <path d="M3 21v-5h5" />
     </svg>
   )
 }
@@ -291,12 +360,78 @@ function ratioLabel(w: number, h: number): string {
   return `${rw}:${rh}`
 }
 
+/**
+ * The extension and media type a host needs to name a saved file.
+ *
+ * ⚠️ Both were missing from the download request, so the dialog offered a bare uuid with no extension. The
+ * url's own extension is the truth here: it is the stored object's name, not a guess from the content type,
+ * which cannot tell a png from a webp.
+ */
+function extensionOf(url: string): string | null {
+  const path = url.split('?')[0] ?? ''
+  const m = /\.([a-z0-9]{2,5})$/i.exec(path)
+  return m?.[1]?.toLowerCase() ?? null
+}
+
+const FALLBACK_EXT: Record<WidgetData['contentType'], string> = { image: 'png', video: 'mp4', audio: 'mp3' }
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+  avif: 'image/avif', svg: 'image/svg+xml', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
+}
+
+function fileNameFor(o: Output, data: WidgetData): string {
+  const ext = extensionOf(o.url) ?? FALLBACK_EXT[data.contentType]
+  return o.name.includes('.') ? o.name : `${o.name}.${ext}`
+}
+
+function mimeFor(o: Output, data: WidgetData): string | undefined {
+  const ext = extensionOf(o.url) ?? FALLBACK_EXT[data.contentType]
+  return MIME_BY_EXT[ext]
+}
+
+/**
+ * The messages the action buttons put in the conversation.
+ *
+ * ⭐ Kept together and out of the render tree because they are the actual PRODUCT of a button: what the
+ * agent is asked to do. Reading them side by side is the only way to see that each one is complete, which
+ * is the property the whole design rests on (see `say`).
+ */
+const ASK = {
+  animate: (url: string) =>
+    `Animate this image into a short video. Use it as the reference image: ${url}\n\n` +
+    `Pick a suitable video model and tell me which one before you spend credits.`,
+  edit: (url: string) =>
+    `I want to edit this image: ${url}\n\n` +
+    `Ask me what change I want, then make it with an image-editing model. Do not generate anything yet.`,
+  /**
+   * ⚠️ `model: ${d.modelId}` IS THE RAW ID ON PURPOSE. This message's reader is the agent, which needs the
+   * token it can pass to a tool, not the display name a person reads. The chip is the opposite case and
+   * renders nothing rather than an id; both are deliberate and stated in `format.ts` for the same reason.
+   */
+  recreate: (d: WidgetData) => {
+    const lines = [
+      'Generate this again with the same settings.',
+      '',
+      `type: ${d.contentType}`,
+      `model: ${d.modelId}`,
+    ]
+    if (d.displayAspect) lines.push(`aspect_ratio: ${d.displayAspect}`)
+    lines.push(`count: ${d.outputs.length}`)
+    if (d.prompt) lines.push('', 'prompt:', d.prompt)
+    return lines.join('\n')
+  },
+}
+
 function Widget() {
   const [data, setData] = useState<WidgetData | null>(null)
   const [index, setIndex] = useState(0)
   const [full, setFull] = useState(false)
   const [openPrompt, setOpenPrompt] = useState(false)
   const [ratio, setRatio] = useState<string | null>(null)
+  /** The url currently downloading, and the url whose download was refused. Both are transient UI only. */
+  const [busy, setBusy] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
 
   /**
    * ⚠️⚠️ REGISTERED IN `onAppCreated`, WHICH IS BEFORE THE HANDSHAKE COMPLETES.
@@ -370,9 +505,76 @@ function Widget() {
     return () => app.removeEventListener?.('hostcontextchanged', onChange)
   }, [app])
 
-  const download = (o: Output) =>
-    void app?.downloadFile({ contents: [{ type: 'resource_link', uri: o.url, name: o.name }] })
-  const open = (o: Output) => void app?.openLink({ url: o.url })
+  /**
+   * ⛔⛔ **A DENIAL WAS BEING THROWN AWAY.** This was `void app?.downloadFile(...)`, so the `isError` the
+   * host returns when it refuses or the person cancels went nowhere: a download that did nothing looked
+   * exactly like a download that worked, and "the button is broken" could not be told apart from "the host
+   * asked and I said no". The result is now read and a failure says so on the button itself.
+   *
+   * ⚠️ The `name` carries a FILE EXTENSION and a `mimeType`, both of which were missing. The host names the
+   * saved file from these, and it is the only thing in the download dialog a person can recognize.
+   */
+  /**
+   * ⭐ ARROW KEYS IN FULLSCREEN. The thumbnail strip already says these are siblings of one set, and a set a
+   * person is comparing is one they will want to step through without aiming at a 56px target.
+   *
+   * ⚠️ Bound to the WINDOW rather than a focused element: nothing in the fullscreen tree holds focus after
+   * the host opens it, so a keydown on a container would never fire. Only active while fullscreen, so the
+   * inline widget never swallows a key the host wants.
+   */
+  useEffect(() => {
+    if (!full || !data || data.outputs.length < 2) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      e.preventDefault()
+      const len = data.outputs.length
+      setIndex((i) => (e.key === 'ArrowRight' ? (i + 1) % len : (i - 1 + len) % len))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [full, data])
+
+  const download = async (o: Output) => {
+    // ⚠️ `data` is narrowed below, but this closure is defined above that point, so the guard is restated.
+    if (!app || !data) return
+    setBusy(o.url)
+    try {
+      const res = await app.downloadFile({
+        contents: [{ type: 'resource_link', uri: o.url, name: fileNameFor(o, data), mimeType: mimeFor(o, data) }],
+      })
+      setFailed(res?.isError ? o.url : null)
+    } catch {
+      setFailed(o.url)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /**
+   * ⭐⭐⭐ **EVERY MESSAGE IS COMPLETE ON ITS OWN, BECAUSE WE DO NOT CONTROL WHETHER IT IS SENT.**
+   *
+   * `ui/message` is the only channel the spec gives an app for putting text in the conversation, and it has
+   * no "prefill but do not send" flag: the SDK documents it as adding a message to the thread, in contrast
+   * to `updateModelContext`, which never reaches the composer at all. The reference implementation's
+   * buttons visibly leave their text sitting in the composer with a trailing `Prompt:` for the person to
+   * finish, which means a host may also just SEND it.
+   *
+   * ⛔ So a message ending in an empty `Prompt:` is a bug waiting on host behavior: if the host sends it,
+   * a turn is spent on an instruction with a hole in it. Writing each message so that sending it
+   * immediately is the CORRECT outcome makes both host behaviors right, and removes a dependency on
+   * something we cannot observe from in here.
+   *
+   * ⚠️ The url is the same capability url the result's text block already prints, so this exposes nothing
+   * new. Its token names one object.
+   */
+  const say = async (text: string) => {
+    if (!app) return
+    try {
+      await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] })
+    } catch {
+      /* A host that refuses leaves the conversation untouched, which is the honest outcome. */
+    }
+  }
 
   if (!data || !current) {
     return <div className="fallback muted">{isConnected ? 'Waiting for the generation result.' : 'Connecting.'}</div>
@@ -399,6 +601,44 @@ function Widget() {
    * tiles and a hole, which reads as a missing item rather than an arrangement.
    */
   const cols = Math.min(n, columnsForAspect(aspect))
+
+  /**
+   * ⭐ ONE ACTION SET, RENDERED TWICE. The hover overlay and the fullscreen foot offer the same verbs, so
+   * they are built from one function: two lists would drift the first time a verb is added to one of them.
+   *
+   * ⚠️ WHICH VERBS APPLY IS A PROPERTY OF THE MEDIUM. Animate and Edit are image-only: there is nothing to
+   * animate about a video and no image-editing model takes audio. Recreate and Download apply to all three.
+   */
+  const actions = (o: Output, opts: { labels: boolean }) => {
+    const isImage = data.contentType === 'image'
+    const t = (s: string) => (opts.labels ? s : null)
+    const refused = failed === o.url
+    return (
+      <>
+        {isImage && (
+          <button className="pill gold" onClick={() => void say(ASK.animate(o.url))} title="Animate">
+            <IconAnimate />
+            {t('Animate')}
+          </button>
+        )}
+        <button
+          className={`pill${refused ? ' warn' : ''}`}
+          onClick={() => void download(o)}
+          disabled={busy === o.url}
+          title={refused ? 'The host refused that download' : 'Download'}
+        >
+          <IconDownload />
+          {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
+        </button>
+        {isImage && (
+          <button className="pill" onClick={() => void say(ASK.edit(o.url))} title="Edit">
+            <IconEdit />
+            {t('Edit')}
+          </button>
+        )}
+      </>
+    )
+  }
 
   const badges = (
     <>
@@ -441,8 +681,11 @@ function Widget() {
           </div>
         )}
         <div className="foot">
-          <button className="pill gold" onClick={() => download(current)}>Download</button>
-          <button className="pill" onClick={() => open(current)}>Open</button>
+          {actions(current, { labels: true })}
+          <button className="pill" onClick={() => void say(ASK.recreate(data))} title="Recreate">
+            <IconRecreate />
+            Recreate
+          </button>
           <span className="spacer" />
           {badges}
           {n > 1 && <span className="muted">Variation {index + 1} of {n}</span>}
@@ -514,21 +757,27 @@ function Widget() {
             ) : (
               <Media output={o} kind={data.contentType} />
             )}
-            <div className="acts">
-              <button className="pill" onClick={(e) => { e.stopPropagation(); download(o) }}>Download</button>
-              <button className="pill" onClick={(e) => { e.stopPropagation(); open(o) }}>Open</button>
+            {/* ⚠️ stopPropagation, or every action also opens the lightbox underneath it. */}
+            <div className="acts" onClick={(e) => e.stopPropagation()}>
+              {actions(o, { labels: false })}
             </div>
           </div>
         ))}
       </div>
 
-      {canExpand && data.contentType === 'image' && (
-        <div className="bar">
-          <span className="muted">{label}</span>
-          <span className="spacer" />
+      <div className="bar">
+        <span className="muted">{label}</span>
+        <span className="spacer" />
+        {/* Recreate acts on the GENERATION, not one output, which is why it sits under the set rather than
+            on a tile. It carries the prompt and settings, so it needs no follow-up to be actionable. */}
+        <button className="pill ghost" onClick={() => void say(ASK.recreate(data))}>
+          <IconRecreate />
+          Recreate
+        </button>
+        {canExpand && data.contentType === 'image' && (
           <button className="pill ghost" onClick={() => void setMode(true)}>Expand</button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
