@@ -110,12 +110,30 @@ const styles = `
     color: var(--color-text-primary, CanvasText);
     background: transparent;
   }
+  /*
+   * ⭐ ROUNDER, AND LIT FROM THE TOP LEFT.
+   *
+   * A 14px radius on a panel this size reads as a utility box. The reference's widgets are noticeably
+   * rounder and carry a soft diagonal gradient, which is most of what makes them feel finished rather than
+   * functional. Both are cheap: one radius and one overlay gradient in the brand's own gold, at an opacity
+   * low enough to read as light rather than as color.
+   *
+   * ⚠️ The gradient goes on the CONTAINER and stays under the content, so it tints the panel without
+   * touching the media. Painting it over the grid would cast gold on every picture.
+   */
   .wrap {
+    position: relative;
     border: 1px solid var(--color-border-primary, color-mix(in srgb, CanvasText 14%, transparent));
-    border-radius: var(--border-radius-lg, 14px);
+    border-radius: var(--border-radius-lg, 22px);
     overflow: hidden;
     background: var(--color-background-secondary, Canvas);
   }
+  .wrap::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(135deg, color-mix(in srgb, ${GOLD} 7%, transparent), transparent 55%);
+  }
+  .wrap > * { position: relative; z-index: 1; }
 
   .head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
   .head .mark { width: 18px; height: 18px; flex: 0 0 auto; }
@@ -186,7 +204,7 @@ const styles = `
    * displayAspect means we do not know the shape, and cropping on a guess is worse than a bar.
    */
   .tile {
-    position: relative; overflow: hidden; border-radius: var(--border-radius-md, 10px);
+    position: relative; overflow: hidden; border-radius: var(--border-radius-md, 14px);
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
     border: 1px solid transparent; padding: 0; display: block; width: 100%;
   }
@@ -272,8 +290,21 @@ const styles = `
    * neutral surface is theme-aware for the same reason the chip's is: a single fixed gray is unreadable
    * against one of the two backgrounds, and the frame does not choose which.
    */
-  .pill.neutral { background: var(--chip-bg); color: var(--chip-fg); }
-  .pill.neutral:hover { background: var(--chip-bg-hover); }
+  /*
+   * ⚠️ A SURFACE **AND** A HAIRLINE. The neutral fill alone still read as bare text against a dark panel,
+   * because the fill and the panel are close in value by design. The border is what makes the edge of the
+   * control findable, and it is the treatment Expand already had before the other buttons were changed
+   * around it, which is why they suddenly looked unlike each other.
+   */
+  .pill.neutral {
+    background: var(--chip-bg);
+    color: var(--chip-fg);
+    border-color: var(--color-border-secondary, color-mix(in srgb, CanvasText 18%, transparent));
+  }
+  .pill.neutral:hover {
+    background: var(--chip-bg-hover);
+    border-color: ${GOLD};
+  }
   .pill[disabled] { opacity: .6; cursor: default; }
   /* A refused download must not look like one that worked. Gold is the brand's attention color. */
   .pill.warn { border-color: ${GOLD}; color: ${GOLD}; }
@@ -297,17 +328,23 @@ const styles = `
    * ⚠️ Pointer-events off, or the tooltip sits under the cursor and re-triggers the hover it came from,
    * which flickers. It is also the reason the glyphs themselves are pointer-events: none.
    */
-  [data-tip] { position: relative; }
-  [data-tip]::after {
+  /*
+   * ⛔ SCOPED TO .acts, WHICH IS THE ONLY PLACE A BUTTON HAS NO LABEL. A tooltip on a button that already
+   * says Recreate tells you what it says, which is noise wearing the costume of help. The selector is the
+   * enforcement: there is no way to attach one to a labelled button without moving it into the hover row.
+   */
+  .acts [data-tip] { position: relative; }
+  .acts [data-tip]::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-    padding: 5px 9px; border-radius: 8px; white-space: nowrap;
+    /* Fully round, like every other control here. A rounded rectangle was the odd one out. */
+    padding: 5px 12px; border-radius: 999px; white-space: nowrap;
     font-size: 12px; font-weight: 500; line-height: 1.2;
     background: var(--chip-bg); color: var(--chip-fg);
     box-shadow: 0 2px 10px rgb(0 0 0 / .28);
     opacity: 0; pointer-events: none; transition: opacity .1s ease; z-index: 3;
   }
-  [data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; }
+  .acts [data-tip]:hover::after, .acts [data-tip]:focus-visible::after { opacity: 1; }
 
   .muted { color: var(--color-text-secondary, color-mix(in srgb, CanvasText 55%, transparent)); font-size: 13px; }
   .spacer { flex: 1 1 auto; }
@@ -928,11 +965,14 @@ function Widget() {
   const actions = (o: Output, opts: { labels: boolean }) => {
     const isImage = data.contentType === 'image'
     const t = (s: string) => (opts.labels ? s : null)
+    // ⛔ A LABELLED BUTTON GETS NO TOOLTIP. It already says what it does, and repeating that on hover is
+    // noise. `tip` is undefined in the labelled variant so the attribute is absent, not empty.
+    const tip = (s: string) => (opts.labels ? undefined : s)
     const refused = failed === o.url
     return (
       <>
         {isImage && (
-          <button className="pill gold" onClick={() => void say(ASK.animate(o.name))} data-tip="Animate">
+          <button className="pill gold" onClick={() => void say(ASK.animate(o.name))} data-tip={tip('Animate')}>
             <IconAnimate />
             {t('Animate')}
           </button>
@@ -941,13 +981,13 @@ function Widget() {
           className={`pill neutral${refused ? ' warn' : ''}`}
           onClick={() => void download(o)}
           disabled={busy === o.url}
-          data-tip={refused ? failReason || 'The host refused that download' : 'Download'}
+          data-tip={refused ? failReason || 'The host refused that download' : tip('Download')}
         >
           <IconDownload />
           {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
         </button>
         {isImage && (
-          <button className="pill neutral" onClick={() => void say(ASK.edit(o.name))} data-tip="Edit">
+          <button className="pill neutral" onClick={() => void say(ASK.edit(o.name))} data-tip={tip('Edit')}>
             <IconEdit />
             {t('Edit')}
           </button>
@@ -998,7 +1038,7 @@ function Widget() {
         )}
         <div className="foot">
           {actions(current, { labels: true })}
-          <button className="pill neutral" onClick={() => void say(ASK.recreate(data))} data-tip="Recreate">
+          <button className="pill neutral" onClick={() => void say(ASK.recreate(data))}>
             <IconRecreate />
             Recreate
           </button>
@@ -1115,13 +1155,13 @@ function Widget() {
         {/* Recreate acts on the GENERATION, not one output, which is why it sits under the set rather than
             on a tile. It carries the prompt and settings, so it needs no follow-up to be actionable. */}
         {!pending && (
-          <button className="pill neutral" data-tip="Recreate" onClick={() => void say(ASK.recreate(data))}>
+          <button className="pill neutral" onClick={() => void say(ASK.recreate(data))}>
             <IconRecreate />
             Recreate
           </button>
         )}
         {!pending && canExpand && data.contentType === 'image' && (
-          <button className="pill ghost" onClick={() => void setMode(true)}>Expand</button>
+          <button className="pill neutral" onClick={() => void setMode(true)}>Expand</button>
         )}
       </div>
     </div>
