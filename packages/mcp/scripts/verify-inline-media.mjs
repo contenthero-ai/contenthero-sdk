@@ -13,9 +13,9 @@
  * and a manual test in two hosts. This speaks real MCP to the real built server against the real API, so the
  * same question is answered in about ten seconds from a rebuild.
  *
- * ⚠️ **IT SPENDS NO CREDITS.** It reads generations that already exist by id, through `get_media`,
- * which is the same formatter path a fresh generation returns. Verifying the output shape must never cost
- * money, or it stops being run.
+ * ⚠️ **IT SPENDS NO CREDITS.** It reads generations that already exist by id, through the two tools that
+ * answer the two halves of the question: `get_media` for the blocks an agent sees, `show_media` for the
+ * card a person sees. Verifying the output shape must never cost money, or it stops being run.
  *
  * ## Usage
  *
@@ -142,23 +142,24 @@ try {
   let n = 10
   for (const [medium, outputId] of Object.entries(ids)) {
     if (!outputId) { console.log(`  ${medium.padEnd(6)} SKIPPED (no id given)`); continue }
-    const res = await rpc(child, n++, 'tools/call', {
-      /**
-      * ⛔⛔ **`get_media`, NOT `get_generation_status`. THIS HARNESS WAS ASKING THE WRONG TOOL.**
-      *
-      * A status call REPORTS: it deliberately declares no widget, because the generate call already returns
-      * one that polls itself to completion and a second card for the same generation is a duplicate. So
-      * this ran green for weeks and then reported FAIL on three correct mediums the day the split landed.
-      * A harness that fails on correct behavior is worse than none, because it teaches you to ignore it.
-      *
-      * ⭐ `get_media` is the tool whose job is showing an existing thing, which is the question this script
-      * asks. It also spends no credits, which is why this instrument gets run at all.
-      */
-      name: 'get_media',
-      // ⚠️ A harness that cannot tell a WRONG CALL from a real failure is worse than none, so the text of
-      // any non-media result is printed below rather than summarized away.
-      arguments: { items: [{ mediaId: outputId }] },
-    })
+    /**
+     * ⭐⭐⭐ **TWO TOOLS, TWO QUESTIONS, BECAUSE ONE TOOL NO LONGER ANSWERS BOTH.**
+     *
+     * This asked `get_media` for everything, which worked while that tool both saw and showed. It does not
+     * any more: `get_media` is the agent's eyes and renders nothing, `show_media` is the card. Asking one
+     * tool about the other's job is exactly the mistake this harness already made once, when it asked
+     * `get_generation_status` for a widget and reported FAIL on three correct mediums.
+     *
+     * ⚠️ BOTH CALLS, EVERY RUN. Checking only the one that changed is how the other silently rots, and the
+     * pair is the actual contract: an agent can see it AND a person can see it.
+     *
+     * Neither spends credits, which is why this instrument gets run at all.
+     */
+    const args = { items: [{ mediaId: outputId }] }
+    // ⚠️ A harness that cannot tell a WRONG CALL from a real failure is worse than none, so the text of
+    // any non-media result is printed below rather than summarized away.
+    const res = await rpc(child, n++, 'tools/call', { name: 'get_media', arguments: args })
+    const shown = await rpc(child, n++, 'tools/call', { name: 'show_media', arguments: args })
     const firstText = (res.content ?? []).find((c) => c.type === 'text')?.text ?? ''
     if (/^MCP error|validation error/i.test(firstText)) {
       console.log(`  ${medium.padEnd(6)} ERROR the call itself failed: ${firstText.slice(0, 120)}`)
@@ -174,11 +175,22 @@ try {
     // ⭐ THE WIDGET IS THE PART THAT RENDERS VIDEO, so it is checked for EVERY medium, not just video.
     // `structuredContent` is what the widget reads; `_meta` is what tells the host to mount it. One without
     // the other renders nothing, and each fails silently on its own.
-    const meta = res._meta ?? {}
+    /**
+     * ⛔ THE WIDGET IS JUDGED ON `show_media`, AND ITS ABSENCE ON `get_media` IS NOW A REQUIREMENT.
+     *
+     * A card from the looking tool is the duplicate the split removed: an agent inspecting something it
+     * just generated produced a second card of the same media under the first.
+     */
+    if (res._meta?.['ui/resourceUri'] || res.structuredContent) {
+      console.log(`  ${medium.padEnd(6)} FAIL get_media rendered a card; that is show_media's job`)
+      failures += 1
+      continue
+    }
+    const meta = shown._meta ?? {}
     const boundTo = meta['ui/resourceUri'] ?? meta.ui?.resourceUri
     // ⚠️ `items`, not `outputs`. The payload became a SET OF ITEMS so anything but a generation could
     // render, and this script kept reading the old field and reported a missing widget on a working one.
-    const feeds = Array.isArray(res.structuredContent?.items) && res.structuredContent.items.length > 0
+    const feeds = Array.isArray(shown.structuredContent?.items) && shown.structuredContent.items.length > 0
     /**
      * ⛔⛔ THE SIZE OF THE WHOLE RESULT, MEASURED, NOT THE SIZE OF THE BLOCKS.
      *
@@ -187,6 +199,7 @@ try {
      * production on 2026-09-19 and no assertion here could see it, because every check was about which
      * BLOCKS were present rather than how big the envelope was.
      */
+    // The ceiling applies to whichever result is the big one, and that is always the one carrying bytes.
     const wireBytes = Buffer.byteLength(JSON.stringify(res))
     const overCeiling = wireBytes > HOST_RESULT_CEILING
     const hasWidget = Boolean(boundTo && feeds)
@@ -220,7 +233,7 @@ try {
      * ⚠️ A deployment that does not yet return `modelDisplayName` prints `chip=-` on every row. That is the
      * expected reading until the app ships, not a regression to chase.
      */
-    const sc = res.structuredContent ?? {}
+    const sc = shown.structuredContent ?? {}
     /**
      * ⚠️ READ OFF THE FIRST ITEM, not the payload. The shared fields are only populated when every item
      * agrees, which is a generation; a mixed set carries its medium, shape and destination per tile, and a

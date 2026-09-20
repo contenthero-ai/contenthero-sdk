@@ -1196,13 +1196,22 @@ export function mediaBatchResult(
    * ⭐ DISPLAY COSTS NOTHING EXTRA. The blocks above are the agent's vision and are budget-bounded; this is
    * urls, so every resolved item renders whether or not its pixels fit that budget.
    */
-  const tiles = mediaBatchItems(result, baseUrl)
-  if (tiles.length === 0) return { content }
-  return {
-    content,
-    structuredContent: mediaWidgetData({ items: tiles }),
-    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
-  }
+  /**
+   * ⛔⛔⛔ **NO CARD FROM THIS TOOL, AND THE SPLIT IS WHY.**
+   *
+   * `get_media` used to display as well, on the reasoning that the agent is already looking so showing
+   * the person costs nothing. The first real test of that rule refuted it: an agent fetched keyframes of
+   * a video it had JUST generated, and the person got a second card showing the same video directly under
+   * the first. Every inspection of already-shown media produced a duplicate.
+   *
+   * ⭐ `show_media` exists precisely so display has its own verb. With that in place, "the agent is
+   * already looking" stops being an argument for a card and becomes an argument for none: looking and
+   * showing are now two tools, and a tool that does both is the thing we split apart.
+   *
+   * ⚠️ NO `structuredContent` EITHER. Without `_meta` no host mounts anything, so a payload here would be
+   * bytes on the wire that nothing can ever read, on the one tool whose entire constraint is its size.
+   */
+  return { content }
 }
 
 /**
