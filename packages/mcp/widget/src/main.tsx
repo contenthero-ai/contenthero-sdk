@@ -344,7 +344,13 @@ const ICON = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke
  * ⚠️ The keyframes are injected ONCE for the whole widget rather than per card. Nine `@keyframes` blocks
  * repeated across four placeholders is the same CSS four times, and every copy after the first is ignored.
  */
-const LAUREL_CSS = laurelKeyframes({ prefix: 'ch', durationSecs: 2 })
+/**
+ * ⛔ **NO `durationSecs` HERE, DELIBERATELY.** This passed 2 and ran THREE TIMES faster than the studio,
+ * whose skeleton cards render `<LaurelLoader />` with no duration and therefore take its default of 6.
+ * Nothing about a fast laurel looks broken, which is why it survived until the two were compared side by
+ * side. The package owns the number now, so a surface that says nothing inherits the right speed.
+ */
+const LAUREL_CSS = laurelKeyframes({ prefix: 'ch' })
 
 function Skeleton() {
   return (
