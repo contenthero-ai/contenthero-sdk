@@ -22,15 +22,42 @@
  * React is bundled IN, not externalized: the frame has no import map and no node_modules.
  */
 import { build } from 'esbuild'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT_DIR = join(HERE, '..', 'dist', 'widget')
+const ENTRY = join(HERE, 'src', 'main.tsx')
+
+/**
+ * ⚠️⚠️ **A BACKTICK INSIDE THE CSS TEMPLATE ENDS IT, AND THE ERROR NAMES THE WRONG THING.**
+ *
+ * The stylesheet is one long template literal, so a comment inside it that quotes an identifier in
+ * backticks closes the string early and the rest of the CSS is parsed as JavaScript. This has happened
+ * twice: once from a comment containing a CSS declaration in backticks, once from a comment naming a
+ * custom property in backticks.
+ *
+ * ⛔ esbuild does report it, but as `Expected ";" but found "cols"` pointing at prose inside a comment,
+ * which describes the symptom and not the cause. Checking here costs nothing and names the actual rule:
+ * inside that template, write identifiers plain.
+ */
+const source = readFileSync(ENTRY, 'utf8')
+const CSS_OPEN = 'const styles = `'
+const cssStart = source.indexOf(CSS_OPEN)
+if (cssStart < 0) throw new Error('the stylesheet template was not found in the entry')
+const cssEnd = source.indexOf('\n`\n', cssStart)
+if (cssEnd < 0) throw new Error('the stylesheet template is not closed')
+const strayBackticks = source.slice(cssStart + CSS_OPEN.length, cssEnd).split('`').length - 1
+if (strayBackticks > 0) {
+  throw new Error(
+    `${strayBackticks} backtick(s) inside the CSS template literal will END it early. ` +
+      'Comments in there must name identifiers without quoting them.',
+  )
+}
 
 const result = await build({
-  entryPoints: [join(HERE, 'src', 'main.tsx')],
+  entryPoints: [ENTRY],
   bundle: true,
   format: 'esm',
   target: 'es2022',

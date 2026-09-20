@@ -42,6 +42,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
+    "@contenthero-ai/brand-ui": "0.1.0",
     "@contenthero/sdk": "^0.4.6",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/sdk": "1.26.0",

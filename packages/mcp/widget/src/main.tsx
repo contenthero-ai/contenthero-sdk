@@ -22,6 +22,7 @@
 import { createRoot } from 'react-dom/client'
 import { useCallback, useMemo, useState } from 'react'
 import { useApp } from '@modelcontextprotocol/ext-apps/react'
+import { columnsForAspect, aspectToCss, LAUREL_PATHS, LAUREL_VIEW_BOX, LAUREL_GOLD } from '@contenthero-ai/brand-ui'
 
 interface Output {
   readonly url: string
@@ -33,7 +34,16 @@ interface WidgetData {
   readonly outputId: string
   readonly contentType: 'image' | 'video' | 'audio'
   readonly modelId: string
-  readonly modelName?: string
+  /**
+   * ⛔ **NULL MEANS RENDER NO CHIP. NEVER FALL BACK TO `modelId`.** This carried `modelName ?? modelId`
+   * until the server resolved it properly, and `gpt-image-2` reads enough like a label that a failed
+   * lookup showed up as a chip flickering between kebab case and title case instead of as a failure.
+   */
+  readonly modelName?: string | null
+  readonly modelBrandColor?: string | null
+  readonly modelIconKey?: string | null
+  /** `"W:H"` from the row, or null for audio. Drives both the column count and each tile's own shape. */
+  readonly displayAspect?: string | null
   readonly outputs: readonly Output[]
   readonly prompt?: string | null
 }
@@ -87,31 +97,47 @@ const styles = `
   .badge .dot { width: 6px; height: 6px; border-radius: 999px; background: ${GOLD}; }
 
   /**
-   * ⭐ A GRID, NOT A CAROUSEL. One column for a single output so it gets the full width; two columns from
-   * two upward. A lone third tile CENTERS under the pair rather than leaving a hole, which reads as a
-   * deliberate arrangement instead of a missing item.
+   * ⭐ A GRID, NOT A CAROUSEL. The reference uses one horizontal row with arrows, which makes comparison
+   * SERIAL: variation 1 and variation 4 can never be on screen at once, and choosing between them is the
+   * entire reason four were generated.
+   *
+   * ⭐⭐⭐ **THE COLUMN COUNT COMES FROM THE SHAPE, VIA --cols.** This was 1fr 1fr for every count, so
+   * four 9:16 images sat two-up and each one had to be shrunk to fit, which is where the letterboxing came
+   * from. Four portrait images belong on ONE row; two 16:9 images already fill it. The rule is
+   * columnsForAspect in @contenthero-ai/brand-ui, shared with the studio's row view so the same batch
+   * is arranged the same way in both places.
+   *
+   * ⚠️ min() with the count, so three outputs under a four-column rule make three columns rather than
+   * three columns and a hole.
    */
-  /**
-   * ⚠️ THE WHOLE SET HAS TO FIT ON SCREEN, OR THE GRID BUYS NOTHING. A 2x2 of portrait images ran taller
-   * than the viewport, so comparing variation 1 with variation 4 meant scrolling, which is exactly the
-   * serial comparison the grid replaced the carousel to avoid. Capping each tile keeps the set visible.
-   */
-  .grid { display: grid; gap: 8px; padding: 10px 12px; }
-  .grid.n1 { grid-template-columns: 1fr; }
-  .grid.n2, .grid.n3, .grid.n4 { grid-template-columns: 1fr 1fr; }
-  .grid.n3 > :nth-child(3) { grid-column: 1 / -1; justify-self: center; width: calc(50% - 4px); }
-  .grid.many { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .grid { display: grid; gap: 8px; padding: 10px 12px; grid-template-columns: repeat(var(--cols, 2), 1fr); }
 
+  /**
+   * ⛔⛔⛔ **THE TILE IS THE IMAGE. IT IS NOT A BOX WITH AN IMAGE INSIDE IT.**
+   *
+   * The tile used to be a fixed max-height: 220px container with object-fit: contain, so anything whose
+   * shape disagreed with the container got bars painted around it. Four portrait images in landscape boxes
+   * is most of what looked wrong here.
+   *
+   * ⭐ Giving the tile the generation's own aspect-ratio leaves nothing over to letterbox: the box takes
+   * the shape of its content, the image covers it exactly, and the visible edge is the picture's edge.
+   * --ar is set per tile from displayAspect, which the server now sends.
+   *
+   * ⚠️ object-fit: cover is safe ONLY because the tile's ratio IS the media's ratio. If the two ever
+   * disagree, cover crops silently. The fallback below is contain for exactly that case: a missing
+   * displayAspect means we do not know the shape, and cropping on a guess is worse than a bar.
+   */
   .tile {
     position: relative; overflow: hidden; border-radius: var(--border-radius-md, 10px);
     background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
     border: 1px solid transparent; padding: 0; display: block; width: 100%;
   }
   .tile.img { cursor: zoom-in; }
-  .tile.sel { border-color: ${GOLD}; }
   .tile:focus-within { outline: 2px solid ${GOLD}; outline-offset: 2px; }
-  .tile img, .tile video { display: block; width: 100%; height: auto; max-height: 220px; object-fit: contain; }
-  .grid.n1 img, .grid.n1 video { max-height: 420px; }
+  .tile.shaped { aspect-ratio: var(--ar); }
+  .tile.shaped img, .tile.shaped video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Shape unknown: contain inside a bounded box, because cropping on a guess is worse than a bar. */
+  .tile.unshaped img, .tile.unshaped video { display: block; width: 100%; height: auto; max-height: 260px; object-fit: contain; }
   .tile audio { width: 100%; padding: 22px 14px; }
 
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
@@ -161,34 +187,18 @@ const styles = `
 `
 
 /**
- * The ContentHero laurel, the REAL one.
+ * ⛔ **THE LAUREL'S PATHS ARE NO LONGER COPIED INTO THIS FILE.**
  *
- * ⛔ This replaced a hand-drawn placeholder I invented, which looked like a generic hexagon and had nothing
- * to do with the brand. Path data copied verbatim from `components/chat/LaurelStatic.tsx` in the app.
- *
- * ⚠️ COPIED, NOT IMPORTED, AND THAT IS FORCED. This bundle ships inside the published MCP package and must
- * contain everything it draws; it cannot reach into the app repo. The app's own file already carries the
- * same note about its relationship to `LaurelLoader`, so the copy is the third instance of one shape rather
- * than the second. ⏭️ Publishing the mark as a tiny shared package is the convergence, once more than these
- * two need it.
+ * They were, and they were the THIRD hand-copy of one shape. A copied path is a logo that slowly stops
+ * being the logo, and nothing typechecks a `d` attribute. They now come from `@contenthero-ai/brand-ui`,
+ * which ships data and pure functions only: this bundle must contain everything it draws, so a package
+ * exporting React components could not have solved it.
  */
-const LAUREL = [
-  'M11.15,47.67l6.07-1.67c3.58-.98,6.21-3.75,7.02-7.6l1.4-6.65-4.42,1.12c-3.69.94-7.74,3.92-9.46,7.77.03-4.07-4.23-7.74-7.63-9.28l-4.13-1.88.08,6.78c.05,3.92,2.1,7.11,5.43,8.7l5.64,2.7Z',
-  'M23.89,60.4c2.99-2.1,4.45-5.57,3.8-9.45l-1.12-6.7-3.74,2.52c-3.12,2.1-5.82,6.23-6.02,10.42-1.46-3.82-6.8-5.85-10.55-6.18l-4.56-.4,2.56,6.33c1.48,3.66,4.57,5.97,8.27,6.36l6.28.67,5.08-3.57Z',
-  'M14.43,17.52l-.48-6.01c-.29-3.54,1.52-6.7,5.04-8.46l6.08-3.05.44,4.36c.38,3.72-.44,7.4-4.21,9.44l-6.87,3.72Z',
-  'M81.48,31.59l-6.18-1.26c-3.64-.75-6.47-3.33-7.55-7.12l-1.88-6.54,4.49.83c3.75.69,8,3.4,10,7.13-.32-4.05,3.66-8,6.94-9.76l3.98-2.15.41,6.77c.24,3.92-1.58,7.23-4.78,9.03l-5.43,3.07Z',
-  'M82.69,47.67l-6.07-1.67c-3.58-.98-6.21-3.75-7.02-7.6l-1.4-6.65,4.42,1.12c3.69.94,7.74,3.92,9.46,7.77-.03-4.07,4.23-7.74,7.63-9.28l4.13-1.88-.08,6.78c-.05,3.92-2.1,7.11-5.43,8.7l-5.64,2.7Z',
-  'M69.95,60.4c-2.99-2.1-4.45-5.57-3.8-9.45l1.12-6.7,3.74,2.52c3.12,2.1,5.82,6.23,6.02,10.42,1.46-3.82,6.8-5.85,10.55-6.18l4.56-.4-2.56,6.33c-1.48,3.66-4.57,5.97-8.27,6.36l-6.28.67-5.08-3.57Z',
-  'M39.41,88.17l-1.89-2.36-2.12-2.64c2.61-2.85,5.43-5.02,8.29-6.79-1.44-.96-2.92-1.7-4.36-2.08-2.56-.68-5.26-.56-7.82.51l-1.16.48c-3.41,1.42-7.3.9-10.5-1.56l-5.55-4.26,4.15-1.83c3.42-1.51,9.11-2.29,12.38.32-2.02-3.72-1.86-8.58-.27-11.89l1.91-3.96,4.49,5.26c2.6,3.04,3.16,6.74,1.68,9.99l-1.23,2.69c2.93,1.37,6.19,2.72,9.51,4.47,3.32-1.75,6.58-3.1,9.51-4.47l-1.23-2.69c-1.48-3.25-.92-6.94,1.68-9.99l4.49-5.26,1.91,3.96c1.59,3.3,1.76,8.17-.27,11.89,3.27-2.61,8.96-1.83,12.38-.32l4.15,1.83-5.55,4.26c-3.21,2.46-7.09,2.99-10.5,1.56l-1.16-.48c-2.57-1.07-5.27-1.19-7.82-.51-1.45.38-2.92,1.12-4.36,2.08,2.86,1.77,5.68,3.95,8.29,6.79l-2.12,2.64-1.89,2.36c-1.38-2.49-4.2-6.22-7.52-9.24-3.32,3.01-6.14,6.75-7.52,9.24Z',
-  'M79.42,17.52l.48-6.01c.29-3.54-1.52-6.7-5.04-8.46l-6.08-3.05-.44,4.36c-.38,3.72.44,7.4,4.21,9.44l6.87,3.72Z',
-  'M12.36,31.59l6.18-1.26c3.64-.75,6.47-3.33,7.55-7.12l1.88-6.54-4.49.83c-3.75.69-8,3.4-10,7.13.32-4.05-3.66-8-6.94-9.76l-3.98-2.15-.41,6.77c-.24,3.92,1.58,7.23,4.78,9.03l5.43,3.07Z',
-] as const
-
 function Mark({ size = 18 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} className="mark" aria-hidden="true">
-      {LAUREL.map((d) => (
-        <path key={d} d={d} fill={GOLD} />
+    <svg viewBox={LAUREL_VIEW_BOX} width={size} height={size} className="mark" aria-hidden="true">
+      {LAUREL_PATHS.map((d) => (
+        <path key={d} d={d} fill={LAUREL_GOLD} />
       ))}
     </svg>
   )
@@ -284,12 +294,38 @@ function Widget() {
   }
 
   const n = data.outputs.length
-  const gridClass = n > 4 ? 'grid many' : `grid n${n}`
   const label = n === 1 ? data.contentType : `${n} ${data.contentType}s`
+
+  /**
+   * ⭐⭐ **MEASURED PIXELS BEAT THE REQUESTED RATIO, AND `displayAspect` SEEDS THE FIRST PAINT.**
+   *
+   * A model does not always return the shape it was asked for, and the studio's row view already settles
+   * this the same way for the same reason: lay out by what the media ACTUALLY is. But measuring requires a
+   * loaded image, so seeding from the server's `displayAspect` means the grid is right on the first frame
+   * instead of reflowing once a decode finishes.
+   *
+   * ⚠️ Null is a real third state. Audio has no shape, and an older server sends nothing, so the tiles fall
+   * back to a bounded `contain` box rather than cropping against a ratio nobody established.
+   */
+  const aspect = ratio ?? data.displayAspect ?? null
+
+  /**
+   * ⚠️ `Math.min` WITH THE COUNT. Three outputs under a four-column rule would otherwise lay out as three
+   * tiles and a hole, which reads as a missing item rather than an arrangement.
+   */
+  const cols = Math.min(n, columnsForAspect(aspect))
+
   const badges = (
     <>
-      <span className="badge"><span className="dot" />{data.modelName ?? data.modelId}</span>
-      {ratio && <span className="badge">{ratio}</span>}
+      {/* ⛔ No `?? data.modelId`. A null name means the server could not resolve one, and the id reads
+          enough like a label that printing it turns that into a cosmetic bug nobody can diagnose. */}
+      {data.modelName && (
+        <span className="badge">
+          <span className="dot" style={{ background: data.modelBrandColor || GOLD }} />
+          {data.modelName}
+        </span>
+      )}
+      {aspect && <span className="badge">{aspect}</span>}
     </>
   )
 
@@ -350,11 +386,13 @@ function Widget() {
         </div>
       )}
 
-      <div className={gridClass}>
+      <div className="grid" style={{ ['--cols' as string]: String(cols) }}>
         {data.outputs.map((o, i) => (
           <div
             key={o.url}
-            className={`tile${data.contentType === 'image' ? ' img' : ''}`}
+            className={`tile${data.contentType === 'image' ? ' img' : ''} ${aspect ? 'shaped' : 'unshaped'}`}
+            // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
+            style={aspect ? { ['--ar' as string]: aspectToCss(aspect) } : undefined}
             onClick={() => {
               setIndex(i)
               if (data.contentType === 'image') void setMode(true)
