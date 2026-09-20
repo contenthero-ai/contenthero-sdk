@@ -216,10 +216,28 @@ const styles = `
    * A PLACEHOLDER IS THE SAME TILE, so it occupies exactly the space its output will. Anything else makes
    * the grid jump when the media lands, which reads as a glitch rather than as an arrival.
    */
-  .tile.pending { display: flex; align-items: center; justify-content: center; }
-  .tile.pending .laurel { width: 38%; max-width: 72px; height: auto; }
-  /* An unshaped placeholder has no ratio to hold it open, so it needs a height of its own. */
-  .tile.pending.unshaped { min-height: 132px; }
+  .laurel-wrap {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--color-background-tertiary, color-mix(in srgb, CanvasText 6%, transparent));
+    transition: opacity .35s ease;
+  }
+  .laurel-wrap .laurel { width: 38%; max-width: 72px; height: auto; }
+
+  /*
+   * ⭐⭐⭐ THE HANDOFF: THE LAUREL STAYS UNTIL THE PIXELS ARE ACTUALLY THERE.
+   *
+   * Swapping the placeholder for an img the moment the poll returns urls leaves the tile EMPTY for however
+   * long the download takes, so the sequence reads laurel, blank card, pop. The studio does not do that: it
+   * holds its skeleton until the media reports ready and then cross-fades opacity only.
+   *
+   * So the media mounts UNDERNEATH at opacity 0 with the laurel over it, and one class flips on load. They
+   * cross-fade in place and nothing moves, because the tile already has its final shape.
+   */
+  .tile .media { opacity: 0; transition: opacity .35s ease; }
+  .tile.ready .media { opacity: 1; }
+  .tile.ready .laurel-wrap { opacity: 0; pointer-events: none; }
+  /* Audio has no decode event worth waiting on and no picture to fade, so it is ready on arrival. */
+  .tile.audio .media { opacity: 1; }
 
   /* Actions live ON the thing they act on. Hidden until hover, but never unreachable by keyboard. */
   .acts { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; z-index: 1; }
@@ -377,12 +395,33 @@ function IconRecreate() {
 }
 
 /** ⚠️ `preload="metadata"`: fetching whole videos for a result nobody played is a cost on someone else's bill. */
-function Media({ output, kind }: { output: Output; kind: WidgetData['contentType'] }) {
+function Media({
+  output,
+  kind,
+  onReady,
+}: {
+  output: Output
+  kind: WidgetData['contentType']
+  onReady?: () => void
+}) {
   if (kind === 'video') {
-    return <video src={output.url} poster={output.posterUrl ?? undefined} controls preload="metadata" playsInline />
+    return (
+      <video
+        className="media"
+        src={output.url}
+        poster={output.posterUrl ?? undefined}
+        controls
+        preload="metadata"
+        playsInline
+        // ⚠️ `loadeddata`, not `canplay`: the first frame is painted by then, which is what the laurel is
+        // waiting for. `canplay` waits on enough buffer to play through, which is a different question.
+        onLoadedData={onReady}
+        onError={onReady}
+      />
+    )
   }
-  if (kind === 'audio') return <audio src={output.url} controls preload="metadata" />
-  return <img src={output.url} alt={output.name} loading="lazy" />
+  if (kind === 'audio') return <audio className="media" src={output.url} controls preload="metadata" />
+  return <img className="media" src={output.url} alt={output.name} onLoad={onReady} onError={onReady} />
 }
 
 /** Reduce measured pixels to the ratio a person recognizes, so 2736x1536 reads as `16:9`. */
@@ -466,6 +505,20 @@ const ASK = {
   },
 }
 
+/**
+ * The CSS custom properties that give a tile its shape.
+ *
+ * ⚠️ ONE HELPER FOR BOTH THE PLACEHOLDER AND THE FINISHED TILE. Written out twice, the two would drift and
+ * the grid would resize at the exact moment the media arrives, which is the jump the placeholders exist to
+ * prevent.
+ */
+function shapeOf(aspect: string): CSSProperties {
+  return {
+    ['--ar']: aspectToCss(aspect),
+    ['--ar-num']: String(parseAspectRatio(aspect) ?? 1),
+  } as CSSProperties
+}
+
 function Widget() {
   const [data, setData] = useState<WidgetData | null>(null)
   const [index, setIndex] = useState(0)
@@ -477,6 +530,8 @@ function Widget() {
   const [failed, setFailed] = useState<string | null>(null)
   /** True once polling has given up. A spinner that never resolves is worse than saying so. */
   const [stalled, setStalled] = useState(false)
+  /** Urls whose media has pixels on screen. Drives the laurel-to-media cross-fade, per tile. */
+  const [loaded, setLoaded] = useState<ReadonlySet<string>>(() => new Set())
 
   /**
    * ⚠️⚠️ REGISTERED IN `onAppCreated`, WHICH IS BEFORE THE HANDSHAKE COMPLETES.
@@ -839,34 +894,25 @@ function Widget() {
       <div className="grid" style={{ ['--cols' as string]: String(cols) }}>
         {pending &&
           Array.from({ length: n }, (_, i) => (
-            <div
-              key={`pending-${i}`}
-              className={`tile pending ${aspect ? 'shaped' : 'unshaped'}`}
-              style={
-                aspect
-                  ? ({
-                      ['--ar']: aspectToCss(aspect),
-                      ['--ar-num']: String(parseAspectRatio(aspect) ?? 1),
-                    } as CSSProperties)
-                  : undefined
-              }
-            >
-              <Skeleton />
+            // ⚠️ A placeholder is ALWAYS shaped: `shapeOf` bottoms out at 1:1, matching the studio's own
+            // aspect resolver. There is no media to crop yet, so a square beats an arbitrary fixed height
+            // that the real tile would then jump away from.
+            <div key={`pending-${i}`} className="tile shaped" style={shapeOf(aspect ?? '1:1')}>
+              <div className="laurel-wrap">
+                <Skeleton />
+              </div>
             </div>
           ))}
         {data.outputs.map((o, i) => (
           <div
             key={o.url}
-            className={`tile${data.contentType === 'image' ? ' img' : ''} ${aspect ? 'shaped' : 'unshaped'}`}
-            // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
-            style={
-              aspect
-                ? ({
-                    ['--ar']: aspectToCss(aspect),
-                    ['--ar-num']: String(parseAspectRatio(aspect) ?? 1),
-                  } as CSSProperties)
-                : undefined
+            className={
+              `tile${data.contentType === 'image' ? ' img' : ''}` +
+              `${data.contentType === 'audio' ? ' audio' : ''}` +
+              ` ${aspect ? 'shaped' : 'unshaped'}${loaded.has(o.url) ? ' ready' : ''}`
             }
+            // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
+            style={aspect ? shapeOf(aspect) : undefined}
             onClick={() => {
               setIndex(i)
               if (data.contentType === 'image') void setMode(true)
@@ -874,25 +920,45 @@ function Widget() {
           >
             {data.contentType === 'image' ? (
               <img
+                className="media"
                 src={o.url}
                 alt={o.name}
-                loading="lazy"
                 /**
-                 * ⭐⭐ MEASURED FROM THE REAL PIXELS, WHICH NOW DRIVES THE LAYOUT AND NOT JUST THE BADGE.
-                 *
-                 * A model does not always return the shape it was asked for, and object-fit: cover crops
-                 * against whatever ratio the tile was given, so laying out by the REQUESTED ratio would
-                 * silently trim any output that came back different. The server's displayAspect seeds the
-                 * first paint; this corrects it the moment a real decode can answer.
+                 * ⛔ NOT `loading="lazy"`. These tiles are the point of the message and they are all above
+                 * the fold, and a lazy image that never enters the viewport never fires `onLoad`, which is
+                 * now the signal that retires the laurel. A placeholder that never resolves would be worse
+                 * than an eager fetch of four images somebody just paid to generate.
                  */
                 onLoad={(e) => {
+                  // The handoff signal: this tile has pixels, so its laurel can go.
+                  setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))
+                  /**
+                   * ⭐⭐ MEASURED FROM THE REAL PIXELS, WHICH DRIVES THE LAYOUT AND NOT JUST THE BADGE.
+                   *
+                   * A model does not always return the shape it was asked for, and object-fit: cover crops
+                   * against whatever ratio the tile was given, so laying out by the REQUESTED ratio would
+                   * silently trim any output that came back different. The server's displayAspect seeds
+                   * the first paint; this corrects it the moment a real decode can answer.
+                   */
                   if (i !== 0) return
                   const el = e.currentTarget
                   if (el.naturalWidth && el.naturalHeight) setRatio(ratioLabel(el.naturalWidth, el.naturalHeight))
                 }}
+                // A broken image must not leave a laurel spinning over it forever.
+                onError={() => setLoaded((prev) => new Set(prev).add(o.url))}
               />
             ) : (
-              <Media output={o} kind={data.contentType} />
+              <Media
+                output={o}
+                kind={data.contentType}
+                onReady={() => setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))}
+              />
+            )}
+            {/* The laurel sits ON the media until it has pixels, then the two cross-fade. See .tile .media. */}
+            {!loaded.has(o.url) && data.contentType !== 'audio' && (
+              <div className="laurel-wrap">
+                <Skeleton />
+              </div>
             )}
             {/* ⚠️ stopPropagation, or every action also opens the lightbox underneath it. */}
             <div className="acts" onClick={(e) => e.stopPropagation()}>
