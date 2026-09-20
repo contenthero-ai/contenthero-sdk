@@ -64,7 +64,6 @@ import {
   type UpdateAvatarRequest,
 
   type Generation,
-  type ModelInfo,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 
@@ -635,29 +634,25 @@ const WIDGET_CSP = {
 
 
 /**
- * `gpt-image-2` is an IDENTIFIER. `GPT Image 2` is what a person should read.
+ * ⛔⛔ **THE DISPLAY NAME IS NO LONGER RESOLVED HERE. `Generation.modelDisplayName` CARRIES IT.**
  *
- * ⛔ NOT TITLE-CASED FROM THE ID. Mechanically capitalising gives "Gpt Image 2", and any table mapping the
- * two would be a second copy of a fact the registry already owns, drifting the moment an admin renames a
- * model in the switchboard with no deploy. The catalog is the source of truth, so it is asked.
+ * This file used to hold `displayNameForModel`, which fetched the entire model catalog over the network to
+ * turn `gpt-image-2` into "GPT Image 2", memoized it in a module-level `let`, and returned the raw id from a
+ * `catch` whenever that call failed.
  *
- * ⭐ FETCHED ONCE PER PROCESS. The catalog is small and changes rarely, so one call serves every generation
- * result afterwards. A failure returns the id, because a missing display name must never cost someone the
- * result they paid for.
+ * ⭐⭐⭐ **THE FALLBACK WAS THE DEFECT, NOT THE FETCH.** `gpt-image-2` reads like a label, so a failed
+ * catalog call did not surface as a failure: it surfaced as a chip that flickered between kebab case and
+ * title case depending on whether an unrelated request happened to succeed, with nothing logged anywhere.
+ * A sentinel that collapses "I could not resolve this" into a plausible answer moves the defect into every
+ * caller.
+ *
+ * ⭐⭐ And the fetch was never necessary. `model_providers` is a table the status route already holds a
+ * connection to, so the name now arrives with the row that needed it. One request, no cache, no fallback,
+ * and no second network path that can fail on its own schedule.
+ *
+ * ⚠️ `modelDisplayName` is null when there is nothing to name (an upload, an import, a browser-side
+ * operation). **Render nothing in that case. Do not substitute `modelId`**, which is the mistake above.
  */
-let modelNames: Map<string, string> | null = null
-
-async function displayNameForModel(client: ContentHero, modelId: string): Promise<string> {
-  try {
-    if (!modelNames) {
-      const models = await client.listModels()
-      modelNames = new Map(models.map((m: ModelInfo) => [m.modelId, m.displayName]))
-    }
-    return modelNames.get(modelId) ?? modelId
-  } catch {
-    return modelId
-  }
-}
 
 /** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
 export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
@@ -900,7 +895,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
+        return completedResult(gen, await attachmentsFor(gen), [])
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -965,7 +960,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
+        return completedResult(gen, await attachmentsFor(gen), [])
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1070,7 +1065,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
+        return completedResult(gen, await attachmentsFor(gen), [])
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1224,7 +1219,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
+        return completedResult(gen, await attachmentsFor(gen), [])
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1289,7 +1284,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const gen = await client.generateAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], await displayNameForModel(client, gen.modelId))
+        return completedResult(gen, await attachmentsFor(gen), [])
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -2551,8 +2546,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           gens.length === 1 && gens[0]
             ? { [gens[0].outputId]: await attachmentsFor(gens[0]) }
             : {}
-        const name = gens.length === 1 && gens[0] ? await displayNameForModel(client, gens[0].modelId) : undefined
-        return generationBatchResult(gens, attachments, name)
+        return generationBatchResult(gens, attachments)
       } catch (err) {
         return errorResult(err)
       }

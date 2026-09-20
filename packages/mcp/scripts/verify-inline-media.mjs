@@ -166,9 +166,25 @@ try {
     const has = hasWidget && !overCeiling
     const widget = hasWidget ? 'widget' : boundTo ? 'BOUND BUT NO DATA' : feeds ? 'DATA BUT UNBOUND' : 'NO WIDGET'
     const note = has && want.blocks.length && !hasBlocks ? '  (link-only: too large to inline)' : ''
+    /**
+     * ⭐⭐ THE CHIP, PRINTED RATHER THAN INFERRED.
+     *
+     * `modelName` is null BY DESIGN when the server could not name the model, because a model id reads like
+     * a label and printing one turned a lookup failure into a chip that flickered between kebab case and
+     * title case with nothing logged anywhere. Null is therefore a legitimate answer here, not a failure,
+     * and the only way to tell "the server sent no name" from "the widget dropped it" is to look.
+     *
+     * ⚠️ A deployment that does not yet return `modelDisplayName` prints `chip=-` on every row. That is the
+     * expected reading until the app ships, not a regression to chase.
+     */
+    const sc = res.structuredContent ?? {}
+    const chip =
+      `chip=${sc.modelName ?? '-'}${sc.modelBrandColor ? ` ${sc.modelBrandColor}` : ''}` +
+      `${sc.modelIconKey ? `/${sc.modelIconKey}` : ''}` +
+      `  ar=${sc.displayAspect ?? '-'}  prompt=${sc.prompt ? `${String(sc.prompt).length}ch` : '-'}`
     console.log(
       `  ${medium.padEnd(6)} ${has ? 'OK  ' : 'FAIL'}  blocks=[${types.join(', ')}]` +
-        `  wire=${(wireBytes / 1024).toFixed(0)}KB${overCeiling ? ' OVER CEILING' : ''}  ${widget}${note}`,
+        `  wire=${(wireBytes / 1024).toFixed(0)}KB${overCeiling ? ' OVER CEILING' : ''}  ${widget}  ${chip}${note}`,
     )
     if (!has) {
       failures += 1

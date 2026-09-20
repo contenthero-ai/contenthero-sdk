@@ -389,6 +389,27 @@ export interface Generation {
   /** Where the asset was placed (present only when `projectId` was supplied to generate). Carried from the submit
    *  response through `generateAndWait` so a caller gets the placement outcome alongside the finished asset. */
   placement?: PlacementResult
+  /** The prompt this generation was made from, VERBATIM. Some are JSON-shaped because the person authored a
+   *  structured prompt and the model received that object; it is not a wrapper to unwrap. Absent on the submit
+   *  response and on older servers. */
+  prompt?: string | null
+  /** The output's canonical aspect ratio as `"W:H"` (e.g. `"9:16"`). Null for audio, which has no shape.
+   *  Absent on the submit response and on older servers. */
+  displayAspect?: string | null
+  /**
+   * What a person should read for the model, resolved server-side from the registry.
+   *
+   * ⛔ **NULL MEANS SHOW NOTHING. NEVER SUBSTITUTE `modelId`.** A model id reads enough like a label that
+   * printing one turns a resolution failure into a cosmetic inconsistency nobody can diagnose.
+   *
+   * ⚠️ It is not always this generation's own model: a look assembled from an existing output names the
+   * model that produced the SOURCE, and an upload or import names what it is rather than a model.
+   */
+  modelDisplayName?: string | null
+  /** Brand accent (hex) for the model, from the registry. Null when there is no model to brand. */
+  modelBrandColor?: string | null
+  /** Stable brand family key (e.g. `"openai"`) for mapping to an icon. NOT the model id. */
+  modelIconKey?: string | null
 }
 
 /** Subscription tiers the API normalizes balances against. */

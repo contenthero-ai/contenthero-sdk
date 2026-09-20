@@ -7,6 +7,7 @@ import {
   pendingResult,
   enhanceClipsResult,
   completedResult,
+  generationWidgetData,
 } from './format.js'
 
 /**
@@ -251,4 +252,84 @@ test('placement notes survive alongside the attachment', () => {
   )
   assert.match(res.content[0].text, /canvas layer \(id L1\)/)
   assert.ok(res.content.some((c) => c.type === 'image'))
+})
+
+
+// ---------------------------------------------------------------------------
+// The model chip
+// ---------------------------------------------------------------------------
+
+/**
+ * ⛔⛔⛔ **THE CHIP SHOWS NOTHING RATHER THAN THE MODEL ID.**
+ *
+ * `generationWidgetData` used to compute `modelName: displayName ?? gen.modelId`, fed by a catalog fetch
+ * in the server whose `catch` returned the id. `gpt-image-2` reads like a label, so every failure of that
+ * unrelated network call surfaced as a chip flickering between kebab case and title case, with nothing
+ * logged. A sentinel that collapses "I could not resolve this" into a plausible answer moves the defect
+ * into every caller.
+ *
+ * ⚠️ This test fails if anyone reintroduces the `?? gen.modelId` fallback, which is the only reason it
+ * asserts a null rather than simply asserting the happy path.
+ */
+test('🚨 an unresolved model name renders NOTHING, never the raw id', () => {
+  const data = generationWidgetData({
+    ...baseGen,
+    modelId: 'gpt-image-2',
+    contentType: 'image',
+    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+  } as never)
+  assert.equal(data.modelName, null, 'no display name means no chip')
+  assert.notEqual(data.modelName, 'gpt-image-2', 'the id must never stand in for the label')
+  // The id itself stays on the payload: it is the machine-readable key, just not the label.
+  assert.equal(data.modelId, 'gpt-image-2')
+})
+
+test('the chip carries what the registry resolved, not what the widget could guess', () => {
+  const data = generationWidgetData({
+    ...baseGen,
+    modelId: 'gpt-image-2',
+    contentType: 'image',
+    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    modelDisplayName: 'GPT Image 2',
+    modelBrandColor: '#10A37F',
+    modelIconKey: 'openai',
+    displayAspect: '9:16',
+    prompt: 'a yoga pose',
+  } as never)
+  assert.equal(data.modelName, 'GPT Image 2')
+  assert.equal(data.modelBrandColor, '#10A37F')
+  // ⚠️ The icon key is a BRAND FAMILY, not the model id. Keying a glyph off the id would need a new entry
+  // per model and would miss every model added to the registry after the last deploy.
+  assert.equal(data.modelIconKey, 'openai')
+  assert.equal(data.displayAspect, '9:16')
+  assert.equal(data.prompt, 'a yoga pose')
+})
+
+/**
+ * ⭐ **THE ONE PLACE THE ID IS STILL AN ACCEPTABLE FALLBACK.**
+ *
+ * The text block's reader is the model, for whom `gpt-image-2` is a true and directly useful token. The
+ * chip's reader is a person, for whom the same string is an unexplained failure wearing a label's clothes.
+ * Same value, opposite correct behavior, which is why this is asserted rather than left to be "fixed" later
+ * into consistency with the test above.
+ */
+test('the TEXT header still names the id when nothing resolved, because a model reads it', () => {
+  const res = completedResult({
+    ...baseGen,
+    modelId: 'gpt-image-2',
+    contentType: 'image',
+    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+  } as never)
+  assert.match(res.content[0].text, /from gpt-image-2/)
+})
+
+test('a resolved name reaches the text header too', () => {
+  const res = completedResult({
+    ...baseGen,
+    modelId: 'gpt-image-2',
+    contentType: 'image',
+    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    modelDisplayName: 'GPT Image 2',
+  } as never)
+  assert.match(res.content[0].text, /from GPT Image 2/)
 })
