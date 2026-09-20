@@ -43,7 +43,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     title: 'Media',
     blurb: 'The library: browse, search, import and upload the media an account owns.',
     tools: [
-      'list_media', 'get_media', 'search_media', 'import_media',
+      'list_media', 'get_media', 'show_media', 'search_media', 'import_media',
       'create_media_upload', 'complete_media_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
       'favorite', 'archive',

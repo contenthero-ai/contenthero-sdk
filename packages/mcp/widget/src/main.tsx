@@ -78,9 +78,8 @@ interface Item {
   readonly previewUrl?: string | null
   /** Which library this came from. Only a CREATION can be generated again, so this gates Recreate. */
   readonly source?: 'creations' | 'uploads' | 'stock' | null
-  /** PER ITEM, so Recreate works for a mixed set where no shared model or prompt exists. */
+  /** PER ITEM, so Recreate works for a mixed set where no shared model exists. */
   readonly modelId?: string | null
-  readonly prompt?: string | null
 }
 
 interface WidgetData {
@@ -877,19 +876,16 @@ const ASK = {
    * ⚠️ `source === 'creations'` IS PART OF THE TEST, not just the presence of a model. An upload can carry
    * a model id (something generated it elsewhere) and still not be a thing this product can generate again.
    */
-  canRecreateItem: (o: Item) => Boolean(o.source === 'creations' && o.modelId && o.prompt),
+  canRecreateItem: (o: Item) => Boolean(o.source === 'creations' && o.reference && o.modelId),
+  /**
+   * ⚠️ NAMES THE ITEM, DOES NOT QUOTE ITS PROMPT. Embedding one prompt per tile is affordable for a
+   * generation's four variations and not for a hundred library items, and a truncated prompt would
+   * regenerate something quietly different. The agent reads the settings from the id.
+   */
   recreateItem: (o: Item) =>
-    [
-      'Generate this again with the same settings.',
-      '',
-      `type: ${o.contentType}`,
-      `model: ${o.modelId}`,
-      ...(o.displayAspect ? [`aspect_ratio: ${o.displayAspect}`] : []),
-      'count: 1',
-      '',
-      'prompt:',
-      o.prompt ?? '',
-    ].join('\n'),
+    `Generate this again with the same settings: ${o.reference}\n\n` +
+    `Read its prompt and settings first (model ${o.modelId}), tell me what you are about to run, ` +
+    `then generate one.`,
   recreate: (d: WidgetData) => {
     const lines = [
       'Generate this again with the same settings.',

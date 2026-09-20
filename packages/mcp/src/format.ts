@@ -242,13 +242,21 @@ export interface MediaWidgetItem {
    */
   source?: 'creations' | 'uploads' | 'stock' | null
   /**
-   * PER ITEM, because a mixed set has no shared model or prompt and Recreate needs both.
+   * ⛔⛔ THERE IS NO PER-ITEM `prompt` HERE, AND ITS ABSENCE IS DELIBERATE.
    *
-   * ⚠️ `modelId` IS THE RAW ID ON PURPOSE, unlike `modelName`. Its reader is the agent, which needs the
-   * token it can pass to a tool; the chip is the opposite case and renders nothing rather than an id.
+   * It was, so Recreate could quote it. A prompt is the largest field on an item, and `show_media` carries
+   * up to a hundred: measured, sixty items cost 165 KB of context with prompts embedded, against a tool
+   * whose whole justification is that its cost does not grow with the count.
+   *
+   * ⭐ Recreate names the ITEM instead and lets the agent read its settings, which is the rule this file
+   * already applies to urls: "the messages name an output id, not a url". A reference is 36 characters and
+   * resolves to everything, including a prompt too long to have embedded safely anyway.
+   *
+   * ⚠️ `modelId` STAYS. It is about twenty characters, it does not grow, and it lets the message say which
+   * model without a lookup. Its reader is the agent, which needs the token; the chip is the opposite case
+   * and renders nothing rather than an id.
    */
   modelId?: string | null
-  prompt?: string | null
 }
 
 /**
@@ -316,7 +324,6 @@ export function mediaWidgetData(input: MediaWidgetInput) {
       previewUrl: it.previewUrl ?? null,
       source: it.source ?? null,
       modelId: it.modelId ?? null,
-      prompt: it.prompt ?? null,
     })),
   }
 }
@@ -360,7 +367,6 @@ export function generationWidgetData(
       // A generation is, by definition, something that was generated.
       source: 'creations' as const,
       modelId: gen.modelId,
-      prompt: gen.prompt,
     })),
   })
 }
@@ -1079,7 +1085,6 @@ function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidget
        * Recreate at all even though every item knew its own model and prompt.
        */
       modelId: it.model ?? null,
-      prompt: it.prompt ?? null,
     })
   }
   return items
@@ -1147,6 +1152,63 @@ export function mediaBatchResult(
    * urls, so every resolved item renders whether or not its pixels fit that budget.
    */
   const tiles = mediaBatchItems(result, baseUrl)
+  if (tiles.length === 0) return { content }
+  return {
+    content,
+    structuredContent: mediaWidgetData({ items: tiles }),
+    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+  }
+}
+
+/**
+ * The DISPLAY twin of `mediaBatchResult`: the same tiles, none of the bytes.
+ *
+ * ## ⭐⭐⭐ WHY THIS IS A SECOND TOOL AND NOT A FLAG
+ *
+ * `get_media` costs about 2 KB for twenty items and about 900 KB for four, depending on how many previews
+ * fit the inline budget. An agent cannot reason about that before calling, and no description can state it
+ * honestly. **A tool whose context cost is unpredictable is the real defect**, not the number of items it
+ * accepts.
+ *
+ * Splitting makes each one honest. `get_media` costs bytes and is capped where the budget actually runs
+ * out. This costs a couple of kilobytes no matter how many items it carries, because it never fetches
+ * anything: the widget renders from urls, and a url costs the same whether it points at 60 KB or 3 MB.
+ *
+ * ⛔ **IT SHARES THE RESOLVER AND THE TILE BUILDER, DELIBERATELY.** The two tools differ in exactly one
+ * thing, whether bytes are read. A second resolution path would be a second answer to "what is this item",
+ * and the widget would start rendering two slightly different shapes depending on which verb was used.
+ *
+ * ⚠️ NO "0 image(s) attached" LINE. Saying it here would report the absence of something never promised,
+ * which is how a working tool reads as a broken one.
+ */
+/**
+ * One short line per shown item: what it is and how to name it again, and nothing else.
+ *
+ * ⚠️ THE PROMPT IS DELIBERATELY ABSENT. It is the single largest field on an item and the one this
+ * audience does not read. An id is 36 characters and lets the agent ask for any of these in detail.
+ */
+function displayItemLine(it: ResolvedMediaBatchItem, i: number): string {
+  const label = `[${i + 1}]`
+  if (!it.ok) {
+    const ref = it.mediaId ?? ('url' in it.input ? it.input.url : JSON.stringify(it.input))
+    return `${label} ERROR (${ref}): ${it.error ?? 'could not resolve'}`
+  }
+  const name = it.mediaId
+    ? `${it.mediaId}${it.variation != null && it.variation > 1 ? `-${it.variation}` : ''}`
+    : (it.url ?? 'url')
+  return `${label} ${it.type ?? 'media'} ${name}`
+}
+
+export function mediaDisplayResult(result: MediaBatchResult, baseUrl = DEFAULT_APP_URL): CallToolResult {
+  const { items } = result
+  const okCount = items.filter((i) => i.ok).length
+  const tiles = mediaBatchItems(result, baseUrl)
+  const summary =
+    `Showing ${okCount}/${items.length} media item(s) to the person.` +
+    (okCount < items.length ? ' Items that could not be resolved are listed below.' : '') +
+    '\n\n' +
+    items.map((it, i) => displayItemLine(it, i)).join('\n')
+  const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
   if (tiles.length === 0) return { content }
   return {
     content,

@@ -115,6 +115,7 @@ import {
   folderListResult,
   folderContentsResult,
   mediaBatchResult,
+  mediaDisplayResult,
   mediaUploadResult,
   importedMediaResult,
   uploadedMediaResult,
@@ -2334,17 +2335,24 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     {
       title: 'Get Media',
       /**
-       * ⭐ get_media BOTH SEES AND SHOWS, which is why it is one tool and not two.
+       * ⭐⭐⭐ get_media IS THE LOOKING TOOL. show_media IS THE SHOWING TOOL.
        *
-       * The image blocks are the agent's vision and cost context, so they run through a shared byte budget.
-       * The widget renders from URLS, which cost nothing. A call therefore attaches as many pixels as the
-       * budget allows and displays EVERY resolved item, and the two limits never fight: more items means
-       * fewer inlined images, never a card showing less than was asked for.
+       * This used to be both, and the cost of a call was therefore unpredictable: about 2 KB for twenty
+       * items and about 900 KB for four, depending on how many previews fit the inline budget. An agent
+       * cannot reason about that before calling and no description can state it honestly.
+       *
+       * ⛔ **THE CAP IS 5 BECAUSE THAT IS WHERE THE BUDGET ACTUALLY RUNS OUT**, not because five is a tidy
+       * number. A preview is 55 to 280 KB, base64 inflates it by a third, and the whole result must fit
+       * under a 1 MB host ceiling, so four or five is what fits. Advertising 25 was advertising a promise
+       * the budget could not keep: measured on a 15-item call, six attached and nine did not.
+       *
+       * ⭐ It still DISPLAYS what it attaches, because the agent is already looking and showing the person
+       * the same thing costs nothing. Reach for `show_media` when the person is the audience.
        */
       ...RENDERS_GENERATION,
       annotations: READ,
       description:
-        'SEE specific media. Pass a batch of items (up to 25) to view them at once, rendered together for the user AND returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media, up to 5 items. Use this when YOU need to look at the pixels: judge a face, check legibility, compare variations. To show a person a larger set without looking at it yourself, use show_media instead, which takes up to 100 and costs almost no context. Pass a batch of items to view at once, rendered together for the user AND returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
@@ -2370,8 +2378,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             ]),
           )
           .min(1)
-          .max(25)
-          .describe('The media to view, up to 25 items per call. Paginate with another call for more.'),
+          .max(5)
+          .describe(
+            'The media to LOOK at, up to 5 per call. Five is where the inline byte budget runs out, not a ' +
+              'round number. Use show_media for a larger set you only need to display.',
+          ),
       },
     },
     async (args, extra) => {
@@ -2391,6 +2402,67 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           ),
         )
         return mediaBatchResult(result, images, client.baseUrl)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- show_media -----------------------------------------------------------
+  server.registerTool(
+    'show_media',
+    {
+      title: 'Show Media',
+      /**
+       * ⭐⭐⭐ THE DISPLAY HALF OF WHAT get_media USED TO BE, AND THE SPLIT IS ABOUT PREDICTABLE COST.
+       *
+       * This never reads a byte. The widget renders from urls, and a url costs the same whether it points
+       * at 60 KB or 3 MB, so a hundred items cost about the same context as three. That is the property
+       * `get_media` could not have while it was also the agent's eyes.
+       *
+       * ⛔ IT SHARES THE RESOLVER AND THE TILE BUILDER with `get_media`. The two differ in exactly one
+       * thing, whether bytes are fetched; a second resolution path would be a second answer to "what is
+       * this item" and the widget would render two subtly different shapes depending on the verb used.
+       */
+      ...RENDERS_GENERATION,
+      annotations: READ,
+      description:
+        'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or an { mediaId, variation? }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
+      inputSchema: {
+        items: z
+          .array(
+            z.union([
+              z.object({
+                url: z.string().url().describe('A media URL on one of our storage hosts.'),
+              }),
+              z.object({
+                mediaId: z.string().min(1).describe('A studio output id, full or first-8.'),
+                variation: z
+                  .number()
+                  .int()
+                  .positive()
+                  .optional()
+                  .describe('1-based variation to show; omit for the primary variation only.'),
+              }),
+            ]),
+          )
+          .min(1)
+          .max(100)
+          /**
+           * ⚠️ NO KEYFRAME FIELDS HERE, and their absence is the point. Keyframes exist so the AGENT can
+           * watch footage, they are extracted per call, and they are bytes. A display tool that accepted
+           * them would be the cost-unpredictability this split removed, reintroduced through a parameter.
+           */
+          .describe('The media to show, up to 100 items per call.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const result = await client.getMediaBatch(args.items)
+        // ⛔ NO `inlineImagesWithinBudget` CALL, DELIBERATELY. That is the entire difference between this
+        // tool and get_media, and it is what makes this one's cost a constant.
+        return mediaDisplayResult(result, client.baseUrl)
       } catch (err) {
         return errorResult(err)
       }
