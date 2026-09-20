@@ -2933,8 +2933,23 @@ test('every media tool declares the widget, and only media tools do', async () =
 test('a tool declares the widget exactly when it can emit one', () => {
   const src = readFileSync(new URL('./server.ts', import.meta.url), 'utf8')
 
-  /** Result builders that attach the widget `_meta` and `structuredContent`. */
-  const EMITTERS = ['completedResult', 'pendingResult', 'audioResult', 'mediaWidgetData']
+  /**
+   * ⭐⭐ **THE EMITTER SET IS DERIVED, NOT LISTED.**
+   *
+   * A hand-written list of result builders is the same allowlist this guard replaced, one level up: adding
+   * `mediaBatchResult` made this test fail for the wrong reason, because the test had not heard of it. A
+   * builder attaches the widget exactly when its own body names `RESOURCE_URI_META_KEY`, which is a fact
+   * `format.ts` already carries, so read it from there.
+   */
+  const fmt = readFileSync(new URL('./format.ts', import.meta.url), 'utf8')
+  const fnStarts = [...fmt.matchAll(/export function ([a-zA-Z]+)\(/g)]
+  const EMITTERS = fnStarts
+    .filter((m, i) => {
+      const body = fmt.slice(m.index!, i + 1 < fnStarts.length ? fnStarts[i + 1]!.index! : fmt.length)
+      return body.includes('RESOURCE_URI_META_KEY')
+    })
+    .map((m) => m[1]!)
+  assert.ok(EMITTERS.length >= 3, `only found ${EMITTERS.length} widget-emitting builders; the scan broke`)
 
   const blocks = [...src.matchAll(/server\.registerTool\(\s*'([a-z_]+)'/g)]
   assert.ok(blocks.length > 20, 'the tool scan found almost nothing; the registration shape changed')

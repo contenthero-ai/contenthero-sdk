@@ -48,7 +48,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@contenthero-ai/brand-ui": "0.2.0",
+    "@contenthero-ai/brand-ui": "0.3.0",
     "@lobehub/icons": "5.10.0",
     "@types/node": "^22.19.19",
     "@types/react": "19.2.2",

@@ -2210,9 +2210,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'get_media',
     {
       title: 'Get Media',
+      /**
+       * ⭐ get_media BOTH SEES AND SHOWS, which is why it is one tool and not two.
+       *
+       * The image blocks are the agent's vision and cost context, so they run through a shared byte budget.
+       * The widget renders from URLS, which cost nothing. A call therefore attaches as many pixels as the
+       * budget allows and displays EVERY resolved item, and the two limits never fight: more items means
+       * fewer inlined images, never a card showing less than was asked for.
+       */
+      ...RENDERS_GENERATION,
       annotations: READ,
       description:
-        'SEE specific media. Pass a batch of items (up to 10) to view them at once: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media. Pass a batch of items (up to 25) to view them at once, rendered together for the user AND returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
@@ -2238,8 +2247,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             ]),
           )
           .min(1)
-          .max(10)
-          .describe('The media to view, up to 10 items per call. Paginate with another call for more.'),
+          .max(25)
+          .describe('The media to view, up to 25 items per call. Paginate with another call for more.'),
       },
     },
     async (args, extra) => {
@@ -2254,7 +2263,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const images = await inlineImagesWithinBudget(
           result.items.map((it) => (it.ok ? it.imageUrl : null)),
         )
-        return mediaBatchResult(result, images)
+        return mediaBatchResult(result, images, client.baseUrl)
       } catch (err) {
         return errorResult(err)
       }

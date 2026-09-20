@@ -7,6 +7,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 // The spec's own spelling of the key that binds a result to its widget. See `server.ts` for why only the
 // constants come from this package and not its server helpers.
+import { aspectLabel } from '@contenthero-ai/brand-ui'
 import { RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
 import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import type {
@@ -969,9 +970,52 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
  * array (fetched + base64-encoded by the caller, image items only; null for
  * video/audio/errors). This just assembles the result. See get-context §9.5.
  */
+/**
+ * Turn resolved media into tiles.
+ *
+ * ## ⭐⭐⭐ THE BYTES ARE FOR THE AGENT, THE URLS ARE FOR THE PERSON, AND ONE CALL DOES BOTH
+ *
+ * The image blocks above are the agent's vision and they cost context, which is why they run through one
+ * shared budget. The widget renders from URLS, which cost nothing. So a call can attach as many pixels as
+ * the budget allows AND display every item, and the two limits do not fight: more items means fewer
+ * inlined images, never a card that shows less than was asked for.
+ *
+ * ⛔ **NO CHIP, BECAUSE `model` HERE IS A RAW ID.** `gpt-image-2` reads like a label, and substituting one
+ * is the exact defect that made the generation chip flicker between kebab case and title case. Resolving
+ * it needs the registry, the same way the generation path got its name, so until this payload carries a
+ * display name the tiles render their media and no label.
+ *
+ * ⚠️ Transcripts are skipped: the widget has no element for text, and a tile that renders nothing is worse
+ * than an item the summary already describes in words.
+ */
+function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidgetItem[] {
+  const items: MediaWidgetItem[] = []
+  for (const it of result.items) {
+    if (!it.ok || !it.url) continue
+    if (it.type !== 'image' && it.type !== 'video' && it.type !== 'audio') continue
+    const g = it.geometry
+    items.push({
+      url: it.url,
+      // A video's still, so a tile shows something before anyone presses play.
+      posterUrl: it.type === 'video' ? it.imageUrl : null,
+      /** The reference the API takes: `<id>` or `<id>-<n>`, one-based, matching what a person reads. */
+      name: it.mediaId ? `${it.mediaId}${it.variation && it.variation > 1 ? `-${it.variation}` : ''}` : it.url,
+      contentType: it.type,
+      // MEASURED, from the storage spine. Null when nothing measured it, which the tile handles.
+      displayAspect: g ? aspectLabel(g.width, g.height) : null,
+      openUrl: it.mediaId
+        ? `${baseUrl.replace(/\/+$/, '')}/studio?output=${encodeURIComponent(it.mediaId)}` +
+          (it.variation && it.variation > 1 ? `&variation=${it.variation}` : '')
+        : undefined,
+    })
+  }
+  return items
+}
+
 export function mediaBatchResult(
   result: MediaBatchResult,
   images: Array<{ data: string; mimeType: string } | null>,
+  baseUrl = DEFAULT_APP_URL,
 ): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
@@ -998,7 +1042,17 @@ export function mediaBatchResult(
       }
     }
   })
-  return { content }
+  /**
+   * ⭐ DISPLAY COSTS NOTHING EXTRA. The blocks above are the agent's vision and are budget-bounded; this is
+   * urls, so every resolved item renders whether or not its pixels fit that budget.
+   */
+  const tiles = mediaBatchItems(result, baseUrl)
+  if (tiles.length === 0) return { content }
+  return {
+    content,
+    structuredContent: mediaWidgetData({ items: tiles }),
+    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+  }
 }
 
 /** Phase 1 of an upload: the signed URL + the PUT-then-complete instructions. */
