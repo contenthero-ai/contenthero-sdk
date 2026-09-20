@@ -998,6 +998,20 @@ export interface ResolvedMediaBatchItem {
    * whether "generate this again" is a sensible offer: only a creation was ever generated.
    */
   source: 'creations' | 'uploads' | 'stock' | null
+  /**
+   * The model's DISPLAY NAME and brand marks, resolved from the registry.
+   *
+   * ⛔ `model` below is a RAW ID. Never render it as a label: `gpt-image-2.5-flare` reads enough like one
+   * that substituting it turns a lookup failure into a cosmetic bug nobody can diagnose, which is exactly
+   * how the generation chip came to flicker between kebab case and title case.
+   *
+   * ⭐ Null means RENDER NO CHIP. An upload, a browser-side operation with no registry row, and any
+   * sentinel the resolver has not been taught all land here; a missing chip is visibly missing where a
+   * wrong one is not.
+   */
+  modelName: string | null
+  modelBrandColor: string | null
+  modelIconKey: string | null
   type: MediaType | null
   model: string | null
   prompt: string | null

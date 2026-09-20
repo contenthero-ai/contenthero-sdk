@@ -1045,10 +1045,11 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
  * the budget allows AND display every item, and the two limits do not fight: more items means fewer
  * inlined images, never a card that shows less than was asked for.
  *
- * ⛔ **NO CHIP, BECAUSE `model` HERE IS A RAW ID.** `gpt-image-2` reads like a label, and substituting one
- * is the exact defect that made the generation chip flicker between kebab case and title case. Resolving
- * it needs the registry, the same way the generation path got its name, so until this payload carries a
- * display name the tiles render their media and no label.
+ * ⭐ **THE CHIP IS PER ITEM AND COMES FROM THE REGISTRY.** `model` here is a RAW ID and is never shown as
+ * one: `gpt-image-2` reads like a label, and substituting it is the exact defect that made the generation
+ * chip flicker between kebab case and title case. The API now resolves a display name alongside it, so a
+ * mixed set can label each tile with the model that actually made it, and a tile the registry cannot name
+ * renders its media and no label.
  *
  * ⚠️ Transcripts are skipped: the widget has no element for text, and a tile that renders nothing is worse
  * than an item the summary already describes in words.
@@ -1085,6 +1086,17 @@ function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidget
        * Recreate at all even though every item knew its own model and prompt.
        */
       modelId: it.model ?? null,
+      /**
+       * ⭐ THE PER-ITEM CHIP, WHICH IS WHAT A MIXED SET NEEDS. The payload's SHARED model fields are null
+       * the moment two items disagree, so a library set spanning four models showed no chip at all even
+       * though every item knew its own.
+       *
+       * ⛔ NO `?? it.model` FALLBACK. A null name means the registry could not name it, and the id reads
+       * enough like a label that printing one hides the failure rather than showing it.
+       */
+      modelName: it.modelName ?? null,
+      modelBrandColor: it.modelBrandColor ?? null,
+      modelIconKey: it.modelIconKey ?? null,
     })
   }
   return items
