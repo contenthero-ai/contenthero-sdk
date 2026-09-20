@@ -181,25 +181,69 @@ export function studioUrlFor(baseUrl: string, outputId: string, index: number, t
  * no model, prompt or aspect must be able to render rather than invent them. The widget already renders
  * nothing for a null chip.
  */
-export interface MediaWidgetInput {
-  outputId: string
+export interface MediaWidgetItem {
+  url: string
+  /** A still for a video, so a tile shows something before anyone presses play. */
+  posterUrl?: string | null
+  /** The reference a person copies and the API accepts: `<outputId>` or `<outputId>-<n>`, one-based. */
+  name: string
   contentType: 'image' | 'video' | 'audio'
-  urls: readonly string[]
+  /** `"W:H"`. Null for audio, and null when nothing measured it. */
+  displayAspect?: string | null
+  /**
+   * Where this thing lives IN THE PRODUCT.
+   *
+   * ⛔ **NOT `studioUrl`, WHICH IS WHAT IT WAS CALLED AND WHAT MADE THE THINKING WRONG.** Naming a field
+   * after one destination made "does an export belong in the studio detail view" sound like a question
+   * worth answering; it is not, because an export belongs to the editor and canvas. Whoever builds the
+   * payload knows where its media lives, so they supply the link and the widget just opens it.
+   *
+   * ⚠️ Optional. Absent means there is nowhere to go, and the Open button does not render.
+   */
+  openUrl?: string
+  /** Per-item chip, for a mixed set where the items do not share one model. */
+  modelName?: string | null
+  modelBrandColor?: string | null
+  modelIconKey?: string | null
+}
+
+/**
+ * What the widget is handed, for ANY media this server produces.
+ *
+ * ## ⭐⭐⭐ A SET OF ITEMS, AND A GENERATION IS THE SPECIAL CASE WHERE THEY SHARE A SHAPE
+ *
+ * The payload used to BE a generation: one `outputId`, one `contentType`, one model chip, one prompt and
+ * one aspect ratio shared by every tile. That shape is why nothing but a generation could render. Ten
+ * library items from ten different generations do not fit it, and neither does an upload, an import or a
+ * project export.
+ *
+ * ⭐ Generalizing to items costs nothing at the call site and removes the whole class: a generation is now
+ * "items that happen to share a model, a prompt and a shape", which is a property of the data rather than
+ * a mode anyone has to select. The widget derives its layout from that property.
+ *
+ * ⚠️ Everything shared is OPTIONAL, because a caller that genuinely has no model, prompt or aspect must be
+ * able to render rather than invent them. The widget renders no chip for a null name.
+ */
+export interface MediaWidgetInput {
+  /** The generation these items came from, when they came from one. Absent for a mixed set. */
+  outputId?: string
+  items: readonly MediaWidgetItem[]
+  /** Shared chip, when every item shares it. */
   modelId?: string
   modelDisplayName?: string | null
   modelBrandColor?: string | null
   modelIconKey?: string | null
-  displayAspect?: string | null
   prompt?: string | null
-  posterUrls?: readonly (string | null)[]
-  baseUrl?: string
+  /** Shared shape, when every item shares it. Its presence is what makes the layout a ROW. */
+  displayAspect?: string | null
+  /** Shared medium, when every item shares it. */
+  contentType?: 'image' | 'video' | 'audio'
 }
 
 export function mediaWidgetData(input: MediaWidgetInput) {
-  const { outputId, contentType, urls, posterUrls = [], baseUrl = DEFAULT_APP_URL } = input
   return {
-    outputId,
-    contentType,
+    outputId: input.outputId ?? null,
+    contentType: input.contentType ?? null,
     modelId: input.modelId ?? '',
     /**
      * ⛔⛔ **NULL WHEN THERE IS NOTHING TO NAME, AND THE WIDGET MUST RENDER NO CHIP.**
@@ -207,25 +251,23 @@ export function mediaWidgetData(input: MediaWidgetInput) {
      * This used to be `displayName ?? modelId`, fed by a catalog fetch with a `catch` that returned the id.
      * The id reads like a label, so a failed fetch showed as a chip flickering between kebab case and title
      * case rather than as a failure. The name now arrives on the row.
-     *
-     * ⚠️ It is not always the producing model: an upload names itself, and a look names the model that made
-     * the image it was assembled from.
      */
     modelName: input.modelDisplayName ?? null,
-    /** Hex brand accent from the registry, or null. The widget colors its chip with it. */
     modelBrandColor: input.modelBrandColor ?? null,
-    /** Brand family key (e.g. `"openai"`) for choosing a glyph. NOT the model id. */
     modelIconKey: input.modelIconKey ?? null,
-    /** `"W:H"`, or null for audio. Drives the column count and the tile's own shape. */
     displayAspect: input.displayAspect ?? null,
     /** Verbatim. Some prompts are JSON-shaped because the person authored one; that object IS the prompt. */
     prompt: input.prompt ?? null,
-    outputs: urls.map((url, i) => ({
-      url,
-      posterUrl: posterUrls[i] ?? null,
-      name: `${outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
-      /** Where the Open button goes: this asset, in the studio, with its siblings and every action. */
-      studioUrl: studioUrlFor(baseUrl, outputId, i, urls.length),
+    items: input.items.map((it) => ({
+      url: it.url,
+      posterUrl: it.posterUrl ?? null,
+      name: it.name,
+      contentType: it.contentType,
+      displayAspect: it.displayAspect ?? null,
+      openUrl: it.openUrl ?? null,
+      modelName: it.modelName ?? null,
+      modelBrandColor: it.modelBrandColor ?? null,
+      modelIconKey: it.modelIconKey ?? null,
     })),
   }
 }
@@ -236,18 +278,30 @@ export function generationWidgetData(
   posterUrls: readonly (string | null)[] = [],
   baseUrl = DEFAULT_APP_URL,
 ) {
+  const urls = gen.outputUrls ?? []
   return mediaWidgetData({
     outputId: gen.outputId,
     contentType: gen.contentType,
-    urls: gen.outputUrls ?? [],
     modelId: gen.modelId,
     modelDisplayName: gen.modelDisplayName,
     modelBrandColor: gen.modelBrandColor,
     modelIconKey: gen.modelIconKey,
+    /**
+     * ⭐ SHARED, which is what makes a generation render as a ROW. Every variation of one generation has
+     * the same shape by construction, so the widget lays them out side by side for comparison rather than
+     * as a mixed grid.
+     */
     displayAspect: gen.displayAspect,
     prompt: gen.prompt,
-    posterUrls,
-    baseUrl,
+    items: urls.map((url, i) => ({
+      url,
+      posterUrl: posterUrls[i] ?? null,
+      name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+      contentType: gen.contentType,
+      displayAspect: gen.displayAspect ?? null,
+      // A generation lives in the studio. Another producer supplies its own destination.
+      openUrl: studioUrlFor(baseUrl, gen.outputId, i, urls.length),
+    })),
   })
 }
 
@@ -403,7 +457,7 @@ export function pendingResult(
       /** At least one, or the widget renders a grid with nothing in it and looks broken rather than busy. */
       expected: Math.max(1, shape.expected ?? 1),
       pollAfterSeconds,
-      outputs: [],
+      items: [],
     },
     _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
   }
@@ -437,8 +491,14 @@ export function audioResult(
     structuredContent: mediaWidgetData({
       outputId: result.outputId,
       contentType: 'audio',
-      urls,
-      baseUrl,
+      items: urls.map((url, i) => ({
+        url,
+        name: `${result.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+        contentType: 'audio' as const,
+        // Audio has no shape, so there is nothing for a tile to take.
+        displayAspect: null,
+        openUrl: studioUrlFor(baseUrl, result.outputId, i, urls.length),
+      })),
     }),
     _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
   }

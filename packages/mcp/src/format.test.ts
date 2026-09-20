@@ -10,6 +10,7 @@ import {
   generationWidgetData,
   pollAfterSecondsFor,
   studioUrlFor,
+  audioResult,
 } from './format.js'
 
 /**
@@ -359,7 +360,7 @@ test('a pending generation binds the widget and says how many are coming', () =>
   assert.equal(sc.status, 'processing')
   assert.equal(sc.expected, 4)
   assert.equal(sc.displayAspect, '9:16')
-  assert.deepEqual(sc.outputs, [], 'nothing has landed yet')
+  assert.deepEqual(sc.items, [], 'nothing has landed yet')
   assert.ok(res._meta?.['ui/resourceUri'], 'the widget must be bound or nothing renders')
 })
 
@@ -454,8 +455,12 @@ test('the widget payload carries a studio url per output', () => {
     [],
     'http://localhost:3000',
   )
-  assert.equal(data.outputs[0]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=1')
-  assert.equal(data.outputs[1]!.studioUrl, 'http://localhost:3000/studio?output=o1&variation=2')
+  /**
+   * ⚠️ `openUrl`, NOT `studioUrl`. The field means "where this lives in the product", and naming it after
+   * one destination is what made an earlier version treat a project export as a studio question.
+   */
+  assert.equal(data.items[0]!.openUrl, 'http://localhost:3000/studio?output=o1&variation=1')
+  assert.equal(data.items[1]!.openUrl, 'http://localhost:3000/studio?output=o1&variation=2')
 })
 
 
@@ -482,4 +487,83 @@ test('a video job still gets the reassurance, because for video it is true', () 
  */
 test('with no shape the wording is unchanged', () => {
   assert.match(pendingResult('o', 15).content[0].text, /This is normal for video\./)
+})
+
+
+// ---------------------------------------------------------------------------
+// The payload shape
+// ---------------------------------------------------------------------------
+
+/**
+ * ⭐⭐⭐ **A GENERATION IS THE CASE WHERE EVERY ITEM AGREES, NOT A MODE ANYONE SETS.**
+ *
+ * The payload used to BE a generation: one outputId, one contentType, one chip, one aspect shared by every
+ * tile. That shape is the reason nothing but a generation could render, and why `generate_audio` was
+ * text-only for the life of this widget. Items with their own medium and shape is what lets an upload, an
+ * export and a mixed library set use the same viewer.
+ */
+test('a generation emits items that all share its medium and shape', () => {
+  const data = generationWidgetData(
+    {
+      ...baseGen,
+      outputId: 'o1',
+      contentType: 'image',
+      displayAspect: '9:16',
+      outputUrls: ['https://media.contenthero.ai/a.png', 'https://media.contenthero.ai/b.png'],
+    } as never,
+    [],
+    'https://app.contenthero.ai',
+  )
+  assert.equal(data.items.length, 2)
+  for (const it of data.items) {
+    assert.equal(it.contentType, 'image')
+    assert.equal(it.displayAspect, '9:16')
+    assert.ok(it.openUrl, 'a generation lives in the studio, so every item knows where to open')
+  }
+  // The shared values stay too: their PRESENCE is what tells the widget to lay this out as a row.
+  assert.equal(data.displayAspect, '9:16')
+  assert.equal(data.contentType, 'image')
+})
+
+/**
+ * ⚠️ AUDIO HAS NO SHAPE, and null is the honest answer rather than a default square. A tile with no ratio
+ * falls back to a bounded box instead of cropping against one nobody established.
+ */
+test('audio items carry a null shape, not a guessed one', () => {
+  const r = audioResult(
+    { outputId: 'aud', outputUrls: ['https://media.contenthero.ai/a.mp3'] } as never,
+    'https://app.contenthero.ai',
+  )
+  const sc = r.structuredContent as { items: Array<{ contentType: string; displayAspect: unknown }> }
+  assert.equal(sc.items[0]!.contentType, 'audio')
+  assert.equal(sc.items[0]!.displayAspect, null)
+})
+
+/**
+ * ⛔⛔ **THE OLD SHAPE MUST KEEP RENDERING.**
+ *
+ * Results already sitting in people's conversations carry `outputs` with a shared `contentType`, and the
+ * host re-renders them with whatever bundle is current. Dropping the old reader would blank every card
+ * anybody generated before this change, which is a regression nobody would attribute to a payload rename.
+ *
+ * ⚠️ This asserts the NORMALIZER, which is the widget's own `itemsOf` logic restated here because the
+ * widget has no test runner. That restatement is the weakness; it is recorded rather than hidden.
+ */
+test('the old outputs shape still yields items', () => {
+  const legacy = {
+    outputId: 'o1',
+    contentType: 'image' as const,
+    displayAspect: '16:9',
+    outputs: [{ url: 'https://media.contenthero.ai/a.png', name: 'o1-1', studioUrl: '/studio?output=o1' }],
+  }
+  const items = legacy.outputs.map((o) => ({
+    url: o.url,
+    name: o.name,
+    contentType: legacy.contentType,
+    displayAspect: legacy.displayAspect,
+    openUrl: o.studioUrl,
+  }))
+  assert.equal(items[0]!.contentType, 'image')
+  assert.equal(items[0]!.displayAspect, '16:9')
+  assert.equal(items[0]!.openUrl, '/studio?output=o1')
 })

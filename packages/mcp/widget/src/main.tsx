@@ -26,6 +26,7 @@ import { useApp } from '@modelcontextprotocol/ext-apps/react'
 import { ModelGlyph } from './model-icon.js'
 import {
   columnsForAspect,
+  masonryColumns,
   aspectToCss,
   parseAspectRatio,
   laurelKeyframes,
@@ -35,24 +36,32 @@ import {
   LAUREL_GOLD,
 } from '@contenthero-ai/brand-ui'
 
-interface Output {
+/** One tile. Everything past the url is optional, because a producer may genuinely not know it. */
+interface Item {
   readonly url: string
   readonly posterUrl?: string | null
   readonly name: string
+  readonly contentType: 'image' | 'video' | 'audio'
+  readonly displayAspect?: string | null
   /**
-   * Where this asset lives in the product, computed by the server.
+   * Where this thing lives IN THE PRODUCT, supplied by whoever built the payload.
    *
-   * ⛔ NOT DERIVED HERE. The first version parsed the slot back out of `name` (`<id>-3` means slot 2),
-   * which re-derives something the server had as a number. Absent on an older server, in which case there
-   * is nothing to open and the button does not render.
+   * ⛔ NOT a studio link by assumption. A generation lives in the studio, a project export lives in the
+   * editor, an upload lives in the library. Naming the field after one destination is what made an earlier
+   * version ask whether an export belonged in the studio detail view, which is not a question about this
+   * field at all. Absent means there is nowhere to go and the Open button does not render.
    */
-  readonly studioUrl?: string
+  readonly openUrl?: string | null
+  readonly modelName?: string | null
+  readonly modelBrandColor?: string | null
+  readonly modelIconKey?: string | null
 }
 
 interface WidgetData {
-  readonly outputId: string
-  readonly contentType: 'image' | 'video' | 'audio'
-  readonly modelId: string
+  readonly outputId?: string | null
+  /** Shared medium, when every item shares one. Null for a mixed set. */
+  readonly contentType?: 'image' | 'video' | 'audio' | null
+  readonly modelId?: string
   /**
    * ⛔ **NULL MEANS RENDER NO CHIP. NEVER FALL BACK TO `modelId`.** This carried `modelName ?? modelId`
    * until the server resolved it properly, and `gpt-image-2` reads enough like a label that a failed
@@ -61,20 +70,59 @@ interface WidgetData {
   readonly modelName?: string | null
   readonly modelBrandColor?: string | null
   readonly modelIconKey?: string | null
-  /** `"W:H"` from the row, or null for audio. Drives both the column count and each tile's own shape. */
+  /** Shared shape, when every item shares one. Its presence is what makes the layout a ROW. */
   readonly displayAspect?: string | null
-  readonly outputs: readonly Output[]
   readonly prompt?: string | null
+  readonly items?: readonly Item[]
   /**
-   * ⭐ `'processing'` is what makes the placeholders possible. A generation that outran the server's smart
-   * wait used to come back as one sentence of prose asking the agent to poll, which is every video, so the
-   * person who waited longest saw the least.
+   * ⚠️ **THE OLD SHAPE, READ FOR AS LONG AS OLD RESULTS EXIST.**
+   *
+   * The payload used to be a generation with `outputs`, each carrying only a url and a name, with the
+   * medium and the shape shared at the top. Those results are still sitting in people's conversations and
+   * the host re-renders them with whatever bundle is current, so dropping this would blank every card
+   * anybody generated before today.
    */
+  readonly outputs?: readonly { url: string; posterUrl?: string | null; name: string; studioUrl?: string }[]
   readonly status?: 'processing' | 'completed'
-  /** How many outputs were asked for. Drives how many placeholders are drawn. */
   readonly expected?: number
-  /** Seconds the server suggests waiting between polls. Images finish faster than video. */
   readonly pollAfterSeconds?: number
+}
+
+/**
+ * One list of tiles, whichever shape the payload arrived in.
+ *
+ * ⭐ Normalizing ONCE here means the rest of the widget never asks which era a result came from. The old
+ * shape's shared `contentType` and `displayAspect` become per-item values, which is exactly what they
+ * always meant.
+ */
+function itemsOf(data: WidgetData): Item[] {
+  if (data.items?.length) return [...data.items]
+  return (data.outputs ?? []).map((o) => ({
+    url: o.url,
+    posterUrl: o.posterUrl ?? null,
+    name: o.name,
+    contentType: data.contentType ?? 'image',
+    displayAspect: data.displayAspect ?? null,
+    openUrl: o.studioUrl ?? null,
+  }))
+}
+
+/**
+ * ⭐⭐⭐ THE LAYOUT IS DERIVED FROM THE DATA, NOT SELECTED BY A FLAG.
+ *
+ * Variations of one generation share a medium and a shape, and they exist to be compared, so they go on a
+ * ROW sized by that shape. A mixed set shares nothing and is being scanned rather than chosen from, so it
+ * goes in a masonry grid that keeps each item's own shape.
+ *
+ * ⚠️ "A generation" is therefore not a mode anyone sets. It is the case where every item agrees, which is
+ * a property the payload already carries.
+ */
+function isUniform(items: readonly Item[]): boolean {
+  if (items.length === 0) return true
+  const first = items[0]!
+  return items.every(
+    (it) => it.contentType === first.contentType && (it.displayAspect ?? null) === (first.displayAspect ?? null),
+  )
 }
 
 /**
@@ -215,6 +263,31 @@ const styles = `
    * three columns and a hole.
    */
   .grid { display: grid; gap: 8px; padding: 10px 12px; grid-template-columns: repeat(var(--cols, 2), 1fr); }
+
+  /*
+   * MASONRY, for a set whose items do not share a shape.
+   *
+   * ⭐ A uniform set is a ROW, because variations of one generation exist to be compared and comparison has
+   * to be parallel. A mixed set is being SCANNED, not chosen from, so every item stays its own shape and
+   * the column count comes from the width instead. Both rules live in the shared package, so the same
+   * media lands the same way in the studio and in a chat.
+   *
+   * ⚠️ Columns rather than a real masonry algorithm: CSS columns keep each tile's natural height with no
+   * measurement pass and no layout thrash as images decode at different times. The cost is reading order
+   * running down each column rather than across, which for a set nobody is reading in order is not a cost.
+   */
+  .grid.mixed {
+    display: block;
+    column-count: var(--cols, 3);
+    column-gap: 8px;
+  }
+  .grid.mixed > .tile {
+    /* ⚠️ Without this a tile can be split across a column break, which slices an image in half. */
+    break-inside: avoid;
+    margin-bottom: 8px;
+    /* A mixed tile is sized by its own ratio, so it must not also be bounded by the row cap. */
+    max-width: none;
+  }
 
   /**
    * ⛔⛔⛔ **THE TILE IS THE IMAGE. IT IS NOT A BOX WITH AN IMAGE INSIDE IT.**
@@ -536,7 +609,7 @@ function Media({
   kind,
   onReady,
 }: {
-  output: Output
+  output: Item
   kind: WidgetData['contentType']
   onReady?: () => void
 }) {
@@ -591,20 +664,20 @@ function extensionOf(url: string): string | null {
   return m?.[1]?.toLowerCase() ?? null
 }
 
-const FALLBACK_EXT: Record<WidgetData['contentType'], string> = { image: 'png', video: 'mp4', audio: 'mp3' }
+const FALLBACK_EXT: Record<Item['contentType'], string> = { image: 'png', video: 'mp4', audio: 'mp3' }
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
   avif: 'image/avif', svg: 'image/svg+xml', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
   mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg',
 }
 
-function fileNameFor(o: Output, data: WidgetData): string {
-  const ext = extensionOf(o.url) ?? FALLBACK_EXT[data.contentType]
+function fileNameFor(o: Item): string {
+  const ext = extensionOf(o.url) ?? FALLBACK_EXT[o.contentType]
   return o.name.includes('.') ? o.name : `${o.name}.${ext}`
 }
 
-function mimeFor(o: Output, data: WidgetData): string | undefined {
-  const ext = extensionOf(o.url) ?? FALLBACK_EXT[data.contentType]
+function mimeFor(o: Item): string | undefined {
+  const ext = extensionOf(o.url) ?? FALLBACK_EXT[o.contentType]
   return MIME_BY_EXT[ext]
 }
 
@@ -646,7 +719,7 @@ const ASK = {
       `model: ${d.modelId}`,
     ]
     if (d.displayAspect) lines.push(`aspect_ratio: ${d.displayAspect}`)
-    lines.push(`count: ${d.outputs.length}`)
+    lines.push(`count: ${itemsOf(d).length}`)
     if (d.prompt) lines.push('', 'prompt:', d.prompt)
     return lines.join('\n')
   },
@@ -683,6 +756,18 @@ function Widget() {
   const [failReason, setFailReason] = useState<string | null>(null)
   /** True once ANY tool result has been delivered, whether or not it was a generation. See `readResult`. */
   const [answered, setAnswered] = useState(false)
+  /**
+   * The frame's own width, which is the only thing a masonry grid can reason from.
+   *
+   * ⚠️ MEASURED, not taken from the host's reported container: the host reports the space it GAVE us, and
+   * our own padding and borders come out of that. `innerWidth` is what the grid actually has.
+   */
+  const [frameWidth, setFrameWidth] = useState(() => (typeof window === 'undefined' ? 0 : window.innerWidth))
+  useEffect(() => {
+    const onResize = () => setFrameWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   /**
    * ⚠️⚠️ REGISTERED IN `onAppCreated`, WHICH IS BEFORE THE HANDSHAKE COMPLETES.
@@ -725,7 +810,9 @@ function Widget() {
     },
   })
 
-  const current = useMemo(() => data?.outputs[index] ?? null, [data, index])
+  /** Every tile, whichever payload era this result came from. See `itemsOf`. */
+  const items = useMemo(() => (data ? itemsOf(data) : []), [data])
+  const current = useMemo(() => items[index] ?? null, [items, index])
 
   /**
    * ⭐ ASKS THE HOST FOR ROOM rather than faking a lightbox inside a frame only as big as the host allows,
@@ -829,11 +916,13 @@ function Widget() {
    * inline widget never swallows a key the host wants.
    */
   useEffect(() => {
-    if (!full || !data || data.outputs.length < 2) return
+    if (!full || !data) return
+    const all = itemsOf(data)
+    if (all.length < 2) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
       e.preventDefault()
-      const len = data.outputs.length
+      const len = all.length
       setIndex((i) => (e.key === 'ArrowRight' ? (i + 1) % len : (i - 1 + len) % len))
     }
     window.addEventListener('keydown', onKey)
@@ -861,7 +950,7 @@ function Widget() {
    * flight would otherwise schedule one more round against a widget that is gone.
    */
   useEffect(() => {
-    if (!app || !data || data.status !== 'processing' || data.outputs.length > 0) return
+    if (!app || !data || data.status !== 'processing' || itemsOf(data).length > 0) return
     const everySeconds = Math.max(3, data.pollAfterSeconds ?? 10)
     const deadline = 20 * 60
     let cancelled = false
@@ -919,14 +1008,14 @@ function Widget() {
    * by CSP or a network failure means we have no bytes to offer, so asking the host to try is strictly
    * better than giving up. Any failure now carries its reason to the button.
    */
-  const download = async (o: Output) => {
+  const download = async (o: Item) => {
     // ⚠️ `data` is narrowed below, but this closure is defined above that point, so the guard is restated.
     if (!app || !data) return
     setBusy(o.url)
     setFailed(null)
     setFailReason(null)
-    const name = fileNameFor(o, data)
-    const mimeType = mimeFor(o, data)
+    const name = fileNameFor(o)
+    const mimeType = mimeFor(o)
     try {
       let sent: { isError?: boolean } | undefined
       try {
@@ -997,11 +1086,15 @@ function Widget() {
     return <div className="fallback muted">{isConnected ? 'Waiting for the generation result.' : 'Connecting.'}</div>
   }
 
-  /** True while the server has told us a job is running and no outputs have landed yet. */
-  const pending = data.status === 'processing' && data.outputs.length === 0
+  /** True while the server has told us a job is running and nothing has landed yet. */
+  const pending = data.status === 'processing' && items.length === 0
 
-  const n = pending ? Math.max(1, data.expected ?? 1) : data.outputs.length
-  const noun = data.contentType
+  const n = pending ? Math.max(1, data.expected ?? 1) : items.length
+  /**
+   * ⚠️ A MIXED SET HAS NO SINGLE NOUN. "4 images" is only true when every item is an image, which is the
+   * uniform case; anything else is honestly just "items".
+   */
+  const noun = data.contentType ?? (isUniform(items) ? items[0]?.contentType ?? 'item' : 'item')
   const label = pending
     ? stalled
       ? 'Still running. Ask me to check on it.'
@@ -1021,13 +1114,29 @@ function Widget() {
    * ⚠️ Null is a real third state. Audio has no shape, and an older server sends nothing, so the tiles fall
    * back to a bounded `contain` box rather than cropping against a ratio nobody established.
    */
-  const aspect = ratio ?? data.displayAspect ?? null
+  const aspect = ratio ?? data.displayAspect ?? (isUniform(items) ? items[0]?.displayAspect ?? null : null)
+
+  /**
+   * ⭐⭐⭐ **ROW OR MASONRY, DECIDED BY THE DATA.**
+   *
+   * Variations of one generation share a medium and a shape and exist to be compared, so they go on a row
+   * sized by that shape. A mixed set shares nothing and is being scanned, so it goes in a masonry grid
+   * that keeps each item's own shape. Neither is a mode anyone selects; `isUniform` reads a property the
+   * payload already carries.
+   */
+  const uniform = pending || isUniform(items)
 
   /**
    * ⚠️ `Math.min` WITH THE COUNT. Three outputs under a four-column rule would otherwise lay out as three
    * tiles and a hole, which reads as a missing item rather than an arrangement.
    */
-  const cols = Math.min(n, columnsForAspect(aspect))
+  /**
+   * ⚠️ TWO RULES, BECAUSE THEY ANSWER TWO QUESTIONS. A uniform set's column count comes from its SHAPE
+   * (four portrait variations belong on one row); a mixed set's comes from the WIDTH, because there is no
+   * shared shape to reason from. Both rules live in `@contenthero-ai/brand-ui` so the studio and a chat
+   * arrange the same media the same way.
+   */
+  const cols = uniform ? Math.min(n, columnsForAspect(aspect)) : masonryColumns(frameWidth, n)
 
   /**
    * ⭐ ONE ACTION SET, RENDERED TWICE. The hover overlay and the fullscreen foot offer the same verbs, so
@@ -1036,8 +1145,8 @@ function Widget() {
    * ⚠️ WHICH VERBS APPLY IS A PROPERTY OF THE MEDIUM. Animate and Edit are image-only: there is nothing to
    * animate about a video and no image-editing model takes audio. Recreate and Download apply to all three.
    */
-  const actions = (o: Output, opts: { labels: boolean }) => {
-    const isImage = data.contentType === 'image'
+  const actions = (o: Item, opts: { labels: boolean }) => {
+    const isImage = o.contentType === 'image'
     const t = (s: string) => (opts.labels ? s : null)
     // ⛔ A LABELED BUTTON GETS NO TOOLTIP. It already says what it does, and repeating that on hover is
     // noise. `tip` is undefined in the labeled variant so the attribute is absent, not empty.
@@ -1092,11 +1201,11 @@ function Widget() {
         {/* ⛔ NO HEADER HERE. The host already frames a fullscreen app with its own title and close control,
             so drawing ours produced two of each stacked on top of one another. */}
         <div className="stage">
-          <Media output={current} kind={data.contentType} />
+          <Media output={current} kind={current.contentType} />
         </div>
         {n > 1 && (
           <div className="strip" role="tablist" aria-label="Variations">
-            {data.outputs.map((o, i) => (
+            {items.map((o, i) => (
               <button
                 key={o.url}
                 className="t"
@@ -1118,10 +1227,10 @@ function Widget() {
           </button>
           {/* Leaving the conversation is a deliberate choice, so it sits here rather than in the hover row,
               which stays the three fast verbs. */}
-          {current.studioUrl && (
+          {current.openUrl && (
             <button
               className="pill neutral"
-              onClick={() => void app?.openLink({ url: current.studioUrl! })}
+              onClick={() => void app?.openLink({ url: current.openUrl! })}
             >
               <IconOpen />
               Open
@@ -1163,7 +1272,7 @@ function Widget() {
         </div>
       )}
 
-      <div className="grid" style={{ ['--cols' as string]: String(cols) }}>
+      <div className={uniform ? 'grid' : 'grid mixed'} style={{ ['--cols' as string]: String(cols) }}>
         {pending &&
           Array.from({ length: n }, (_, i) => (
             // ⚠️ A placeholder is ALWAYS shaped: `shapeOf` bottoms out at 1:1, matching the studio's own
@@ -1175,22 +1284,31 @@ function Widget() {
               </div>
             </div>
           ))}
-        {data.outputs.map((o, i) => (
+        {items.map((o, i) => (
           <div
             key={o.url}
             className={
-              `tile${data.contentType === 'image' ? ' img' : ''}` +
-              `${data.contentType === 'audio' ? ' audio' : ''}` +
-              ` ${aspect ? 'shaped' : 'unshaped'}${loaded.has(o.url) ? ' ready' : ''}`
+              `tile${o.contentType === 'image' ? ' img' : ''}` +
+              `${o.contentType === 'audio' ? ' audio' : ''}` +
+              ` ${(uniform ? aspect : o.displayAspect) ? 'shaped' : 'unshaped'}` +
+              `${loaded.has(o.url) ? ' ready' : ''}`
             }
             // ⭐ The tile takes the MEDIA's shape, so there is nothing left over to letterbox. See `.tile` above.
-            style={aspect ? shapeOf(aspect) : undefined}
+            /**
+             * ⚠️ THE TILE'S OWN SHAPE IN A MIXED SET, the shared one when the set is uniform. Using the
+             * shared value for a mixed set would crop every item that disagreed with the first one,
+             * silently, because object-fit: cover trims against whatever ratio the tile was given.
+             */
+            style={(() => {
+              const a = uniform ? aspect : (o.displayAspect ?? null)
+              return a ? shapeOf(a) : undefined
+            })()}
             onClick={() => {
               setIndex(i)
-              if (data.contentType === 'image') void setMode(true)
+              if (o.contentType === 'image') void setMode(true)
             }}
           >
-            {data.contentType === 'image' ? (
+            {o.contentType === 'image' ? (
               <img
                 className="media"
                 src={o.url}
@@ -1222,12 +1340,12 @@ function Widget() {
             ) : (
               <Media
                 output={o}
-                kind={data.contentType}
+                kind={o.contentType}
                 onReady={() => setLoaded((prev) => (prev.has(o.url) ? prev : new Set(prev).add(o.url)))}
               />
             )}
             {/* The laurel sits ON the media until it has pixels, then the two cross-fade. See .tile .media. */}
-            {!loaded.has(o.url) && data.contentType !== 'audio' && (
+            {!loaded.has(o.url) && o.contentType !== 'audio' && (
               <div className="laurel-wrap">
                 <Skeleton />
               </div>
@@ -1251,7 +1369,7 @@ function Widget() {
             Recreate
           </button>
         )}
-        {!pending && canExpand && data.contentType === 'image' && (
+        {!pending && canExpand && items.some((it) => it.contentType === 'image') && (
           <button className="pill neutral" onClick={() => void setMode(true)}>Expand</button>
         )}
       </div>
