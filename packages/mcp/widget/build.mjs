@@ -74,7 +74,16 @@ writeFileSync(out, html)
 
 const kb = (html.length / 1024).toFixed(0)
 console.log(`widget: ${out.replace(join(HERE, '..'), '.')} (${kb}KB, self-contained)`)
-// A widget that silently lost its script is the failure this catches at build time rather than in a host.
-if (!html.includes('createRoot') && !/createRoot|\.render\(/.test(js)) {
+/**
+ * ⚠️ THE TWO WAYS THIS BUNDLE CAN BE SILENTLY BROKEN, BOTH CAUGHT HERE RATHER THAN IN A HOST.
+ *
+ * A widget that lost its script renders an empty frame with no error anywhere, and a CSS template closed
+ * early by a stray backtick takes the whole module with it. The second one actually happened: a comment
+ * inside the styles template contained `min-height: 0` in backticks, which ENDED the literal.
+ */
+if (!/createRoot|\.render\(/.test(js)) {
   throw new Error('bundle does not appear to mount a React root')
+}
+if (!/\.wrap\s*\{/.test(js) || !/\.grid\s*\{/.test(js)) {
+  throw new Error('the stylesheet is missing from the bundle: a stray backtick probably closed the template early')
 }
