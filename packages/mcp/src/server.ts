@@ -45,6 +45,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
  */
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
+import { modelChipFor } from './model-presentation.js'
 import {
   ContentHero,
   GenerationTimeoutError,
@@ -212,14 +213,26 @@ function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio
     aspectRatio?: string
     numImages?: number
     numGenerations?: number
+    prompt?: string
+    script?: string
   }
   const ar = a.aspectRatio
   const displayAspect = !ar || ar === 'auto' || ar === 'adaptive' || !ar.includes(':') ? null : ar
+  const chip = modelChipFor(a.modelId)
   return {
     contentType,
     modelId: a.modelId ?? '',
     displayAspect,
     expected: a.numImages ?? a.numGenerations ?? 1,
+    /**
+     * ⚠️ `script` IS THE PROMPT FOR LIP SYNC, where the words spoken are what a person recognizes the
+     * card by. Falling back to it rather than showing nothing is the difference between a card that is
+     * about something and a card that is about a model id.
+     */
+    prompt: a.prompt ?? a.script ?? null,
+    modelName: chip?.name ?? null,
+    modelBrandColor: chip?.brandColor ?? null,
+    modelIconKey: chip?.iconKey ?? null,
   }
 }
 
@@ -438,7 +451,8 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
        * failing a generation the person already paid for.
        */
       const previewUri = gen.previewUrls?.[i] ?? null
-      const hit = await fetchDisplayImage(uri, previewUri, budget)
+      const visionUri = gen.visionUrls?.[i] ?? null
+      const hit = await fetchDisplayImage(uri, previewUri, budget, visionUri)
       if (hit.ok) {
         budget -= hit.image.data.length
         out.push({ kind: 'bytes', type: 'image', data: hit.image.data, mimeType: hit.image.mimeType })
@@ -676,8 +690,25 @@ async function fetchDisplayImage(
   master: string | null | undefined,
   preview: string | null | undefined,
   budget: number,
+  /**
+   * ⭐⭐⭐ THE SMALLEST ARTIFACT THAT STILL SHOWS THE PICTURE, TRIED FIRST.
+   *
+   * A 1600px preview encodes to roughly 500 KB against a ~900 KB allowance for an ENTIRE tool result, so
+   * exactly one fits and everything after it is dropped. Measured 2026-09-21 on a real four-variation
+   * generation: previews of 517, 513, 506 and 447 KB, one attached, the model saw a quarter of what the
+   * person saw. The 512px `vision` derivative is about 45 KB, so all four fit with room to spare.
+   *
+   * ⚠️ ABSENT FOR MOST OF THE CORPUS, which is why the chain is vision then preview then master rather
+   * than a swap: anything older simply behaves exactly as it did before this existed.
+   */
+  vision?: string | null,
 ): Promise<ImageFetch> {
   let previewMiss: ImageFetch | null = null
+  if (vision && vision !== master) {
+    const hit = await fetchImage(vision, budget)
+    if (hit.ok) return hit
+    previewMiss = hit
+  }
   if (preview && preview !== master) {
     const hit = await fetchImage(preview, budget)
     if (hit.ok) return hit
@@ -717,7 +748,11 @@ export interface InlinedImage {
 }
 
 async function inlineImagesWithinBudget(
-  items: readonly { url: string | null | undefined; previewUrl?: string | null }[],
+  items: readonly {
+    url: string | null | undefined
+    previewUrl?: string | null
+    visionUrl?: string | null
+  }[],
 ): Promise<InlinedImage[]> {
   let budget = MAX_INLINE_BASE64_CHARS
   const out: InlinedImage[] = []
@@ -726,7 +761,7 @@ async function inlineImagesWithinBudget(
       out.push({ image: null })
       continue
     }
-    const hit = await fetchDisplayImage(item.url, item.previewUrl, budget)
+    const hit = await fetchDisplayImage(item.url, item.previewUrl, budget, item.visionUrl)
     if (hit.ok) {
       budget -= hit.image.data.length
       out.push({ image: hit.image })
@@ -2510,7 +2545,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // not: an image master is routinely 1.7 to 2.6 MB, which no budget under a 1 MB ceiling can admit.
         const images = await inlineImagesWithinBudget(
           result.items.map((it) =>
-            it.ok ? { url: it.imageUrl, previewUrl: it.previewUrl } : { url: null },
+            it.ok
+              ? { url: it.imageUrl, previewUrl: it.previewUrl, visionUrl: it.visionUrl }
+              : { url: null },
           ),
         )
         return mediaBatchResult(result, images, client.baseUrl)

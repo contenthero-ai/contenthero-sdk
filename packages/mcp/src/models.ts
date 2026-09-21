@@ -21,6 +21,7 @@
  */
 
 import type { ContentHero } from '@contenthero/sdk'
+import { rememberModelPresentation } from './model-presentation.js'
 
 /** Fallback image-generation models (used only if discovery is unreachable). */
 export const IMAGE_MODELS_FALLBACK = [
@@ -113,6 +114,12 @@ export function fallbackModelEnums(): ResolvedModelEnums {
 export async function resolveModelEnums(getClient: () => ContentHero): Promise<ResolvedModelEnums> {
   try {
     const models = await getClient().listModels()
+    /**
+     * ⭐ THE SAME CALL ALREADY PAYS FOR THIS. Enum resolution needs every model's id; the chip needs its
+     * name and brand marks, which arrive in the same rows. Remembering them here is why a card can show a
+     * model from the first frame without the per-chip catalog fetch this package deleted.
+     */
+    rememberModelPresentation(models)
     const image = models
       .filter((m) => m.contentType === 'image' && m.kind === 'generate')
       .map((m) => m.modelId)

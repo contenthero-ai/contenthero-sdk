@@ -389,6 +389,26 @@ export interface Generation {
    * ⚠️ Absent on an older server. Treat a missing array as "no previews", never as an error.
    */
   previewUrls?: (string | null)[]
+  /**
+   * The 512px derivative of each entry in `outputUrls`, INDEX-ALIGNED, for inlining bytes.
+   *
+   * ⭐ Prefer this over `previewUrls` when attaching: a preview is sized for a screen and four of them do
+   * not fit one tool result.
+   */
+  visionUrls?: (string | null)[]
+  /**
+   * The urls of the variations that have ALREADY LANDED, index-aligned by slot, while status is
+   * 'processing'. Absent once the row completes, when `outputUrls` is the answer.
+   *
+   * ⭐⭐ THIS IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME. `outputUrls` is written once, inside the
+   * completion transition, because it is the slot-ordered projection and is only correct when every slot
+   * has settled. So a consumer polling it sees nothing and then everything. The spine registers each
+   * object as it is stored, which is a partial fact that is already true, and this reports it.
+   *
+   * ⚠️ IT SAYS WHAT EXISTS, NEVER THAT THE JOB IS DONE. A full-looking partial still races the side
+   * effects that run after the last slot; `status` remains the only terminal signal.
+   */
+  partialUrls?: (string | null)[]
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
   createdAt: string
@@ -992,6 +1012,17 @@ export interface ResolvedMediaBatchItem {
    */
   previewUrl: string | null
   /**
+   * The same picture at 512px, for a caller inlining bytes under a token ceiling.
+   *
+   * ⭐ PREFER THIS OVER `previewUrl` WHEN YOU ARE ATTACHING BYTES. A 1600px preview encodes to roughly
+   * 500 KB against a ~900 KB allowance for an entire tool result, so exactly one fits and everything
+   * after it is dropped. Measured on a real four-variation generation: the model saw one of four pictures
+   * the person could see.
+   *
+   * ⚠️ Null for anything generated before the vision pipeline shipped. Fall back to `previewUrl`.
+   */
+  visionUrl: string | null
+  /**
    * Which library this item came from: `creations`, `uploads` or `stock`. Null when nothing maps.
    *
    * ⭐ Resolved from the storage spine, so a raw `{ url }` item carries it too. A consumer needs it to decide
@@ -1301,6 +1332,18 @@ export interface PromptReferences {
 export interface ModelInfo {
   modelId: string
   displayName: string
+  /**
+   * Brand accent (hex) and the stable brand-family key that maps to an icon.
+   *
+   * ⭐ THEY TRAVEL WITH THE NAME because every consumer that renders one renders all three: a chip is a
+   * glyph, an accent and a label. `displayName` was public and these were not, so a caller could name a
+   * model and could not draw it.
+   *
+   * ⚠️ `iconKey` IS A BRAND FAMILY, NOT A MODEL ID. Four GPT Image models share `openai`. Null means
+   * render no glyph rather than guess one.
+   */
+  brandColor: string | null
+  iconKey: string | null
   description: string | null
   contentType: 'image' | 'video' | 'audio'
   kind: ModelKind

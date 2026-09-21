@@ -470,6 +470,21 @@ export interface PendingShape {
   displayAspect?: string | null
   /** How many outputs were asked for, so the widget draws that many placeholders. */
   expected?: number
+  /**
+   * ⭐⭐⭐ **EVERYTHING THE REQUEST ALREADY KNEW, SO THE CARD IS NOT BLANK WHILE IT WAITS.**
+   *
+   * The prompt, the model and the shape are all decided at SUBMIT. The card used to show none of them
+   * until the generation FINISHED and the completed row carried its own provenance, so the whole loading
+   * period, which is the part a person actually watches, displayed placeholders and nothing else.
+   *
+   * ⛔ `modelName` IS RESOLVED, NEVER THE ID. `gpt-image-2.5-flare` reads enough like a label that
+   * printing one turns a lookup failure into a cosmetic bug nobody can diagnose, which is exactly how the
+   * chip once came to flicker between kebab case and title case. Null renders no chip.
+   */
+  prompt?: string | null
+  modelName?: string | null
+  modelBrandColor?: string | null
+  modelIconKey?: string | null
 }
 
 /**
@@ -515,11 +530,13 @@ export function pendingResult(
       status: 'processing',
       contentType: shape.contentType,
       modelId: shape.modelId,
-      modelName: null,
-      modelBrandColor: null,
-      modelIconKey: null,
+      // ⭐ Carried from the REQUEST, so the chip and the prompt are on the card from the first frame
+      // rather than appearing only once the generation finishes. Null still means render nothing.
+      modelName: shape.modelName ?? null,
+      modelBrandColor: shape.modelBrandColor ?? null,
+      modelIconKey: shape.modelIconKey ?? null,
       displayAspect: shape.displayAspect ?? null,
-      prompt: null,
+      prompt: shape.prompt ?? null,
       /** At least one, or the widget renders a grid with nothing in it and looks broken rather than busy. */
       expected: Math.max(1, shape.expected ?? 1),
       pollAfterSeconds,
@@ -663,13 +680,33 @@ export function generationStatusResult(
   const secs = pollAfterSecondsFor(gen.contentType)
   const ready = gen.outputUrls ?? []
   const poll = `Call get_generation_status again in ~${secs}s [poll_after_seconds: ${secs}]`
-  if (ready.length === 0) {
+  /**
+   * ⭐⭐⭐ **THE SLOTS THAT HAVE LANDED, WHICH IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME.**
+   *
+   * `outputUrls` is written once, inside the completion transition, because it is the slot-ORDERED
+   * projection and is only correct when every slot has settled. So polling it sees nothing and then
+   * everything, and a four-variation card showed four skeletons and then four pictures while the studio
+   * beside it resolved each one as its own image existed.
+   *
+   * `partialUrls` is the spine's answer to a different question: which objects EXIST right now. It is
+   * index-aligned by slot with `null` for one not yet written, so a tile keeps its position even though
+   * slots land in whatever order their vendor calls return.
+   *
+   * ⚠️ FALLS BACK TO `outputUrls`, so an older server behaves exactly as before: all or nothing.
+   */
+  const landed = (gen.partialUrls ?? ready).filter((u): u is string => !!u)
+  /**
+   * ⛔ THE EMPTY CHECK MOVED BELOW `landed`, AND THAT IS THE WHOLE POINT. It used to test `outputUrls`,
+   * which is EMPTY for the entire life of a running job, so this function returned prose on every poll
+   * and the partial payload below was unreachable. Nothing is known only when NEITHER source has a url.
+   */
+  if (landed.length === 0) {
     return text(`Generation ${gen.outputId} is still ${gen.status}. ${poll}.`)
   }
-  const noun = ready.length === 1 ? gen.contentType : `${gen.contentType}s`
+  const noun = landed.length === 1 ? gen.contentType : `${gen.contentType}s`
   const prose = [
-    `Partial. ${ready.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
-    ...ready.map((u, i) => `${i + 1}. ${u}`),
+    `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
+    ...landed.map((u, i) => `${i + 1}. ${u}`),
     `NOT the full set. ${poll} for the rest.`,
   ].join('\n')
   /**
@@ -689,7 +726,9 @@ export function generationStatusResult(
   return {
     content: [{ type: 'text', text: prose }],
     structuredContent: {
-      ...generationWidgetData(gen, [], baseUrl),
+      // ⚠️ Built from the LANDED slots, not from `outputUrls`: the two differ precisely while the job is
+      // still running, which is the only time this branch is reached.
+      ...generationWidgetData({ ...gen, outputUrls: landed }, [], baseUrl),
       status: 'processing',
       /**
        * ⚠️ NO `expected` HERE, DELIBERATELY. A `Generation` does not carry how many were ASKED for, only
