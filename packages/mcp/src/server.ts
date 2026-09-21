@@ -31,7 +31,7 @@
  */
 
 import type { Implementation } from '@modelcontextprotocol/sdk/types.js'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 /**
  * ⚠️⚠️ **THE CONSTANTS ONLY, NOT THE `./server` HELPERS, AND THAT IS DELIBERATE.**
  *
@@ -1025,6 +1025,38 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
    * ⭐ The resource is part of this server's contract. Advertising it always and throwing a NAMED error at
    * read time turns "no widget, no reason" into one line that says exactly what is missing.
    */
+  /**
+   * ⛔⛔⛔ **EVERY PUBLISH USED TO ORPHAN EVERY CONVERSATION THAT HAD ALREADY RENDERED A CARD.**
+   *
+   * The widget's uri carries the package version, which is deliberate: a host caches a `ui://` resource by
+   * uri, so a stable one would keep serving last week's widget forever. The cost nobody accounted for is
+   * that a transcript stores the uri it saw. Publishing 0.4.15 stopped serving
+   * `generation-0.4.14.html`, and ChatGPT Desktop, which reopens past conversations from its own cache,
+   * showed **"This app couldn't be loaded"** on every card it had previously rendered correctly. Measured
+   * 2026-09-21. The web client escaped it only because it re-listed tools and got the new uri.
+   *
+   * ⭐⭐⭐ **SO ANY VERSION RESOLVES, AND IT RESOLVES TO THE CURRENT WIDGET.** The template below matches
+   * every uri this package has ever minted and serves today's bundle for all of them. Cache-busting is
+   * untouched, because a new conversation still gets a uri no host has cached. What changes is that an old
+   * one is no longer pointed at nothing.
+   *
+   * ⚠️ SERVING THE CURRENT BUNDLE FOR AN OLD URI IS THE POINT, not a compromise. The widget renders from
+   * `structuredContent` the host replays, and it is one app whose newest version is the one we want on
+   * screen. Pinning historical bundles would mean shipping every past build forever to reproduce bugs we
+   * have already fixed.
+   *
+   * ⚠️ `list: undefined` so the template adds nothing to `resources/list`. The concrete registration below
+   * is what hosts discover; this one exists purely to answer reads for uris already in the wild.
+   */
+  server.resource(
+    'generation-any-version',
+    new ResourceTemplate('ui://contenthero/generation-{version}.html', { list: undefined }),
+    { description: 'Any previously published generation widget, served as the current one.', mimeType: RESOURCE_MIME_TYPE, ...WIDGET_CSP },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: RESOURCE_MIME_TYPE, text: GENERATION_WIDGET_HTML, ...WIDGET_CSP }],
+    }),
+  )
+
   server.registerResource(
     'generation',
     GENERATION_WIDGET_URI,

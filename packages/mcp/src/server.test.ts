@@ -3195,3 +3195,52 @@ test('the ChatGPT CSP mirror lists the same origins as the MCP Apps one', async 
   assert.deepEqual(mirror?.resource_domains, csp?.resourceDomains, 'resource domains differ between hosts')
   assert.deepEqual(mirror?.connect_domains, csp?.connectDomains, 'connect domains differ between hosts')
 })
+
+/**
+ * ⭐⭐⭐ **A PUBLISHED WIDGET URI MUST OUTLIVE THE PUBLISH THAT MINTED IT.**
+ *
+ * The widget's uri carries the package version so a host cannot serve a cached stale bundle. The cost
+ * nobody accounted for is that a TRANSCRIPT stores the uri it saw. Publishing 0.4.15 stopped serving
+ * `generation-0.4.14.html`, and ChatGPT Desktop, which reopens past conversations from its own cache,
+ * showed "This app couldn't be loaded" on every card it had previously rendered. Measured 2026-09-21.
+ *
+ * ⛔ THE WEB CLIENT DID NOT REPRODUCE IT, because it re-listed tools and got the new uri. So "it works in
+ * my browser" was true and useless: the failure only appears where history is replayed.
+ *
+ * ⚠️ THIS ASSERTS OLD URIS RESOLVE, not merely that the current one does. A guard that reads only the
+ * version it just built passes on exactly the bug it exists to catch, forever.
+ */
+test('every version of the widget uri still resolves, not just the current one', async () => {
+  const mcp = await connect(fakeClient())
+
+  const { resources } = await mcp.listResources()
+  const listed = resources.map((r) => r.uri)
+  assert.deepEqual(listed, [GENERATION_WIDGET_URI], `resources/list should advertise exactly the current uri: ${listed}`)
+
+  const current = await mcp.readResource({ uri: GENERATION_WIDGET_URI })
+  const bytes = (current.contents?.[0] as { text?: string })?.text?.length ?? 0
+  assert.ok(bytes > 1000, `the current widget should have a body, got ${bytes} bytes`)
+
+  // Versions this package has actually published, plus a shape it has never minted.
+  for (const version of ['0.4.12', '0.4.13', '0.4.14', '0.9.99']) {
+    const uri = `ui://contenthero/generation-${version}.html`
+    const res = await mcp.readResource({ uri })
+    const body = res.contents?.[0] as { text?: string; mimeType?: string } | undefined
+    assert.equal(body?.text?.length, bytes, `${uri} should serve the CURRENT widget, byte for byte`)
+    assert.equal(body?.mimeType, 'text/html;profile=mcp-app', `${uri} served the wrong mime type`)
+  }
+})
+
+/**
+ * ⚠️ THE TEMPLATE MUST NOT SWALLOW UNRELATED URIS. Matching too widely would turn a genuine typo into a
+ * silently served widget, which is the same class of defect as the version orphaning, one level up.
+ */
+test('the widget template does not answer for uris it should not own', async () => {
+  const mcp = await connect(fakeClient())
+  for (const uri of ['ui://contenthero/something-else.html', 'ui://other/generation-0.4.15.html']) {
+    await assert.rejects(
+      () => mcp.readResource({ uri }),
+      `${uri} should not resolve; only generation-<version>.html is ours`,
+    )
+  }
+})
