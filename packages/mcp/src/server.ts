@@ -2629,7 +2629,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Showing media'),
       annotations: READ,
       description:
-        'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or an { mediaId, variation? }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
+        'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or an { mediaId, variation? }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. Do not re-show media another tool already displayed: anything that creates or imports media renders its own card, and showing it again only duplicates it. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
       inputSchema: {
         items: z
           .array(
