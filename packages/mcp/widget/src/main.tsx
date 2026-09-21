@@ -173,8 +173,20 @@ const styles = `
    * legible against a light background too, where the inverse is not. data-theme is stamped on <html> from
    * the host context, so a toggle repaints without remounting anything.
    */
+  /*
+   * ⛔⛔ A TRANSPARENT ROOT, AND color-scheme IS EXACTLY WHY IT IS NEEDED.
+   *
+   * Declaring color-scheme tells the browser to paint its OWN canvas backdrop for the active scheme.
+   * Setting the body transparent does not stop that: the canvas color comes from the ROOT element, so
+   * the frame filled itself with the user agent's dark gray and our rounded card sat on a square of it.
+   *
+   * ⭐ Measured in ChatGPT 2026-09-21: four dark corners around the widget, in a chat whose own
+   * background is a different shade, so the card read as pasted on rather than placed in. The radius was
+   * never the problem; there was something opaque behind it.
+   */
   :root {
     color-scheme: light dark;
+    background: transparent;
     --chip-bg: ${OBSIDIAN};
     --chip-bg-hover: #242424;
     --chip-fg: #ffffff;
@@ -1505,6 +1517,31 @@ function Widget() {
   const uniform = pending || isUniform(items)
 
   /**
+   * ⭐⭐⭐ THE MODEL CHIP, DERIVED THE SAME WAY THE ASPECT BADGE IS.
+   *
+   * The payload's SHARED model fields are set by a generation, which knows its one model, and left null
+   * by show_media, which may span many. So a show_media card naming a single generation showed a bare
+   * aspect ratio and no model at all, while the identical set arriving from generate_image showed both.
+   * Same media, same one model, two different cards.
+   *
+   * ⛔ ONLY WHEN THEY AGREE, for exactly the reason the ratio may only label a uniform set. A grid
+   * spanning four models has no one model to name, and picking item one's would be the same class of
+   * lie as calling a mixed grid 1:1.
+   *
+   * ⚠️ FALLS BACK TO THE SHARED FIELD FIRST so a generation keeps naming its model even before any item
+   * has loaded, which is the whole point of showing a chip on a pending card.
+   */
+  const agreedModel = (() => {
+    if (data.modelName) return { name: data.modelName, brandColor: data.modelBrandColor, iconKey: data.modelIconKey }
+    const named = items.filter((i) => i.modelName)
+    if (!named.length || named.length !== items.length) return null
+    const first = named[0]!
+    return named.every((i) => i.modelName === first.modelName)
+      ? { name: first.modelName!, brandColor: first.modelBrandColor, iconKey: first.modelIconKey }
+      : null
+  })()
+
+  /**
    * ⚠️ `Math.min` WITH THE COUNT. Three outputs under a four-column rule would otherwise lay out as three
    * tiles and a hole, which reads as a missing item rather than an arrangement.
    */
@@ -1625,16 +1662,31 @@ function Widget() {
     )
   }
 
-  const badges = (
+  /**
+   * ⭐ ONE BADGE ROW, RENDERED TWICE, AND THE ARGUMENT IS WHY IT CAN BE.
+   *
+   * The header describes the SET, so it names a model only when the set agrees on one. The detail foot
+   * describes ONE ITEM, so it can always name that item's model, including inside a mixed set where the
+   * header correctly names none.
+   *
+   * ⛔ A SECOND COPY OF THIS MARKUP WAS THE ALTERNATIVE, and this file already carries that scar: the
+   * foot grew its own Open and its own Recreate, and nobody noticed until those verbs joined the shared
+   * list and the foot drew each of them twice.
+   */
+  const badges = (item?: Item) => {
+    const model = (item?.modelName
+      ? { name: item.modelName, brandColor: item.modelBrandColor, iconKey: item.modelIconKey }
+      : agreedModel) as { name: string; brandColor?: string | null; iconKey?: string | null } | null
+    return (
     <>
       {/* ⛔ No `?? data.modelId`. A null name means the server could not resolve one, and the id reads
           enough like a label that printing it turns that into a cosmetic bug nobody can diagnose. */}
-      {data.modelName && (
-        <span className={`badge model${data.modelIconKey ? '' : ' no-glyph'}`}>
+      {model && (
+        <span className={`badge model${model.iconKey ? '' : ' no-glyph'}`}>
           {/* The glyph IS the brand mark, so the dot only appears when there is no glyph to stand in for. */}
-          <ModelGlyph iconKey={data.modelIconKey} />
-          <span className="dot" style={{ background: data.modelBrandColor || GOLD }} />
-          {data.modelName}
+          <ModelGlyph iconKey={model.iconKey} />
+          <span className="dot" style={{ background: model.brandColor || GOLD }} />
+          {model.name}
         </span>
       )}
       {/**
@@ -1654,7 +1706,8 @@ function Widget() {
         !pending && <span className="badge">{setNoun(items)}</span>
       )}
     </>
-  )
+    )
+  }
 
   if (full && current) {
     return (
@@ -1702,7 +1755,7 @@ function Widget() {
             */}
           {actions(current, { labels: true })}
           <span className="spacer" />
-          {badges}
+          {badges(current)}
           {/* ⭐ "Variation X of Y" IS GENERATION VOCABULARY. True for variations of one generation, false
               for a library set spanning many, where item 3 is not a variation of anything. */}
           {n > 1 && (
@@ -1830,7 +1883,7 @@ function Widget() {
       {/* ⭐ METADATA LEFT, MARK RIGHT. The wordmark and the count both went: the host already shows which
           connector answered, and the count is said once at the bottom instead of twice. */}
       <div className="head">
-        <div className="badges">{badges}</div>
+        <div className="badges">{badges()}</div>
         <span className="spacer" />
         {/* Size comes from `.head .mark`, deliberately: see the rule for why it is not passed here. */}
         <Mark />
