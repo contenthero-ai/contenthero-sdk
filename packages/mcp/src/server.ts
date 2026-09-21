@@ -30,6 +30,7 @@
  * fields, and per-tool modelId enums prevent cross-type model misuse.
  */
 
+import type { Implementation } from '@modelcontextprotocol/sdk/types.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 /**
  * ⚠️⚠️ **THE CONSTANTS ONLY, NOT THE `./server` HELPERS, AND THAT IS DELIBERATE.**
@@ -4368,7 +4369,34 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
  * does not exist, so the hosted server reported 0.0.0 and the catch made it silent. A version is a
  * build-time fact, so it is generated alongside the widget and no path resolution is left to get wrong.
  */
-export const SERVER_INFO = { name: 'contenthero', version: PACKAGE_VERSION } as const
+export const SERVER_INFO: Implementation = {
+  /** The stable identifier. Machine-facing, lowercase, never rendered by a well-behaved host. */
+  name: 'contenthero',
+  /**
+   * ⭐⭐⭐ **THE HUMAN NAME, AND WITHOUT IT A HOST WILL TITLE-CASE THE IDENTIFIER.**
+   *
+   * Gemini rendered `mcp-typescript server on vercel` as "Mcp Typescript Server On Vercel": it split on
+   * the hyphen and capitalized each word. Apply that same transform to a bare `contenthero` and you get
+   * **"Contenthero"**, which is wrong in the one place a user reads it. `title` is the field the protocol
+   * provides for exactly this, so the capital H is stated rather than left to somebody's formatter.
+   */
+  title: 'ContentHero',
+  version: PACKAGE_VERSION,
+  websiteUrl: 'https://contenthero.ai',
+  description: 'Create, edit, schedule and publish content from your own AI assistant.',
+  /**
+   * ⭐⭐ **THE ICON, DECLARED RATHER THAN SCRAPED.**
+   *
+   * Gemini put a 48x48 on the ContentHero card because it fell back to guessing: it read `favicon.ico`
+   * and took the first directory entry. That ico is fixed separately (largest first now), but guessing is
+   * the wrong mechanism to leave in place when the protocol has a field for the answer. A host that reads
+   * this gets the size and format from us instead of inferring them.
+   */
+  icons: [
+    { src: 'https://app.contenthero.ai/icon.png', mimeType: 'image/png', sizes: ['512x512'] },
+    { src: 'https://app.contenthero.ai/favicon.svg', mimeType: 'image/svg+xml', sizes: ['any'] },
+  ],
+}
 
 /**
  * Build a stdio-style server bound to a single env-configured client. The model
