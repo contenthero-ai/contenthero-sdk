@@ -38,8 +38,11 @@ export function registerContext(program: Command): void {
     .description('Read what the user is currently viewing in the open app (requires context:read)')
     .option('--project <id>', 'scope to a specific project (editor/canvas)')
     .option('--capture', "also capture a fresh screenshot of the live viewport (the user's screen; slower)")
-    .option('--render', 'also render your work inline; ephemeral. Add --count with a range for several frames')
-    .option('--mode <mode>', "what MEDIUM to render: image (default) | video. video is a job you poll")
+    .option('--render', 'also render your work inline (images); ephemeral. Add --count with a range for several frames. For a composed VIDEO use `context preview`')
+    // ⛔ NO `--mode`. It offered image|video, but this command passes straight through to the
+    // context endpoint, which renders INLINE IMAGES ONLY -- so `--mode video` silently returned
+    // images (and now returns a 400). A composed video is an async job with its own polling, which
+    // is exactly what the sibling `context preview` command already does. One way to do one thing.
     .option('--frame <n>', 'image: which single timeline frame (omit for the current playhead)', (v) => parseInt(v, 10))
     .option('--slide <id>', 'image (canvas): which slide id (omit for the focused slide)')
     .option('--slide-index <n>', 'image (canvas): 1-based slide index (alternative to --slide)', (v) => parseInt(v, 10))
@@ -51,7 +54,7 @@ export function registerContext(program: Command): void {
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const render =
-        Boolean(opts.render) || opts.mode != null || opts.frame != null || opts.slide != null || opts.slideIndex != null ||
+        Boolean(opts.render) || opts.frame != null || opts.slide != null || opts.slideIndex != null ||
         opts.fromFrame != null || opts.toFrame != null || opts.width != null
       // --save needs an image; imply --capture only when the user did not ask for a render.
       const capture = Boolean(opts.capture) || (Boolean(opts.save) && !render)
@@ -59,7 +62,6 @@ export function registerContext(program: Command): void {
         projectId: opts.project as string | undefined,
         capture,
         render: render || undefined,
-        mode: opts.mode as 'image' | 'video' | undefined,
         frame: opts.frame as number | undefined,
         slideId: opts.slide as string | undefined,
         slideIndex: opts.slideIndex as number | undefined,

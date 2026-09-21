@@ -712,7 +712,13 @@ test('generate_board rejects an unknown boardType at the schema boundary', async
   assert.ok(blocked, 'expected an invalid boardType to be blocked before the handler')
 })
 
-test('generate_image forwards mode via the parameters passthrough', async () => {
+/**
+ * ⭐ THIS REPLACES A TEST THAT PINNED THE OLD BEHAVIOR ("generate_image forwards mode via the
+ * parameters passthrough"). `mode` named a paid TIER the model id did not carry, so the id the
+ * agent named was not the thing it was billed for. Each tier is now its own registry model, and a
+ * test asserting the old forwarding would argue against the fix every time someone ran it.
+ */
+test('a retired tier mode never reaches the wire', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -725,10 +731,29 @@ test('generate_image forwards mode via the parameters passthrough', async () => 
       },
     }),
   )
-  // Forwarding is model-agnostic (the server validates mode per model); use a
-  // catalog model so the enum boundary lets the handler run.
-  await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'gpt-image-2', prompt: 'x', mode: 'flex' } })
-  assert.equal(captured.parameters?.mode, 'flex')
+  const res = await mcp
+    .callTool({ name: 'generate_image', arguments: { modelId: 'gpt-image-2', prompt: 'x', mode: 'flex' } })
+    .catch((err) => ({ rejected: err }))
+
+  /**
+   * ⭐ THE SCHEMA REFUSES IT RATHER THAN DROPPING IT, which is better than either alternative and is
+   * what this pins. The first draft of this test assumed the arg would be silently stripped and the
+   * handler would still run; it failed because `generate` was never reached at all. An agent that
+   * passes the retired tier param is TOLD, instead of quietly getting the base tier and its price.
+   */
+  assert.equal(captured, undefined, 'the generate call must not run with a retired tier param')
+  const refused = 'rejected' in (res as Record<string, unknown>) || (res as { isError?: boolean }).isError === true
+  assert.ok(refused, 'passing `mode` must surface an error, not pass silently')
+})
+
+test('the generate_image schema no longer advertises a mode parameter', async () => {
+  // ⚠️ THE SCHEMA IS THE CONTRACT, AND DROPPING AN ARG SILENTLY IS NOT THE SAME AS NOT OFFERING IT.
+  // Without this, `mode` could be re-added to the schema and the test above would still pass.
+  const mcp = await connect(fakeClient({}))
+  const { tools } = await mcp.listTools()
+  const gen = tools.find((t) => t.name === 'generate_image')
+  assert.ok(gen, 'generate_image must exist')
+  assert.equal(gen.inputSchema?.properties?.mode, undefined)
 })
 
 /**

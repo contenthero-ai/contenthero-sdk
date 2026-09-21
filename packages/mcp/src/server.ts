@@ -1146,10 +1146,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe('Describe the image to generate. Required for most models; optional for a few that can run from references alone.'),
         aspectRatio: z.string().optional().describe('e.g. 16:9, 1:1, 9:16. Validated per model.'),
         resolution: z.string().optional().describe('e.g. 1K, 2K, 4K. Model-dependent (e.g. gpt-image-2, nano-banana-2/pro, flux-2-pro, seedream).'),
-        mode: z
-          .string()
-          .optional()
-          .describe('Variant mode for models that expose one: flux-2-pro takes "pro" or "flex"; flux-1-kontext takes "pro" or "max". Affects both the variant and the price. Ignored by models without a mode.'),
+        // ⛔ NO `mode`. It named a paid TIER the model id did not: flux-2-pro took "pro" or "flex",
+        // flux-1-kontext took "pro" or "max", and the price moved with it, so the id the agent
+        // named was not the thing it was billed for. Each tier is now its own model in the
+        // registry (`flux-2-pro` / `flux-2-flex`, `flux-1-kontext-pro` / `flux-1-kontext-max`,
+        // `wan-2.7-image` / `wan-2.7-image-pro`), and `modelId` above is discovery-derived, so the
+        // tiers appear in its enum automatically. Passing `mode` now selects nothing.
         numImages: z.number().int().min(1).max(4).optional().describe('Number of variations (1-4).'),
         referenceImages: z
           .array(z.string())
@@ -1176,7 +1178,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           resolution: args.resolution,
           numImages: args.numImages,
           references: buildReferences({ images: args.referenceImages }),
-          parameters: args.mode ? { mode: args.mode } : undefined,
           avatarId: args.avatarId,
           projectId: args.projectId,
           placement: args.placement as GenerateRequest['placement'],

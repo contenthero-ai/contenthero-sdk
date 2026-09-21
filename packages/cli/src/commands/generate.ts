@@ -84,7 +84,9 @@ export function registerGenerate(program: Command): void {
       .requiredOption('-m, --model <id>', 'image model id (see `contenthero model list --type image`)')
       .option('--aspect <ratio>', 'aspect ratio, e.g. 16:9, 1:1, 9:16')
       .option('--resolution <res>', 'resolution, e.g. 1K, 2K, 4K (model-dependent)')
-      .option('--mode <mode>', 'variant mode for models that expose one (e.g. flux-2-pro: pro/flex)')
+      // ⛔ NO `--mode`. It picked a paid TIER (flux pro/flex, kontext pro/max) that the registry
+      // now names with its own model id, so `-m flux-2-flex` says what `--mode flex` used to.
+      // See .claude/plans/model-id-tier-convention-v1.md in the app repo.
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
       .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)'),
@@ -98,7 +100,6 @@ export function registerGenerate(program: Command): void {
       resolution: opts.resolution as string | undefined,
       numImages: opts.num as number | undefined,
       references: references({ images: opts.ref as string[] | undefined }),
-      parameters: opts.mode ? { mode: opts.mode } : undefined,
       avatarId: opts.avatar as string | undefined,
       ...placementFields(opts),
     })

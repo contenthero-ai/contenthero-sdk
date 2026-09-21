@@ -31,7 +31,7 @@ export const IMAGE_MODELS_FALLBACK = [
   'seedream-5-lite',
   'gpt-image-2',
   'flux-2-pro',
-  'flux-1-kontext',
+  'flux-1-kontext-pro',
 ] as const
 
 /** Fallback video-generation models (used only if discovery is unreachable). */
@@ -198,7 +198,7 @@ export const BOARD_TYPE_GUIDANCE =
 
 /** Short selection guidance baked into each generate tool's modelId description. */
 export const IMAGE_MODEL_GUIDANCE =
-  'nano-banana-2 = strong general default (1K/2K/4K). gpt-image-2 = best text rendering (resolution 1K/2K/4K, no quality param). flux-2-pro (mode pro|flex) / seedream-5-lite / nano-banana-pro = alternatives. flux-1-kontext (mode pro|max) = edit/recreate. Pass referenceImages for image-to-image / editing; pass mode for flux models.'
+  'nano-banana-2 = strong general default (1K/2K/4K). gpt-image-2 = best text rendering (resolution 1K/2K/4K, no quality param). flux-2-pro / seedream-5-lite / nano-banana-pro = alternatives. flux-1-kontext-pro = edit/recreate. Higher tiers are separate ids, not a parameter: flux-2-flex, flux-1-kontext-max, wan-2.7-image-pro. Pass referenceImages for image-to-image / editing.'
 
 export const VIDEO_MODEL_GUIDANCE =
   'veo-3.1-fast / veo-3.1-quality = high quality clips with audio. seedance-2 / seedance-2-fast = multimodal references; startFrame(+endFrame) = frame mode, referenceImages/Videos/Audio = references mode. kling-3.0 (per-shot via shots) / kling-2.6 = strong motion. wan-2.6 (multiShot for multi-shot mode) = alternative. The motion-control variants require an input image plus an input video.'

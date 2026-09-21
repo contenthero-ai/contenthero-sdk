@@ -2250,26 +2250,27 @@ export interface EditorSelectedItem {
   mediaUrl?: string
 }
 
-/** The inline render returned when `getContext` is called with `render`. Shape depends on the tier. */
-export interface LiveContextRender {
-  /** The tier that produced this: 'still' (default) | 'filmstrip'. */
-  mode?: 'still' | 'filmstrip'
-  // still:
-  surface?: 'editor' | 'canvas'
-  frame?: number
-  slideId?: string
-  slideIndex?: number
-  /** still: the pixel size of the returned image. Confirms what an explicit `width` request actually produced
-   *  (it is clamped), and reports the derived height. */
-  width?: number
-  height?: number
-  /** still: `data:image/webp;base64,...` of the composed frame/slide. */
-  dataUrl?: string
-  // filmstrip (multiple frames, each with its own dataUrl):
-  fromFrame?: number
-  toFrame?: number
-  frames?: Array<{ frame?: number; dataUrl: string }>
-}
+/**
+ * ⛔ `LiveContextRender` WAS DELETED HERE ON 2026-09-21. DO NOT RE-ADD IT.
+ *
+ * It described the `rendered` key inside `LiveContextResult.context`, which is deliberately typed
+ * `Record<string, unknown>` because the context is discriminated by surface. So the interface could
+ * never be referenced by anything: git history confirms it was introduced in ONE commit (the
+ * visual-preview surface) and `rendered?: LiveContextRender` never existed in any commit. It was
+ * BORN ORPHANED, not replaced and not broken by a later edit.
+ *
+ * ⭐⭐⭐ AND BEING UNREFERENCED IS EXACTLY WHY IT WENT STALE. It still said the render tier was
+ * `'still' | 'filmstrip'` two days after that pair was renamed to `'image' | 'video'` on the
+ * REQUEST side of this same file (see `GetLiveContextOptions.render.mode`), because no compiler and
+ * no test could disagree with it. **AN UNENFORCEABLE MIRROR OF A SERVER SHAPE IS NOT
+ * DOCUMENTATION, IT IS A SECOND SOURCE OF TRUTH THAT NOTHING KEEPS HONEST.**
+ *
+ * The render payload's real shape is owned by the server (`lib/context/live-context-render.ts`),
+ * and the MCP formatter reads it STRUCTURALLY (`dataUrl` for one frame, `frames[]` for several)
+ * rather than by any declared tier field, so nothing needed this type to begin with. If `context`
+ * is ever narrowed into a real discriminated union, type the render key THERE, as a member of that
+ * union, where the compiler can hold it to the server.
+ */
 
 /** Filters for `listProjects`. */
 export interface ListProjectsInput {
