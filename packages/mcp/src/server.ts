@@ -4384,7 +4384,20 @@ export const SERVER_INFO: Implementation = {
   title: 'ContentHero',
   version: PACKAGE_VERSION,
   websiteUrl: 'https://contenthero.ai',
-  description: 'Create, edit, schedule and publish content from your own AI assistant.',
+  /**
+   * ⭐ **THE CONVENTION IS THREE TO SIX WORDS, VERB-LED.** Measured against ChatGPT's own plugin
+   * directory 2026-09-21: Canva "Create, review, edit designs", Firecrawl "Search and scrape the web",
+   * Supabase "Manage and query databases". This said "...from your own AI assistant", which describes the
+   * MECHANISM rather than the capability and is redundant when the thing reading it IS the AI assistant.
+   *
+   * ⛔⛔ **KEPT IN STEP WITH `@contenthero-ai/connect` BY A GUARD IN THE APP, NOT BY MEMORY.** The
+   * installer has to offer this string for copy-paste because ChatGPT makes the user type it, and the two
+   * packages CANNOT import each other: this one is public npm, that one is private GitHub Packages, and a
+   * public package with a private dependency 404s for everyone who installs it. So the duplication is
+   * forced, and `__tests__/lib/connect-description-parity.test.ts` in the app is the mechanism that keeps
+   * it honest, since the app is the only consumer that depends on both.
+   */
+  description: 'Create, edit, schedule and publish content',
   /**
    * ⭐⭐ **THE ICON, DECLARED RATHER THAN SCRAPED.**
    *
@@ -4394,7 +4407,15 @@ export const SERVER_INFO: Implementation = {
    * this gets the size and format from us instead of inferring them.
    */
   icons: [
+    /**
+     * ⚠️ SEVERAL SIZES, WHICH IS WHAT `sizes` IS FOR. A host rendering a ~48px card icon from a single
+     * 512 has to downscale by more than 10x in one step, and a naive filter turns fine artwork soft. The
+     * intermediate entries let it pick something closer. Offered rather than relied on: Gemini's card
+     * looks equally soft for a flat square with no detail to lose, so the renderer is the likelier cause.
+     */
     { src: 'https://app.contenthero.ai/icon.png', mimeType: 'image/png', sizes: ['512x512'] },
+    { src: 'https://app.contenthero.ai/icon-256.png', mimeType: 'image/png', sizes: ['256x256'] },
+    { src: 'https://app.contenthero.ai/icon-128.png', mimeType: 'image/png', sizes: ['128x128'] },
     { src: 'https://app.contenthero.ai/favicon.svg', mimeType: 'image/svg+xml', sizes: ['any'] },
   ],
 }
