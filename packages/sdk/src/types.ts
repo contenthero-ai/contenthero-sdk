@@ -109,7 +109,6 @@ export interface GenerateRequest {
   /** Enable generated audio on video models that support it. */
   audioEnabled?: boolean
   negativePrompt?: string
-  seed?: number
   /** Upscale factor for upscale models, e.g. "2x", "4x" (validated per model). */
   upscaleFactor?: string
   references?: References

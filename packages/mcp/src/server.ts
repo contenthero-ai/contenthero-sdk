@@ -788,11 +788,44 @@ async function inlineImagesWithinBudget(
  * ⭐ Spread into the tools whose results are MEDIA. Not onto all 87: a tool that returns a card or a folder
  * has nothing for this widget to show, and claiming otherwise would put an empty frame under every call.
  */
+/**
+ * ⭐⭐⭐ **CHATGPT READS ITS OWN KEY, AND THAT IS WHY THE WIDGET NEVER MOUNTED THERE.**
+ *
+ * Measured in ChatGPT 2026-09-21: an image generation submitted, ran, and rendered as plain text with no
+ * frame. Not a crash and not a refusal. The host simply never learned the tool had a UI, because it looks
+ * for `openai/outputTemplate` and we emitted only the two MCP Apps spellings. OpenAI's own reference calls
+ * that key "an optional/compatibility alias for `_meta.ui.resourceUri`", which is exactly what it is: the
+ * same URI under a third name.
+ *
+ * ⛔ **DERIVED, NEVER TYPED TWICE.** Three spellings of one URI is three chances for a bump to land on two
+ * of them. All three read `GENERATION_WIDGET_URI`, so a version bump cannot leave one host pointed at a
+ * resource that no longer exists.
+ *
+ * ⚠️ 64 CHARACTERS IS OPENAI'S CAP on the invoking label, and a silent truncation in someone else's UI is
+ * not something we would ever see. Asserted at module load so an over-long label fails our build instead.
+ */
+function chatGptAliases(progress: string) {
+  if (progress.length > 64) {
+    throw new Error(`openai/toolInvocation/invoking is capped at 64 chars; "${progress}" is ${progress.length}`)
+  }
+  return {
+    'openai/outputTemplate': GENERATION_WIDGET_URI,
+    /**
+     * The same present participle `ui/progressLabel` carries, under ChatGPT's name for it. One argument
+     * feeds both, so a tool cannot describe itself differently depending on who is asking.
+     */
+    'openai/toolInvocation/invoking': progress,
+    /** Lets the mounted component call back into the server, which is what the widget's poll depends on. */
+    'openai/widgetAccessible': true,
+  } as const
+}
+
 function renders(progress: string) {
   return {
     _meta: {
       ui: { resourceUri: GENERATION_WIDGET_URI },
       [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI,
+      ...chatGptAliases(progress),
       /**
        * ⭐⭐⭐ **WHAT THE FRAME SAYS BEFORE THERE IS ANYTHING TO SHOW, AS A PRESENT PARTICIPLE.**
        *
@@ -835,31 +868,53 @@ function renders(progress: string) {
  * allowlist. That list governs what the SERVER may fetch and inline; this governs what the FRAME may load.
  * Two different questions, deliberately not one constant.
  */
+/**
+ * What the frame may PAINT. Named once so the ChatGPT mirror below is derived rather than retyped.
+ */
+const WIDGET_RESOURCE_DOMAINS = [
+  // Capability urls for generated assets: the token rides in the query string, so an element src loads
+  // one directly with no header to set.
+  'https://media.contenthero.ai',
+  // Public-class objects (posters, gallery, stock).
+  'https://cdn.contenthero.ai',
+]
+
+/**
+ * What the frame may READ.
+ *
+ * ⛔⛔ **A SEPARATE FIELD, AND OMITTING IT BLOCKS `fetch` ENTIRELY.** `resourceDomains` maps to `img-src`,
+ * `media-src` and friends, which is why the pictures render. `connectDomains` maps to `connect-src`, and the
+ * spec's default for an omitted list is "no network connections (secure default)". So the frame could
+ * DISPLAY our media and could not READ it, which is exactly the shape needed to save a file: downloading
+ * means holding the bytes.
+ *
+ * ⚠️ Same origins, deliberately a separate list rather than an alias of the one above. They answer
+ * different questions (may the frame paint this, may the frame read this) and a future answer to one is not
+ * automatically the answer to the other.
+ */
+const WIDGET_CONNECT_DOMAINS = ['https://media.contenthero.ai', 'https://cdn.contenthero.ai']
+
 const WIDGET_CSP = {
   _meta: {
     ui: {
       csp: {
-        resourceDomains: [
-          // Capability urls for generated assets: the token rides in the query string, so an element src
-          // loads one directly with no header to set.
-          'https://media.contenthero.ai',
-          // Public-class objects (posters, gallery, stock).
-          'https://cdn.contenthero.ai',
-        ],
-        /**
-         * ⛔⛔ **A SEPARATE FIELD, AND OMITTING IT BLOCKS `fetch` ENTIRELY.**
-         *
-         * `resourceDomains` maps to `img-src`, `media-src` and friends, which is why the pictures render.
-         * `connectDomains` maps to `connect-src`, and the spec's default for an omitted list is "no network
-         * connections (secure default)". So the frame could DISPLAY our media and could not READ it, which
-         * is exactly the shape needed to save a file: downloading means holding the bytes.
-         *
-         * ⚠️ Same origins, deliberately repeated rather than shared with a constant. They answer different
-         * questions (may the frame paint this, may the frame read this) and a future answer to one is not
-         * automatically the answer to the other.
-         */
-        connectDomains: ['https://media.contenthero.ai', 'https://cdn.contenthero.ai'],
+        resourceDomains: WIDGET_RESOURCE_DOMAINS,
+        connectDomains: WIDGET_CONNECT_DOMAINS,
       },
+    },
+    /**
+     * ⭐⭐ **THE SAME TWO LISTS UNDER CHATGPT'S NAMES, IN SNAKE CASE.** OpenAI's reference calls this
+     * "legacy CSP metadata" and it is still what their host reads, so a widget that mounts there without
+     * it renders a frame full of broken images: precisely the failure we already diagnosed in Claude when
+     * `resourceDomains` was missing, and it would have repeated verbatim one host over.
+     *
+     * ⛔ **DERIVED FROM THE ARRAYS ABOVE.** The two lists hold the same origins today and answer different
+     * questions, so they stay separate variables. What must never happen is a THIRD and FOURTH hand-typed
+     * copy: adding a domain for Claude and forgetting it for ChatGPT is a bug that only one of you can see.
+     */
+    'openai/widgetCSP': {
+      resource_domains: WIDGET_RESOURCE_DOMAINS,
+      connect_domains: WIDGET_CONNECT_DOMAINS,
     },
   },
 } as const
@@ -1095,7 +1150,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Variant mode for models that expose one: flux-2-pro takes "pro" or "flex"; flux-1-kontext takes "pro" or "max". Affects both the variant and the price. Ignored by models without a mode.'),
         numImages: z.number().int().min(1).max(4).optional().describe('Number of variations (1-4).'),
-        seed: z.number().int().optional().describe('Seed for reproducibility.'),
         referenceImages: z
           .array(z.string())
           .optional()
@@ -1120,7 +1174,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           numImages: args.numImages,
-          seed: args.seed,
           references: buildReferences({ images: args.referenceImages }),
           parameters: args.mode ? { mode: args.mode } : undefined,
           avatarId: args.avatarId,
@@ -1259,7 +1312,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe('Generate audio (only for models that support it).'),
         numGenerations: z.number().int().min(1).max(4).optional().describe('Number of variations (1-4).'),
         negativePrompt: z.string().optional().describe('What to avoid (models that support it).'),
-        seed: z.number().int().optional().describe('Seed for reproducibility.'),
         startFrame: z.string().optional().describe('First frame: an image URL or a previous output id (e.g. "<id>-2") to chain (e.g. animate an image you just generated).'),
         endFrame: z.string().optional().describe('Last frame: an image URL or a previous output id.'),
         referenceImages: z.array(z.string()).optional().describe('Reference images: each a URL or a previous output id to chain.'),
@@ -1309,7 +1361,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           audioEnabled: args.audioEnabled,
           numGenerations: args.numGenerations,
           negativePrompt: args.negativePrompt,
-          seed: args.seed,
           ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
           references: buildReferences({
             startFrame: args.startFrame,

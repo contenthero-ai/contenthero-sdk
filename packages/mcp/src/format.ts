@@ -9,6 +9,23 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 // constants come from this package and not its server helpers.
 import { aspectLabel } from '@contenthero-ai/brand-ui'
 import { RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
+
+/**
+ * ⭐⭐⭐ **EVERY SPELLING OF "THIS RESULT BELONGS TO THE GENERATION WIDGET", IN ONE PLACE.**
+ *
+ * This object was written out by hand at SIX call sites, each naming `GENERATION_WIDGET_URI` twice. That is
+ * twelve copies of one URI, and the widget's resource uri carries the package version, so every publish
+ * rewrites all twelve. One missed copy points a host at a resource that no longer exists, and the symptom is
+ * a blank frame in that host only.
+ *
+ * ⛔ **`openai/outputTemplate` IS THE THIRD SPELLING AND THE REASON THIS CONVERGED NOW.** Adding it to six
+ * hand-written literals would have made eighteen copies. Adding it here makes one.
+ */
+const WIDGET_META = {
+  [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI,
+  ui: { resourceUri: GENERATION_WIDGET_URI },
+  'openai/outputTemplate': GENERATION_WIDGET_URI,
+} as const
 import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import type {
   Avatar,
@@ -441,7 +458,7 @@ export function completedResult(
     content,
     isError: false,
     structuredContent: generationWidgetData(gen, posterUrls, baseUrl),
-    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+    _meta: WIDGET_META,
   }
 }
 
@@ -542,7 +559,7 @@ export function pendingResult(
       pollAfterSeconds,
       items: [],
     },
-    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+    _meta: WIDGET_META,
   }
 }
 
@@ -583,7 +600,7 @@ export function audioResult(
         openUrl: studioUrlFor(baseUrl, result.outputId, i, urls.length),
       })),
     }),
-    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+    _meta: WIDGET_META,
   }
 }
 
@@ -1306,7 +1323,7 @@ export function mediaDisplayResult(result: MediaBatchResult, baseUrl = DEFAULT_A
   return {
     content,
     structuredContent: mediaWidgetData({ items: tiles }),
-    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+    _meta: WIDGET_META,
   }
 }
 
@@ -1384,7 +1401,7 @@ function renderableMedia(
         },
       ],
     }),
-    _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+    _meta: WIDGET_META,
   }
 }
 
@@ -2297,7 +2314,7 @@ export function completedExportResult(
         contentType: medium,
         items: [{ url: job.outputUrl, name: job.exportId, contentType: medium }],
       }),
-      _meta: { [RESOURCE_URI_META_KEY]: GENERATION_WIDGET_URI, ui: { resourceUri: GENERATION_WIDGET_URI } },
+      _meta: WIDGET_META,
     }
   }
 }

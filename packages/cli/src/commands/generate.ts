@@ -86,7 +86,6 @@ export function registerGenerate(program: Command): void {
       .option('--resolution <res>', 'resolution, e.g. 1K, 2K, 4K (model-dependent)')
       .option('--mode <mode>', 'variant mode for models that expose one (e.g. flux-2-pro: pro/flex)')
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
-      .option('--seed <seed>', 'seed for reproducibility', toInt)
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
       .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)'),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
@@ -98,7 +97,6 @@ export function registerGenerate(program: Command): void {
       aspectRatio: opts.aspect as string | undefined,
       resolution: opts.resolution as string | undefined,
       numImages: opts.num as number | undefined,
-      seed: opts.seed as number | undefined,
       references: references({ images: opts.ref as string[] | undefined }),
       parameters: opts.mode ? { mode: opts.mode } : undefined,
       avatarId: opts.avatar as string | undefined,
@@ -120,7 +118,6 @@ export function registerGenerate(program: Command): void {
       .option('--audio', 'enable generated audio (models that support it)')
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
       .option('--negative <text>', 'what to avoid (models that support it)')
-      .option('--seed <seed>', 'seed for reproducibility', toInt)
       .option('--start-frame <urlOrId>', 'first frame (image URL or output id)')
       .option('--end-frame <urlOrId>', 'last frame (image URL or output id)')
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
@@ -149,7 +146,6 @@ export function registerGenerate(program: Command): void {
       audioEnabled: opts.audio === true ? true : undefined,
       numGenerations: opts.num as number | undefined,
       negativePrompt: opts.negative as string | undefined,
-      seed: opts.seed as number | undefined,
       parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
       references: references({
         startFrame: opts.startFrame as string | undefined,

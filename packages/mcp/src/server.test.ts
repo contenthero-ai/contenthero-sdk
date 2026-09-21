@@ -2985,9 +2985,16 @@ test('a tool declares the widget exactly when it can emit one', () => {
    */
   const strips = (body: string) => /delete\s*\(res as[^)]*\)\._meta/.test(body)
 
+  /**
+   * ⚠️ TWO SEEDS, BECAUSE THE META CONVERGED. Six call sites used to spell the binding out inline, each
+   * naming `RESOURCE_URI_META_KEY`; they now share `WIDGET_META`, which is also what made room for a third
+   * host dialect without a third copy per site. This guard caught that refactor immediately by reporting
+   * zero emitters rather than silently vacuously passing, which is the only reason it is worth having.
+   */
+  const ATTACHES = /RESOURCE_URI_META_KEY|WIDGET_META/
   const emitters = new Set<string>()
   for (const [name, body] of bodyOf) {
-    if (!strips(body) && body.includes('RESOURCE_URI_META_KEY')) emitters.add(name)
+    if (!strips(body) && ATTACHES.test(body)) emitters.add(name)
   }
   for (;;) {
     const before = emitters.size
@@ -3090,4 +3097,76 @@ test('every widget-bearing tool states what it is DOING, as a present participle
   // And it must not simply restate the imperative title, which is the failure that looks like success.
   const echoesTitle = bearing.filter((t) => labelOf(t) === t.title).map((t) => t.name)
   assert.deepEqual(echoesTitle, [], `progress label is just the title again: ${echoesTitle}`)
+})
+
+/**
+ * ⭐⭐⭐ **THREE HOSTS READ THREE DIFFERENT KEYS FOR ONE URI, AND A MISS IS INVISIBLE IN THE OTHER TWO.**
+ *
+ * Measured in ChatGPT 2026-09-21: a generation submitted, ran to completion, and rendered as plain text.
+ * No crash, no error, no clue. The host looks for `openai/outputTemplate` and we emitted only the two MCP
+ * Apps spellings, so it never learned the tool had a UI at all. The whole failure was one absent key, and
+ * every test we had passed because they all asked Claude's question.
+ *
+ * ⛔ THIS ASSERTS AGREEMENT, NOT PRESENCE. A guard that only checks "the key exists" would pass on a
+ * version bump that updated two spellings and left the third pointing at a resource that no longer
+ * resolves, which is the exact shape this converged code is built to prevent.
+ */
+test('every widget-bearing tool names the same widget in all three host dialects', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const bearing = tools.filter((t) => Boolean(t._meta?.['ui/resourceUri']))
+  assert.ok(bearing.length > 5, `expected several widget-bearing tools, found ${bearing.length}`)
+
+  const disagreeing = bearing
+    .map((t) => {
+      const m = t._meta ?? {}
+      const spellings = {
+        'ui/resourceUri': m['ui/resourceUri'],
+        'ui.resourceUri': (m.ui as { resourceUri?: string } | undefined)?.resourceUri,
+        'openai/outputTemplate': m['openai/outputTemplate'],
+      }
+      const wrong = Object.entries(spellings)
+        .filter(([, v]) => v !== GENERATION_WIDGET_URI)
+        .map(([k, v]) => `${k}=${v ?? 'MISSING'}`)
+      return wrong.length ? `${t.name}: ${wrong.join(', ')}` : null
+    })
+    .filter(Boolean)
+  assert.deepEqual(disagreeing, [], `does not resolve to ${GENERATION_WIDGET_URI} in every host: ${disagreeing.join(' | ')}`)
+
+  // The progress label likewise has two names, and a tool that says different things to different hosts is
+  // a product inconsistency nobody can see from inside one of them.
+  const labelMismatch = bearing
+    .filter((t) => t._meta?.['openai/toolInvocation/invoking'] !== t._meta?.['ui/progressLabel'])
+    .map((t) => `${t.name}: "${t._meta?.['ui/progressLabel']}" vs "${t._meta?.['openai/toolInvocation/invoking']}"`)
+  assert.deepEqual(labelMismatch, [], `progress label differs by host: ${labelMismatch.join(' | ')}`)
+
+  // ⚠️ 64 is OpenAI's documented cap. Exceeding it truncates in a UI we cannot observe.
+  const tooLong = bearing
+    .map((t) => String(t._meta?.['openai/toolInvocation/invoking'] ?? ''))
+    .filter((l) => l.length > 64)
+  assert.deepEqual(tooLong, [], `over OpenAI's 64-char invoking cap: ${tooLong.join(', ')}`)
+
+  // Without this the component cannot call back, and the widget's own poll is how a card fills in.
+  const notAccessible = bearing.filter((t) => t._meta?.['openai/widgetAccessible'] !== true).map((t) => t.name)
+  assert.deepEqual(notAccessible, [], `cannot call the server back from ChatGPT: ${notAccessible}`)
+})
+
+/**
+ * The CSP mirror, for the same reason and with a worse symptom: a frame that mounts and shows nothing but
+ * broken images. We already shipped that failure in Claude when `resourceDomains` was absent, so the cost of
+ * repeating it one host over is known exactly.
+ */
+test('the ChatGPT CSP mirror lists the same origins as the MCP Apps one', async () => {
+  const mcp = await connect(fakeClient())
+  const { resources } = await mcp.listResources()
+  const widget = resources.find((r) => r.uri === GENERATION_WIDGET_URI)
+  assert.ok(widget, `no resource registered at ${GENERATION_WIDGET_URI}`)
+
+  const meta = widget._meta ?? {}
+  const csp = (meta.ui as { csp?: { resourceDomains?: string[]; connectDomains?: string[] } } | undefined)?.csp
+  const mirror = meta['openai/widgetCSP'] as { resource_domains?: string[]; connect_domains?: string[] } | undefined
+
+  assert.ok(csp?.resourceDomains?.length, 'the MCP Apps csp names no resource domains')
+  assert.deepEqual(mirror?.resource_domains, csp?.resourceDomains, 'resource domains differ between hosts')
+  assert.deepEqual(mirror?.connect_domains, csp?.connectDomains, 'connect domains differ between hosts')
 })
