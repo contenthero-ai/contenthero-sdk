@@ -16,6 +16,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { buildServer } from './server.js'
 
 export { buildServer, registerTools } from './server.js'
+export { SERVER_INFO } from './server.js'
 export type { BuildServerOptions, RegisterToolsOptions, GetClient } from './server.js'
 export { resolveModelEnums, fallbackModelEnums } from './models.js'
 export type { ResolvedModelEnums, ModelEnum } from './models.js'

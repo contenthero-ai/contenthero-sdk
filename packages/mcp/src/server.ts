@@ -4346,17 +4346,29 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 }
 
 /**
- * Our own version, baked in at build time.
+ * ⭐⭐⭐ **WHO THIS SERVER SAYS IT IS, FOR BOTH TRANSPORTS, FROM ONE PLACE.**
  *
- * ⛔ This used to parse `../package.json` relative to `import.meta.url` inside a try/catch returning
- * '0.0.0'. Same defect as the widget read and the same blast radius: under a bundler the path does not
- * exist, so the hosted server reported 0.0.0 and the catch made it silent. A version is a build-time fact,
- * so it is now generated alongside the widget and there is no path resolution left in this package to get
- * wrong.
+ * The stdio server named itself `contenthero` here. The HOSTED server never named itself at all: the app's
+ * route calls `createMcpHandler(register, {}, config)` and that empty second argument is `serverOptions`,
+ * so `mcp-handler` fell back to its own default, `"mcp-typescript server on vercel"`.
+ *
+ * ⛔⛔ **AND THAT DEFAULT IS WHAT A USER NAMES THE CONNECTION.** Measured in Gemini 2026-09-21: the "Save
+ * your custom app" dialog pre-filled **"Mcp Typescript Server On Vercel"** next to our laurel mark and a
+ * correct list of 88 tools. Every person connecting over the hosted transport has been offered someone
+ * else's build-tool name as our product name, in the one dialog that decides what they will call us
+ * forever. Claude and ChatGPT never surfaced it, so nothing made it visible until a host put it in a text
+ * field.
+ *
+ * ⚠️ EXPORTED, NOT RESTATED. A second literal in the app's route would be a third spelling of one identity
+ * across two repos, which is the same shape as the widget uri problem: correct on the day it is typed and
+ * silently stale afterwards.
+ *
+ * ⛔ The VERSION half used to parse `../package.json` relative to `import.meta.url` inside a try/catch
+ * returning '0.0.0'. Same defect as the widget read and the same blast radius: under a bundler the path
+ * does not exist, so the hosted server reported 0.0.0 and the catch made it silent. A version is a
+ * build-time fact, so it is generated alongside the widget and no path resolution is left to get wrong.
  */
-function readVersion(): string {
-  return PACKAGE_VERSION
-}
+export const SERVER_INFO = { name: 'contenthero', version: PACKAGE_VERSION } as const
 
 /**
  * Build a stdio-style server bound to a single env-configured client. The model
@@ -4365,7 +4377,7 @@ function readVersion(): string {
 export async function buildServer(options: BuildServerOptions = {}): Promise<McpServer> {
   const getClient = options.getClient ?? defaultGetClient
   const models = await resolveModelEnums(getClient)
-  const server = new McpServer({ name: 'contenthero', version: readVersion() })
+  const server = new McpServer({ ...SERVER_INFO })
   registerTools(server, { getClient: () => getClient(), models })
   return server
 }
