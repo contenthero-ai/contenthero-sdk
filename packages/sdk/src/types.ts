@@ -1459,10 +1459,39 @@ export interface CardSummary {
 export interface CardAsset {
   id: string
   assetType: string | null
+  /** For an `inspiration` asset this is the tracked-content id, which is what `getContent` takes. */
   assetId: string | null
   assetUrl: string | null
   displayName: string | null
   sortOrder: number
+  /**
+   * For an `inspiration` asset: every scalar triage fact the tracked post carries, so ten linked
+   * outliers can be ranked without a `getContent` per link. Null for every other asset kind.
+   */
+  inspiration?: CardAssetInspiration | null
+}
+
+/** Scalar triage facts for an inspiration (tracked post) attached to a card. */
+export interface CardAssetInspiration {
+  platform: string | null
+  contentType: string | null
+  creator: string | null
+  handle: string | null
+  publishedAt: string | null
+  durationSeconds: number | null
+  viewCount: number | null
+  likeCount: number | null
+  commentCount: number | null
+  /** Instagram-only in practice; null is honest absence, not zero. */
+  shareCount: number | null
+  playCount: number | null
+  followerCount: number | null
+  outlierScore: number | null
+  engagementRate: number | null
+  /** Whether `getContent` with a transcript grain will return anything. */
+  hasTranscript: boolean
+  /** Whether THIS account holds a Break It Down analysis for the post. Null when unknown. */
+  hasBreakdown: boolean | null
 }
 
 /** One post: a card's publication on one platform, bound to a connected account. */
@@ -1804,6 +1833,24 @@ export interface ContentDetail extends ContentSummary {
   followerCountSnapshot: number | null
   /** Present only when a transcript grain was requested. */
   transcript?: ContentTranscript
+  /** Always present: availability at minimum, plus `data` when analysis content was requested. */
+  analysis: ContentAnalysis
+}
+
+/**
+ * The caller's Break It Down analysis for one post. Availability is always reported; the content is
+ * opt-in (a full analysis is ~60KB). `transcriptSegments` is excluded from `analysis: 'full'` because
+ * the transcript has its own opt-in surface with windowing and search; name it explicitly to pull it.
+ */
+export interface ContentAnalysis {
+  /** `complete` when this account holds a Break It Down for the post; `absent` otherwise. */
+  status: 'complete' | 'absent'
+  analyzedAt?: string
+  model?: string | null
+  /** The section names `analysisSections` accepts. Listed even when data was not requested. */
+  sections?: string[]
+  /** The requested sections, keyed by name. */
+  data?: Record<string, unknown>
 }
 
 /** One tracked account with its performance. */
@@ -1865,6 +1912,10 @@ export interface GetContentOptions {
   endMs?: number
   /** Case-insensitive substring; returns only the segments containing it. Implies the `segments` grain. */
   transcriptSearch?: string
+  /** `none` (default) reports availability only; `full` returns every section except `transcriptSegments`. */
+  analysis?: 'none' | 'full'
+  /** Return only these analysis sections (see `ContentAnalysis.sections` for what exists). */
+  analysisSections?: string[]
 }
 
 /** Options for `listAccounts`. */

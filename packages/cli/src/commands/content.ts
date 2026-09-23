@@ -197,12 +197,14 @@ export function registerContent(program: Command): void {
 
   content
     .command('get')
-    .description('Get one tracked post in full (engagement, hashtags, optional transcript)')
-    .argument('<id>', 'the content id (from content list, or a tracked account)')
+    .description('Get one tracked post in full (engagement, hashtags, optional transcript and Break It Down analysis)')
+    .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
     .option('--transcript [grain]', `include the transcript: ${GRAINS.join(', ')} (default none)`)
     .option('--start-ms <n>', 'transcript window start, ms into the media', toInt)
     .option('--end-ms <n>', 'transcript window end, ms into the media', toInt)
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
+    .option('--analysis', 'include the full Break It Down analysis (availability always reports)')
+    .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)')
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
       // be honored against flat text.
@@ -224,6 +226,11 @@ export function registerContent(program: Command): void {
         startMs: opts.startMs as number | undefined,
         endMs: opts.endMs as number | undefined,
         transcriptSearch: opts.transcriptSearch as string | undefined,
+        analysis: opts.analysis ? 'full' : undefined,
+        analysisSections:
+          typeof opts.analysisSections === 'string'
+            ? opts.analysisSections.split(',').map((s) => s.trim()).filter(Boolean)
+            : undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
         const pairs: Array<[string, string | number]> = [
@@ -250,6 +257,22 @@ export function registerContent(program: Command): void {
               : t.windowed ? '  (no segments in that window)' : '  (none stored)')
           } else {
             out += head + '\n' + (t.text ?? '  (none stored)')
+          }
+        }
+        // Availability always prints: the section names are the vocabulary --analysis-sections accepts.
+        const an = c.analysis
+        if (an) {
+          if (an.status === 'complete') {
+            const provenance = [an.model, an.analyzedAt?.slice(0, 10)].filter(Boolean).join(', ')
+            out += `\n\nAnalysis: complete${provenance ? ` (${provenance})` : ''}`
+            if (an.sections?.length) out += `\n  sections: ${an.sections.join(', ')}`
+            if (an.data) {
+              for (const [section, value] of Object.entries(an.data)) {
+                out += `\n\n${section}:\n${JSON.stringify(value, null, 2)}`
+              }
+            }
+          } else {
+            out += '\n\nAnalysis: absent (run Break It Down in the app to create one)'
           }
         }
         return out

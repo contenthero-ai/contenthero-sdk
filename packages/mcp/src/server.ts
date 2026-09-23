@@ -3127,7 +3127,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Card',
       annotations: READ,
       description:
-        'Get one CARD in full: its fields (title, description, script, notes, status, stage, schedule), plus its posts (one per platform, which is how it publishes) and its attached assets in carousel order.',
+        'Get one CARD in full: its fields (title, description, script, notes, status, stage, schedule), plus its posts (one per platform, which is how it publishes) and its attached assets in carousel order. An [inspiration] asset is a tracked post attached as a reference; its line already carries the headline metrics (creator, outlier score, views, likes, duration) plus transcript and breakdown availability, and a content id to pass to get_content for the transcript and the full Break It Down analysis.',
       inputSchema: {
         cardId: z.string().describe('The card id from list_cards.'),
       },
@@ -3764,9 +3764,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Tracked Content',
       annotations: READ,
       description:
-        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous.",
+        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
       inputSchema: {
-        contentId: z.string().describe('The content id from list_content or get_account.'),
+        contentId: z.string().describe('The content id from list_content, get_account, or a get_card inspiration asset.'),
         transcript: z
           .enum(['none', 'text', 'segments'])
           .optional()
@@ -3777,6 +3777,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .optional()
           .describe('Return only the segments containing this phrase. Implies segments.'),
+        analysis: z
+          .enum(['none', 'full'])
+          .optional()
+          .describe("How much of the owner's Break It Down analysis to include. Default 'none' (availability + section names still report)."),
+        analysisSections: z
+          .array(z.string())
+          .optional()
+          .describe('Only these analysis sections (names come from the availability line, e.g. contentStructure, recreationSteps).'),
       },
     },
     async (args, extra) => {

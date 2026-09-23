@@ -210,8 +210,10 @@ export function registerCard(program: Command): void {
         const assets = post.assets.length
           ? '\n\nAssets:\n' +
             table(
-              ['TYPE', 'NAME', 'URL'],
-              post.assets.map((a) => [a.assetType ?? '', a.displayName ?? '', a.assetUrl ?? '']),
+              // ID is the reference the next command takes: for an `inspiration` row it is the
+              // tracked-content id `contenthero content get` resolves to the full record.
+              ['TYPE', 'NAME', 'ID', 'URL'],
+              post.assets.map((a) => [a.assetType ?? '', a.displayName ?? '', a.assetId ?? '', a.assetUrl ?? '']),
             )
           : ''
         return head + dests + assets

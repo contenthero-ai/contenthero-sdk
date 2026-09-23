@@ -1728,7 +1728,35 @@ export function cardResult(p: CardDetail): CallToolResult {
         return `  - ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}${set ? ` | settings: ${set}` : ''}`
       }),
       `assets (${p.assets.length}):`,
-      ...p.assets.map((a) => `  - [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id})`),
+      ...p.assets.map((a) => {
+        const name = a.displayName ? ` ${a.displayName} |` : ''
+        /**
+         * ⭐ AN INSPIRATION ATTACHMENT'S `assetId` IS THE TRACKED-CONTENT ID, AND IT IS PRINTED BECAUSE IT
+         * IS AN INPUT TO THE NEXT CALL, same rule as `revision` above. It is exactly what `get_content`
+         * takes to return the full record and its transcript; without it the agent could see the
+         * attachment but never follow it. The triage line (creator, score, views, availability) is
+         * printed so ranking ten links costs zero extra calls.
+         */
+        const insp = a.inspiration
+        const triage = insp
+          ? [
+              insp.creator ?? insp.handle,
+              insp.outlierScore != null ? `${Number(insp.outlierScore).toFixed(1)}x` : null,
+              insp.viewCount != null ? `${compactNum(insp.viewCount)} views` : null,
+              insp.likeCount != null ? `${compactNum(insp.likeCount)} likes` : null,
+              insp.durationSeconds != null ? `${insp.durationSeconds}s` : null,
+              insp.publishedAt ? insp.publishedAt.slice(0, 10) : null,
+              [insp.hasTranscript ? 'transcript' : null, insp.hasBreakdown ? 'breakdown' : null]
+                .filter(Boolean)
+                .join('+') || 'no transcript',
+            ]
+              .filter(Boolean)
+              .map((v) => ` | ${v}`)
+              .join('')
+          : ''
+        const ref = a.assetType === 'inspiration' && a.assetId ? ` | content ${a.assetId} (pass to get_content)` : ''
+        return `  - [${a.assetType ?? '?'}]${name} ${a.assetUrl ?? '(no url)'}${triage}${ref} (id ${a.id})`
+      }),
     ]),
   )
 }
@@ -1991,8 +2019,30 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
       c.hashtags.length ? `hashtags: ${c.hashtags.join(' ')}` : null,
       c.description ? `description: ${c.description}` : null,
       ...(c.transcript ? transcriptLines(c.transcript) : []),
+      ...analysisLines(c.analysis),
     ]),
   )
+}
+
+/**
+ * The Break It Down availability line, always, and the requested sections when present. The section
+ * names are printed because they are the vocabulary `analysisSections` accepts; hiding them would
+ * make the surgical pull undiscoverable.
+ */
+function analysisLines(analysis: ContentDetail['analysis']): Array<string | null> {
+  if (!analysis || analysis.status !== 'complete') {
+    return ['analysis: absent (run Break It Down in the app to create one)']
+  }
+  const provenance = [analysis.model, analysis.analyzedAt?.slice(0, 10)].filter(Boolean).join(', ')
+  const head = `analysis: complete${provenance ? ` (${provenance})` : ''}${
+    analysis.sections?.length ? ` | sections: ${analysis.sections.join(', ')}` : ''
+  }`
+  const body = analysis.data
+    ? Object.entries(analysis.data).map(
+        ([section, value]) => `analysis.${section}:\n${JSON.stringify(value, null, 1)}`,
+      )
+    : []
+  return [head, ...body]
 }
 
 /** One line summarizing a connected account (a publish target). */

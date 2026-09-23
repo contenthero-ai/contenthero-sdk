@@ -1309,6 +1309,8 @@ export class ContentHero {
     if (options.startMs != null) q.set('start_ms', String(options.startMs))
     if (options.endMs != null) q.set('end_ms', String(options.endMs))
     if (options.transcriptSearch) q.set('transcript_search', options.transcriptSearch)
+    if (options.analysis && options.analysis !== 'none') q.set('analysis', options.analysis)
+    if (options.analysisSections?.length) q.set('analysis_sections', options.analysisSections.join(','))
     const qs = q.toString()
     return this.request<ContentDetail>(
       'GET',
