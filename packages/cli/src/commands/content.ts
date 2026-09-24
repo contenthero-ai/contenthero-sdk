@@ -1,6 +1,6 @@
 /**
  * `contenthero content` / `tracked-account` - the research surface.
- *   content list                  tracked social posts, ranked by outlier score
+ *   content list                  tracked social posts, ranked by outlier score (by relevance with --search)
  *   content get <id>              one post in full, transcript optional
  *   tracked-account list          the social accounts this account tracks
  *   tracked-account get <id>      one account with its performance
@@ -25,7 +25,9 @@ import type {
   ContentSummary,
   ContentScope,
   TrackedAccount,
+  ContentSort,
 } from '@contenthero/sdk'
+import { CONTENT_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -61,8 +63,6 @@ export function outliersTable(rows: ContentSummary[]): string {
   )
 }
 
-const SORTS = ['score', 'date', 'views', 'engagement'] as const
-type Sort = (typeof SORTS)[number]
 const SCOPES = ['all', 'inspiration', 'brand'] as const
 const WINDOWS = ['week', 'month', '3months', '6months', 'year', '2years'] as const
 const GRAINS = ['none', 'text', 'segments'] as const
@@ -129,7 +129,7 @@ export function registerContent(program: Command): void {
 
   content
     .command('list')
-    .description('List tracked content, ranked by outlier score')
+    .description('List tracked content, ranked by outlier score, or by relevance when you pass --search')
     .option('--scope <scope>', `which accounts: ${SCOPES.join(', ')} (default all)`)
     .option('--platform <platform>', 'filter to one platform (youtube, instagram)')
     .option('--type <type>', 'content type, e.g. video, short, reel')
@@ -144,8 +144,11 @@ export function registerContent(program: Command): void {
     .option('--since <window>', `published within: ${WINDOWS.join(', ')}`)
     .option('--published-after <iso>', 'published on or after this ISO timestamp (wins over --since)')
     .option('--published-before <iso>', 'published on or before this ISO timestamp')
-    .option('--search <text>', 'text search across title, creator, handle, description')
-    .option('--sort <sort>', `sort field: ${SORTS.join(', ')} (default score)`)
+    .option(
+      '--search <text>',
+      'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance; returns only the posts judged relevant, so no rows means nothing matched',
+    )
+    .option('--sort <sort>', `sort field: ${CONTENT_SORTS.join(', ')} (default relevance with --search, otherwise score)`)
     .option('--asc', 'sort ascending (default descending)')
     .option('--account <id>', 'limit to this tracked account; repeatable', collectAccount)
     .option('--added-by-you', 'only the one-off posts saved by url')
@@ -154,8 +157,8 @@ export function registerContent(program: Command): void {
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .option('--offset <n>', 'pagination offset', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
-      if (opts.sort && !SORTS.includes(opts.sort as Sort)) {
-        throw new CliError(`Invalid --sort "${opts.sort}". Expected one of: ${SORTS.join(', ')}.`, EXIT.USAGE)
+      if (opts.sort && !(CONTENT_SORTS as readonly string[]).includes(opts.sort as string)) {
+        throw new CliError(`Invalid --sort "${opts.sort}". Expected one of: ${CONTENT_SORTS.join(', ')}.`, EXIT.USAGE)
       }
       if (opts.scope && !(SCOPES as readonly string[]).includes(opts.scope as string)) {
         throw new CliError(`Invalid --scope "${opts.scope}". Expected one of: ${SCOPES.join(', ')}.`, EXIT.USAGE)
@@ -180,7 +183,7 @@ export function registerContent(program: Command): void {
         publishedAfter: opts.publishedAfter as string | undefined,
         publishedBefore: opts.publishedBefore as string | undefined,
         search: opts.search as string | undefined,
-        sortBy: opts.sort as Sort | undefined,
+        sortBy: opts.sort as ContentSort | undefined,
         sortOrder: opts.asc ? 'asc' : undefined,
         accountIds: opts.account as string[] | undefined,
         addedByYou: opts.addedByYou ? true : undefined,

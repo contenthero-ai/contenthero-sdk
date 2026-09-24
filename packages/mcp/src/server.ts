@@ -63,6 +63,7 @@ import {
   type UpdateAvatarRequest,
 
   type Generation,
+  CONTENT_SORTS,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 
@@ -3714,7 +3715,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Tracked Content',
       annotations: READ,
       description:
-        "The core research read: social posts this account tracks, ranked by OUTLIER SCORE (how far a post overperformed its own creator's baseline, so a small account's hit still surfaces). SPANS BOTH the creators they watch and their OWN posts by default; set scope to narrow, and every row carries isOwn either way. This is how you answer both \"what is working for the people I watch\" and \"how did my own posts do\" without picking a subsystem first. Filter by platform, content type, a published window (publicationDate like 'week' or 'month', or exact publishedAfter/publishedBefore), and ranges over score, views, duration and follower count. Call get_content for one post in full, including its transcript.",
+        "The core research read: social posts this account tracks, ranked by OUTLIER SCORE (how far a post overperformed its own creator's baseline, so a small account's hit still surfaces), or by relevance when you pass search. SPANS BOTH the creators they watch and their OWN posts by default; set scope to narrow, and every row carries isOwn either way. This is how you answer both \"what is working for the people I watch\" and \"how did my own posts do\" without picking a subsystem first. Filter by platform, content type, a published window (publicationDate like 'week' or 'month', or exact publishedAfter/publishedBefore), and ranges over score, views, duration and follower count. Call get_content for one post in full, including its transcript.",
       inputSchema: {
         scope: z
           .enum(['all', 'inspiration', 'brand'])
@@ -3736,8 +3737,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe('Published within this window. Use publishedAfter for an exact date instead.'),
         publishedAfter: z.string().optional().describe('ISO timestamp. Wins over publicationDate.'),
         publishedBefore: z.string().optional().describe('ISO timestamp.'),
-        search: z.string().optional().describe('Text search across title, creator, handle, and description.'),
-        sortBy: z.enum(['score', 'date', 'views', 'engagement']).optional().describe("Sort field (default 'score')."),
+        search: z
+          .string()
+          .optional()
+          .describe(
+            'Finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance. Returns only the posts judged relevant, so an empty result means nothing matched.',
+          ),
+        sortBy: z
+          .enum(CONTENT_SORTS)
+          .optional()
+          .describe("Sort field. Default 'relevance' when search is set, otherwise 'score'. Any other field reorders the same relevant set."),
         sortOrder: z.enum(['asc', 'desc']).optional().describe("Sort direction (default 'desc')."),
         accountIds: z.array(z.string()).optional().describe('Limit to these tracked account ids (from list_accounts).'),
         addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),

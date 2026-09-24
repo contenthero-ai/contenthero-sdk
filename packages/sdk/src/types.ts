@@ -1867,6 +1867,13 @@ export interface AccountDetail {
 export type ContentScope = 'all' | 'inspiration' | 'brand'
 
 /** Options for `listContent`. */
+/**
+ * Every way content can be ordered. ONE list: the MCP tool schema and the CLI flag both import it, so a new sort
+ * cannot reach one surface and not the others (the CLI and MCP each held their own copy before 'relevance').
+ */
+export const CONTENT_SORTS = ['relevance', 'score', 'date', 'views', 'engagement'] as const
+export type ContentSort = (typeof CONTENT_SORTS)[number]
+
 export interface ListContentOptions {
   /**
    * `inspiration` = creators they watch, `brand` = their own accounts, `all` = both (the default).
@@ -1889,8 +1896,10 @@ export interface ListContentOptions {
   publishedBefore?: string
   /** A window keyword: week, month, 3months, 6months, year, 2years. */
   publicationDate?: string
+  /** Finds posts by meaning and keyword; results are only the posts judged relevant, ranked by relevance. */
   search?: string
-  sortBy?: 'score' | 'date' | 'views' | 'engagement'
+  /** Default 'relevance' when `search` is set, otherwise 'score'. Any other field reorders the same relevant set. */
+  sortBy?: ContentSort
   sortOrder?: 'asc' | 'desc'
   /** Tracked-account ids. Ids the caller does not own resolve to nothing rather than widening the query. */
   accountIds?: string[]

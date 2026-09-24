@@ -6,6 +6,8 @@
  */
 
 export { ContentHero } from './client.js'
+export { CONTENT_SORTS } from './types.js'
+export type { ContentSort } from './types.js'
 export type { ContentHeroOptions, FetchLike } from './client.js'
 export type {
   References,
