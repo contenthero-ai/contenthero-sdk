@@ -59,6 +59,7 @@ import {
   type PostInput,
   type BrandKitSectionInput,
   type BrandKitAccountInput,
+  type BrandKitFieldWrite,
   type CardAssetInput,
   type UpdateAvatarRequest,
 
@@ -100,6 +101,8 @@ import {
   balanceResult,
   brandKitListResult,
   brandKitResult,
+  brandKitSummaryResult,
+  brandKitFieldsResult,
   brandKitSectionResult,
   brandKnowledgeListResult,
   brandKnowledgeDetailResult,
@@ -2019,15 +2022,36 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Brand Kit',
       annotations: READ,
       description:
-        'Get one brand kit in full: business overview, positioning, audience, voice profile, visual identity (logos/colors/typography), curated sections, linked brand + inspiration accounts, and a knowledge-base summary. Use it to ground on-brand generation.',
+        "Get one brand kit. THREE WAYS TO READ, chosen by what you pass: (1) detail:'summary' lists every section and field with its key, role, load tier, version and length but NO values, the cheap first read, so start there and decide what the task needs; (2) any of keys, roles, sections, tabs or tiers returns just those fields with their values (the filters combine with AND), and history:true adds each returned field's earlier versions; (3) neither returns the whole kit: fields, visual identity (logos, colors, typography), linked brand and inspiration accounts, and a knowledge-base summary. A field's role says what it means and is the same across kits; its load tier says how eagerly it belongs in context: core always, contextual when relevant, reference only on request. Every field carries a version: pass it back as expectedVersion when you change it with update_brand_kit.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id from list_brand_kits.'),
+        detail: z
+          .enum(['summary', 'full'])
+          .optional()
+          .describe("'summary' lists every field without values; 'full', the default, returns the whole kit. Cannot be combined with a filter."),
+        keys: z.array(z.string()).optional().describe('Field keys, as the index lists them.'),
+        roles: z.array(z.string()).optional().describe('Field roles, as the index lists them.'),
+        sections: z.array(z.string()).optional().describe('Section keys, as the index lists them.'),
+        tabs: z.array(z.enum(['overview', 'voice'])).optional().describe("'overview' or 'voice'."),
+        tiers: z.array(z.enum(['core', 'contextual', 'reference'])).optional().describe("'core', 'contextual' or 'reference'."),
+        history: z.boolean().optional().describe("With a filter, also return each field's earlier versions, newest first."),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return brandKitResult(await client.getBrandKit(args.brandKitId))
+        const { brandKitId, detail, history, ...filter } = args
+        const filtered = Object.values(filter).some((v) => Array.isArray(v) && v.length > 0)
+        // The server refuses these combinations too; refusing here names the tool's own inputs.
+        if (detail === 'summary' && filtered) {
+          return errorResult(new Error("get_brand_kit: detail:'summary' cannot be combined with keys, roles, sections, tabs or tiers."))
+        }
+        if (history && !filtered) {
+          return errorResult(new Error('get_brand_kit: history needs a filter (keys, roles, sections, tabs or tiers).'))
+        }
+        if (detail === 'summary') return brandKitSummaryResult(await client.getBrandKit(brandKitId, { detail: 'summary' }))
+        if (filtered) return brandKitFieldsResult(await client.getBrandKit(brandKitId, { ...filter, history }))
+        return brandKitResult(await client.getBrandKit(brandKitId))
       } catch (err) {
         return errorResult(err)
       }
@@ -2050,15 +2074,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Scrape websiteUrl and fill the kit in automatically. Returns at once; poll extractionStatus.'),
         duplicateFrom: z.string().optional().describe('Copy an existing brand kit id instead of starting empty.'),
-        businessName: z.string().optional().describe('The business or creator name this kit represents.'),
-        primaryOffer: z.string().optional().describe('What this business sells, in one line. Grounds copy in what is actually being promoted.'),
-        nicheDefinition: z.string().optional().describe('The niche this brand operates in. Keeps generated angles on-topic.'),
-        positioning: z.record(z.string(), z.unknown()).optional().describe('Positioning object (free-form).'),
-        audience: z.record(z.string(), z.unknown()).optional().describe('Audience object (free-form).'),
-        voiceProfile: z.record(z.string(), z.unknown()).optional().describe('Voice profile object (tone, style, ...).'),
         visualStyle: z.string().optional().describe("The look in words, e.g. 'warm film grain, muted earth tones'. Grounds image and video prompts."),
         designPrinciples: z.array(z.string()).optional().describe('Design rules to hold to, one per entry. REPLACES the list; [] clears it.'),
-        contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
         logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
         assets: z.array(assetEntrySchema).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
         sections: z
@@ -2110,7 +2127,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit: identity fields (business name, positioning, audience, voice profile, visual style, content strategy), its brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/sections/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
+        "Update a brand kit: its field content, visual style, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only the fields you pass change. Get the current kit first with get_brand_kit. FIELD CONTENT is written with fields, by key and all or nothing: pass each field's version as expectedVersion, and if any field changed since you read it NOTHING is written and the error lists each stale field's current version and value, so re-read, reapply your change, and retry. A value replaces the field (a string for text and textarea fields, an array of strings for list fields, null to clear it); revertTo restores an earlier version as a new one. Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN website extraction, which returns immediately and fills the kit in the background from its websiteUrl (poll extractionStatus via get_brand_kit). logos/assets/sections/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
         brandKitId: z.string().optional().describe('The brand kit id. Omit ONLY when reordering with orderedIds.'),
         orderedIds: z
@@ -2128,6 +2145,17 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("The kit's curated sections, each { tab, sectionName, sortOrder?, fields? }. REPLACES the set, keyed by (tab, sectionName); a section left out is ARCHIVED, never deleted. Array position is the default order."),
         isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
+        fields: z
+          .array(
+            z.object({
+              key: z.string().describe('The field key, as get_brand_kit lists it.'),
+              value: z.union([z.string(), z.array(z.string()), z.null()]).optional().describe('The new value. Null clears the field.'),
+              revertTo: z.number().int().min(1).optional().describe("A version from the field's history to restore, as a new version."),
+              expectedVersion: z.number().int().min(1).optional().describe('The version you read.'),
+            }),
+          )
+          .optional()
+          .describe('Field writes, each { key, value, expectedVersion } or { key, revertTo, expectedVersion }. All or nothing.'),
         brandAccounts: z
           .array(accountEntrySchema)
           .optional()
@@ -2137,22 +2165,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Competitor/creator profiles they watch. Same entry shape as brandAccounts. REPLACES the list; [] clears it.'),
         name: z.string().optional().describe('Rename the kit. This is the label in the UI, not the business name.'),
-        businessName: z.string().optional().describe('The business or creator name this kit represents.'),
         websiteUrl: z.string().optional().describe('The business website. Stored as a reference; it does not re-extract on its own.'),
-        primaryOffer: z.string().optional().describe('What this business sells, in one line. Grounds copy in what is actually being promoted.'),
-        nicheDefinition: z.string().optional().describe('The niche this brand operates in. Keeps generated angles on-topic.'),
-        positioning: z.record(z.string(), z.unknown()).optional().describe('Positioning object (free-form).'),
-        audience: z.record(z.string(), z.unknown()).optional().describe('Audience object (free-form).'),
-        voiceProfile: z.record(z.string(), z.unknown()).optional().describe('Voice profile object (tone, style, ...).'),
         visualStyle: z.string().optional().describe("The look in words, e.g. 'warm film grain, muted earth tones'. Grounds image and video prompts."),
         designPrinciples: z.array(z.string()).optional().describe('Design rules to hold to, one per entry. REPLACES the list; [] clears it.'),
-        contentStrategy: z.record(z.string(), z.unknown()).optional().describe('Content strategy object (free-form).'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { brandKitId, orderedIds, extract, logos, assets, sections, brandAccounts, inspirationAccounts, ...rest } = args
+        const { brandKitId, orderedIds, extract, logos, assets, sections, brandAccounts, inspirationAccounts, fields, ...rest } = args
         // The declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than restating the shape in zod.
         const input = {
@@ -2165,6 +2186,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           // `args` by name has to be re-added by name; `...rest` cannot cover it.
           ...(brandAccounts !== undefined ? { brandAccounts: brandAccounts as BrandKitAccountInput[] } : {}),
           ...(inspirationAccounts !== undefined ? { inspirationAccounts: inspirationAccounts as BrandKitAccountInput[] } : {}),
+          // value-or-revertTo is enforced by the server (a 400 naming the field); zod's flat object cannot express it.
+          ...(fields !== undefined ? { fields: fields as BrandKitFieldWrite[] } : {}),
         }
 
         // Reorder is the collection-level mode and takes no kit id at all.

@@ -14,6 +14,8 @@ import { extname } from 'node:path'
 import type { Command } from 'commander'
 import type {
   BrandKit,
+  BrandKitIndex,
+  BrandKitFieldsRead,
   BrandKitSectionRecord,
   BrandKitSummary,
   BrandKnowledgeDetail,
@@ -27,7 +29,7 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, toInt, toJson } from '../args.js'
+import { collect, toInt, toJson, toList } from '../args.js'
 
 /**
  * Turn repeated `--logo` / `--asset` refs into the declarative media list the API takes.
@@ -68,25 +70,21 @@ function accountRefs(refs: string[] | undefined) {
 }
 
 /**
- * The brand identity fields `create` and `update` share, declared ONCE for both.
+ * The brand identity options `create` and `update` share, declared ONCE for both.
  *
- * ⚠️ WHY SHARED. They used to be two hand-written option lists, and `create` fell behind: it lacked positioning,
- * audience, voice profile, content strategy, design principles and both account lists, although the SDK's
- * `CreateBrandKitInput` accepts every one of them, and its handler even READ --brand-account for a flag it never
- * registered. The MCP/CLI parity test in `packages/mcp` found it. On `update` a list flag REPLACES the stored list,
- * which is the one wording difference, so the mode carries it.
+ * ⚠️ WHY SHARED. They used to be two hand-written option lists, and `create` fell behind: it lacked design
+ * principles and both account lists, although the SDK's `CreateBrandKitInput` accepts every one of them, and its
+ * handler even READ --brand-account for a flag it never registered. The MCP/CLI parity test in `packages/mcp` found
+ * it. On `update` a list flag REPLACES the stored list, which is the one wording difference, so the mode carries it.
+ *
+ * The kit's CONTENT is not here: it is field content, written with `update --fields` (brand-kit-foundation-v1). The
+ * seven flags that wrote the old JSON columns (--business-name, --primary-offer, --niche, --positioning, --audience,
+ * --voice-profile, --content-strategy) are gone with them.
  */
 function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
   const replaces = mode === 'update' ? '. REPLACES the list' : ''
   return cmd
-    .option('--business-name <text>')
-    .option('--primary-offer <text>')
-    .option('--niche <text>', 'niche definition')
     .option('--visual-style <text>')
-    .option('--positioning <json>', 'positioning object (JSON)', toJson)
-    .option('--audience <json>', 'audience object (JSON)', toJson)
-    .option('--voice-profile <json>', 'voice profile object (JSON)', toJson)
-    .option('--content-strategy <json>', 'content strategy object (JSON)', toJson)
     .option('--design-principle <text>', `a design principle; repeatable${replaces}`, collect)
     .option(
       '--brand-account <ref>',
@@ -101,14 +99,7 @@ function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
 /** The shared identity fields, read back from the options `identityOptions` declared. */
 function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
   return {
-    businessName: opts.businessName as string | undefined,
-    primaryOffer: opts.primaryOffer as string | undefined,
-    nicheDefinition: opts.niche as string | undefined,
     visualStyle: opts.visualStyle as string | undefined,
-    positioning: opts.positioning as Record<string, unknown> | undefined,
-    audience: opts.audience as Record<string, unknown> | undefined,
-    voiceProfile: opts.voiceProfile as Record<string, unknown> | undefined,
-    contentStrategy: opts.contentStrategy as Record<string, unknown> | undefined,
     designPrinciples: opts.designPrinciple as string[] | undefined,
     brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
     inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
@@ -143,11 +134,10 @@ export function registerBrandKit(program: Command): void {
       })
       emit(kits, ctx, (rows: BrandKitSummary[]) =>
         table(
-          ['ID', 'NAME', 'BUSINESS', 'DEFAULT', 'FAV'],
+          ['ID', 'NAME', 'DEFAULT', 'FAV'],
           rows.map((k) => [
             k.id.slice(0, 8),
             k.name,
-            k.businessName ?? '',
             k.isDefault ? 'yes' : '',
             k.isFavorited ? 'yes' : '',
           ]),
@@ -157,18 +147,65 @@ export function registerBrandKit(program: Command): void {
 
   brandKit
     .command('get')
-    .description('Get one brand kit in full (the whole brand document)')
+    .description(
+      'Get one brand kit: --detail summary lists every field without values; a field filter returns just those ' +
+        'fields with values (add --history for earlier versions); neither returns the whole kit',
+    )
     .argument('<id>', 'the brand kit id')
-    .action(async (id: string, _opts, command: Command) => {
+    .option('--detail <level>', "'summary' (every field, no values) or 'full' (the default); not with a filter")
+    .option('--keys <list>', 'field keys, comma-separated', toList)
+    .option('--roles <list>', 'field roles, comma-separated', toList)
+    .option('--sections <list>', 'section keys, comma-separated', toList)
+    .option('--tabs <list>', "'overview' and/or 'voice', comma-separated", toList)
+    .option('--tiers <list>', "'core', 'contextual' and/or 'reference', comma-separated", toList)
+    .option('--history', "with a filter, also return each field's earlier versions")
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+      const detail = opts.detail as string | undefined
+      if (detail !== undefined && detail !== 'summary' && detail !== 'full') {
+        throw new CliError(`--detail must be 'summary' or 'full', got "${detail}".`, EXIT.USAGE)
+      }
+      const filter = compact({
+        keys: opts.keys as string[] | undefined,
+        roles: opts.roles as string[] | undefined,
+        sections: opts.sections as string[] | undefined,
+        tabs: opts.tabs as string[] | undefined,
+        tiers: opts.tiers as string[] | undefined,
+      })
+      const filtered = Object.values(filter).some((v) => Array.isArray(v) && v.length > 0)
+      if (detail === 'summary' && filtered) {
+        throw new CliError('--detail summary cannot be combined with a field filter.', EXIT.USAGE)
+      }
+      if (opts.history && !filtered) {
+        throw new CliError('--history needs a field filter (--keys, --roles, --sections, --tabs or --tiers).', EXIT.USAGE)
+      }
       const { client, ctx } = makeClient(command)
+      if (detail === 'summary') {
+        const index = await client.getBrandKit(id, { detail: 'summary' })
+        emit(index, ctx, (k: BrandKitIndex) =>
+          table(
+            ['SECTION', 'KEY', 'LABEL', 'ROLE', 'TIER', 'VERSION', 'CHARS'],
+            k.sections.flatMap((s) =>
+              s.fields.map((f) => [s.key, f.key, f.label, f.role, f.loadTier, f.version, f.hasValue ? f.charCount : '']),
+            ),
+          ),
+        )
+        return
+      }
+      if (filtered) {
+        const read = await client.getBrandKit(id, { ...filter, history: opts.history ? true : undefined })
+        emit(read, ctx, (r: BrandKitFieldsRead) =>
+          table(
+            ['KEY', 'LABEL', 'VERSION', 'VALUE'],
+            r.fields.map((f) => [f.key, f.label, f.version, Array.isArray(f.value) ? f.value.join('; ') : String(f.value ?? '')]),
+          ),
+        )
+        return
+      }
       const kit = await client.getBrandKit(id)
       emit(kit, ctx, (k: BrandKit) =>
         keyValues([
           ['Name', k.name],
           ['Id', k.id],
-          ['Business', k.businessName ?? ''],
-          ['Niche', k.nicheDefinition ?? ''],
-          ['Primary offer', k.primaryOffer ?? ''],
           ['Visual style', k.visualStyle ?? ''],
           ['Sections', k.sections.length],
           ['Brand accounts', k.brandAccounts.length],
@@ -260,11 +297,16 @@ export function registerBrandKit(program: Command): void {
   identityOptions(
     brandKit
       .command('update')
-      .description('Update a brand kit\'s identity fields (requires brandkit:write)')
+      .description('Update a brand kit: field content, visual style, media, accounts and sections (requires brandkit:write)')
       .argument('<id>', 'the brand kit id')
       .option('--name <text>')
       .option('--website-url <url>')
       .option('--default', 'make this the default brand kit, un-defaulting every other')
+      .option(
+        '--fields <json>',
+        'field writes as JSON, all or nothing: [{ key, value, expectedVersion }] or [{ key, revertTo, expectedVersion }]',
+        toJson,
+      )
       .option('--sections <json>', 'curated sections as JSON. REPLACES the set, keyed by (tab, sectionName); one left out is ARCHIVED', toJson),
     'update',
   )
@@ -274,6 +316,7 @@ export function registerBrandKit(program: Command): void {
         websiteUrl: opts.websiteUrl as string | undefined,
         ...identityInput(opts),
         isDefault: opts.default ? true : undefined,
+        fields: opts.fields as UpdateBrandKitInput['fields'],
         sections: opts.sections as UpdateBrandKitInput['sections'],
       })
       if (Object.keys(input).length === 0) {

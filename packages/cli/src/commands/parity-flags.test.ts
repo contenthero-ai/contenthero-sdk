@@ -42,22 +42,32 @@ async function run(...args: string[]): Promise<Seen> {
 test('brand-kit create sends the identity fields it used to lack', async () => {
   const r = await run(
     'brand-kit', 'create', '--name', 'Acme',
-    '--positioning', '{"statement":"p"}',
-    '--audience', '{"who":"a"}',
-    '--voice-profile', '{"tone":"t"}',
-    '--content-strategy', '{"pillars":["c"]}',
     '--design-principle', 'one', '--design-principle', 'two',
     '--brand-account', 'instagram:acme',
     '--inspiration-account', 'https://youtube.com/@rival',
   )
   assert.equal(r.method, 'POST')
-  assert.deepEqual(r.body?.positioning, { statement: 'p' })
-  assert.deepEqual(r.body?.audience, { who: 'a' })
-  assert.deepEqual(r.body?.voiceProfile, { tone: 't' })
-  assert.deepEqual(r.body?.contentStrategy, { pillars: ['c'] })
   assert.deepEqual(r.body?.designPrinciples, ['one', 'two'])
   assert.deepEqual(r.body?.brandAccounts, [{ platform: 'instagram', handleOrUrl: 'acme' }])
   assert.deepEqual(r.body?.inspirationAccounts, [{ handleOrUrl: 'https://youtube.com/@rival' }])
+})
+
+test('brand-kit get sends the summary detail, or the field filter with history, as query parameters', async () => {
+  const summary = await run('brand-kit', 'get', 'bk1', '--detail', 'summary')
+  assert.equal(summary.path, '/api/v1/brand-kits/bk1')
+  assert.equal(summary.query.get('detail'), 'summary')
+
+  const scoped = await run('brand-kit', 'get', 'bk1', '--tabs', 'voice', '--tiers', 'core,contextual', '--history')
+  assert.equal(scoped.query.get('tabs'), 'voice')
+  assert.equal(scoped.query.get('tiers'), 'core,contextual')
+  assert.equal(scoped.query.get('history'), 'true')
+})
+
+test('brand-kit update --fields sends field writes, all in one patch', async () => {
+  const fields = [{ key: 'summary', value: 'Warm.', expectedVersion: 2 }, { key: 'avoid', revertTo: 1 }]
+  const r = await run('brand-kit', 'update', 'bk1', '--fields', JSON.stringify(fields))
+  assert.equal(r.method, 'PATCH')
+  assert.deepEqual(r.body?.fields, fields)
 })
 
 test('brand-kit create from a social profile alone is accepted (the flag its handler already read now exists)', async () => {

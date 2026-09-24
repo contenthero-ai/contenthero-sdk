@@ -121,13 +121,11 @@ function fakeClient(overrides = {}) {
       }),
     }),
     listBrandKits: async () => [
-      { id: 'bk1', name: 'ContentHero', businessName: 'Content Hero', nicheDefinition: 'AI content', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' },
+      { id: 'bk1', name: 'ContentHero', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' },
     ],
     getBrandKit: async (id) => ({
       id,
       name: 'ContentHero',
-      businessName: 'Content Hero',
-      nicheDefinition: 'AI content',
       isDefault: true,
       isActive: true,
       isFavorited: false,
@@ -135,17 +133,12 @@ function fakeClient(overrides = {}) {
       createdAt: 't',
       websiteUrl: 'https://contenthero.ai',
       sourceType: 'manual',
-      primaryOffer: 'AI content studio',
-      positioning: { tagline: 'make content' },
-      audience: null,
-      voiceProfile: { tone: 'confident' },
       logos: [],
       brandColors: [{ hex: '#0B0B0F' }],
       typography: null,
       visualStyle: 'obsidian/gold',
       designPrinciples: ['bold'],
       socialAccounts: [],
-      contentStrategy: null,
       assets: [],
       sections: [{ tab: 'voice', sectionName: 'Brand Voice', sortOrder: 0, fields: [{ key: 'tone', label: 'Tone', type: 'text', value: 'confident' }] }],
       brandAccounts: [{ platform: 'instagram', name: 'ContentHero', handle: 'contenthero', avatarUrl: null, followerCount: 100 }],
@@ -1581,8 +1574,6 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
         return {
           id,
           name: 'ContentHero',
-          businessName: null,
-          nicheDefinition: null,
           isDefault: true,
           isActive: true,
           isFavorited: false,
@@ -1590,19 +1581,14 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
           createdAt: 't',
           websiteUrl: null,
           sourceType: null,
-          primaryOffer: null,
-          positioning: null,
-          audience: null,
-          voiceProfile: { tone: 'confident' },
           logos: [],
           brandColors: [],
           typography: null,
           visualStyle: null,
           designPrinciples: [],
           socialAccounts: [],
-          contentStrategy: null,
           assets: [],
-          sections: [],
+          sections: [{ id: 's1', key: 'glance', tab: 'voice', sectionName: 'Voice at a Glance', sortOrder: 0, fields: [{ key: 'summary', label: 'The Voice in a Paragraph', type: 'textarea', value: 'confident' }] }],
           brandAccounts: [],
           inspirationAccounts: [],
           knowledge: [],
@@ -1613,8 +1599,8 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
   const res = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1' } })
   assert.ok(!res.isError)
   assert.equal(capturedId, 'bk1')
-  // The full kit comes back as JSON, so nested brand context is intact.
-  assert.match(res.content[0].text, /"voiceProfile"/)
+  // The full kit comes back as JSON, so nested field content is intact.
+  assert.match(res.content[0].text, /"key": "summary"/)
   assert.match(res.content[0].text, /confident/)
 })
 
@@ -2237,18 +2223,62 @@ test('update_brand_kit passes the changed fields through and returns the kit', a
     fakeClient({
       updateBrandKit: async (id, input) => {
         captured = { id, input }
-        return { id, name: input.name ?? 'ContentHero', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+        return { id, name: input.name ?? 'ContentHero', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
       },
     }),
   )
-  const res = await mcp.callTool({
-    name: 'update_brand_kit',
-    arguments: { brandKitId: 'bk1', voiceProfile: { tone: 'bold' }, nicheDefinition: 'AI video' },
-  })
+  const fields = [{ key: 'summary', value: 'Warm and direct.', expectedVersion: 2 }, { key: 'avoid', revertTo: 1 }]
+  const res = await mcp.callTool({ name: 'update_brand_kit', arguments: { brandKitId: 'bk1', fields } })
   assert.equal(captured.id, 'bk1')
-  assert.deepEqual(captured.input.voiceProfile, { tone: 'bold' })
-  assert.equal(captured.input.nicheDefinition, 'AI video')
+  assert.deepEqual(captured.input.fields, fields)
   assert.match(res.content[0].text, /Brand kit "ContentHero"/)
+})
+
+test('the seven retired kit inputs are not declared on create_brand_kit or update_brand_kit', async () => {
+  const mcp = await connect(fakeClient({}))
+  const { tools } = await mcp.listTools()
+  for (const name of ['create_brand_kit', 'update_brand_kit']) {
+    const declared = Object.keys(tools.find((t) => t.name === name).inputSchema.properties)
+    for (const retired of ['businessName', 'primaryOffer', 'nicheDefinition', 'positioning', 'audience', 'voiceProfile', 'contentStrategy']) {
+      assert.ok(!declared.includes(retired), `${name} still declares ${retired}`)
+    }
+  }
+})
+
+test('get_brand_kit reads three ways and refuses the combinations that cannot mean anything', async () => {
+  const calls = []
+  const mcp = await connect(
+    fakeClient({
+      getBrandKit: async (id, options) => {
+        calls.push(options)
+        if (options?.detail === 'summary') {
+          return {
+            id, name: 'CH', template: { slug: 'standard', version: 1 },
+            sections: [{ id: 's1', key: 'glance', tab: 'voice', name: 'Voice at a Glance', fields: [
+              { id: 'f1', key: 'summary', sectionKey: 'glance', sectionName: 'Voice at a Glance', tab: 'voice', label: 'The Voice in a Paragraph', type: 'textarea', role: 'voice.core', loadTier: 'core', version: 3, updatedAt: 't', hasValue: true, charCount: 412 },
+            ] }],
+          }
+        }
+        if (options) return { id, name: 'CH', fields: [{ key: 'summary', value: 'Warm.', version: 3 }] }
+        return { id, name: 'CH', isDefault: true, sections: [] }
+      },
+    }),
+  )
+  const summary = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1', detail: 'summary' } })
+  assert.match(summary.content[0].text, /summary: The Voice in a Paragraph \| textarea \| voice\.core \| core \| v3 \| 412 chars/)
+
+  const scoped = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1', tabs: ['voice'], history: true } })
+  assert.deepEqual(calls[1], { tabs: ['voice'], history: true })
+  assert.match(scoped.content[0].text, /1 field\(s\) from brand kit "CH"/)
+
+  await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1' } })
+  assert.equal(calls[2], undefined)
+
+  const bad = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1', detail: 'summary', keys: ['x'] } })
+  assert.equal(bad.isError, true)
+  const lonely = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1', history: true } })
+  assert.equal(lonely.isError, true)
+  assert.equal(calls.length, 3)
 })
 
 test('archive confirms a brand kit via the universal tool', async () => {
@@ -2271,7 +2301,7 @@ test('update_brand_kit forwards brandAccounts, including a url that adds a NEW a
     fakeClient({
       updateBrandKit: async (id, input) => {
         captured = input
-        return { id, name: 'ContentHero', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+        return { id, name: 'ContentHero', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
       },
     }),
   )
@@ -2291,7 +2321,7 @@ test('update_brand_kit forwards inspirationAccounts too', async () => {
     fakeClient({
       updateBrandKit: async (id, input) => {
         captured = input
-        return { id, name: 'x', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+        return { id, name: 'x', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
       },
     }),
   )
@@ -2308,9 +2338,8 @@ test('every declared field on update_brand_kit actually reaches the client', asy
   // each optional field survives the handler, so the next field added this way fails here instead of in
   // production.
   const SAMPLES = {
-    name: 'n', businessName: 'b', websiteUrl: 'https://x.test', primaryOffer: 'o', nicheDefinition: 'nd',
-    visualStyle: 'vs', positioning: { a: 1 }, audience: { a: 1 }, voiceProfile: { a: 1 },
-    contentStrategy: { a: 1 }, designPrinciples: ['p'], logos: [{ url: 'https://x/1.png' }],
+    name: 'n', websiteUrl: 'https://x.test', visualStyle: 'vs', fields: [{ key: 'k', value: 'v' }],
+    designPrinciples: ['p'], logos: [{ url: 'https://x/1.png' }],
     assets: [{ url: 'https://x/2.png' }], sections: [{ tab: 't', sectionName: 's' }],
     brandAccounts: ['https://youtube.com/@a'], inspirationAccounts: ['https://youtube.com/@b'],
   }
@@ -2319,7 +2348,7 @@ test('every declared field on update_brand_kit actually reaches the client', asy
     fakeClient({
       updateBrandKit: async (id, input) => {
         captured = input
-        return { id, name: 'x', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+        return { id, name: 'x', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
       },
     }),
   )
@@ -2343,7 +2372,7 @@ test('update_brand_kit sets sections declaratively, keyed by tab and name', asyn
     fakeClient({
       updateBrandKit: async (id, input) => {
         captured = input
-        return { id, name: 'ContentHero', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
+        return { id, name: 'ContentHero', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] }
       },
     }),
   )

@@ -32,6 +32,8 @@ import type {
   AvatarSummary,
   Balance,
   BrandKit,
+  BrandKitIndex,
+  BrandKitFieldsRead,
   BrandKitSummary,
   BrandKitSectionRecord,
   BrandKnowledgeItem,
@@ -891,7 +893,7 @@ export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
   if (!kits.length) return text('No brand kits found. Create one in the ContentHero app first.')
   const rows = kits.map(
     (k) =>
-      `- ${k.name}${k.businessName && k.businessName !== k.name ? ` (${k.businessName})` : ''} (id ${k.id})${k.isDefault ? ' [default]' : ''}${k.nicheDefinition ? ` | niche: ${k.nicheDefinition}` : ''}`,
+      `- ${k.name} (id ${k.id})${k.isDefault ? ' [default]' : ''}`,
   )
   return text([`${kits.length} brand kit(s):`, ...rows].join('\n'))
 }
@@ -914,6 +916,33 @@ export function brandKitResult(kit: BrandKit, extraction?: ExtractionOutcome): C
         ? 'Extraction is NOT CONFIGURED on this deployment, so nothing was queued.'
         : null
   return text([header, ...(note ? ['', note] : []), '', JSON.stringify(kit, null, 2)].join('\n'))
+}
+
+/**
+ * A kit's summary: every section and field, one line each, no values. Compact on purpose: this is the read an
+ * agent makes first to decide what to pull, so it should cost little.
+ */
+export function brandKitSummaryResult(kit: BrandKitIndex): CallToolResult {
+  const lines = [
+    `Brand kit "${kit.name}" (id ${kit.id})${kit.template ? `, template ${kit.template.slug} v${kit.template.version}` : ''}:`,
+  ]
+  for (const s of kit.sections) {
+    lines.push('', `[${s.tab}] ${s.name} (section ${s.key})`)
+    for (const f of s.fields) {
+      lines.push(
+        `  ${f.key}: ${f.label} | ${f.type} | ${f.role} | ${f.loadTier} | v${f.version} | ${f.hasValue ? `${f.charCount} chars` : 'empty'}`,
+      )
+    }
+  }
+  return text(lines.join('\n'))
+}
+
+/** Just the fields a filtered read asked for, with values (and history when asked). */
+export function brandKitFieldsResult(read: BrandKitFieldsRead): CallToolResult {
+  if (!read.fields.length) return text(`No fields in brand kit "${read.name}" match that filter.`)
+  return text(
+    [`${read.fields.length} field(s) from brand kit "${read.name}" (id ${read.id}):`, '', JSON.stringify(read.fields, null, 2)].join('\n'),
+  )
 }
 
 /** A created/updated/archived brand-kit section. */
