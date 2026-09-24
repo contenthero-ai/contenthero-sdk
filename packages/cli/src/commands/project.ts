@@ -81,6 +81,7 @@ export function registerProject(program: Command): void {
     .option('--to <frame>', 'timeline only: end frame of the window')
     .option('--track <trackId>', 'timeline only: scope to one track by id')
     .option('--slide <slideId>', "canvas only: scope to one slide by id (applies to --detail full too)")
+    .option('--include-render-url', 'also return a preview still URL of the current composition (renders one only if it changed)')
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.getProject(projectId, {
@@ -89,9 +90,11 @@ export function registerProject(program: Command): void {
         toFrame: opts.to != null ? Number(opts.to) : undefined,
         trackId: typeof opts.track === 'string' ? opts.track : undefined,
         slideId: typeof opts.slide === 'string' ? opts.slide : undefined,
+        includeRenderUrl: opts.includeRenderUrl ? true : undefined,
       })
       emit(p, ctx, () =>
         `Project ${p.id} "${p.title}" (${p.surface}), revision ${p.revision}` +
+        (p.renderUrl ? `\nPreview still: ${p.renderUrl}` : '') +
         // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
         // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
         // printed no dimensions at all, so there was nowhere to learn it short of reading app source.
@@ -158,6 +161,7 @@ export function registerProject(program: Command): void {
     .option('--orientation <ratio>', "e.g. 16:9, 9:16, 1:1 (default: 16:9)")
     .option('--width <n>', 'pixel width (default: from orientation)', toInt)
     .option('--height <n>', 'pixel height (default: from orientation)', toInt)
+    .option('--brand-kit <id>', 'associate this brand kit with the project')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.createProject({
@@ -166,6 +170,7 @@ export function registerProject(program: Command): void {
         orientation: opts.orientation as string | undefined,
         width: opts.width as number | undefined,
         height: opts.height as number | undefined,
+        brandKitId: opts.brandKit as string | undefined,
       })
       emit(p, ctx, () => `Created ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
     })
@@ -300,6 +305,7 @@ export function registerProject(program: Command): void {
     .option('--ops-file <path>', 'read the ops JSON array from a file')
     .option('--intent <text>', 'a short description of the edit (for attribution)')
     .option('--expected-revision <n>', 'revision for optimistic concurrency (from `project get`)', toInt)
+    .option('--include-render-url', 'also return a preview still URL of the resulting composition')
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const raw = opts.opsFile ? readFileSync(opts.opsFile as string, 'utf8') : (opts.ops as string | undefined)
       if (!raw) throw new CliError('Provide --ops <json> or --ops-file <path>.', EXIT.USAGE)
@@ -310,10 +316,14 @@ export function registerProject(program: Command): void {
         ops,
         userIntent: opts.intent as string | undefined,
         expectedRevision: opts.expectedRevision as number | undefined,
+        includeRenderUrl: opts.includeRenderUrl ? true : undefined,
       })
       emit(result, ctx, () => {
         const ok = result.results.filter((r) => r.ok).length
-        return `Applied ${ok}/${result.results.length} op(s). New revision: ${result.revision}.`
+        return (
+          `Applied ${ok}/${result.results.length} op(s). New revision: ${result.revision}.` +
+          (result.renderUrl ? `\nPreview still: ${result.renderUrl}` : '')
+        )
       })
     })
 }

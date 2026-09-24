@@ -67,6 +67,56 @@ function accountRefs(refs: string[] | undefined) {
   })
 }
 
+/**
+ * The brand identity fields `create` and `update` share, declared ONCE for both.
+ *
+ * ⚠️ WHY SHARED. They used to be two hand-written option lists, and `create` fell behind: it lacked positioning,
+ * audience, voice profile, content strategy, design principles and both account lists, although the SDK's
+ * `CreateBrandKitInput` accepts every one of them, and its handler even READ --brand-account for a flag it never
+ * registered. The MCP/CLI parity test in `packages/mcp` found it. On `update` a list flag REPLACES the stored list,
+ * which is the one wording difference, so the mode carries it.
+ */
+function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
+  const replaces = mode === 'update' ? '. REPLACES the list' : ''
+  return cmd
+    .option('--business-name <text>')
+    .option('--primary-offer <text>')
+    .option('--niche <text>', 'niche definition')
+    .option('--visual-style <text>')
+    .option('--positioning <json>', 'positioning object (JSON)', toJson)
+    .option('--audience <json>', 'audience object (JSON)', toJson)
+    .option('--voice-profile <json>', 'voice profile object (JSON)', toJson)
+    .option('--content-strategy <json>', 'content strategy object (JSON)', toJson)
+    .option('--design-principle <text>', `a design principle; repeatable${replaces}`, collect)
+    .option(
+      '--brand-account <ref>',
+      `the owner's OWN profile: a tracked-account id, or a profile url / platform:handle to ADD one. Repeatable${replaces}`,
+      collect,
+    )
+    .option('--inspiration-account <ref>', `a competitor/creator profile: same forms as --brand-account. Repeatable${replaces}`, collect)
+    .option('--logo <ref>', `a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary${replaces}`, collect)
+    .option('--asset <ref>', `a brand asset: a url, or a generation id to copy in. Repeatable${replaces}`, collect)
+}
+
+/** The shared identity fields, read back from the options `identityOptions` declared. */
+function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
+  return {
+    businessName: opts.businessName as string | undefined,
+    primaryOffer: opts.primaryOffer as string | undefined,
+    nicheDefinition: opts.niche as string | undefined,
+    visualStyle: opts.visualStyle as string | undefined,
+    positioning: opts.positioning as Record<string, unknown> | undefined,
+    audience: opts.audience as Record<string, unknown> | undefined,
+    voiceProfile: opts.voiceProfile as Record<string, unknown> | undefined,
+    contentStrategy: opts.contentStrategy as Record<string, unknown> | undefined,
+    designPrinciples: opts.designPrinciple as string[] | undefined,
+    brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
+    inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
+    logos: mediaRefs(opts.logo as string[] | undefined),
+    assets: mediaRefs(opts.asset as string[] | undefined),
+  }
+}
+
 function recordHuman(s: BrandKitSectionRecord, action: string): string {
   return keyValues([
     [action, s.sectionName],
@@ -128,20 +178,17 @@ export function registerBrandKit(program: Command): void {
       )
     })
 
-  brandKit
-    .command('create')
-    .description('Create a brand kit: empty, from a website, or as a copy (requires brandkit:write)')
-    .option('--name <text>', "the kit's name; optional when a website or social profile url is given")
-    .option('--website-url <url>', 'the business website')
-    .option('--extract', 'scrape --website-url and fill the kit in automatically (returns immediately)')
-    .option('--duplicate-from <id>', 'copy an existing brand kit instead of starting empty')
-    .option('--business-name <text>')
-    .option('--primary-offer <text>')
-    .option('--niche <text>', 'niche definition')
-    .option('--visual-style <text>')
-    .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary', collect)
-    .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable', collect)
-    .option('--sections <json>', 'curated sections as JSON: [{ tab, sectionName, sortOrder?, fields? }]', toJson)
+  identityOptions(
+    brandKit
+      .command('create')
+      .description('Create a brand kit: empty, from a website, or as a copy (requires brandkit:write)')
+      .option('--name <text>', "the kit's name; optional when a website or social profile url is given")
+      .option('--website-url <url>', 'the business website')
+      .option('--extract', 'scrape --website-url and fill the kit in automatically (returns immediately)')
+      .option('--duplicate-from <id>', 'copy an existing brand kit instead of starting empty')
+      .option('--sections <json>', 'curated sections as JSON: [{ tab, sectionName, sortOrder?, fields? }]', toJson),
+    'create',
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const seedsFromAccount =
@@ -163,12 +210,7 @@ export function registerBrandKit(program: Command): void {
           websiteUrl: opts.websiteUrl as string | undefined,
           extract: opts.extract ? true : undefined,
           duplicateFrom: opts.duplicateFrom as string | undefined,
-          businessName: opts.businessName as string | undefined,
-          primaryOffer: opts.primaryOffer as string | undefined,
-          nicheDefinition: opts.niche as string | undefined,
-          visualStyle: opts.visualStyle as string | undefined,
-          logos: mediaRefs(opts.logo as string[] | undefined),
-          assets: mediaRefs(opts.asset as string[] | undefined),
+          ...identityInput(opts),
           sections: opts.sections as CreateBrandKitInput['sections'],
         }),
       )
@@ -215,45 +257,23 @@ export function registerBrandKit(program: Command): void {
       )
     })
 
-  brandKit
-    .command('update')
-    .description('Update a brand kit\'s identity fields (requires brandkit:write)')
-    .argument('<id>', 'the brand kit id')
-    .option('--name <text>')
-    .option('--business-name <text>')
-    .option('--website-url <url>')
-    .option('--primary-offer <text>')
-    .option('--niche <text>', 'niche definition')
-    .option('--visual-style <text>')
-    .option('--positioning <json>', 'positioning object (JSON)', toJson)
-    .option('--audience <json>', 'audience object (JSON)', toJson)
-    .option('--voice-profile <json>', 'voice profile object (JSON)', toJson)
-    .option('--content-strategy <json>', 'content strategy object (JSON)', toJson)
-    .option('--design-principle <text>', 'a design principle; repeatable', collect)
-    .option('--default', 'make this the default brand kit, un-defaulting every other')
-    .option('--brand-account <ref>', "the owner's OWN profile: a tracked-account id, or a profile url / platform:handle to ADD one. Repeatable. REPLACES the list", collect)
-    .option('--inspiration-account <ref>', 'a competitor/creator profile: same forms as --brand-account. Repeatable. REPLACES the list', collect)
-    .option('--logo <ref>', 'a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary. REPLACES the list', collect)
-    .option('--asset <ref>', 'a brand asset: a url, or a generation id to copy in. Repeatable. REPLACES the list', collect)
-    .option('--sections <json>', 'curated sections as JSON. REPLACES the set, keyed by (tab, sectionName); one left out is ARCHIVED', toJson)
+  identityOptions(
+    brandKit
+      .command('update')
+      .description('Update a brand kit\'s identity fields (requires brandkit:write)')
+      .argument('<id>', 'the brand kit id')
+      .option('--name <text>')
+      .option('--website-url <url>')
+      .option('--default', 'make this the default brand kit, un-defaulting every other')
+      .option('--sections <json>', 'curated sections as JSON. REPLACES the set, keyed by (tab, sectionName); one left out is ARCHIVED', toJson),
+    'update',
+  )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const input = compact<UpdateBrandKitInput>({
         name: opts.name as string | undefined,
-        businessName: opts.businessName as string | undefined,
         websiteUrl: opts.websiteUrl as string | undefined,
-        primaryOffer: opts.primaryOffer as string | undefined,
-        nicheDefinition: opts.niche as string | undefined,
-        visualStyle: opts.visualStyle as string | undefined,
-        positioning: opts.positioning as Record<string, unknown> | undefined,
-        audience: opts.audience as Record<string, unknown> | undefined,
-        voiceProfile: opts.voiceProfile as Record<string, unknown> | undefined,
-        contentStrategy: opts.contentStrategy as Record<string, unknown> | undefined,
-        designPrinciples: opts.designPrinciple as string[] | undefined,
+        ...identityInput(opts),
         isDefault: opts.default ? true : undefined,
-        brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
-        inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
-        logos: mediaRefs(opts.logo as string[] | undefined),
-        assets: mediaRefs(opts.asset as string[] | undefined),
         sections: opts.sections as UpdateBrandKitInput['sections'],
       })
       if (Object.keys(input).length === 0) {

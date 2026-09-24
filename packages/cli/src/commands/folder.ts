@@ -93,6 +93,7 @@ export function registerFolder(program: Command): void {
     .argument('<id>', 'the folder id')
     .option('--name <text>', 'a new name')
     .option('--parent <id>', 'move under this folder id, or "none" for the top level')
+    .option('--text <text>', "a smart folder's new semantic query text (the same query `folder create --smart --text` sets)")
     .option('--also <id>', 'apply to this folder too; repeatable. Name and query still need exactly one', collect)
     .option('--add <ref>', 'file an item: sourceTable:sourceRecordId[:variant]. Repeatable', collect)
     .option('--remove <ref>', 'unfile an item: sourceTable:sourceRecordId[:variant]. Repeatable', collect)
@@ -102,6 +103,7 @@ export function registerFolder(program: Command): void {
         name: opts.name as string | undefined,
         parentId:
           opts.parent === undefined ? undefined : NONE.includes(String(opts.parent).toLowerCase()) ? null : (opts.parent as string),
+        query: opts.text === undefined ? undefined : { text: opts.text as string },
         addItems: parseRefs(opts.add as string[] | undefined),
         removeItems: parseRefs(opts.remove as string[] | undefined),
       }

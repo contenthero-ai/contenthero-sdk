@@ -189,7 +189,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   update_brand_kit: { orderedIds: '<ids>', nicheDefinition: '--niche', isDefault: '--default' },
   add_brand_knowledge: { fileData: '--file' },
   create_folder: { type: '--smart', query: '--text' },
-  update_folder: { folderIds: '--also', addItems: '--add', removeItems: '--remove' },
+  update_folder: { folderIds: '--also', query: '--text', addItems: '--add', removeItems: '--remove' },
   get_media: { items: '<id>' },
   create_media_upload: { fileName: '--name' },
   import_media: { fileName: '--name' },
@@ -245,24 +245,11 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
 /**
  * ⚠️ KNOWN GAPS: things the MCP can do that the CLI cannot, recorded so they are visible and tracked. Each is a
  * debt, not an exemption: close it by adding the flag, and this test then REQUIRES the entry to be deleted.
- * Measured 2026-09-24 when this guard was introduced.
+ * Introduced 2026-09-24 with 12 gaps (brand-kit create lacked 7 fields update had, folder update could not
+ * re-query, project create could not take a brand kit, and project get / apply could not ask for a preview still);
+ * all 12 closed the same day. Empty is the goal; a new entry needs a reason and a plan to close it.
  */
-const KNOWN_GAPS: Record<string, Record<string, string>> = {
-  create_brand_kit: {
-    positioning: '`brand-kit update` has --positioning; `create` does not',
-    audience: '`brand-kit update` has --audience; `create` does not',
-    voiceProfile: '`brand-kit update` has --voice-profile; `create` does not',
-    contentStrategy: '`brand-kit update` has --content-strategy; `create` does not',
-    designPrinciples: '`brand-kit update` has --design-principle; `create` does not',
-    brandAccounts: '`brand-kit update` has --brand-account; `create` does not',
-    inspirationAccounts: '`brand-kit update` has --inspiration-account; `create` does not',
-  },
-  update_folder: { query: 'no way to change a smart folder query after creation' },
-  create_project: { brandKitId: 'no way to associate a brand kit at creation' },
-  get_project: { includeRenderUrl: 'no way to ask for a preview still of the composition' },
-  update_timeline: { includeRenderUrl: 'no way to ask for a preview still after an edit' },
-  update_canvas: { includeRenderUrl: 'no way to ask for a preview still after an edit' },
-}
+const KNOWN_GAPS: Record<string, Record<string, string>> = {}
 
 async function mcpTools(): Promise<Map<string, string[]>> {
   const server = await buildServer({ getClient: () => ({ listModels: async () => [] }) as never })
