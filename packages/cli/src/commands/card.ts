@@ -29,7 +29,7 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, toInt, toJson } from '../args.js'
+import { collect, toInt, toJson, toList } from '../args.js'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -102,12 +102,6 @@ function postHuman(d: Post): string {
     ...(d.scheduledAt ? [['Scheduled', d.scheduledAt] as [string, string]] : []),
     ...(settingsKeys.length ? [['Settings', settingsKeys.join(', ')] as [string, string]] : []),
   ])
-}
-
-/** Parse a comma-separated --tags option into an array of names. */
-function parseTagsOpt(value: unknown): string[] | undefined {
-  if (typeof value !== 'string') return undefined
-  return value.split(',').map((s) => s.trim()).filter(Boolean)
 }
 
 /** Parse a --settings JSON-object argument into platformSettings. */
@@ -229,7 +223,7 @@ export function registerCard(program: Command): void {
     .option('--stage <stage>', 'stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
-    .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)')
+    .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)', toList)
     .action(async (title: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string)
       const { client, ctx } = makeClient(command)
@@ -240,7 +234,7 @@ export function registerCard(program: Command): void {
         stage: opts.stage as string | undefined,
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
-        tags: parseTagsOpt(opts.tags),
+        tags: opts.tags as string[] | undefined,
       })
       emit(await client.createCard(input), ctx, (p: CardSummary) => summaryHuman(p, 'Created'))
     })
@@ -262,7 +256,7 @@ export function registerCard(program: Command): void {
     )
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
-    .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)')
+    .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)', toList)
     .option('--schedule <when>', 'ISO-8601 publish time for the card AND its posts, or "clear"')
     .option('--posts <json>', 'the card\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
     .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
@@ -279,7 +273,7 @@ export function registerCard(program: Command): void {
         expectedRevision: opts.expectedRevision as number | undefined,
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
-        tags: parseTagsOpt(opts.tags),
+        tags: opts.tags as string[] | undefined,
         // 'clear' unschedules. compact() drops undefined but keeps null, which is the difference between
         // "leave the schedule alone" and "remove it".
         scheduledAt:

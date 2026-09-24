@@ -15,7 +15,7 @@ import type { ImportedMedia, MediaBatchItem, MediaItem, MediaKind, MediaSource, 
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toInt } from '../args.js'
+import { toInt, toList } from '../args.js'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: string): Buffer | null {
@@ -187,13 +187,10 @@ export function registerMedia(program: Command): void {
     .command('search')
     .description('Semantically search your library (creations, uploads, stock, brand) by describing the content')
     .argument('<query>', 'natural-language description of the media to find')
-    .option('--kinds <kinds>', `restrict to media kinds (comma-separated): ${SEARCH_KINDS.join(', ')}`)
+    .option('--kinds <kinds>', `restrict to media kinds (comma-separated): ${SEARCH_KINDS.join(', ')}`, toList)
     .option('--limit <n>', 'max assets to return (default 12, max 50)', toInt)
     .action(async (query: string, opts: Record<string, unknown>, command: Command) => {
-      const kinds =
-        typeof opts.kinds === 'string'
-          ? opts.kinds.split(',').map((k) => k.trim()).filter(Boolean)
-          : undefined
+      const kinds = opts.kinds as string[] | undefined
       if (kinds) {
         for (const k of kinds) {
           if (!SEARCH_KINDS.includes(k as MediaKind)) {

@@ -28,6 +28,14 @@ export function collect(value: string, previous: string[] = []): string[] {
   return [...previous, value]
 }
 
+/**
+ * Split a comma-separated option (--tags a,b) into its non-empty items. The ONE parser for list flags: it was
+ * written out three times (card tags, content analysis sections, media kinds) before this.
+ */
+export function toList(value: string): string[] {
+  return value.split(',').map((s) => s.trim()).filter(Boolean)
+}
+
 /** Parse a JSON option value into an unknown, with a usage error on bad JSON. */
 export function toJson(value: string): unknown {
   try {

@@ -31,7 +31,7 @@ import { CONTENT_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toFloat, toInt } from '../args.js'
+import { toFloat, toInt, toList } from '../args.js'
 
 /** A table of tracked accounts. KIND is present because the list spans both tiers by default. */
 export function trackedAccountsTable(rows: TrackedAccount[]): string {
@@ -207,7 +207,7 @@ export function registerContent(program: Command): void {
     .option('--end-ms <n>', 'transcript window end, ms into the media', toInt)
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
     .option('--analysis', 'include the full Break It Down analysis (availability always reports)')
-    .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)')
+    .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)', toList)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
       // be honored against flat text.
@@ -230,10 +230,7 @@ export function registerContent(program: Command): void {
         endMs: opts.endMs as number | undefined,
         transcriptSearch: opts.transcriptSearch as string | undefined,
         analysis: opts.analysis ? 'full' : undefined,
-        analysisSections:
-          typeof opts.analysisSections === 'string'
-            ? opts.analysisSections.split(',').map((s) => s.trim()).filter(Boolean)
-            : undefined,
+        analysisSections: opts.analysisSections as string[] | undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
         const pairs: Array<[string, string | number]> = [
