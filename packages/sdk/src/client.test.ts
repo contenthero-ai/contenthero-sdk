@@ -118,7 +118,7 @@ test('getVoice requests the voice path and returns detail', async () => {
 })
 
 test('listBrandKits unwraps { brandKits } and getBrandKit hits the id path', async () => {
-  const list = stubFetch([{ status: 200, body: { brandKits: [{ id: 'bk1', name: 'CH', businessName: null, nicheDefinition: null, isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' }] } }])
+  const list = stubFetch([{ status: 200, body: { brandKits: [{ id: 'bk1', name: 'CH', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' }] } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: list.fetch, baseUrl: 'https://example.test' })
   const kits = await c1.listBrandKits()
   assert.equal(kits[0].id, 'bk1')
@@ -131,37 +131,30 @@ test('listBrandKits unwraps { brandKits } and getBrandKit hits the id path', asy
   assert.equal(get.calls[0]?.url, 'https://example.test/api/v1/brand-kits/bk1')
 })
 
-test('brand kit fields: the index, a scoped read, a write by key, history and revert hit their paths', async () => {
+test('getBrandKit reads three ways on one path, and updateBrandKit carries field writes', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { index: { id: 'bk1', name: 'CH', template: { slug: 'standard', version: 1 }, sections: [] } } },
-    { status: 200, body: { fields: [] } },
-    { status: 200, body: { fields: [{ key: 'who', version: 2 }] } },
-    { status: 200, body: { revisions: [{ version: 2 }, { version: 1 }] } },
-    { status: 200, body: { field: { key: 'who', version: 3 } } },
+    { status: 200, body: { id: 'bk1', name: 'CH', template: { slug: 'standard', version: 1 }, sections: [] } },
+    { status: 200, body: { id: 'bk1', name: 'CH', fields: [] } },
+    { status: 200, body: { id: 'bk1', name: 'CH', sections: [] } },
     { status: 200, body: { templates: [], roles: [], loadTiers: ['core'] } },
   ])
   const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
 
-  assert.equal((await c.getBrandKitIndex('bk1')).template?.slug, 'standard')
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/brand-kits/bk1?view=index')
+  assert.equal((await c.getBrandKit('bk1', { detail: 'summary' })).template?.slug, 'standard')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/brand-kits/bk1?detail=summary')
 
-  await c.getBrandKitFields('bk1', { tabs: ['voice'], tiers: ['core', 'contextual'], keys: [] })
+  await c.getBrandKit('bk1', { tabs: ['voice'], tiers: ['core', 'contextual'], keys: [], history: true })
   // Lists are comma-joined; an empty list is left off rather than sent as an empty filter.
-  assert.equal(calls[1]?.url, 'https://example.test/api/v1/brand-kits/bk1/fields?tabs=voice&tiers=core%2Ccontextual')
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/brand-kits/bk1?tabs=voice&tiers=core%2Ccontextual&history=true')
 
-  const written = await c.updateBrandKitFields('bk1', [{ key: 'who', value: 'x', expectedVersion: 1 }])
-  assert.equal(written[0]?.version, 2)
+  await c.updateBrandKit('bk1', { fields: [{ key: 'who', value: 'x', expectedVersion: 1 }, { key: 'wants', revertTo: 2 }] })
   assert.equal(calls[2]?.init?.method, 'PATCH')
-  assert.deepEqual(JSON.parse(calls[2]?.init?.body as string), { updates: [{ key: 'who', value: 'x', expectedVersion: 1 }] })
-
-  assert.equal((await c.listBrandKitFieldRevisions('bk1', 'who')).length, 2)
-  assert.equal(calls[3]?.url, 'https://example.test/api/v1/brand-kits/bk1/fields/who/revisions')
-
-  assert.equal((await c.revertBrandKitField('bk1', 'who', 1, { expectedVersion: 2 })).version, 3)
-  assert.deepEqual(JSON.parse(calls[4]?.init?.body as string), { version: 1, expectedVersion: 2 })
+  assert.deepEqual(JSON.parse(calls[2]?.init?.body as string), {
+    fields: [{ key: 'who', value: 'x', expectedVersion: 1 }, { key: 'wants', revertTo: 2 }],
+  })
 
   assert.deepEqual((await c.listBrandKitTemplates()).loadTiers, ['core'])
-  assert.equal(calls[5]?.url, 'https://example.test/api/v1/brand-kit-templates')
+  assert.equal(calls[3]?.url, 'https://example.test/api/v1/brand-kit-templates')
 })
 
 test('a 409 is a ConflictError carrying each stale field', async () => {
@@ -169,7 +162,7 @@ test('a 409 is a ConflictError carrying each stale field', async () => {
     { status: 409, body: { error: 'stale', conflicts: [{ key: 'who', version: 4, value: 'current' }] } },
   ])
   const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await assert.rejects(c.updateBrandKitFields('bk1', [{ key: 'who', value: 'x', expectedVersion: 3 }]), (err: unknown) => {
+  await assert.rejects(c.updateBrandKit('bk1', { fields: [{ key: 'who', value: 'x', expectedVersion: 3 }] }), (err: unknown) => {
     assert.ok(err instanceof ConflictError)
     assert.deepEqual(err.conflicts, [{ key: 'who', version: 4, value: 'current' }])
     return true

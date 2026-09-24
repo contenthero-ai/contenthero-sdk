@@ -644,10 +644,6 @@ export interface ListVoicesOptions {
 export interface BrandKitSummary {
   id: string
   name: string
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  businessName: string | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  nicheDefinition: string | null
   isDefault: boolean
   isActive: boolean
   isFavorited: boolean
@@ -715,9 +711,20 @@ export interface BrandKitFieldMeta {
   updatedAt: string
 }
 
-/** A field with its value. `value` is a string, a string array (for `list`), or null. */
+/**
+ * A field with its value. `value` is a string, a string array (for `list`), or null. `revisions` is present only
+ * when the read asked for `history`.
+ */
 export interface BrandKitField extends BrandKitFieldMeta {
   value: unknown
+  revisions?: BrandKitFieldRevision[]
+}
+
+/** What a filtered `getBrandKit` returns: the kit's id and name, and just the fields asked for. */
+export interface BrandKitFieldsRead {
+  id: string
+  name: string
+  fields: BrandKitField[]
 }
 
 /** A field in the index: no value, but whether it has one and its length, so a caller can decide what to pull. */
@@ -747,16 +754,15 @@ export interface BrandKitFieldFilter {
   tiers?: string[]
 }
 
-/** One field write. `value: null` clears the field. */
-export interface BrandKitFieldUpdate {
+/** One field write in `updateBrandKit({ fields })`: a new `value` (null clears it) OR `revertTo` an earlier version. */
+export type BrandKitFieldWrite = {
   key: string
-  value: unknown
   /**
-   * The `version` you read. If the field has changed since, the WHOLE request is refused with a `ConflictError`
+   * The `version` you read. If the field has changed since, the WHOLE patch is refused with a `ConflictError`
    * whose `conflicts` lists each stale field's current `{ key, version, value }`, and nothing is written.
    */
   expectedVersion?: number
-}
+} & ({ value: unknown; revertTo?: never } | { revertTo: number; value?: never })
 
 /** One entry of a field's history. */
 export interface BrandKitFieldRevision {
@@ -870,22 +876,12 @@ export interface BrandKit extends BrandKitSummary {
   /** The user-facing reason the last extraction failed, when it did. */
   extractionError?: string | null
   sourceType: string | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  primaryOffer: string | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  positioning: Record<string, unknown> | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  audience: Record<string, unknown> | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  voiceProfile: Record<string, unknown> | null
   logos: unknown[]
   brandColors: unknown[]
   typography: Record<string, unknown> | null
   visualStyle: string | null
   designPrinciples: string[]
   socialAccounts: unknown[]
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  contentStrategy: Record<string, unknown> | null
   assets: unknown[]
   sections: BrandKitSection[]
   brandAccounts: BrandKitAccount[]
@@ -896,25 +892,17 @@ export interface BrandKit extends BrandKitSummary {
 /** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
 export interface UpdateBrandKitInput {
   name?: string
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  businessName?: string | null
+  /**
+   * Field content, by key and ALL OR NOTHING, written before anything else in the patch. Read the keys and versions
+   * with `getBrandKit(id, { detail: 'summary' })` or a filtered read. A restore is `{ key, revertTo }` and lands as
+   * a new version.
+   */
+  fields?: BrandKitFieldWrite[]
   websiteUrl?: string | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  primaryOffer?: string | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  nicheDefinition?: string | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  positioning?: Record<string, unknown> | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  audience?: Record<string, unknown> | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  voiceProfile?: Record<string, unknown> | null
   visualStyle?: string | null
   designPrinciples?: string[]
   brandColors?: unknown[]
   typography?: Record<string, unknown> | null
-  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
-  contentStrategy?: Record<string, unknown> | null
   /**
    * Brand media. A patch REPLACES the list, so pass the whole set; `[]` clears it. These are reconciled into
    * `brand_kit_assets` rather than written as columns, which is why they are not simple fields.
