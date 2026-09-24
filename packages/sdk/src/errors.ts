@@ -53,6 +53,23 @@ export class ValidationError extends ContentHeroError {
   }
 }
 
+/**
+ * 409: what you tried to change has moved on since you read it. Nothing was written.
+ *
+ * `conflicts` is set when the server names each stale item with its current state (brand kit field writes send
+ * `{ key, version, value }` per field); re-read, reapply your change, and send the new `expectedVersion`. Other
+ * 409s carry their current state in `body`.
+ */
+export class ConflictError extends ContentHeroError {
+  readonly conflicts?: Array<Record<string, unknown>>
+
+  constructor(message = 'Conflict', options?: ContentHeroErrorOptions & { conflicts?: Array<Record<string, unknown>> }) {
+    super(message, options)
+    this.name = 'ConflictError'
+    this.conflicts = options?.conflicts
+  }
+}
+
 /** 404: the referenced generation does not exist (or is not owned by this key). */
 export class NotFoundError extends ContentHeroError {
   constructor(message = 'Not found', options?: ContentHeroErrorOptions) {
@@ -192,6 +209,11 @@ export function errorFromResponse(status: number, body: unknown): ContentHeroErr
       return new PermissionError(message, options)
     case 404:
       return new NotFoundError(message, options)
+    case 409:
+      return new ConflictError(message, {
+        ...options,
+        conflicts: Array.isArray(record?.conflicts) ? (record.conflicts as Array<Record<string, unknown>>) : undefined,
+      })
     case 429:
       return new RateLimitError(message, {
         ...options,

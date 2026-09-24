@@ -9,6 +9,7 @@ import {
   GenerationTimeoutError,
   GenerationInterruptedError,
   pendingOutputId,
+  ConflictError,
 } from './errors.js'
 import type { FetchLike } from './client.js'
 
@@ -128,6 +129,51 @@ test('listBrandKits unwraps { brandKits } and getBrandKit hits the id path', asy
   const kit = await c2.getBrandKit('bk1')
   assert.equal(kit.id, 'bk1')
   assert.equal(get.calls[0]?.url, 'https://example.test/api/v1/brand-kits/bk1')
+})
+
+test('brand kit fields: the index, a scoped read, a write by key, history and revert hit their paths', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { index: { id: 'bk1', name: 'CH', template: { slug: 'standard', version: 1 }, sections: [] } } },
+    { status: 200, body: { fields: [] } },
+    { status: 200, body: { fields: [{ key: 'who', version: 2 }] } },
+    { status: 200, body: { revisions: [{ version: 2 }, { version: 1 }] } },
+    { status: 200, body: { field: { key: 'who', version: 3 } } },
+    { status: 200, body: { templates: [], roles: [], loadTiers: ['core'] } },
+  ])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+
+  assert.equal((await c.getBrandKitIndex('bk1')).template?.slug, 'standard')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/brand-kits/bk1?view=index')
+
+  await c.getBrandKitFields('bk1', { tabs: ['voice'], tiers: ['core', 'contextual'], keys: [] })
+  // Lists are comma-joined; an empty list is left off rather than sent as an empty filter.
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/brand-kits/bk1/fields?tabs=voice&tiers=core%2Ccontextual')
+
+  const written = await c.updateBrandKitFields('bk1', [{ key: 'who', value: 'x', expectedVersion: 1 }])
+  assert.equal(written[0]?.version, 2)
+  assert.equal(calls[2]?.init?.method, 'PATCH')
+  assert.deepEqual(JSON.parse(calls[2]?.init?.body as string), { updates: [{ key: 'who', value: 'x', expectedVersion: 1 }] })
+
+  assert.equal((await c.listBrandKitFieldRevisions('bk1', 'who')).length, 2)
+  assert.equal(calls[3]?.url, 'https://example.test/api/v1/brand-kits/bk1/fields/who/revisions')
+
+  assert.equal((await c.revertBrandKitField('bk1', 'who', 1, { expectedVersion: 2 })).version, 3)
+  assert.deepEqual(JSON.parse(calls[4]?.init?.body as string), { version: 1, expectedVersion: 2 })
+
+  assert.deepEqual((await c.listBrandKitTemplates()).loadTiers, ['core'])
+  assert.equal(calls[5]?.url, 'https://example.test/api/v1/brand-kit-templates')
+})
+
+test('a 409 is a ConflictError carrying each stale field', async () => {
+  const { fetch } = stubFetch([
+    { status: 409, body: { error: 'stale', conflicts: [{ key: 'who', version: 4, value: 'current' }] } },
+  ])
+  const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await assert.rejects(c.updateBrandKitFields('bk1', [{ key: 'who', value: 'x', expectedVersion: 3 }]), (err: unknown) => {
+    assert.ok(err instanceof ConflictError)
+    assert.deepEqual(err.conflicts, [{ key: 'who', version: 4, value: 'current' }])
+    return true
+  })
 })
 
 test('listMedia builds the query string and getMedia encodes the token', async () => {

@@ -31,6 +31,12 @@ import type {
   AddAvatarLooksResult,
   Balance,
   BrandKit,
+  BrandKitIndex,
+  BrandKitField,
+  BrandKitFieldFilter,
+  BrandKitFieldUpdate,
+  BrandKitFieldRevision,
+  BrandKitTemplates,
   BrandKitSummary,
   BrandKnowledgeDetail,
   BrandKnowledgeItem,
@@ -551,6 +557,82 @@ export class ContentHero {
   /** Get one brand kit, fully assembled (the get half). Throws NotFoundError if absent. */
   async getBrandKit(brandKitId: string): Promise<BrandKit> {
     return this.request<BrandKit>('GET', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`)
+  }
+
+  /**
+   * Every section and field of a brand kit with its key, role, load tier, version and length, and NO values.
+   * Read this first, then pull only the fields a task needs with `getBrandKitFields`.
+   */
+  async getBrandKitIndex(brandKitId: string): Promise<BrandKitIndex> {
+    const data = await this.request<{ index: BrandKitIndex }>(
+      'GET',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}?view=index`,
+    )
+    return data.index
+  }
+
+  /**
+   * Field values, scoped by key, role, section key, tab or tier (the filters combine with AND). No filter reads
+   * every field. An unknown role, tier or tab is refused with a `ValidationError` naming the valid ones.
+   */
+  async getBrandKitFields(brandKitId: string, filter: BrandKitFieldFilter = {}): Promise<BrandKitField[]> {
+    const q = new URLSearchParams()
+    for (const name of ['keys', 'roles', 'sections', 'tabs', 'tiers'] as const) {
+      const list = filter[name]
+      if (list && list.length > 0) q.set(name, list.join(','))
+    }
+    const qs = q.toString()
+    const data = await this.request<{ fields: BrandKitField[] }>(
+      'GET',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/fields${qs ? `?${qs}` : ''}`,
+    )
+    return data.fields
+  }
+
+  /**
+   * Write field values by key, all or nothing. Pass each field's `expectedVersion` (from a read) to write safely:
+   * if any has changed since, this throws a `ConflictError` whose `conflicts` holds every stale field's current
+   * `{ key, version, value }`, and nothing is written. Returns the written fields. Requires `brandkit:write`.
+   */
+  async updateBrandKitFields(brandKitId: string, updates: BrandKitFieldUpdate[]): Promise<BrandKitField[]> {
+    const data = await this.request<{ fields: BrandKitField[] }>(
+      'PATCH',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/fields`,
+      { updates },
+    )
+    return data.fields
+  }
+
+  /** A field's history, newest first. */
+  async listBrandKitFieldRevisions(brandKitId: string, key: string): Promise<BrandKitFieldRevision[]> {
+    const data = await this.request<{ revisions: BrandKitFieldRevision[] }>(
+      'GET',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/fields/${encodeURIComponent(key)}/revisions`,
+    )
+    return data.revisions
+  }
+
+  /**
+   * Restore a field's earlier value. It becomes a NEW version (history is append-only), so a revert can itself be
+   * reverted. Requires `brandkit:write`.
+   */
+  async revertBrandKitField(
+    brandKitId: string,
+    key: string,
+    version: number,
+    options: { expectedVersion?: number } = {},
+  ): Promise<BrandKitField> {
+    const data = await this.request<{ field: BrandKitField }>(
+      'POST',
+      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/fields/${encodeURIComponent(key)}/revert`,
+      { version, ...(options.expectedVersion !== undefined ? { expectedVersion: options.expectedVersion } : {}) },
+    )
+    return data.field
+  }
+
+  /** The system templates (a kit's starting layout) and the role and load-tier vocabulary their fields use. */
+  async listBrandKitTemplates(): Promise<BrandKitTemplates> {
+    return this.request<BrandKitTemplates>('GET', '/api/v1/brand-kit-templates')
   }
 
   /**

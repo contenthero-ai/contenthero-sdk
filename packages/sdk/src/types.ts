@@ -644,7 +644,9 @@ export interface ListVoicesOptions {
 export interface BrandKitSummary {
   id: string
   name: string
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   businessName: string | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   nicheDefinition: string | null
   isDefault: boolean
   isActive: boolean
@@ -676,11 +678,112 @@ export interface BrandKitAccount {
 
 /** A curated section of a brand kit (overview / voice tabs). */
 export interface BrandKitSection {
+  id: string
+  /** Stable and never renamed; the user renames `sectionName`. */
+  key: string
   tab: string
   sectionName: string
   sortOrder: number
-  /** Field objects: { key, label, type, value }. */
+  /**
+   * Field objects: `{ id, key, label, type, role, loadTier, version, updatedAt, sort_order, value }`. For
+   * field-level work use `getBrandKitIndex`, `getBrandKitFields` and `updateBrandKitFields`, which are typed.
+   */
   fields: unknown[]
+}
+
+/**
+ * A brand kit field's identity and metadata.
+ *
+ * `key` is stable and unique among a kit's fields: address fields by key, never by label (the user renames labels).
+ * `role` is what a field MEANS (`voice.core`, `audience.profile`, ...), the contract to rely on across templates;
+ * `listBrandKitTemplates` returns the full vocabulary. `loadTier` is how eagerly it belongs in an AI's context:
+ * `core` always, `contextual` when relevant, `reference` only on request.
+ */
+export interface BrandKitFieldMeta {
+  id: string
+  key: string
+  sectionKey: string
+  sectionName: string
+  tab: string
+  label: string
+  /** 'text' (a line), 'textarea' (prose) or 'list' (an array of strings). */
+  type: string
+  role: string
+  loadTier: string
+  /** Increments on every change. Send it back as `expectedVersion` to write safely. */
+  version: number
+  updatedAt: string
+}
+
+/** A field with its value. `value` is a string, a string array (for `list`), or null. */
+export interface BrandKitField extends BrandKitFieldMeta {
+  value: unknown
+}
+
+/** A field in the index: no value, but whether it has one and its length, so a caller can decide what to pull. */
+export interface BrandKitIndexField extends BrandKitFieldMeta {
+  hasValue: boolean
+  charCount: number
+}
+
+/** Every section and field of a kit, without values. What to read first. */
+export interface BrandKitIndex {
+  id: string
+  name: string
+  /** The template the layout came from; null for a kit that predates templates. */
+  template: { slug: string; version: number } | null
+  sections: Array<{ id: string; key: string; tab: string; name: string; fields: BrandKitIndexField[] }>
+}
+
+/** Scopes a field read. Each is a list; the filters combine with AND. Omit all to read every field. */
+export interface BrandKitFieldFilter {
+  keys?: string[]
+  roles?: string[]
+  /** Section keys. */
+  sections?: string[]
+  /** 'overview' or 'voice'. */
+  tabs?: string[]
+  /** 'core', 'contextual' or 'reference'. */
+  tiers?: string[]
+}
+
+/** One field write. `value: null` clears the field. */
+export interface BrandKitFieldUpdate {
+  key: string
+  value: unknown
+  /**
+   * The `version` you read. If the field has changed since, the WHOLE request is refused with a `ConflictError`
+   * whose `conflicts` lists each stale field's current `{ key, version, value }`, and nothing is written.
+   */
+  expectedVersion?: number
+}
+
+/** One entry of a field's history. */
+export interface BrandKitFieldRevision {
+  version: number
+  value: unknown
+  /** Who wrote it: 'user', 'agent', 'api', 'extraction' or 'migration'. */
+  valueSource: string
+  createdAt: string
+}
+
+/** The system templates and the vocabulary their fields use. */
+export interface BrandKitTemplates {
+  templates: Array<{
+    slug: string
+    version: number
+    name: string
+    description: string
+    offeredForNewKits: boolean
+    sections: Array<{
+      key: string
+      tab: string
+      name: string
+      fields: Array<{ key: string; label: string; type: string; role: string; loadTier: string; repeatable: boolean }>
+    }>
+  }>
+  roles: Array<{ role: string; group: string; description: string }>
+  loadTiers: string[]
 }
 
 /** A knowledge-base item (body truncated to a preview), as embedded in `getBrandKit`. */
@@ -767,9 +870,13 @@ export interface BrandKit extends BrandKitSummary {
   /** The user-facing reason the last extraction failed, when it did. */
   extractionError?: string | null
   sourceType: string | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   primaryOffer: string | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   positioning: Record<string, unknown> | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   audience: Record<string, unknown> | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   voiceProfile: Record<string, unknown> | null
   logos: unknown[]
   brandColors: unknown[]
@@ -777,6 +884,7 @@ export interface BrandKit extends BrandKitSummary {
   visualStyle: string | null
   designPrinciples: string[]
   socialAccounts: unknown[]
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   contentStrategy: Record<string, unknown> | null
   assets: unknown[]
   sections: BrandKitSection[]
@@ -788,17 +896,24 @@ export interface BrandKit extends BrandKitSummary {
 /** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
 export interface UpdateBrandKitInput {
   name?: string
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   businessName?: string | null
   websiteUrl?: string | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   primaryOffer?: string | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   nicheDefinition?: string | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   positioning?: Record<string, unknown> | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   audience?: Record<string, unknown> | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   voiceProfile?: Record<string, unknown> | null
   visualStyle?: string | null
   designPrinciples?: string[]
   brandColors?: unknown[]
   typography?: Record<string, unknown> | null
+  /** @deprecated Read and write the matching role fields instead (`getBrandKitFields`, `updateBrandKitFields`). Removal no earlier than 30 days after the release that added them. */
   contentStrategy?: Record<string, unknown> | null
   /**
    * Brand media. A patch REPLACES the list, so pass the whole set; `[]` clears it. These are reconciled into
