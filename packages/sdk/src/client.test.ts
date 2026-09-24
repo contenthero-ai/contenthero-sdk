@@ -755,3 +755,14 @@ test('deleteStage sends an explicit null target, so the server can refuse a non-
   const body = JSON.parse(String(calls[0]?.init?.body))
   assert.equal(body.target_stage_id, null)
 })
+
+test('getContent sends analysisSections camelCase, the one spelling the API accepts', async () => {
+  // 🚨 0.4.11 and 0.4.12 sent `analysis_sections`, the API's one snake_case newcomer, and the app's wire check
+  // failed CI for a day over it. The API now refuses that spelling, so this is the name that must go out.
+  const { fetch, calls } = stubFetch([{ status: 200, body: { id: 'c1' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test/' })
+  await client.getContent('c1', { analysisSections: ['hook', 'structure'] })
+  const url = new URL(calls[0]!.url)
+  assert.equal(url.searchParams.get('analysisSections'), 'hook,structure')
+  assert.equal(url.searchParams.has('analysis_sections'), false)
+})

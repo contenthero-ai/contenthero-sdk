@@ -1310,7 +1310,9 @@ export class ContentHero {
     if (options.endMs != null) q.set('end_ms', String(options.endMs))
     if (options.transcriptSearch) q.set('transcript_search', options.transcriptSearch)
     if (options.analysis && options.analysis !== 'none') q.set('analysis', options.analysis)
-    if (options.analysisSections?.length) q.set('analysis_sections', options.analysisSections.join(','))
+    // camelCase on the wire, like the option. 0.4.11 and 0.4.12 sent `analysis_sections`, which the API now
+    // refuses with a 400 naming this spelling (the app's check-wire-vocabulary rule).
+    if (options.analysisSections?.length) q.set('analysisSections', options.analysisSections.join(','))
     const qs = q.toString()
     return this.request<ContentDetail>(
       'GET',
