@@ -87,7 +87,7 @@ import type {
   TranscriptResult,
   ExportJob,
   ExportFormatCatalog,
-  ExtractionOutcome,} from '@contenthero/sdk'
+  BrandImportOutcome,} from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
@@ -902,19 +902,34 @@ export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
  * curated sections, linked accounts, knowledge), so return a short header plus
  * the whole object as JSON: faithful and complete, and an agent reads it cleanly.
  */
-export function brandKitResult(kit: BrandKit, extraction?: ExtractionOutcome): CallToolResult {
+export function brandKitResult(kit: BrandKit, started?: BrandImportOutcome): CallToolResult {
   const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (id ${kit.id}):`
   // Stated in words, not just left in the JSON, because the caller has to know the kit it just got back is
-  // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes extraction failed.
-  const note =
-    extraction && extraction.status !== 'unconfigured'
-      ? extraction.status === 'deduped'
-        ? 'Extraction was ALREADY RUNNING for this kit, so nothing new was queued. Poll extractionStatus with get_brand_kit.'
-        : 'Extraction STARTED and is still running. Its empty sections will fill in. Poll extractionStatus with get_brand_kit.'
-      : extraction?.status === 'unconfigured'
-        ? 'Extraction is NOT CONFIGURED on this deployment, so nothing was queued.'
-        : null
+  // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes the import failed.
+  const note = started ? importNote(started) : null
   return text([header, ...(note ? ['', note] : []), '', JSON.stringify(kit, null, 2)].join('\n'))
+}
+
+function importNote(started: BrandImportOutcome): string {
+  if (started.error) {
+    return `The kit was created, but its import could not be started: ${started.error}. Retry with update_brand_kit and extract:true.`
+  }
+  if (!started.extract && !started.synthesis) {
+    return 'Nothing to import: the kit has no website and no own YouTube or Instagram account. Add one, then pass extract:true.'
+  }
+  if (started.extract?.status === 'unconfigured' || started.synthesis?.status === 'unconfigured') {
+    return 'Import is NOT CONFIGURED on this deployment, so nothing was queued.'
+  }
+  const state = (o: { status: string }) => (o.status === 'deduped' ? 'was ALREADY RUNNING' : 'STARTED')
+  const parts: string[] = []
+  if (started.extract) parts.push(`Visual extraction (logos, colors, fonts) from the first website ${state(started.extract)}.`)
+  if (started.synthesis) {
+    parts.push(
+      `The analysis that writes the empty sections ${state(started.synthesis)}; it waits for new accounts' posts and transcripts, so it can take several minutes.`,
+    )
+  }
+  parts.push('Poll extractionStatus and analysisStatus with get_brand_kit.')
+  return parts.join(' ')
 }
 
 /**

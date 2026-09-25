@@ -131,7 +131,7 @@ function fakeClient(overrides = {}) {
       isFavorited: false,
       isArchived: false,
       createdAt: 't',
-      websiteUrl: 'https://contenthero.ai',
+      websiteUrls: ['https://contenthero.ai'],
       sourceType: 'manual',
       logos: [],
       brandColors: [{ hex: '#0B0B0F' }],
@@ -1577,7 +1577,7 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
           isFavorited: false,
           isArchived: false,
           createdAt: 't',
-          websiteUrl: null,
+          websiteUrls: [],
           sourceType: null,
           logos: [],
           brandColors: [],
@@ -2342,7 +2342,7 @@ test('every declared field on update_brand_kit actually reaches the client', asy
   // each optional field survives the handler, so the next field added this way fails here instead of in
   // production.
   const SAMPLES = {
-    name: 'n', websiteUrl: 'https://x.test', logos: [{ url: 'https://x/1.png' }],
+    name: 'n', websiteUrls: ['https://x.test'], logos: [{ url: 'https://x/1.png' }],
     assets: [{ url: 'https://x/2.png' }], sections: [{ key: 'about', body: 'b' }],
     brandAccounts: ['https://youtube.com/@a'], inspirationAccounts: ['https://youtube.com/@b'],
   }

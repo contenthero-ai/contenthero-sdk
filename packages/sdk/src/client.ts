@@ -50,7 +50,7 @@ import type {
   CreateCardInput,
   UpdateBrandKitInput,
   CreateBrandKitInput,
-  ExtractionOutcome,
+  BrandImportOutcome,
   TrackedAccount,
   GenerateBoardRequest,
   GenerateRequest,
@@ -501,15 +501,16 @@ export class ContentHero {
   /**
    * Create a brand kit. Requires the `brandkit:write` scope.
    *
-   * Three sources, and the input decides which: EMPTY (just a name), FROM A WEBSITE
-   * (`websiteUrl` + `extract: true`), or A COPY (`duplicateFrom`).
+   * Three sources, and the input decides which: EMPTY (just a name), IMPORTED (`websiteUrls` and/or its own
+   * accounts in `brandAccounts`, with `extract: true`), or A COPY (`duplicateFrom`).
    *
    * ⚠️ WITH `extract` IT RETURNS IMMEDIATELY, before the kit has any content. That empty kit is the HANDLE:
-   * the thing to poll and the row the UI renders at once. Poll `extractionStatus` via `getBrandKit`.
+   * the thing to poll and the row the UI renders at once. Poll `extractionStatus` and `analysisStatus` via
+   * `getBrandKit`.
    */
   async createBrandKit(
     input: CreateBrandKitInput & { duplicateFrom?: string },
-  ): Promise<{ brandKit: BrandKit; extraction?: ExtractionOutcome }> {
+  ): Promise<{ brandKit: BrandKit; import?: BrandImportOutcome }> {
     // A copy is a create with a source, so it shares this method rather than owning a verb of its own.
     if (input.duplicateFrom) {
       const { duplicateFrom, name } = input
@@ -520,7 +521,7 @@ export class ContentHero {
       )
       return { brandKit: data.brandKit }
     }
-    return this.request<{ brandKit: BrandKit; extraction?: ExtractionOutcome }>(
+    return this.request<{ brandKit: BrandKit; import?: BrandImportOutcome }>(
       'POST',
       '/api/v1/brand-kits',
       input,
@@ -528,15 +529,16 @@ export class ContentHero {
   }
 
   /**
-   * Re-run website extraction for an existing kit. Returns at once; poll `extractionStatus`.
-   * Requires the kit to already have a `websiteUrl`, and the `brandkit:write` scope.
+   * Re-run an existing kit's import: visuals from its first website, and the analysis of every website and its own
+   * accounts, which writes only into sections still empty. Returns at once; poll `extractionStatus` and
+   * `analysisStatus`. Needs a website or an own YouTube or Instagram account, and the `brandkit:write` scope.
    */
-  async extractBrandKit(brandKitId: string): Promise<ExtractionOutcome> {
-    const data = await this.request<{ extraction: ExtractionOutcome }>(
+  async extractBrandKit(brandKitId: string): Promise<BrandImportOutcome> {
+    const data = await this.request<{ import: BrandImportOutcome }>(
       'POST',
       `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/extract`,
     )
-    return data.extraction
+    return data.import
   }
 
   /**

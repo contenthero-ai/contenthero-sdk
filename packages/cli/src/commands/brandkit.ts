@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import type { Command } from 'commander'
 import type {
+  BrandImportOutcome,
   BrandKit,
   BrandKitSectionsRead,
   BrandKitSummary,
@@ -20,6 +21,7 @@ import type {
   BrandKnowledgeListResult,
   BrandKnowledgeMatch,
   CreateBrandKitInput,
+  JobEnqueueOutcome,
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -116,6 +118,18 @@ function sectionsHuman(r: BrandKitSectionsRead): string {
     .join('\n\n')
 }
 
+/** What an import started, as display rows: each job's state, then how to follow it. */
+function importRows(started: BrandImportOutcome, kitId: string): [string, string][] {
+  if (started.error) return [['Import', `not started: ${started.error}`]]
+  if (!started.extract && !started.synthesis) return [['Import', 'nothing to import (no website, no own YouTube or Instagram)']]
+  const state = (o: JobEnqueueOutcome | null) => (!o ? 'not needed' : o.status === 'deduped' ? 'already running' : o.status)
+  return [
+    ['Visual extraction', state(started.extract)],
+    ['Analysis', state(started.synthesis)],
+    ['Next', `poll with: contenthero brand-kit get ${kitId}`],
+  ]
+}
+
 export function registerBrandKit(program: Command): void {
   const brandKit = program.command('brand-kit').description('Brand kits (brand identity documents)')
 
@@ -204,10 +218,10 @@ export function registerBrandKit(program: Command): void {
   identityOptions(
     brandKit
       .command('create')
-      .description('Create a brand kit: empty, from a website, or as a copy (requires brandkit:write)')
+      .description('Create a brand kit: empty, imported from its websites and accounts, or as a copy (requires brandkit:write)')
       .option('--name <text>', "the kit's name; optional when a website or social profile url is given")
-      .option('--website-url <url>', 'the business website')
-      .option('--extract', 'scrape --website-url and fill the kit in automatically (returns immediately)')
+      .option('--website-url <url>', "one of the brand's websites. Repeatable; the first is the primary site", collect)
+      .option('--extract', 'import the kit from its websites and own --brand-account profiles (returns immediately)')
       .option('--duplicate-from <id>', 'copy an existing brand kit instead of starting empty')
       .option('--sections <json>', 'section content as JSON: [{ key, body }] to fill a starter section, [{ sectionName, tab, body? }] to add one', toJson),
     'create',
@@ -218,54 +232,44 @@ export function registerBrandKit(program: Command): void {
         ((opts.brandAccount as string[] | undefined)?.length ?? 0) +
           ((opts.inspirationAccount as string[] | undefined)?.length ?? 0) >
         0
-      if (!opts.name && !opts.websiteUrl && !opts.duplicateFrom && !seedsFromAccount) {
+      const websiteUrls = opts.websiteUrl as string[] | undefined
+      if (!opts.name && !websiteUrls?.length && !opts.duplicateFrom && !seedsFromAccount) {
         throw new CliError(
           'Pass --name, --website-url, --brand-account/--inspiration-account, or --duplicate-from',
           EXIT.USAGE,
         )
       }
-      if (opts.extract && !opts.websiteUrl) {
-        throw new CliError('--extract needs --website-url to scrape', EXIT.USAGE)
+      if (opts.extract && !websiteUrls?.length && !(opts.brandAccount as string[] | undefined)?.length) {
+        throw new CliError('--extract needs something to import: --website-url, or the brand\'s own --brand-account', EXIT.USAGE)
       }
-      const { brandKit, extraction } = await client.createBrandKit(
+      const { brandKit, import: started } = await client.createBrandKit(
         compact({
           name: opts.name as string | undefined,
-          websiteUrl: opts.websiteUrl as string | undefined,
+          websiteUrls,
           extract: opts.extract ? true : undefined,
           duplicateFrom: opts.duplicateFrom as string | undefined,
           ...identityInput(opts),
           sections: opts.sections as CreateBrandKitInput['sections'],
         }),
       )
-      emit({ brandKit, extraction }, ctx, () =>
+      emit({ brandKit, import: started }, ctx, () =>
         keyValues([
           ['Created', brandKit.name],
           ['Id', brandKit.id],
           // Said plainly, because a kit that is still filling in otherwise reads as a kit that came back empty.
-          ...(extraction
-            ? ([['Extraction', extraction.status === 'deduped' ? 'already running' : extraction.status]] as [string, string][])
-            : []),
-          ...(extraction && extraction.status !== 'unconfigured'
-            ? ([['Next', `poll with: contenthero brand-kit get ${brandKit.id}`]] as [string, string][])
-            : []),
+          ...(started ? importRows(started, brandKit.id) : []),
         ]),
       )
     })
 
   brandKit
     .command('extract')
-    .description('Re-run website extraction for an existing kit (returns immediately)')
+    .description("Re-run a kit's import from its websites and own accounts (returns immediately)")
     .argument('<id>', 'the brand kit id')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const extraction = await client.extractBrandKit(id)
-      emit(extraction, ctx, () =>
-        keyValues([
-          ['Extraction', extraction.status === 'deduped' ? 'already running' : extraction.status],
-          ['Brand kit', id],
-          ['Next', `poll with: contenthero brand-kit get ${id}`],
-        ]),
-      )
+      const started = await client.extractBrandKit(id)
+      emit(started, ctx, () => keyValues([['Brand kit', id], ...importRows(started, id)]))
     })
 
   brandKit
@@ -286,7 +290,7 @@ export function registerBrandKit(program: Command): void {
       .description('Update a brand kit: section content, media and accounts (requires brandkit:write)')
       .argument('<id>', 'the brand kit id')
       .option('--name <text>')
-      .option('--website-url <url>')
+      .option('--website-url <url>', "one of the brand's websites. Repeatable; the first is the primary site. Replaces the list", collect)
       .option('--default', 'make this the default brand kit, un-defaulting every other')
       .option(
         '--sections <json>',
@@ -299,7 +303,7 @@ export function registerBrandKit(program: Command): void {
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const input = compact<UpdateBrandKitInput>({
         name: opts.name as string | undefined,
-        websiteUrl: opts.websiteUrl as string | undefined,
+        websiteUrls: opts.websiteUrl as string[] | undefined,
         ...identityInput(opts),
         isDefault: opts.default ? true : undefined,
         sections: opts.sections as UpdateBrandKitInput['sections'],

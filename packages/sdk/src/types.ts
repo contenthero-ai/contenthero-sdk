@@ -837,12 +837,19 @@ export interface SearchBrandKnowledgeOptions {
 
 /** Full brand kit as returned by `getBrandKit` (the whole document). */
 export interface BrandKit extends BrandKitSummary {
-  websiteUrl: string | null
+  /** The brand's websites, in order. The first is the primary site, where logos, colors and fonts come from. */
+  websiteUrls: string[]
   /**
-   * Where website extraction has got to: 'idle', 'extracting', 'reviewing', 'complete', 'failed'.
-   * This is the polling surface after `createBrandKit({ extract: true })` or `extractBrandKit`.
+   * Where VISUAL extraction (logos, colors, fonts, from the first website) has got to: 'idle', 'extracting',
+   * 'reviewing', 'complete', 'failed'. Poll it after `createBrandKit({ extract: true })` or `extractBrandKit`.
    */
   extractionStatus?: string | null
+  /**
+   * Where the ANALYSIS has got to: the job that reads every website and the kit's own YouTube and Instagram posts
+   * and writes its empty sections. 'queued' includes waiting for new accounts' posts and transcripts; null means
+   * the kit has never been analyzed. Poll it alongside `extractionStatus`.
+   */
+  analysisStatus?: 'queued' | 'running' | 'done' | 'failed' | null
   /** The user-facing reason the last extraction failed, when it did. */
   extractionError?: string | null
   sourceType: string | null
@@ -860,7 +867,8 @@ export interface BrandKit extends BrandKitSummary {
 /** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
 export interface UpdateBrandKitInput {
   name?: string
-  websiteUrl?: string | null
+  /** The brand's websites, primary first. REPLACES the list; `[]` clears it. Stored only: pass `extract` to import. */
+  websiteUrls?: string[]
   brandColors?: unknown[]
   typography?: Record<string, unknown> | null
   /**
@@ -904,27 +912,43 @@ export interface UpdateBrandKitInput {
    */
   brandAccounts?: BrandKitAccountInput[]
   inspirationAccounts?: BrandKitAccountInput[]
-  /** Re-run website extraction after applying this patch. Requires the kit to have a `websiteUrl`. */
+  /**
+   * Re-run the import after applying this patch: visuals from the first website, and the analysis of every website
+   * and the kit's own accounts, which writes only into sections still empty.
+   */
   extract?: boolean
 }
 
 /** Fields accepted when creating a brand kit. */
 export interface CreateBrandKitInput extends UpdateBrandKitInput {
-  /** Optional when `websiteUrl` is given: it then defaults to the site's hostname until extraction supplies a real one. */
+  /** Optional when a website or a social profile is given: it then defaults to the first site's hostname or the @handle. */
   name?: string
   /** Caller-minted id, so a create can be made idempotent. Must be a UUID. */
   id?: string
   /** Free-text provenance ('manual', 'wizard', 'mcp', ...). Defaults to 'manual'. */
   sourceType?: string
-  /** Start filling the kit from `websiteUrl` immediately. Returns at once; poll `extractionStatus`. */
+  /**
+   * Import the kit right away from its websites and its own YouTube and Instagram accounts. Returns at once; poll
+   * `extractionStatus` and `analysisStatus`.
+   */
   extract?: boolean
 }
 
-/** What happened to an extraction request. `deduped` means an identical job was already running, not a failure. */
-export interface ExtractionOutcome {
-  status: 'enqueued' | 'deduped' | 'unconfigured' | 'skipped'
-  msgId?: number
-  reason?: string
+/** What happened to one queued job. `deduped` means an identical job was already running, not a failure. */
+export type JobEnqueueOutcome =
+  | { status: 'enqueued'; msgId: number }
+  | { status: 'deduped' }
+  | { status: 'unconfigured' }
+
+/**
+ * What an import started. `extract` is null when the kit has no website; `synthesis` is null when it has nothing to
+ * analyze (no website, no own YouTube or Instagram account). `error` is set when the kit was created but its import
+ * could not be queued; retry with `extractBrandKit`.
+ */
+export interface BrandImportOutcome {
+  extract: JobEnqueueOutcome | null
+  synthesis: JobEnqueueOutcome | null
+  error?: string
 }
 
 /** An account to link: an existing tracked-account id, or a profile to ADD by handle or url. */
