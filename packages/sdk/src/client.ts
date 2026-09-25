@@ -19,7 +19,6 @@ import type {
   FolderItem,
   CreateFolderInput,
   UpdateFolderInput,
-  BrandKitSectionInput,
   BrandKitAccountInput,
   AddBrandKnowledgeInput,
   Avatar,
@@ -31,10 +30,9 @@ import type {
   AddAvatarLooksResult,
   Balance,
   BrandKit,
-  BrandKitIndex,
-  BrandKitFieldFilter,
-  BrandKitFieldsRead,
-  BrandKitTemplates,
+  BrandKitSummaryRead,
+  BrandKitSectionFilter,
+  BrandKitSectionsRead,
   BrandKitSummary,
   BrandKnowledgeDetail,
   BrandKnowledgeItem,
@@ -554,44 +552,39 @@ export class ContentHero {
 
   /**
    * Get one brand kit, read three ways:
-   * - `{ detail: 'summary' }`: every section and field with its key, role, load tier, version and length, and NO
-   *   values. The cheap first read.
-   * - a field filter (`keys`, `roles`, `sections`, `tabs`, `tiers`, combined with AND): just those fields with
-   *   their values, and each field's earlier versions with `history: true`.
+   * - `{ detail: 'summary' }`: every section with its key, role, version, length and outline (its own headings), and
+   *   NO bodies. The cheap first read: decide what to load, then load just that.
+   * - a section filter (`keys`, `roles`, `tabs`, combined with AND): just those sections with their bodies, and
+   *   each one's earlier versions with `history: true`.
    * - nothing: the whole kit.
    * Contradictory combinations (summary with a filter, history without one) are refused with a ValidationError.
    */
   async getBrandKit(brandKitId: string, options?: { detail?: 'full' }): Promise<BrandKit>
-  async getBrandKit(brandKitId: string, options: { detail: 'summary' }): Promise<BrandKitIndex>
-  async getBrandKit(brandKitId: string, options: BrandKitFieldFilter & { history?: boolean }): Promise<BrandKitFieldsRead>
+  async getBrandKit(brandKitId: string, options: { detail: 'summary' }): Promise<BrandKitSummaryRead>
+  async getBrandKit(brandKitId: string, options: BrandKitSectionFilter & { history?: boolean }): Promise<BrandKitSectionsRead>
   async getBrandKit(
     brandKitId: string,
-    options: { detail?: 'full' | 'summary'; history?: boolean } & BrandKitFieldFilter = {},
-  ): Promise<BrandKit | BrandKitIndex | BrandKitFieldsRead> {
+    options: { detail?: 'full' | 'summary'; history?: boolean } & BrandKitSectionFilter = {},
+  ): Promise<BrandKit | BrandKitSummaryRead | BrandKitSectionsRead> {
     const q = new URLSearchParams()
     if (options.detail) q.set('detail', options.detail)
-    for (const name of ['keys', 'roles', 'sections', 'tabs', 'tiers'] as const) {
+    for (const name of ['keys', 'roles', 'tabs'] as const) {
       const list = options[name]
       if (list && list.length > 0) q.set(name, list.join(','))
     }
     if (options.history) q.set('history', 'true')
     const qs = q.toString()
-    return this.request<BrandKit | BrandKitIndex | BrandKitFieldsRead>(
+    return this.request<BrandKit | BrandKitSummaryRead | BrandKitSectionsRead>(
       'GET',
       `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}${qs ? `?${qs}` : ''}`,
     )
   }
 
-  /** The system templates (a kit's starting layout) and the role and load-tier vocabulary their fields use. */
-  async listBrandKitTemplates(): Promise<BrandKitTemplates> {
-    return this.request<BrandKitTemplates>('GET', '/api/v1/brand-kit-templates')
-  }
-
   /**
-   * Update a brand kit: field content (`fields`, by key and all or nothing), visual style, media, linked accounts
-   * and sections. A stale `expectedVersion` on any field throws a ConflictError whose `conflicts` lists each stale
-   * field's current `{ key, version, value }`, and NOTHING in the patch is written. Requires the `brandkit:write`
-   * scope. Returns the full updated kit.
+   * Update a brand kit: section content (`sections`, the sections you name, all or nothing), media, colors,
+   * typography and linked accounts. A stale `expectedVersion` on any section throws a ConflictError whose
+   * `conflicts` lists each stale section's current `{ key, version, body }`, and NOTHING in the patch is written.
+   * Requires the `brandkit:write` scope. Returns the full updated kit.
    */
   async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput): Promise<BrandKit> {
     return this.request<BrandKit>('PATCH', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`, input)

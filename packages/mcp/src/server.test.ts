@@ -136,11 +136,9 @@ function fakeClient(overrides = {}) {
       logos: [],
       brandColors: [{ hex: '#0B0B0F' }],
       typography: null,
-      visualStyle: 'obsidian/gold',
-      designPrinciples: ['bold'],
       socialAccounts: [],
       assets: [],
-      sections: [{ tab: 'voice', sectionName: 'Brand Voice', sortOrder: 0, fields: [{ key: 'tone', label: 'Tone', type: 'text', value: 'confident' }] }],
+      sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 1, body: 'Confident and direct.', updatedAt: 't' }],
       brandAccounts: [{ platform: 'instagram', name: 'ContentHero', handle: 'contenthero', avatarUrl: null, followerCount: 100 }],
       inspirationAccounts: [],
       knowledge: [{ id: 'kn1', title: 'Origin', sourceType: 'note', sourceUrl: null, contentPreview: 'We started...' }],
@@ -1584,11 +1582,9 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
           logos: [],
           brandColors: [],
           typography: null,
-          visualStyle: null,
-          designPrinciples: [],
           socialAccounts: [],
           assets: [],
-          sections: [{ id: 's1', key: 'glance', tab: 'voice', sectionName: 'Voice at a Glance', sortOrder: 0, fields: [{ key: 'summary', label: 'The Voice in a Paragraph', type: 'textarea', value: 'confident' }] }],
+          sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 1, body: 'confident', updatedAt: 't' }],
           brandAccounts: [],
           inspirationAccounts: [],
           knowledge: [],
@@ -1600,7 +1596,7 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
   assert.ok(!res.isError)
   assert.equal(capturedId, 'bk1')
   // The full kit comes back as JSON, so nested field content is intact.
-  assert.match(res.content[0].text, /"key": "summary"/)
+  assert.match(res.content[0].text, /"key": "voice_and_tone"/)
   assert.match(res.content[0].text, /confident/)
 })
 
@@ -2217,7 +2213,7 @@ test('get_account reports totals and averages for either kind of account', async
 
 // -- brand-kit writes ---------------------------------------------------------
 
-test('update_brand_kit passes the changed fields through and returns the kit', async () => {
+test('update_brand_kit passes section writes through and returns the kit', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -2227,19 +2223,20 @@ test('update_brand_kit passes the changed fields through and returns the kit', a
       },
     }),
   )
-  const fields = [{ key: 'summary', value: 'Warm and direct.', expectedVersion: 2 }, { key: 'avoid', revertTo: 1 }]
-  const res = await mcp.callTool({ name: 'update_brand_kit', arguments: { brandKitId: 'bk1', fields } })
+  const sections = [{ key: 'voice_and_tone', body: '## Personality', expectedVersion: 2 }, { key: 'offer', revertTo: 1 }]
+  const res = await mcp.callTool({ name: 'update_brand_kit', arguments: { brandKitId: 'bk1', sections } })
   assert.equal(captured.id, 'bk1')
-  assert.deepEqual(captured.input.fields, fields)
+  assert.deepEqual(captured.input.sections, sections)
   assert.match(res.content[0].text, /Brand kit "ContentHero"/)
 })
 
-test('the seven retired kit inputs are not declared on create_brand_kit or update_brand_kit', async () => {
+test('the retired kit inputs are not declared on create_brand_kit or update_brand_kit', async () => {
   const mcp = await connect(fakeClient({}))
   const { tools } = await mcp.listTools()
   for (const name of ['create_brand_kit', 'update_brand_kit']) {
     const declared = Object.keys(tools.find((t) => t.name === name).inputSchema.properties)
-    for (const retired of ['businessName', 'primaryOffer', 'nicheDefinition', 'positioning', 'audience', 'voiceProfile', 'contentStrategy']) {
+    // The field-era inputs (Revision 7): a kit's text is its sections, and visual style is the Design Guidelines section.
+    for (const retired of ['businessName', 'primaryOffer', 'nicheDefinition', 'positioning', 'audience', 'voiceProfile', 'contentStrategy', 'visualStyle', 'designPrinciples', 'fields']) {
       assert.ok(!declared.includes(retired), `${name} still declares ${retired}`)
     }
   }
@@ -2253,23 +2250,30 @@ test('get_brand_kit reads three ways and refuses the combinations that cannot me
         calls.push(options)
         if (options?.detail === 'summary') {
           return {
-            id, name: 'CH', template: { slug: 'standard', version: 1 },
-            sections: [{ id: 's1', key: 'glance', tab: 'voice', name: 'Voice at a Glance', fields: [
-              { id: 'f1', key: 'summary', sectionKey: 'glance', sectionName: 'Voice at a Glance', tab: 'voice', label: 'The Voice in a Paragraph', type: 'textarea', role: 'voice.core', loadTier: 'core', version: 3, updatedAt: 't', hasValue: true, charCount: 412 },
-            ] }],
+            id, name: 'CH',
+            sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 3, updatedAt: 't', charCount: 412, outline: ['Personality', 'Principles'] }],
           }
         }
-        if (options) return { id, name: 'CH', fields: [{ key: 'summary', value: 'Warm.', version: 3 }] }
+        if (options) {
+          return {
+            id, name: 'CH',
+            sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 3, updatedAt: 't', body: '## Personality\n\nWarm.', revisions: [{ version: 2, body: 'Older.', bodySource: 'user', createdAt: 't0' }] }],
+          }
+        }
         return { id, name: 'CH', isDefault: true, sections: [] }
       },
     }),
   )
   const summary = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1', detail: 'summary' } })
-  assert.match(summary.content[0].text, /summary: The Voice in a Paragraph \| textarea \| voice\.core \| core \| v3 \| 412 chars/)
+  assert.match(summary.content[0].text, /\[voice\] Voice & Tone \| key voice_and_tone \| role voice_and_tone \| v3 \| 412 chars/)
+  assert.match(summary.content[0].text, /covers: Personality \/ Principles/)
 
   const scoped = await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1', tabs: ['voice'], history: true } })
   assert.deepEqual(calls[1], { tabs: ['voice'], history: true })
-  assert.match(scoped.content[0].text, /1 field\(s\) from brand kit "CH"/)
+  // The body arrives as Markdown, not as a JSON string with escaped line breaks, and its history follows it.
+  assert.match(scoped.content[0].text, /1 section\(s\) from brand kit "CH"/)
+  assert.match(scoped.content[0].text, /v3 \(pass as expectedVersion\) ===\n\n## Personality\n\nWarm\./)
+  assert.match(scoped.content[0].text, /--- v2, user, t0 ---\n\nOlder\./)
 
   await mcp.callTool({ name: 'get_brand_kit', arguments: { brandKitId: 'bk1' } })
   assert.equal(calls[2], undefined)
@@ -2338,9 +2342,8 @@ test('every declared field on update_brand_kit actually reaches the client', asy
   // each optional field survives the handler, so the next field added this way fails here instead of in
   // production.
   const SAMPLES = {
-    name: 'n', websiteUrl: 'https://x.test', visualStyle: 'vs', fields: [{ key: 'k', value: 'v' }],
-    designPrinciples: ['p'], logos: [{ url: 'https://x/1.png' }],
-    assets: [{ url: 'https://x/2.png' }], sections: [{ tab: 't', sectionName: 's' }],
+    name: 'n', websiteUrl: 'https://x.test', logos: [{ url: 'https://x/1.png' }],
+    assets: [{ url: 'https://x/2.png' }], sections: [{ key: 'about', body: 'b' }],
     brandAccounts: ['https://youtube.com/@a'], inspirationAccounts: ['https://youtube.com/@b'],
   }
   let captured
@@ -2366,7 +2369,7 @@ test('every declared field on update_brand_kit actually reaches the client', asy
   }
 })
 
-test('update_brand_kit sets sections declaratively, keyed by tab and name', async () => {
+test('update_brand_kit names only the sections it changes: edit by key, add without one', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -2376,22 +2379,21 @@ test('update_brand_kit sets sections declaratively, keyed by tab and name', asyn
       },
     }),
   )
-  await mcp.callTool({
+  const res = await mcp.callTool({
     name: 'update_brand_kit',
     arguments: {
       brandKitId: 'bk1',
       sections: [
-        { tab: 'voice', sectionName: 'Tone', fields: [{ key: 'tone', value: 'warm' }] },
-        { tab: 'overview', sectionName: 'Positioning' },
+        { key: 'about', body: '## Who We Are', expectedVersion: 2, width: 'full' },
+        { sectionName: 'Hooks', tab: 'voice', body: 'Open with the outcome.' },
       ],
     },
   })
-  // (tab, sectionName) is the key, and it is what an agent can name without looking up an id first:
-  // getBrandKit returns sections with no id at all.
-  assert.equal(captured.sections.length, 2)
-  assert.equal(captured.sections[0].tab, 'voice')
-  assert.equal(captured.sections[0].sectionName, 'Tone')
-  assert.deepEqual(captured.sections[0].fields, [{ key: 'tone', value: 'warm' }])
+  assert.ok(!res.isError, res.content[0].text)
+  assert.deepEqual(captured.sections, [
+    { key: 'about', body: '## Who We Are', expectedVersion: 2, width: 'full' },
+    { sectionName: 'Hooks', tab: 'voice', body: 'Open with the outcome.' },
+  ])
 })
 
 test('archive a brand_kit_section by section id via the universal tool', async () => {

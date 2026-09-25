@@ -672,124 +672,94 @@ export interface BrandKitAccount {
   accountType: string | null
 }
 
-/** A curated section of a brand kit (overview / voice tabs). */
+/**
+ * One section of a brand kit: a free-form Markdown document (brand-kit-foundation-v1, Revision 7). Every kit starts
+ * with eight: about, audience, offer and content_strategy (tab `overview`), voice_and_tone, writing_style and
+ * speaking_style (tab `voice`), and design_guidelines (tab `visual`). The user may rename them and add their own.
+ */
 export interface BrandKitSection {
   id: string
-  /** Stable and never renamed; the user renames `sectionName`. */
+  /** Stable and never renamed: address a section by key. A starter section's key is its role; an added one is `custom_<id>`. */
   key: string
+  /** What a starter section MEANS, the same in every kit whatever the user renamed it to; null for one the user added. */
+  role: string | null
+  /** 'overview', 'voice' or 'visual'. */
   tab: string
+  /** The display name. The user's to rename. */
   sectionName: string
   sortOrder: number
-  /**
-   * Field objects: `{ id, key, label, type, role, loadTier, version, updatedAt, sort_order, value }`. For
-   * field-level work use `getBrandKitIndex`, `getBrandKitFields` and `updateBrandKitFields`, which are typed.
-   */
-  fields: unknown[]
-}
-
-/**
- * A brand kit field's identity and metadata.
- *
- * `key` is stable and unique among a kit's fields: address fields by key, never by label (the user renames labels).
- * `role` is what a field MEANS (`voice.core`, `audience.profile`, ...), the contract to rely on across templates;
- * `listBrandKitTemplates` returns the full vocabulary. `loadTier` is how eagerly it belongs in an AI's context:
- * `core` always, `contextual` when relevant, `reference` only on request.
- */
-export interface BrandKitFieldMeta {
-  id: string
-  key: string
-  sectionKey: string
-  sectionName: string
-  tab: string
-  label: string
-  /** 'text' (a line), 'textarea' (prose) or 'list' (an array of strings). */
-  type: string
-  role: string
-  loadTier: string
-  /** Increments on every change. Send it back as `expectedVersion` to write safely. */
+  /** 'full' or 'half': how wide the section's card is on the brand page. */
+  width: string
+  /** Increments on every body change. Send it back as `expectedVersion` to write safely. */
   version: number
-  updatedAt: string
+  /** The section's content, in Markdown. */
+  body: string
+  updatedAt: string | null
+  /** Earlier versions, newest first. Present only on a filtered read that asked for `history`. */
+  revisions?: BrandKitSectionRevision[]
 }
 
-/**
- * A field with its value. `value` is a string, a string array (for `list`), or null. `revisions` is present only
- * when the read asked for `history`.
- */
-export interface BrandKitField extends BrandKitFieldMeta {
-  value: unknown
-  revisions?: BrandKitFieldRevision[]
-}
-
-/** What a filtered `getBrandKit` returns: the kit's id and name, and just the fields asked for. */
-export interface BrandKitFieldsRead {
-  id: string
-  name: string
-  fields: BrandKitField[]
-}
-
-/** A field in the index: no value, but whether it has one and its length, so a caller can decide what to pull. */
-export interface BrandKitIndexField extends BrandKitFieldMeta {
-  hasValue: boolean
-  charCount: number
-}
-
-/** Every section and field of a kit, without values. What to read first. */
-export interface BrandKitIndex {
-  id: string
-  name: string
-  /** The template the layout came from; null for a kit that predates templates. */
-  template: { slug: string; version: number } | null
-  sections: Array<{ id: string; key: string; tab: string; name: string; fields: BrandKitIndexField[] }>
-}
-
-/** Scopes a field read. Each is a list; the filters combine with AND. Omit all to read every field. */
-export interface BrandKitFieldFilter {
-  keys?: string[]
-  roles?: string[]
-  /** Section keys. */
-  sections?: string[]
-  /** 'overview' or 'voice'. */
-  tabs?: string[]
-  /** 'core', 'contextual' or 'reference'. */
-  tiers?: string[]
-}
-
-/** One field write in `updateBrandKit({ fields })`: a new `value` (null clears it) OR `revertTo` an earlier version. */
-export type BrandKitFieldWrite = {
-  key: string
-  /**
-   * The `version` you read. If the field has changed since, the WHOLE patch is refused with a `ConflictError`
-   * whose `conflicts` lists each stale field's current `{ key, version, value }`, and nothing is written.
-   */
-  expectedVersion?: number
-} & ({ value: unknown; revertTo?: never } | { revertTo: number; value?: never })
-
-/** One entry of a field's history. */
-export interface BrandKitFieldRevision {
+/** One entry of a section's history. */
+export interface BrandKitSectionRevision {
   version: number
-  value: unknown
+  body: string
   /** Who wrote it: 'user', 'agent', 'api', 'extraction' or 'migration'. */
-  valueSource: string
+  bodySource: string
   createdAt: string
 }
 
-/** The system templates and the vocabulary their fields use. */
-export interface BrandKitTemplates {
-  templates: Array<{
-    slug: string
-    version: number
-    name: string
-    description: string
-    offeredForNewKits: boolean
-    sections: Array<{
-      key: string
-      tab: string
-      name: string
-      fields: Array<{ key: string; label: string; type: string; role: string; loadTier: string; repeatable: boolean }>
-    }>
-  }>
-  roles: Array<{ role: string; group: string; description: string }>
-  loadTiers: string[]
+/** A section in the summary: everything but the body, plus its length and its own headings. */
+export interface BrandKitSummarySection extends Omit<BrandKitSection, 'body' | 'revisions'> {
+  charCount: number
+  /** The section's own `##` headings, in order: what it covers, without loading it. */
+  outline: string[]
+}
+
+/** Every section of a kit without bodies. The cheap first read: decide what to load, then load just that. */
+export interface BrandKitSummaryRead {
+  id: string
+  name: string
+  sections: BrandKitSummarySection[]
+}
+
+/** What a filtered `getBrandKit` returns: the kit's id and name, and just the sections asked for, with bodies. */
+export interface BrandKitSectionsRead {
+  id: string
+  name: string
+  sections: BrandKitSection[]
+}
+
+/** Scopes a section read. Each is a list; the filters combine with AND. */
+export interface BrandKitSectionFilter {
+  /** Section keys. */
+  keys?: string[]
+  /** Starter roles, e.g. 'voice_and_tone'. */
+  roles?: string[]
+  /** 'overview', 'voice' or 'visual'. */
+  tabs?: string[]
+}
+
+/**
+ * One section write in `updateBrandKit({ sections })`. Name only the sections you are changing.
+ *
+ * With a `key`, it edits that section: a new `body`, `revertTo` an earlier version (which lands as a NEW version),
+ * a new `sectionName`, or a new `width`. Without a key, it ADDS a section of your own, and `sectionName` and `tab`
+ * are required. To remove a section, archive it (`archive` with assetType `brand_kit_section`).
+ */
+export interface BrandKitSectionWrite {
+  key?: string
+  sectionName?: string
+  tab?: string
+  /** Markdown. Replaces the section's whole body. */
+  body?: string
+  width?: 'full' | 'half'
+  /**
+   * The `version` you read. If the section changed since, the WHOLE write is refused with a `ConflictError` whose
+   * `conflicts` lists each stale section's current `{ key, version, body }`, and nothing is written.
+   */
+  expectedVersion?: number
+  /** Restore this earlier version's body, as a new version. Not combined with `body`. */
+  revertTo?: number
 }
 
 /** A knowledge-base item (body truncated to a preview), as embedded in `getBrandKit`. */
@@ -879,8 +849,6 @@ export interface BrandKit extends BrandKitSummary {
   logos: unknown[]
   brandColors: unknown[]
   typography: Record<string, unknown> | null
-  visualStyle: string | null
-  designPrinciples: string[]
   socialAccounts: unknown[]
   assets: unknown[]
   sections: BrandKitSection[]
@@ -892,15 +860,7 @@ export interface BrandKit extends BrandKitSummary {
 /** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
 export interface UpdateBrandKitInput {
   name?: string
-  /**
-   * Field content, by key and ALL OR NOTHING, written before anything else in the patch. Read the keys and versions
-   * with `getBrandKit(id, { detail: 'summary' })` or a filtered read. A restore is `{ key, revertTo }` and lands as
-   * a new version.
-   */
-  fields?: BrandKitFieldWrite[]
   websiteUrl?: string | null
-  visualStyle?: string | null
-  designPrinciples?: string[]
   brandColors?: unknown[]
   typography?: Record<string, unknown> | null
   /**
@@ -919,10 +879,11 @@ export interface UpdateBrandKitInput {
   logos?: unknown[]
   assets?: unknown[]
   /**
-   * The kit's curated sections. DECLARATIVE and keyed by (tab, sectionName): pass the whole set, and a
-   * section no longer present is ARCHIVED (never deleted). Array position is the default sort order.
+   * Section content: the sections you name, and only those. ALL OR NOTHING and written before anything else in the
+   * patch, so a stale `expectedVersion` refuses the whole patch. Read the keys and versions with
+   * `getBrandKit(id, { detail: 'summary' })` or a filtered read.
    */
-  sections?: BrandKitSectionInput[]
+  sections?: BrandKitSectionWrite[]
   /**
    * Only `true` is meaningful: it makes this the default kit and un-defaults every other one. Passing `false`
    * would leave the account with no default at all, which the brand switcher cannot resolve, so to MOVE the
@@ -966,26 +927,8 @@ export interface ExtractionOutcome {
   reason?: string
 }
 
-/** A brand-kit section record (returned by the section write methods). */
-export interface BrandKitSectionRecord {
-  id: string
-  tab: string
-  sectionName: string
-  sortOrder: number
-  fields: unknown[]
-}
-
 /** An account to link: an existing tracked-account id, or a profile to ADD by handle or url. */
 export type BrandKitAccountInput = string | { platform?: string; handleOrUrl: string }
-
-/** One curated section on a brand kit. Keyed by (tab, sectionName). */
-export interface BrandKitSectionInput {
-  tab: string
-  sectionName: string
-  sortOrder?: number
-  /** Curated field objects: { key, label, type, value }. */
-  fields?: unknown[]
-}
 
 /** A studio output's media kind. */
 export type MediaType = 'image' | 'video' | 'audio' | 'transcript'

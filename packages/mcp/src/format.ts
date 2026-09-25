@@ -32,10 +32,9 @@ import type {
   AvatarSummary,
   Balance,
   BrandKit,
-  BrandKitIndex,
-  BrandKitFieldsRead,
+  BrandKitSummaryRead,
+  BrandKitSectionsRead,
   BrandKitSummary,
-  BrandKitSectionRecord,
   BrandKnowledgeItem,
   BrandKnowledgeDetail,
   BrandKnowledgeListResult,
@@ -911,7 +910,7 @@ export function brandKitResult(kit: BrandKit, extraction?: ExtractionOutcome): C
     extraction && extraction.status !== 'unconfigured'
       ? extraction.status === 'deduped'
         ? 'Extraction was ALREADY RUNNING for this kit, so nothing new was queued. Poll extractionStatus with get_brand_kit.'
-        : 'Extraction STARTED and is still running. The fields below will fill in. Poll extractionStatus with get_brand_kit.'
+        : 'Extraction STARTED and is still running. Its empty sections will fill in. Poll extractionStatus with get_brand_kit.'
       : extraction?.status === 'unconfigured'
         ? 'Extraction is NOT CONFIGURED on this deployment, so nothing was queued.'
         : null
@@ -919,36 +918,40 @@ export function brandKitResult(kit: BrandKit, extraction?: ExtractionOutcome): C
 }
 
 /**
- * A kit's summary: every section and field, one line each, no values. Compact on purpose: this is the read an
- * agent makes first to decide what to pull, so it should cost little.
+ * A kit's summary: every section, one line each plus its outline, no bodies. Compact on purpose: this is the read
+ * an agent makes first to decide what to load, so it should cost little.
  */
-export function brandKitSummaryResult(kit: BrandKitIndex): CallToolResult {
-  const lines = [
-    `Brand kit "${kit.name}" (id ${kit.id})${kit.template ? `, template ${kit.template.slug} v${kit.template.version}` : ''}:`,
-  ]
+export function brandKitSummaryResult(kit: BrandKitSummaryRead): CallToolResult {
+  const lines = [`Brand kit "${kit.name}" (id ${kit.id}), ${kit.sections.length} section(s):`]
   for (const s of kit.sections) {
-    lines.push('', `[${s.tab}] ${s.name} (section ${s.key})`)
-    for (const f of s.fields) {
-      lines.push(
-        `  ${f.key}: ${f.label} | ${f.type} | ${f.role} | ${f.loadTier} | v${f.version} | ${f.hasValue ? `${f.charCount} chars` : 'empty'}`,
-      )
-    }
+    lines.push(
+      '',
+      `[${s.tab}] ${s.sectionName} | key ${s.key}${s.role ? ` | role ${s.role}` : ''} | v${s.version} | ${s.charCount ? `${s.charCount} chars` : 'empty'}`,
+    )
+    if (s.outline.length) lines.push(`  covers: ${s.outline.join(' / ')}`)
   }
   return text(lines.join('\n'))
 }
 
-/** Just the fields a filtered read asked for, with values (and history when asked). */
-export function brandKitFieldsResult(read: BrandKitFieldsRead): CallToolResult {
-  if (!read.fields.length) return text(`No fields in brand kit "${read.name}" match that filter.`)
-  return text(
-    [`${read.fields.length} field(s) from brand kit "${read.name}" (id ${read.id}):`, '', JSON.stringify(read.fields, null, 2)].join('\n'),
-  )
-}
-
-/** A created/updated/archived brand-kit section. */
-export function brandKitSectionResult(s: BrandKitSectionRecord, verb = 'Section'): CallToolResult {
-  const fieldCount = Array.isArray(s.fields) ? s.fields.length : 0
-  return text(`${verb}: "${s.sectionName}" in tab "${s.tab}" (id ${s.id}) | ${fieldCount} field(s).`)
+/**
+ * The sections a filtered read asked for, each as its own Markdown document under a one-line header, and its
+ * history when asked. Text rather than JSON: a body is Markdown, and JSON would escape every line break in it.
+ */
+export function brandKitSectionsResult(read: BrandKitSectionsRead): CallToolResult {
+  if (!read.sections.length) return text(`No sections in brand kit "${read.name}" match that filter.`)
+  const lines = [`${read.sections.length} section(s) from brand kit "${read.name}" (id ${read.id}):`]
+  for (const s of read.sections) {
+    lines.push(
+      '',
+      `=== [${s.tab}] ${s.sectionName} | key ${s.key}${s.role ? ` | role ${s.role}` : ''} | v${s.version} (pass as expectedVersion) ===`,
+      '',
+      s.body || '(empty)',
+    )
+    for (const r of s.revisions ?? []) {
+      lines.push('', `--- v${r.version}, ${r.bodySource}, ${r.createdAt} ---`, '', r.body || '(empty)')
+    }
+  }
+  return text(lines.join('\n'))
 }
 
 /** A brand kit that was just archived. */

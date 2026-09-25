@@ -1,12 +1,10 @@
 /**
  * `contenthero brand-kit` - brand kits (the brand identity documents).
- *   brand-kit list | get | update | archive
- *   brand-kit section add | update | archive
+ *   brand-kit list | get | create | extract | reorder | update
  *   brand-kit knowledge list | get | search | add | remove
  *
- * Reads are open; writes need brandkit:write. Free-form identity objects
- * (positioning, audience, voice profile, content strategy) and section fields
- * are passed as JSON.
+ * Reads are open; writes need brandkit:write. A kit's content is its sections, each one Markdown document,
+ * written by key with `update --sections` (JSON). A section is archived with `archive brand_kit_section <id>`.
  */
 
 import { readFileSync } from 'node:fs'
@@ -14,10 +12,9 @@ import { extname } from 'node:path'
 import type { Command } from 'commander'
 import type {
   BrandKit,
-  BrandKitIndex,
-  BrandKitFieldsRead,
-  BrandKitSectionRecord,
+  BrandKitSectionsRead,
   BrandKitSummary,
+  BrandKitSummaryRead,
   BrandKnowledgeDetail,
   BrandKnowledgeItem,
   BrandKnowledgeListResult,
@@ -77,15 +74,13 @@ function accountRefs(refs: string[] | undefined) {
  * handler even READ --brand-account for a flag it never registered. The MCP/CLI parity test in `packages/mcp` found
  * it. On `update` a list flag REPLACES the stored list, which is the one wording difference, so the mode carries it.
  *
- * The kit's CONTENT is not here: it is field content, written with `update --fields` (brand-kit-foundation-v1). The
- * seven flags that wrote the old JSON columns (--business-name, --primary-offer, --niche, --positioning, --audience,
- * --voice-profile, --content-strategy) are gone with them.
+ * The kit's CONTENT is not here: it is its sections, written with `--sections` (brand-kit-foundation-v1, Revision 7).
+ * The flags that wrote the retired columns (--business-name, --primary-offer, --niche, --positioning, --audience,
+ * --voice-profile, --content-strategy, --visual-style, --design-principle) are gone with them.
  */
 function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
   const replaces = mode === 'update' ? '. REPLACES the list' : ''
   return cmd
-    .option('--visual-style <text>')
-    .option('--design-principle <text>', `a design principle; repeatable${replaces}`, collect)
     .option(
       '--brand-account <ref>',
       `the owner's OWN profile: a tracked-account id, or a profile url / platform:handle to ADD one. Repeatable${replaces}`,
@@ -99,8 +94,6 @@ function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
 /** The shared identity fields, read back from the options `identityOptions` declared. */
 function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
   return {
-    visualStyle: opts.visualStyle as string | undefined,
-    designPrinciples: opts.designPrinciple as string[] | undefined,
     brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
     inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
     logos: mediaRefs(opts.logo as string[] | undefined),
@@ -108,14 +101,19 @@ function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
   }
 }
 
-function recordHuman(s: BrandKitSectionRecord, action: string): string {
-  return keyValues([
-    [action, s.sectionName],
-    ['Section id', s.id],
-    ['Tab', s.tab],
-    ['Sort order', s.sortOrder],
-    ['Fields', s.fields.length],
-  ])
+/** One section as Markdown under a one-line header, and its history when read with it. */
+function sectionsHuman(r: BrandKitSectionsRead): string {
+  if (!r.sections.length) return `No sections in brand kit "${r.name}" match that filter.`
+  return r.sections
+    .map((s) =>
+      [
+        `=== [${s.tab}] ${s.sectionName} | key ${s.key}${s.role ? ` | role ${s.role}` : ''} | v${s.version} ===`,
+        '',
+        s.body || '(empty)',
+        ...(s.revisions ?? []).flatMap((rev) => ['', `--- v${rev.version}, ${rev.bodySource}, ${rev.createdAt} ---`, '', rev.body || '(empty)']),
+      ].join('\n'),
+    )
+    .join('\n\n')
 }
 
 export function registerBrandKit(program: Command): void {
@@ -148,17 +146,15 @@ export function registerBrandKit(program: Command): void {
   brandKit
     .command('get')
     .description(
-      'Get one brand kit: --detail summary lists every field without values; a field filter returns just those ' +
-        'fields with values (add --history for earlier versions); neither returns the whole kit',
+      'Get one brand kit: --detail summary lists every section without its body; a section filter returns just ' +
+        'those sections with their bodies (add --history for earlier versions); neither returns the whole kit',
     )
     .argument('<id>', 'the brand kit id')
-    .option('--detail <level>', "'summary' (every field, no values) or 'full' (the default); not with a filter")
-    .option('--keys <list>', 'field keys, comma-separated', toList)
-    .option('--roles <list>', 'field roles, comma-separated', toList)
-    .option('--sections <list>', 'section keys, comma-separated', toList)
-    .option('--tabs <list>', "'overview' and/or 'voice', comma-separated", toList)
-    .option('--tiers <list>', "'core', 'contextual' and/or 'reference', comma-separated", toList)
-    .option('--history', "with a filter, also return each field's earlier versions")
+    .option('--detail <level>', "'summary' (every section, no bodies) or 'full' (the default); not with a filter")
+    .option('--keys <list>', 'section keys, comma-separated', toList)
+    .option('--roles <list>', 'section roles, comma-separated', toList)
+    .option('--tabs <list>', "'overview', 'voice' and/or 'visual', comma-separated", toList)
+    .option('--history', "with a filter, also return each section's earlier versions")
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const detail = opts.detail as string | undefined
       if (detail !== undefined && detail !== 'summary' && detail !== 'full') {
@@ -167,38 +163,29 @@ export function registerBrandKit(program: Command): void {
       const filter = compact({
         keys: opts.keys as string[] | undefined,
         roles: opts.roles as string[] | undefined,
-        sections: opts.sections as string[] | undefined,
         tabs: opts.tabs as string[] | undefined,
-        tiers: opts.tiers as string[] | undefined,
       })
       const filtered = Object.values(filter).some((v) => Array.isArray(v) && v.length > 0)
       if (detail === 'summary' && filtered) {
-        throw new CliError('--detail summary cannot be combined with a field filter.', EXIT.USAGE)
+        throw new CliError('--detail summary cannot be combined with a section filter.', EXIT.USAGE)
       }
       if (opts.history && !filtered) {
-        throw new CliError('--history needs a field filter (--keys, --roles, --sections, --tabs or --tiers).', EXIT.USAGE)
+        throw new CliError('--history needs a section filter (--keys, --roles or --tabs).', EXIT.USAGE)
       }
       const { client, ctx } = makeClient(command)
       if (detail === 'summary') {
         const index = await client.getBrandKit(id, { detail: 'summary' })
-        emit(index, ctx, (k: BrandKitIndex) =>
+        emit(index, ctx, (k: BrandKitSummaryRead) =>
           table(
-            ['SECTION', 'KEY', 'LABEL', 'ROLE', 'TIER', 'VERSION', 'CHARS'],
-            k.sections.flatMap((s) =>
-              s.fields.map((f) => [s.key, f.key, f.label, f.role, f.loadTier, f.version, f.hasValue ? f.charCount : '']),
-            ),
+            ['TAB', 'SECTION', 'KEY', 'ROLE', 'VERSION', 'CHARS', 'COVERS'],
+            k.sections.map((s) => [s.tab, s.sectionName, s.key, s.role ?? '', s.version, s.charCount || '', s.outline.join(' / ')]),
           ),
         )
         return
       }
       if (filtered) {
         const read = await client.getBrandKit(id, { ...filter, history: opts.history ? true : undefined })
-        emit(read, ctx, (r: BrandKitFieldsRead) =>
-          table(
-            ['KEY', 'LABEL', 'VERSION', 'VALUE'],
-            r.fields.map((f) => [f.key, f.label, f.version, Array.isArray(f.value) ? f.value.join('; ') : String(f.value ?? '')]),
-          ),
-        )
+        emit(read, ctx, sectionsHuman)
         return
       }
       const kit = await client.getBrandKit(id)
@@ -206,8 +193,7 @@ export function registerBrandKit(program: Command): void {
         keyValues([
           ['Name', k.name],
           ['Id', k.id],
-          ['Visual style', k.visualStyle ?? ''],
-          ['Sections', k.sections.length],
+          ['Sections', k.sections.map((s) => s.sectionName).join(', ')],
           ['Brand accounts', k.brandAccounts.length],
           ['Inspiration accounts', k.inspirationAccounts.length],
           ['Knowledge items', k.knowledge.length],
@@ -223,7 +209,7 @@ export function registerBrandKit(program: Command): void {
       .option('--website-url <url>', 'the business website')
       .option('--extract', 'scrape --website-url and fill the kit in automatically (returns immediately)')
       .option('--duplicate-from <id>', 'copy an existing brand kit instead of starting empty')
-      .option('--sections <json>', 'curated sections as JSON: [{ tab, sectionName, sortOrder?, fields? }]', toJson),
+      .option('--sections <json>', 'section content as JSON: [{ key, body }] to fill a starter section, [{ sectionName, tab, body? }] to add one', toJson),
     'create',
   )
     .action(async (opts: Record<string, unknown>, command: Command) => {
@@ -297,17 +283,17 @@ export function registerBrandKit(program: Command): void {
   identityOptions(
     brandKit
       .command('update')
-      .description('Update a brand kit: field content, visual style, media, accounts and sections (requires brandkit:write)')
+      .description('Update a brand kit: section content, media and accounts (requires brandkit:write)')
       .argument('<id>', 'the brand kit id')
       .option('--name <text>')
       .option('--website-url <url>')
       .option('--default', 'make this the default brand kit, un-defaulting every other')
       .option(
-        '--fields <json>',
-        'field writes as JSON, all or nothing: [{ key, value, expectedVersion }] or [{ key, revertTo, expectedVersion }]',
+        '--sections <json>',
+        'section writes as JSON, only the sections you change, all or nothing: [{ key, body, expectedVersion }] edits one ' +
+          '(or revertTo, sectionName, width); [{ sectionName, tab, body? }] adds one',
         toJson,
-      )
-      .option('--sections <json>', 'curated sections as JSON. REPLACES the set, keyed by (tab, sectionName); one left out is ARCHIVED', toJson),
+      ),
     'update',
   )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
@@ -316,7 +302,6 @@ export function registerBrandKit(program: Command): void {
         websiteUrl: opts.websiteUrl as string | undefined,
         ...identityInput(opts),
         isDefault: opts.default ? true : undefined,
-        fields: opts.fields as UpdateBrandKitInput['fields'],
         sections: opts.sections as UpdateBrandKitInput['sections'],
       })
       if (Object.keys(input).length === 0) {
@@ -332,7 +317,6 @@ export function registerBrandKit(program: Command): void {
       )
     })
 
-  // -- brand-kit section ----------------------------------------------------
   const knowledge = brandKit
     .command('knowledge')
     .description('A brand kit\'s knowledge base: list, get, semantic search, add, remove')

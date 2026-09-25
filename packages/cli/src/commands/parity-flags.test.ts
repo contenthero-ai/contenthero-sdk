@@ -39,35 +39,36 @@ async function run(...args: string[]): Promise<Seen> {
   return seen[0]
 }
 
-test('brand-kit create sends the identity fields it used to lack', async () => {
+test('brand-kit create sends accounts and section content', async () => {
+  const sections = [{ key: 'about', body: '## Who We Are' }]
   const r = await run(
     'brand-kit', 'create', '--name', 'Acme',
-    '--design-principle', 'one', '--design-principle', 'two',
     '--brand-account', 'instagram:acme',
     '--inspiration-account', 'https://youtube.com/@rival',
+    '--sections', JSON.stringify(sections),
   )
   assert.equal(r.method, 'POST')
-  assert.deepEqual(r.body?.designPrinciples, ['one', 'two'])
   assert.deepEqual(r.body?.brandAccounts, [{ platform: 'instagram', handleOrUrl: 'acme' }])
   assert.deepEqual(r.body?.inspirationAccounts, [{ handleOrUrl: 'https://youtube.com/@rival' }])
+  assert.deepEqual(r.body?.sections, sections)
 })
 
-test('brand-kit get sends the summary detail, or the field filter with history, as query parameters', async () => {
+test('brand-kit get sends the summary detail, or the section filter with history, as query parameters', async () => {
   const summary = await run('brand-kit', 'get', 'bk1', '--detail', 'summary')
   assert.equal(summary.path, '/api/v1/brand-kits/bk1')
   assert.equal(summary.query.get('detail'), 'summary')
 
-  const scoped = await run('brand-kit', 'get', 'bk1', '--tabs', 'voice', '--tiers', 'core,contextual', '--history')
+  const scoped = await run('brand-kit', 'get', 'bk1', '--tabs', 'voice', '--roles', 'voice_and_tone,writing_style', '--history')
   assert.equal(scoped.query.get('tabs'), 'voice')
-  assert.equal(scoped.query.get('tiers'), 'core,contextual')
+  assert.equal(scoped.query.get('roles'), 'voice_and_tone,writing_style')
   assert.equal(scoped.query.get('history'), 'true')
 })
 
-test('brand-kit update --fields sends field writes, all in one patch', async () => {
-  const fields = [{ key: 'summary', value: 'Warm.', expectedVersion: 2 }, { key: 'avoid', revertTo: 1 }]
-  const r = await run('brand-kit', 'update', 'bk1', '--fields', JSON.stringify(fields))
+test('brand-kit update --sections sends section writes, all in one patch', async () => {
+  const sections = [{ key: 'offer', body: '## What We Sell', expectedVersion: 2 }, { key: 'about', revertTo: 1 }, { sectionName: 'Hooks', tab: 'voice' }]
+  const r = await run('brand-kit', 'update', 'bk1', '--sections', JSON.stringify(sections))
   assert.equal(r.method, 'PATCH')
-  assert.deepEqual(r.body?.fields, fields)
+  assert.deepEqual(r.body?.sections, sections)
 })
 
 test('brand-kit create from a social profile alone is accepted (the flag its handler already read now exists)', async () => {

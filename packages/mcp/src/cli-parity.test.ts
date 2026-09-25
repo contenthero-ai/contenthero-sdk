@@ -167,7 +167,7 @@ const NAMING_RULES: Array<(input: string, tool: string) => string[]> = [
     const bare = kebab(i).replace(/-(id|ids|url|urls|seconds|ms|code)$/, '')
     return [`--${bare}`, `<${bare}>`]
   },
-  // A list becomes a repeatable singular flag: logos -> --logo, designPrinciples -> --design-principle.
+  // A list becomes a repeatable singular flag: logos -> --logo, brandAccounts -> --brand-account.
   (i) => (i.endsWith('s') ? [`--${kebab(i).slice(0, -1)}`] : []),
   // The tool's own entity id is the command's positional id: update_stage.stageId -> <id>.
   (i, tool) => {

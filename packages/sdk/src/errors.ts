@@ -56,8 +56,8 @@ export class ValidationError extends ContentHeroError {
 /**
  * 409: what you tried to change has moved on since you read it. Nothing was written.
  *
- * `conflicts` is set when the server names each stale item with its current state (brand kit field writes send
- * `{ key, version, value }` per field); re-read, reapply your change, and send the new `expectedVersion`. Other
+ * `conflicts` is set when the server names each stale item with its current state (brand kit section writes send
+ * `{ key, version, body }` per section); re-read, reapply your change, and send the new `expectedVersion`. Other
  * 409s carry their current state in `body`.
  */
 export class ConflictError extends ContentHeroError {
