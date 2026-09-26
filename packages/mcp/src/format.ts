@@ -32,6 +32,7 @@ import type {
   AvatarSummary,
   Balance,
   BrandKit,
+  BrandKitAccount,
   BrandKitSummaryRead,
   BrandKitSectionsRead,
   BrandKitSummary,
@@ -902,12 +903,27 @@ export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
  * curated sections, linked accounts, knowledge), so return a short header plus
  * the whole object as JSON: faithful and complete, and an agent reads it cleanly.
  */
+/**
+ * A linked account as an AI needs it: who it is, never how to draw it. `avatarUrl` is a long signed image link an
+ * app renders and a model cannot use, and `accountType` repeats the list the account is already in. A kit linked to
+ * 68 inspiration accounts made the full read about 60 KB, most of it avatar links (measured 2026-09-26). The API and
+ * the SDK still return both fields, for apps that draw the accounts.
+ */
+function accountForModel(a: BrandKitAccount): Omit<BrandKitAccount, 'avatarUrl' | 'accountType'> {
+  return { id: a.id, platform: a.platform, name: a.name, handle: a.handle, followerCount: a.followerCount }
+}
+
 export function brandKitResult(kit: BrandKit, started?: BrandImportOutcome): CallToolResult {
   const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (id ${kit.id}):`
   // Stated in words, not just left in the JSON, because the caller has to know the kit it just got back is
   // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes the import failed.
   const note = started ? importNote(started) : null
-  return text([header, ...(note ? ['', note] : []), '', JSON.stringify(kit, null, 2)].join('\n'))
+  const forModel = {
+    ...kit,
+    brandAccounts: kit.brandAccounts.map(accountForModel),
+    inspirationAccounts: kit.inspirationAccounts.map(accountForModel),
+  }
+  return text([header, ...(note ? ['', note] : []), '', JSON.stringify(forModel, null, 2)].join('\n'))
 }
 
 function importNote(started: BrandImportOutcome): string {
