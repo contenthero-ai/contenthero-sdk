@@ -20,10 +20,12 @@
  * carousel is a concession to horizontal space, not a thing to inherit.
  */
 import { createRoot } from 'react-dom/client'
-import type { CSSProperties } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@modelcontextprotocol/ext-apps/react'
 import { ModelGlyph } from './model-icon.js'
+import { canHover, composerBand, insetsOf, themeOf, type HostLayout } from './host.js'
+import { ZOOM_SCALE, clampPan, classifyRelease, isDoubleTap, zoomAt, type Point } from './gestures.js'
 import {
   columnsForAspect,
   masonryColumns,
@@ -492,7 +494,17 @@ const styles = `
   .corner.tr { right: 8px; }
   .tile:hover .acts, .tile:focus-within .acts,
   .tile:hover .corner, .tile:focus-within .corner { opacity: 1; }
-  @media (hover: none) { .acts, .corner { opacity: 1; } }
+  /*
+   * TOUCH: A TAP OPENS THE VIEWER, SO A TILE CARRIES NO BUTTONS.
+   *
+   * With no hover, an overlay has no way to appear and disappear, so it used to be shown permanently, covering
+   * every picture with five buttons. Where the host grants fullscreen, a tap opens the viewer and every action
+   * lives in its toolbar, so a tile shows only the picture. Where it does not, the buttons stay: they would
+   * otherwise be unreachable. An audio tile keeps its row either way, since it opens no viewer.
+   * Whether hover exists is the host's answer when it gives one (see canHover), stamped on the wrap as a class.
+   */
+  .no-hover .acts, .no-hover .corner { opacity: 1; }
+  .tap-opens .tile:not(.audio) .acts, .tap-opens .tile:not(.audio) .corner { display: none; }
 
   .pill {
     appearance: none; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
@@ -640,10 +652,22 @@ const styles = `
    */
   .full {
     position: fixed; inset: 0; display: flex; flex-direction: column;
-    padding-bottom: var(--composer-band, 132px);
+    padding: var(--inset-top, 0px) var(--inset-right, 0px) var(--composer-band, 132px) var(--inset-left, 0px);
     background: var(--color-background-primary, Canvas);
   }
-  .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px 16px; }
+  .full .stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px 16px; overflow: hidden; }
+  .full .stage .zoom {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    transition: transform .18s ease;
+  }
+  .full .stage .zoom.dragging { transition: none; }
+  /*
+   * GESTURES OWN THE STAGE. touch-action none hands every touch to the viewer, so a swipe steps and a double tap
+   * zooms instead of scrolling or zooming the host page. Only a stage that has gestures sets it: a video keeps its
+   * native controls, where a sideways drag scrubs.
+   */
+  .full .stage.gestures { touch-action: none; user-select: none; -webkit-user-select: none; }
+  .full .stage.gestures img { -webkit-user-drag: none; }
   /**
    * ⭐⭐ THE STAGE IS THE POINT OF THIS VIEW, SO THE PICTURE SHOULD USE IT.
    *
@@ -670,6 +694,20 @@ const styles = `
    */
   .full .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 16px 16px; flex-wrap: wrap; }
   .full .strip + .foot { padding-bottom: 0; }
+  /*
+   * NARROW: ONE ROW OF ICONS, ONE LINE OF METADATA. Five labeled pills wrapped onto three lines on a phone and
+   * pushed the picture up; icons fit one row, and the badges hold one line that clips rather than wraps.
+   */
+  .full.narrow .stage { padding: 8px; }
+  .full.narrow .strip { padding: 6px 12px 8px; justify-content: flex-start; }
+  .full.narrow .strip .t { width: 44px; height: 44px; }
+  .full.narrow .foot { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 8px; padding: 8px 12px 10px; }
+  .full.narrow .tools { display: flex; justify-content: center; gap: 12px; }
+  .full.narrow .tools .pill { padding: 0; width: 40px; height: 40px; justify-content: center; }
+  .full.narrow .tools .pill.warn { width: auto; padding: 0 12px; }
+  .full.narrow .line { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+  .full.narrow .line > * { flex: 0 0 auto; }
+  .full.narrow .line .badge.model { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 `
 
 /**
@@ -820,6 +858,99 @@ function Media({
   }
   if (kind === 'audio') return <audio className="media" src={output.url} controls preload="metadata" />
   return <img className="media" src={src} alt={output.name} onLoad={onReady} onError={onReady} />
+}
+
+/**
+ * The fullscreen stage, with its touch gestures: swipe sideways to step between variations, double tap to zoom in
+ * at the finger and again to zoom out, drag to pan while zoomed. The geometry lives in `gestures.ts`.
+ *
+ * ⚠️ POINTER EVENTS, ONE PATH FOR TOUCH AND MOUSE, so a desktop double click zooms too. A stage with neither
+ * zoom nor steps (a lone video) attaches nothing and leaves the browser's own handling alone.
+ *
+ * ⚠️ NO SWIPE WHILE ZOOMED: a sideways drag is then a pan, and stepping away mid-pan would lose the place.
+ */
+function Stage({
+  children,
+  zoomable,
+  onStep,
+  resetKey,
+}: {
+  children: ReactNode
+  zoomable: boolean
+  onStep?: (dir: 1 | -1) => void
+  resetKey: string
+}) {
+  const zoomRef = useRef<HTMLDivElement>(null)
+  const [zoom, setZoom] = useState<{ scale: number; t: Point }>({ scale: 1, t: { x: 0, y: 0 } })
+  const [dragging, setDragging] = useState(false)
+  const press = useRef<{ x: number; y: number; t0: number; from: Point } | null>(null)
+  const lastTap = useRef<(Point & { t: number }) | null>(null)
+  // A different item starts unzoomed.
+  useEffect(() => {
+    setZoom({ scale: 1, t: { x: 0, y: 0 } })
+    lastTap.current = null
+  }, [resetKey])
+  const gestures = zoomable || Boolean(onStep)
+  // The untransformed size: offset dimensions ignore the transform, a bounding rect does not.
+  const boxOf = () => ({ width: zoomRef.current?.offsetWidth ?? 0, height: zoomRef.current?.offsetHeight ?? 0 })
+
+  return (
+    <div
+      className={`stage${gestures ? ' gestures' : ''}`}
+      onPointerDown={(e) => {
+        if (!gestures) return
+        // Capture keeps a drag that leaves the stage ours; a pointer already released cannot be captured.
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+          /* The press still counts; only the capture is lost. */
+        }
+        press.current = { x: e.clientX, y: e.clientY, t0: e.timeStamp, from: zoom.t }
+      }}
+      onPointerMove={(e) => {
+        const p = press.current
+        if (!p || zoom.scale === 1) return
+        setDragging(true)
+        const t = clampPan({ x: p.from.x + e.clientX - p.x, y: p.from.y + e.clientY - p.y }, boxOf(), zoom.scale)
+        setZoom((z) => ({ ...z, t }))
+      }}
+      onPointerUp={(e) => {
+        const p = press.current
+        press.current = null
+        setDragging(false)
+        if (!p) return
+        const kind = classifyRelease(e.clientX - p.x, e.clientY - p.y, e.timeStamp - p.t0)
+        if (kind === 'tap') {
+          if (!zoomable) return
+          const rect = zoomRef.current?.getBoundingClientRect()
+          if (!rect) return
+          const at = { x: e.clientX - rect.left, y: e.clientY - rect.top, t: e.timeStamp }
+          if (!isDoubleTap(lastTap.current, at)) {
+            lastTap.current = at
+            return
+          }
+          lastTap.current = null
+          setZoom((z) =>
+            z.scale > 1 ? { scale: 1, t: { x: 0, y: 0 } } : { scale: ZOOM_SCALE, t: zoomAt(at, boxOf(), ZOOM_SCALE) },
+          )
+          return
+        }
+        if (zoom.scale === 1 && onStep && (kind === 'next' || kind === 'previous')) onStep(kind === 'next' ? 1 : -1)
+      }}
+      onPointerCancel={() => {
+        press.current = null
+        setDragging(false)
+      }}
+    >
+      <div
+        ref={zoomRef}
+        className={`zoom${dragging ? ' dragging' : ''}`}
+        style={zoom.scale === 1 ? undefined : { transform: `translate(${zoom.t.x}px, ${zoom.t.y}px) scale(${zoom.scale})` }}
+      >
+        {children}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -1006,6 +1137,17 @@ function Widget() {
   const [failReason, setFailReason] = useState<string | null>(null)
   /** True once ANY tool result has been delivered, whether or not it was a generation. See `readResult`. */
   const [answered, setAnswered] = useState(false)
+  /** The host's merged context, for what the layout reads from it (hover, insets). Set by the effect below. */
+  const [host, setHost] = useState<HostLayout | undefined>(undefined)
+  /** The frame's own `(hover: none)`, the fallback when the host does not say whether it can hover. */
+  const [mediaSaysNoHover, setMediaSaysNoHover] = useState(() => window.matchMedia?.('(hover: none)').matches ?? false)
+  useEffect(() => {
+    const q = window.matchMedia?.('(hover: none)')
+    if (!q) return
+    const onChange = () => setMediaSaysNoHover(q.matches)
+    q.addEventListener('change', onChange)
+    return () => q.removeEventListener('change', onChange)
+  }, [])
   /**
    * The frame's own width, which is the only thing a masonry grid can reason from.
    *
@@ -1087,6 +1229,7 @@ function Widget() {
    * and renders against the mode the host GRANTED rather than the one we requested.
    */
   const canExpand = Boolean(app?.getHostContext?.()?.availableDisplayModes?.includes('fullscreen'))
+  const hoverable = canHover(host, mediaSaysNoHover)
   const setMode = useCallback(
     async (want: boolean) => {
       if (!app || !canExpand) return
@@ -1116,16 +1259,9 @@ function Widget() {
    */
   useEffect(() => {
     if (!app) return
-    const apply = (
-      ctx:
-        | {
-            theme?: string
-            displayMode?: string
-            containerDimensions?: { height?: number; maxHeight?: number }
-          }
-        | undefined,
-    ) => {
-      document.documentElement.dataset.theme = ctx?.theme === 'light' ? 'light' : 'dark'
+    const apply = (ctx: HostLayout | undefined) => {
+      setHost(ctx)
+      document.documentElement.dataset.theme = themeOf(ctx)
       /**
        * ⛔⛔⛔ **THE HOST OWNS THE DISPLAY MODE. OUR STATE WAS A SECOND SOURCE OF TRUTH FOR IT.**
        *
@@ -1140,35 +1276,14 @@ function Widget() {
        */
       if (ctx?.displayMode) setFull(ctx.displayMode === 'fullscreen')
       /**
-       * ⚠️ THE COMPOSER GROWS, so the band it overlays cannot be a constant. The host reports the container
-       * it gave us; the part of the viewport BELOW that is what the composer occupies, plus a margin so
-       * the strip is not merely touching it. Clamped to a sane range because a host that reports something
-       * unexpected must not be able to push the whole layout off screen.
+       * ⚠️ THE FULLSCREEN FRAME'S EDGES, FROM THE HOST. The insets keep the picture clear of a phone's notch
+       * and the host's own chrome; the band is what its composer covers at the bottom (see `composerBand`).
        */
-      const dims = ctx?.containerDimensions
-      const given = dims?.height ?? dims?.maxHeight
-      if (given && window.innerHeight) {
-        /**
-         * ⚠️ THE FLOOR CAME DOWN FROM 184px TO 132px, AND THE ARROW IS WHY IT WAS EVER 184.
-         *
-         * The composer is about 90px. The extra reach was for the host's scroll-to-bottom arrow, which
-         * floats over our frame and TAKES THE POINTER, so a button under it highlights only when the
-         * cursor misses the arrow. There is nothing to query and nothing to disable from inside a
-         * sandboxed frame, so standing further back was the whole of the fix.
-         *
-         * ⛔ THAT WAS MEASURED AGAINST THE INLINE FRAME. In fullscreen, which is the only thing that
-         * consumes this, the host draws no arrow: measured 2026-09-21 from a fullscreen capture showing
-         * the composer and no arrow, against an inline capture in the same session showing both. So 184
-         * reserved an arrow's worth of emptiness under the action row for an arrow that is not there, and
-         * that gap is exactly the unused space below the picture.
-         *
-         * ⚠️ 132 IS THE COMPOSER PLUS A MARGIN, NOT A GUESS AT THE ARROW. If an arrow ever does appear
-         * over a fullscreen frame, the symptom is specific and immediate: a button that only responds when
-         * the cursor is slightly off it. Raise this, do not chase the button.
-         */
-        const band = Math.min(240, Math.max(132, window.innerHeight - given + 24))
-        document.documentElement.style.setProperty('--composer-band', `${Math.round(band)}px`)
-      }
+      const rootStyle = document.documentElement.style
+      const insets = insetsOf(ctx)
+      for (const side of ['top', 'right', 'left'] as const) rootStyle.setProperty(`--inset-${side}`, `${insets[side]}px`)
+      const band = composerBand(ctx, window.innerHeight)
+      if (band !== null) rootStyle.setProperty('--composer-band', `${band}px`)
       /**
        * ⭐⭐ THE TOOL NAMES ITSELF, so the waiting line does not have to guess.
        *
@@ -1199,9 +1314,15 @@ function Widget() {
       // An ellipsis is what makes a label read as an action in progress rather than as a finished one.
       if (label) setWaitingLine(`${label}\u2026`)
     }
-    apply(app.getHostContext?.())
-    app.addEventListener?.('hostcontextchanged', apply)
-    return () => app.removeEventListener?.('hostcontextchanged', apply)
+    /**
+     * ⛔⛔ THE PAYLOAD IS A DIFF, SO IT IS NEVER READ. A change notification carries only the fields that changed
+     * (`{ displayMode }` on entering fullscreen); the App has already merged it into `getHostContext()` by the
+     * time this runs. Applying the payload as the state is what turned a light widget dark on every expand.
+     */
+    const onChange = () => apply(app.getHostContext?.())
+    onChange()
+    app.addEventListener?.('hostcontextchanged', onChange)
+    return () => app.removeEventListener?.('hostcontextchanged', onChange)
   }, [app])
 
   /**
@@ -1606,7 +1727,7 @@ function Widget() {
            * is Download, and on a fresh generation it may be Recreate. One treatment across every button
            * in both the hover row and the detail foot, so nothing is emphasized by accident.
            */
-          <button className="pill neutral" onClick={() => void say(ASK.animate(o.reference!))} data-tip={tip('Animate')}>
+          <button className="pill neutral" onClick={() => void say(ASK.animate(o.reference!))} data-tip={tip('Animate')} aria-label="Animate">
             <IconAnimate />
             {t('Animate')}
           </button>
@@ -1617,6 +1738,7 @@ function Widget() {
           onClick={() => void download(o)}
           disabled={busy === o.url}
           data-tip={refused ? failReason || 'The host refused that download' : tip('Download')}
+          aria-label={refused ? 'Not downloaded' : 'Download'}
         >
           <IconDownload />
           {t(refused ? 'Not downloaded' : busy === o.url ? 'Saving' : 'Download')}
@@ -1627,6 +1749,7 @@ function Widget() {
             className="pill neutral"
             onClick={() => void say(ASK.edit(o.reference!, o.contentType))}
             data-tip={tip('Edit')}
+            aria-label="Edit"
           >
             <IconEdit />
             {t('Edit')}
@@ -1640,6 +1763,7 @@ function Widget() {
             className="pill neutral"
             onClick={() => void say(ASK.recreateItem(o))}
             data-tip={tip('Recreate')}
+            aria-label="Recreate"
           >
             <IconRecreate />
             {t('Recreate')}
@@ -1653,6 +1777,7 @@ function Widget() {
             className="pill neutral"
             onClick={() => void app?.openLink({ url: o.openUrl! })}
             data-tip={tip('Open')}
+            aria-label="Open"
           >
             <IconOpen />
             {t('Open')}
@@ -1710,16 +1835,27 @@ function Widget() {
   }
 
   if (full && current) {
+    /** A phone-width frame: one icon row and one metadata line instead of labeled pills that wrap. */
+    const narrow = frameWidth <= 560
+    const counter = n > 1 && (
+      /* ⭐ "Variation X of Y" IS GENERATION VOCABULARY. True for variations of one generation, false
+         for a library set spanning many, where item 3 is not a variation of anything. */
+      <span className="muted">{uniform ? `Variation ${index + 1} of ${n}` : `${index + 1} of ${n}`}</span>
+    )
+    /** Swipe steps like the arrow keys: wrapping, over every item. A video is not swiped (see `Stage`). */
+    const step = n > 1 && current.contentType !== 'video'
+      ? (dir: 1 | -1) => setIndex((i) => (i + dir + items.length) % items.length)
+      : undefined
     return (
-      <div className="full">
+      <div className={`full${narrow ? ' narrow' : ''}`}>
         {/* ⛔ NO HEADER HERE. The host already frames a fullscreen app with its own title and close control,
             so drawing ours produced two of each stacked on top of one another. */}
-        <div className="stage">
+        <Stage zoomable={current.contentType === 'image'} onStep={step} resetKey={current.url}>
           {/* ⭐ THE MASTER, because this is the view someone opened to LOOK at the thing, and a 1600px
               preview is soft at 2600 device px on a retina display. The tile they clicked is already
               painted underneath, so this is a swap rather than a blank frame. */}
           <Media output={current} kind={current.contentType} quality="master" />
-        </div>
+        </Stage>
         {n > 1 && (
           <div className="strip" role="tablist" aria-label="Variations">
             {items.map((o, i) => (
@@ -1753,15 +1889,21 @@ function Widget() {
             * the foot started drawing each of them twice. A second copy of a list is a duplicate waiting
             * for the first thing to be added to the other one.
             */}
-          {actions(current, { labels: true })}
-          <span className="spacer" />
-          {badges(current)}
-          {/* ⭐ "Variation X of Y" IS GENERATION VOCABULARY. True for variations of one generation, false
-              for a library set spanning many, where item 3 is not a variation of anything. */}
-          {n > 1 && (
-            <span className="muted">
-              {uniform ? `Variation ${index + 1} of ${n}` : `${index + 1} of ${n}`}
-            </span>
+          {narrow ? (
+            <>
+              <div className="tools">{actions(current, { labels: false })}</div>
+              <div className="line">
+                {badges(current)}
+                {counter}
+              </div>
+            </>
+          ) : (
+            <>
+              {actions(current, { labels: true })}
+              <span className="spacer" />
+              {badges(current)}
+              {counter}
+            </>
           )}
         </div>
       </div>
@@ -1879,7 +2021,7 @@ function Widget() {
   )
 
   return (
-    <div className="wrap">
+    <div className={`wrap${hoverable ? '' : ' no-hover'}${!hoverable && canExpand ? ' tap-opens' : ''}`}>
       {/* ⭐ METADATA LEFT, MARK RIGHT. The wordmark and the count both went: the host already shows which
           connector answered, and the count is said once at the bottom instead of twice. */}
       <div className="head">
