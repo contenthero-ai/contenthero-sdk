@@ -13,7 +13,7 @@
 import type { Command } from 'commander'
 import type { ConnectedAccount } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table } from '../output.js'
+import { emit, keyValues, table, linkRow } from '../output.js'
 
 export function registerConnectedAccount(program: Command): void {
   const connected = program
@@ -51,7 +51,7 @@ export function registerConnectedAccount(program: Command): void {
       emit(a, ctx, (acc: ConnectedAccount) =>
         keyValues([
           ['Name', acc.accountName ?? ''],
-          ['Id', acc.id],
+          ['Id', acc.id], ...linkRow(acc),
           ['Platform', acc.platform ?? ''],
           ['Handle', acc.accountHandle ?? ''],
           ['Status', acc.connectionStatus ?? ''],

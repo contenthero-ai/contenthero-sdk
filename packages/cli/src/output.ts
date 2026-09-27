@@ -38,3 +38,11 @@ export function keyValues(pairs: Array<[string, string | number | boolean]>): st
     .map(([k, v]) => `${pc.dim((k + ':').padEnd(width + 1))} ${String(v)}`)
     .join('\n')
 }
+
+/**
+ * The item's app link as a key-value row, after its Id. The link is the server's `appUrl`; with none (a type that
+ * has no page, or an older server) there is no row rather than a guessed url.
+ */
+export function linkRow(item: { appUrl?: string | null }): Array<[string, string]> {
+  return item.appUrl ? [['App URL', item.appUrl]] : []
+}

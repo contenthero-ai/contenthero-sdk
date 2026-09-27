@@ -2461,7 +2461,8 @@ test('add_brand_knowledge ingests a text note', async () => {
 test('remove_brand_knowledge removes by id', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'remove_brand_knowledge', arguments: { brandKitId: 'bk1', knowledgeId: 'kn9' } })
-  assert.match(res.content[0].text, /Removed knowledge item: .* \(id kn9\)/)
+  // A removed item has no title or page left to show, so the confirmation names only its id.
+  assert.equal(res.content[0].text, 'Knowledge item removed (id kn9).')
 })
 
 test('list_content forwards brandKitId for brand-scoped reads', async () => {

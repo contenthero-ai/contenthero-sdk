@@ -25,7 +25,7 @@ import type {
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table } from '../output.js'
+import { emit, keyValues, table, linkRow } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, toInt, toJson, toList } from '../args.js'
@@ -206,7 +206,7 @@ export function registerBrandKit(program: Command): void {
       emit(kit, ctx, (k: BrandKit) =>
         keyValues([
           ['Name', k.name],
-          ['Id', k.id],
+          ['Id', k.id], ...linkRow(k),
           ['Sections', k.sections.map((s) => s.sectionName).join(', ')],
           ['Brand accounts', k.brandAccounts.length],
           ['Inspiration accounts', k.inspirationAccounts.length],
@@ -255,7 +255,7 @@ export function registerBrandKit(program: Command): void {
       emit({ brandKit, import: started }, ctx, () =>
         keyValues([
           ['Created', brandKit.name],
-          ['Id', brandKit.id],
+          ['Id', brandKit.id], ...linkRow(brandKit),
           // Said plainly, because a kit that is still filling in otherwise reads as a kit that came back empty.
           ...(started ? importRows(started, brandKit.id) : []),
         ]),
@@ -316,7 +316,7 @@ export function registerBrandKit(program: Command): void {
       emit(kit, ctx, (k: BrandKit) =>
         keyValues([
           ['Updated', k.name],
-          ['Id', k.id],
+          ['Id', k.id], ...linkRow(k),
         ]),
       )
     })
@@ -356,7 +356,7 @@ export function registerBrandKit(program: Command): void {
       emit(item, ctx, (k: BrandKnowledgeDetail) =>
         keyValues([
           ['Title', k.title ?? ''],
-          ['Id', k.id],
+          ['Id', k.id], ...linkRow(k),
           ['Source type', k.sourceType ?? ''],
           ['Source url', k.sourceUrl ?? ''],
           ['Body', k.content ?? '(use search for the full depth)'],
@@ -444,7 +444,7 @@ export function registerBrandKit(program: Command): void {
       emit(item, ctx, (k: BrandKnowledgeItem) =>
         keyValues([
           ['Added', k.title ?? '(untitled)'],
-          ['Id', k.id],
+          ['Id', k.id], ...linkRow(k),
           ['Source type', k.sourceType ?? ''],
         ]),
       )

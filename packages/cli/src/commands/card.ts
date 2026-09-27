@@ -26,7 +26,7 @@ import type {
   UpdateCardInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table } from '../output.js'
+import { emit, keyValues, table, linkRow } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, toInt, toJson, toList } from '../args.js'
@@ -73,7 +73,7 @@ export function assertNotesCarryRevision(cardId: string, notes: unknown, expecte
 function summaryHuman(p: CardSummary, action?: string): string {
   return keyValues([
     ...(action ? [[action, p.title] as [string, string]] : [['Title', p.title] as [string, string]]),
-    ['Id', p.id],
+    ['Id', p.id], ...linkRow(p),
     ['Platform', p.platform ?? ''],
     // A card has no status. Archive is the one lifecycle flag it carries on itself, and it is only shown
     // when true: a line reading "Archived: no" on every live card is noise.
@@ -178,7 +178,7 @@ export function registerCard(program: Command): void {
       emit(p, ctx, (post: CardDetail) => {
         const head = keyValues([
           ['Title', post.title],
-          ['Id', post.id],
+          ['Id', post.id], ...linkRow(post),
           ['Platform', post.platform ?? ''],
           // ⚠️ A CARD HAS NO STATUS. The POSTS table below keeps its own `STATUS` column, which is a
           // real per-destination publish state and a different thing entirely.

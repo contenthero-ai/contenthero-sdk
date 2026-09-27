@@ -12,7 +12,7 @@
 
 import type { Command } from 'commander'
 import { makeClient } from '../context.js'
-import { emit, table, keyValues } from '../output.js'
+import { emit, table, keyValues, linkRow } from '../output.js'
 import { collect } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 import type { Element } from '@contenthero/sdk'
@@ -21,7 +21,7 @@ const CATEGORIES = ['auto', 'character', 'location', 'prop'] as const
 
 function detail(e: Element): string {
   return keyValues([
-    ['Id', e.id],
+    ['Id', e.id], ...linkRow(e),
     ['Name', e.name],
     ['Category', e.category],
     ...(e.description ? [['Description', e.description] as [string, string]] : []),

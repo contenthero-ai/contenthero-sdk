@@ -105,6 +105,7 @@ import {
   brandKnowledgeDetailResult,
   brandKnowledgeSearchResult,
   brandKnowledgeItemResult,
+  brandKnowledgeRemovedResult,
   completedResult,
   type GeneratedAttachment,
   connectedAccountListResult,
@@ -1333,7 +1334,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen), [], client.baseUrl)
+        return completedResult(gen, await attachmentsFor(gen))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1517,7 +1518,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateCost(request))
         const result = await client.generate(request)
-        return audioResult(result, client.baseUrl)
+        return audioResult(result)
       } catch (err) {
         return errorResult(err)
       }
@@ -1577,7 +1578,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (result.outputs) return enhanceClipsResult(result)
         // Enhancement is async (status 'processing'); isolation returns URLs inline.
         if (result.status === 'processing') return pendingResult(result.outputId)
-        return audioResult(result, client.baseUrl)
+        return audioResult(result)
       } catch (err) {
         return errorResult(err)
       }
@@ -2366,10 +2367,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const res = await client.removeBrandKnowledge(args.brandKitId, args.knowledgeId)
-        return brandKnowledgeItemResult(
-          { id: res.id, title: null, sourceType: null, sourceUrl: null, createdAt: null, updatedAt: null },
-          'Removed',
-        )
+        return brandKnowledgeRemovedResult(res)
       } catch (err) {
         return errorResult(err)
       }
@@ -2670,7 +2668,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
               : { url: null },
           ),
         )
-        return mediaBatchResult(result, images, client.baseUrl)
+        return mediaBatchResult(result, images)
       } catch (err) {
         return errorResult(err)
       }
@@ -2731,7 +2729,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const result = await client.getMediaBatch(args.items)
         // ⛔ NO `inlineImagesWithinBudget` CALL, DELIBERATELY. That is the entire difference between this
         // tool and get_media, and it is what makes this one's cost a constant.
-        return mediaDisplayResult(result, client.baseUrl)
+        return mediaDisplayResult(result)
       } catch (err) {
         return errorResult(err)
       }
@@ -2784,7 +2782,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return uploadedMediaResult(await client.completeMediaUpload(args.outputId), client.baseUrl)
+        return uploadedMediaResult(await client.completeMediaUpload(args.outputId))
       } catch (err) {
         return errorResult(err)
       }
@@ -2815,7 +2813,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             contentType: args.contentType,
             fileName: args.fileName,
           }),
-          client.baseUrl,
         )
       } catch (err) {
         return errorResult(err)
@@ -3102,7 +3099,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           gens.length === 1 && gens[0]
             ? { [gens[0].outputId]: await attachmentsFor(gens[0]) }
             : {}
-        return generationBatchResult(gens, attachments, client.baseUrl)
+        return generationBatchResult(gens, attachments)
       } catch (err) {
         return errorResult(err)
       }
@@ -4286,7 +4283,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: SMART_WAIT_MS })
         // ⚠️ The FORMAT is what makes an export renderable, and only this handler knows it: `get_export`
         // polls by exportId alone, so a poll legitimately reports rather than displays.
-        return completedExportResult(job, input.format ?? 'mp4', client.baseUrl)
+        return completedExportResult(job, input.format ?? 'mp4')
       } catch (err) {
         if (err instanceof GenerationTimeoutError) {
           return exportJobResult({ exportId: err.outputId, status: 'rendering' })

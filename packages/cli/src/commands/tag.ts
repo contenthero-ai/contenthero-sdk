@@ -13,7 +13,7 @@
 import type { Command } from 'commander'
 import type { Tag } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table } from '../output.js'
+import { emit, keyValues, table, linkRow } from '../output.js'
 
 export function registerTag(program: Command): void {
   const tag = program.command('tag').description("Manage the account's tags")
@@ -39,7 +39,7 @@ export function registerTag(program: Command): void {
     .action(async (name: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
       const t = await client.createTag(name)
-      emit(t, ctx, (r: Tag) => keyValues([['Tag', r.name], ['Id', r.id]]))
+      emit(t, ctx, (r: Tag) => keyValues([['Tag', r.name], ['Id', r.id], ...linkRow(r)]))
     })
 
   tag
@@ -50,7 +50,7 @@ export function registerTag(program: Command): void {
     .action(async (id: string, name: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
       const t = await client.updateTag(id, name)
-      emit(t, ctx, (r: Tag) => keyValues([['Tag', r.name], ['Id', r.id]]))
+      emit(t, ctx, (r: Tag) => keyValues([['Tag', r.name], ['Id', r.id], ...linkRow(r)]))
     })
 
   tag

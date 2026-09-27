@@ -150,41 +150,19 @@ export type GeneratedAttachment =
  * to set. Embedding base64 here would pay the context cost twice over.
  */
 /**
- * Where one output lives in the product.
+ * ⭐⭐ HOW PROSE NAMES AN ITEM: its id, then its app link when the server sent one.
  *
- * ## ⭐⭐⭐ COMPUTED HERE, NOT IN THE WIDGET, BECAUSE HERE THE INDEX IS ALREADY A NUMBER
- *
- * The widget's first version parsed the slot back out of the output's NAME (`<id>-3` means slot 2), which
- * is a derivation of something this function has in its hand. Parsing a number out of a string we formatted
- * two lines earlier is how an off-by-one gets in, and the symptom would be "Open shows the wrong picture",
- * which reads as a broken link rather than an index bug.
- *
- * ⚠️ **ONE-BASED IN THE NAME, ZERO-BASED IN THE URL.** `<id>-3` is what a person reads as "variation 3",
- * and `variation=2` is the studio's `imageIndex`, which is slot space. Both conventions are correct in
- * their own place and the conversion belongs at exactly one boundary, which is this one.
- *
- * ⚠️ A single-output generation gets NO `variation`. There is no variation to name, and passing 0 would
- * imply there was a choice.
+ * ONE spelling everywhere, so an agent learns it once and can hyperlink any item for the person. The link is the
+ * server's `appUrl`, never composed here: this module once built its own studio links, and their format drifted
+ * from the app's. An item whose type carries no `appUrl` (or an older server) simply renders its id.
  */
-/** Where a deep link points when no client base url was threaded through. */
-export const DEFAULT_APP_URL = 'https://app.contenthero.ai'
+export function idOf(item: { id: string | null; appUrl?: string | null }, label = 'id'): string {
+  return item.appUrl ? `${label} ${item.id}, appUrl ${item.appUrl}` : `${label} ${item.id}`
+}
 
-export function studioUrlFor(baseUrl: string, outputId: string, index: number, total: number): string {
-  const root = baseUrl.replace(/\/+$/, '')
-  /**
-   * ⭐⭐⭐ **ONE-BASED, BECAUSE EVERY OTHER THING A PERSON SEES IS.**
-   *
-   * The reference they copy is `<id>-1`. The detail view says "Variation 1 of 4". A url saying
-   * `variation=0` for that same picture made three surfaces disagree, and the one that disagreed was the
-   * only one anybody would ever paste into a message or a bug report.
-   *
-   * ⛔ The studio's `imageIndex` is a ZERO-BASED slot and stays that way. Slot space is an internal fact
-   * about `task_outcomes` and `item_statuses`, not a number to show anyone. The app subtracts one when it
-   * reads this parameter, so the conversion sits at the boundary where the two vocabularies meet rather
-   * than leaking slot space into a shareable link.
-   */
-  const variation = total > 1 ? `&variation=${index + 1}` : ''
-  return `${root}/studio?output=${encodeURIComponent(outputId)}${variation}`
+/** The same appUrl, after a url a line already shows. */
+function linkAfter(appUrl: string | null | undefined): string {
+  return appUrl ? ` (appUrl ${appUrl})` : ''
 }
 
 /**
@@ -351,7 +329,6 @@ export function mediaWidgetData(input: MediaWidgetInput) {
 export function generationWidgetData(
   gen: Generation,
   posterUrls: readonly (string | null)[] = [],
-  baseUrl = DEFAULT_APP_URL,
 ) {
   const urls = gen.outputUrls ?? []
   return mediaWidgetData({
@@ -374,8 +351,11 @@ export function generationWidgetData(
       name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
       contentType: gen.contentType,
       displayAspect: gen.displayAspect ?? null,
-      // A generation lives in the studio. Another producer supplies its own destination.
-      openUrl: studioUrlFor(baseUrl, gen.outputId, i, urls.length),
+      /**
+       * ⭐ THE SERVER'S LINK, INDEX-ALIGNED with `outputUrls`. The app owns its own URLs; this module composed
+       * them once and they drifted into a second format. Absent from an older server, which hides Open.
+       */
+      openUrl: gen.appUrls?.[i],
       // Every generation output is referenceable by id, which is what makes Animate and Edit meaningful.
       reference: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
       /**
@@ -394,8 +374,6 @@ export function completedResult(
   gen: Generation,
   attachments: GeneratedAttachment[] = [],
   posterUrls: readonly (string | null)[] = [],
-  /** The server this client talks to, so Open deep-links to it rather than always to production. */
-  baseUrl?: string,
 ): CallToolResult {
   const urls = gen.outputUrls ?? []
   const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
@@ -420,7 +398,7 @@ export function completedResult(
    * the same string is an unexplained failure wearing a label's clothes, so there it renders as nothing.
    */
   const header = `Done. ${urls.length} ${noun} from ${gen.modelDisplayName ?? gen.modelId} (outputId ${gen.outputId}):`
-  const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
+  const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}${linkAfter(gen.appUrls?.[i])}`)]
   const p = gen.placement
   if (p) {
     if (p.projectType === 'canvas') {
@@ -459,7 +437,7 @@ export function completedResult(
   return {
     content,
     isError: false,
-    structuredContent: generationWidgetData(gen, posterUrls, baseUrl),
+    structuredContent: generationWidgetData(gen, posterUrls),
     _meta: WIDGET_META,
   }
 }
@@ -580,13 +558,10 @@ export function pendingResult(
  * would be worse than a chip that renders nothing. Audio has no shape, so `displayAspect` is genuinely
  * null rather than unknown.
  */
-export function audioResult(
-  result: GenerateResult | EditAudioResult,
-  baseUrl = DEFAULT_APP_URL,
-): CallToolResult {
+export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
   const urls = result.outputUrls ?? []
   const header = `Done. Audio generated (outputId ${result.outputId}):`
-  const prose = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)].join('\n')
+  const prose = [header, ...urls.map((u, i) => `${i + 1}. ${u}${linkAfter(result.appUrls?.[i])}`)].join('\n')
   if (!urls.length) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],
@@ -599,7 +574,7 @@ export function audioResult(
         contentType: 'audio' as const,
         // Audio has no shape, so there is nothing for a tile to take.
         displayAspect: null,
-        openUrl: studioUrlFor(baseUrl, result.outputId, i, urls.length),
+        openUrl: result.appUrls?.[i],
       })),
     }),
     _meta: WIDGET_META,
@@ -660,7 +635,6 @@ export function costResult(est: CostEstimate): CallToolResult {
 export function generationStatusResult(
   gen: Generation,
   attachments: GeneratedAttachment[] = [],
-  baseUrl?: string,
 ): CallToolResult {
   /**
    * ⛔⛔ **THIS DROPPED THE ATTACHMENTS AND THEREFORE RENDERED NOTHING.** It called `completedResult(gen)`
@@ -672,7 +646,7 @@ export function generationStatusResult(
    * not see it: they call `completedResult` directly and never go through here.
    */
   if (gen.status === 'completed') {
-    const res = completedResult(gen, attachments, [], baseUrl)
+    const res = completedResult(gen, attachments)
     /**
      * ⛔⛔⛔ **`_meta` IS WHAT MOUNTS A WIDGET. `structuredContent` IS JUST DATA, AND DELETING IT BROKE THE
      * ONE THING THAT MAKES A GENERATION CARD FINISH.**
@@ -747,7 +721,7 @@ export function generationStatusResult(
     structuredContent: {
       // ⚠️ Built from the LANDED slots, not from `outputUrls`: the two differ precisely while the job is
       // still running, which is the only time this branch is reached.
-      ...generationWidgetData({ ...gen, outputUrls: landed }, [], baseUrl),
+      ...generationWidgetData({ ...gen, outputUrls: landed }),
       status: 'processing',
       /**
        * ⚠️ NO `expected` HERE, DELIBERATELY. A `Generation` does not carry how many were ASKED for, only
@@ -764,13 +738,12 @@ export function generationStatusResult(
 export function generationBatchResult(
   gens: Generation[],
   attachmentsByOutputId: Record<string, GeneratedAttachment[]> = {},
-  baseUrl?: string,
 ): CallToolResult {
   // ⚠️ ONLY THE SINGLE FORM ATTACHES. A batch status covering ten generations would embed ten sets of
   // bytes into one result, which is the context blow-up the link design was originally protecting against.
   // The single form is what a caller polling one generation hits, and that is the case worth rendering.
   if (gens.length === 1)
-    return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [], baseUrl)
+    return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
   const rows = gens.map((gen) => {
     if (gen.status === 'completed') {
       const urls = gen.outputUrls ?? []
@@ -812,7 +785,7 @@ export function avatarListResult(avatars: AvatarSummary[]): CallToolResult {
   }
   const rows = avatars.map(
     (a) =>
-      `- ${a.name} (id ${a.id})${a.isDefault ? ' [default]' : ''} | image: ${a.imageUrl ?? 'none'} | voice: ${a.defaultVoiceId ?? 'none'}`,
+      `- ${a.name} (${idOf(a)})${a.isDefault ? ' [default]' : ''} | image: ${a.imageUrl ?? 'none'} | voice: ${a.defaultVoiceId ?? 'none'}`,
   )
   return text([`${avatars.length} avatar(s):`, ...rows].join('\n'))
 }
@@ -822,7 +795,7 @@ export function avatarResult(a: Avatar): CallToolResult {
   const traits = [a.gender, a.age, a.ethnicity].filter(Boolean).join(', ')
   return text(
     lines([
-      `${a.name} (id ${a.id})${a.isDefault ? ' [default]' : ''}`,
+      `${a.name} (${idOf(a)})${a.isDefault ? ' [default]' : ''}`,
       `image (base look, use as imageUrl for generate_lip_sync): ${a.imageUrl ?? 'none'}`,
       `default voice (use as voiceId): ${a.defaultVoiceId ?? 'none'}`,
       a.description ? `description: ${a.description}` : null,
@@ -831,7 +804,7 @@ export function avatarResult(a: Avatar): CallToolResult {
       a.looks.length ? `looks (${a.looks.length}):` : 'looks: none',
       ...a.looks.map(
         (l) =>
-          `  - ${l.name ?? l.lookType ?? 'look'} (id ${l.id})${l.isDefault ? ' [default]' : ''}${l.isFavorited ? ' [favorite]' : ''}${l.isArchived ? ' [archived]' : ''}: ${l.imageUrl ?? 'none'}`,
+          `  - ${l.name ?? l.lookType ?? 'look'} (${idOf(l)})${l.isDefault ? ' [default]' : ''}${l.isFavorited ? ' [favorite]' : ''}${l.isArchived ? ' [archived]' : ''}: ${l.imageUrl ?? 'none'}`,
       ),
     ]),
   )
@@ -852,7 +825,7 @@ export function avatarPendingResult(created: CreateAvatarResult): CallToolResult
   const a = created.avatar
   return text(
     lines([
-      `Created "${a.name}" (id ${a.id}).`,
+      `Created "${a.name}" (${idOf(a)}).`,
       '',
       `⚠️ NOT READY YET: status is ${created.status}. The avatar has no image until its first look`,
       'finishes generating, which is also when its default look and profile photo are set.',
@@ -868,7 +841,7 @@ export function voiceListResult(voices: VoiceSummary[]): CallToolResult {
   if (!voices.length) return text('No saved voices found.')
   const rows = voices.map(
     (v) =>
-      `- ${v.name ?? '(unnamed)'} (voiceId ${v.voiceId})${v.isFavorited ? ' [favorite]' : ''}${v.previewUrl ? ` | preview: ${v.previewUrl}` : ''}`,
+      `- ${v.name ?? '(unnamed)'} (${idOf({ id: v.voiceId, appUrl: v.appUrl }, 'voiceId')})${v.isFavorited ? ' [favorite]' : ''}${v.previewUrl ? ` | preview: ${v.previewUrl}` : ''}`,
   )
   return text([`${voices.length} voice(s):`, ...rows].join('\n'))
 }
@@ -878,7 +851,7 @@ export function voiceResult(v: Voice): CallToolResult {
   const traits = [v.gender, v.age, v.accent, v.language].filter(Boolean).join(', ')
   return text(
     lines([
-      `${v.name ?? '(unnamed)'} (voiceId ${v.voiceId})${v.isFavorited ? ' [favorite]' : ''}`,
+      `${v.name ?? '(unnamed)'} (${idOf({ id: v.voiceId, appUrl: v.appUrl }, 'voiceId')})${v.isFavorited ? ' [favorite]' : ''}`,
       v.provider ? `provider: ${v.provider}` : null,
       traits ? `traits: ${traits}` : null,
       v.description ? `description: ${v.description}` : null,
@@ -893,7 +866,7 @@ export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
   if (!kits.length) return text('No brand kits found. Create one in the ContentHero app first.')
   const rows = kits.map(
     (k) =>
-      `- ${k.name} (id ${k.id})${k.isDefault ? ' [default]' : ''}`,
+      `- ${k.name} (${idOf(k)})${k.isDefault ? ' [default]' : ''}`,
   )
   return text([`${kits.length} brand kit(s):`, ...rows].join('\n'))
 }
@@ -914,7 +887,7 @@ function accountForModel(a: BrandKitAccount): Omit<BrandKitAccount, 'avatarUrl' 
 }
 
 export function brandKitResult(kit: BrandKit, started?: BrandImportOutcome): CallToolResult {
-  const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (id ${kit.id}):`
+  const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (${idOf(kit)}):`
   // Stated in words, not just left in the JSON, because the caller has to know the kit it just got back is
   // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes the import failed.
   const note = started ? importNote(started) : null
@@ -953,7 +926,7 @@ function importNote(started: BrandImportOutcome): string {
  * an agent makes first to decide what to load, so it should cost little.
  */
 export function brandKitSummaryResult(kit: BrandKitSummaryRead): CallToolResult {
-  const lines = [`Brand kit "${kit.name}" (id ${kit.id}), ${kit.sections.length} section(s):`]
+  const lines = [`Brand kit "${kit.name}" (${idOf(kit)}), ${kit.sections.length} section(s):`]
   for (const s of kit.sections) {
     lines.push(
       '',
@@ -970,7 +943,7 @@ export function brandKitSummaryResult(kit: BrandKitSummaryRead): CallToolResult 
  */
 export function brandKitSectionsResult(read: BrandKitSectionsRead): CallToolResult {
   if (!read.sections.length) return text(`No sections in brand kit "${read.name}" match that filter.`)
-  const lines = [`${read.sections.length} section(s) from brand kit "${read.name}" (id ${read.id}):`]
+  const lines = [`${read.sections.length} section(s) from brand kit "${read.name}" (${idOf(read)}):`]
   for (const s of read.sections) {
     lines.push(
       '',
@@ -992,7 +965,7 @@ export function brandKnowledgeListResult(result: BrandKnowledgeListResult): Call
   }
   const more = result.hasMore ? ` (showing ${result.items.length} of ${result.total})` : ''
   const lines = result.items.map(
-    (k) => `- ${k.title ?? '(untitled)'} [${k.sourceType ?? 'unknown'}] (id ${k.id})`,
+    (k) => `- ${k.title ?? '(untitled)'} [${k.sourceType ?? 'unknown'}] (${idOf(k)})`,
   )
   return text([`${result.total} knowledge item(s)${more}:`, ...lines].join('\n'))
 }
@@ -1000,7 +973,7 @@ export function brandKnowledgeListResult(result: BrandKnowledgeListResult): Call
 export function brandKnowledgeDetailResult(item: BrandKnowledgeDetail): CallToolResult {
   return text(
     [
-      `${item.title ?? '(untitled)'} [${item.sourceType ?? 'unknown'}] (id ${item.id})`,
+      `${item.title ?? '(untitled)'} [${item.sourceType ?? 'unknown'}] (${idOf(item)})`,
       item.sourceUrl ? `Source: ${item.sourceUrl}` : null,
       '',
       item.content ?? '(no stored body; use search_brand_knowledge for the full depth)',
@@ -1022,8 +995,13 @@ export function brandKnowledgeSearchResult(matches: BrandKnowledgeMatch[]): Call
   return text([`${matches.length} match(es):`, ...blocks].join('\n\n'))
 }
 
+/** A removed knowledge item: only its id survives, and it no longer has a page, so no appUrl. */
+export function brandKnowledgeRemovedResult(r: { id: string }): CallToolResult {
+  return text(`Knowledge item removed (id ${r.id}).`)
+}
+
 export function brandKnowledgeItemResult(item: BrandKnowledgeItem, verb = 'Added'): CallToolResult {
-  return text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (id ${item.id}).`)
+  return text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (${idOf(item)}).`)
 }
 
 /**
@@ -1062,7 +1040,7 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = m.url ? ` | ${m.url}` : ''
-    return `- [${m.type}] ${m.model ?? ''} (id ${m.id})${varTag}${favTag}${kindTag}${nameStr}${durStr} | ${m.status}${promptStr}${urlStr}`
+    return `- [${m.type}] ${m.model ?? ''} (${idOf(m)})${varTag}${favTag}${kindTag}${nameStr}${durStr} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
 }
@@ -1078,14 +1056,14 @@ export function mediaSearchResult(results: SearchMediaResult[]): CallToolResult 
       ? ` | scenes: ${r.scenes.map((s) => `${(s.startMs / 1000).toFixed(1)}-${(s.endMs / 1000).toFixed(1)}s`).join(', ')}`
       : ''
     const urlStr = r.url ? ` | ${r.url}` : ''
-    return `- ${kindTag} (id ${r.id})${rel}${summaryStr}${scenesStr}${urlStr}`
+    return `- ${kindTag} (${idOf(r)})${rel}${summaryStr}${scenesStr}${urlStr}`
   })
   return text([`${results.length} match(es) (most relevant first):`, ...rows].join('\n'))
 }
 
 /** The user's folders (their own + the built-in derived folders). */
 export function folderListResult(data: { folders: Folder[]; derived: DerivedFolder[] }): CallToolResult {
-  const own = data.folders.map((f) => `- ${f.name} [${f.type}] (id ${f.id})${f.parentId ? ` | in ${f.parentId}` : ''}`)
+  const own = data.folders.map((f) => `- ${f.name} [${f.type}] (${idOf(f)})${f.parentId ? ` | in ${f.parentId}` : ''}`)
   const derived = data.derived.map((d) => `- ${d.name} (key ${d.key})`)
   return text([
     own.length ? `Your folders (${own.length}):` : 'You have no folders yet.',
@@ -1107,7 +1085,7 @@ export function folderContentsResult(folder: { name: string } | null, items: Fol
       const summ = i.summary ? ` | ${i.summary.slice(0, 80)}${i.summary.length > 80 ? '...' : ''}` : ''
       return `- [${i.kind ?? 'media'}] (${i.sourceTable} ${i.sourceRecordId} v${i.variant})${rel}${fav}${summ}${i.url ? ` | ${i.url}` : ''}`
     }
-    return `- [${i.type}] ${i.name} (id ${i.id})${i.subtype ? ` | ${i.subtype}` : ''}`
+    return `- [${i.type}] ${i.name} (${idOf(i)})${i.subtype ? ` | ${i.subtype}` : ''}`
   })
   return text([header, ...rows].join('\n'))
 }
@@ -1123,7 +1101,7 @@ export function mediaResult(m: MediaItem): CallToolResult {
     .join(', ')
   return text(
     lines([
-      `${m.type} from ${m.model ?? 'unknown'} (id ${m.id})${m.selectedVariation ? `, variation ${m.selectedVariation}` : ''}`,
+      `${m.type} from ${m.model ?? 'unknown'} (${idOf(m)})${m.selectedVariation ? `, variation ${m.selectedVariation}` : ''}`,
       m.kind && m.kind !== 'creation' ? `kind: ${m.kind}${m.boardType ? ` (${m.boardType})` : ''}` : null,
       m.prompt ? `prompt: ${m.prompt}` : null,
       m.script ? `script: ${m.script}` : null,
@@ -1206,7 +1184,7 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
  * ⚠️ Transcripts are skipped: the widget has no element for text, and a tile that renders nothing is worse
  * than an item the summary already describes in words.
  */
-function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidgetItem[] {
+function mediaBatchItems(result: MediaBatchResult): MediaWidgetItem[] {
   const items: MediaWidgetItem[] = []
   for (const it of result.items) {
     if (!it.ok || !it.url) continue
@@ -1225,10 +1203,8 @@ function mediaBatchItems(result: MediaBatchResult, baseUrl: string): MediaWidget
       contentType: it.type,
       // MEASURED, from the storage spine. Null when nothing measured it, which the tile handles.
       displayAspect: g ? aspectLabel(g.width, g.height) : null,
-      openUrl: it.mediaId
-        ? `${baseUrl.replace(/\/+$/, '')}/studio?output=${encodeURIComponent(it.mediaId)}` +
-          (it.variation && it.variation > 1 ? `&variation=${it.variation}` : '')
-        : undefined,
+      // The server's link. Absent for a raw url that is not one of the account's items.
+      openUrl: it.appUrl,
       // The small picture for the tile. The master stays on `url` for download.
       previewUrl: it.previewUrl ?? null,
       source: it.source ?? null,
@@ -1270,7 +1246,6 @@ export interface InlinedImageSlot {
 export function mediaBatchResult(
   result: MediaBatchResult,
   images: InlinedImageSlot[],
-  baseUrl = DEFAULT_APP_URL,
 ): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
@@ -1372,10 +1347,10 @@ function displayItemLine(it: ResolvedMediaBatchItem, i: number): string {
   return `${label} ${it.type ?? 'media'} ${name}`
 }
 
-export function mediaDisplayResult(result: MediaBatchResult, baseUrl = DEFAULT_APP_URL): CallToolResult {
+export function mediaDisplayResult(result: MediaBatchResult): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
-  const tiles = mediaBatchItems(result, baseUrl)
+  const tiles = mediaBatchItems(result)
   const summary =
     `Showing ${okCount}/${items.length} media item(s) to the person.` +
     (okCount < items.length ? ' Items that could not be resolved are listed below.' : '') +
@@ -1428,9 +1403,9 @@ export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
  * ⚠️ Referenceable, unlike an export: `outputId` is exactly what `generate_*` accepts, which is what the
  * prose has always told the caller.
  */
-export function uploadedMediaResult(r: UploadedMedia, baseUrl = DEFAULT_APP_URL): CallToolResult {
-  const prose = `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`
-  return renderableMedia(prose, r.outputId, r.url, r.contentType, baseUrl)
+export function uploadedMediaResult(r: UploadedMedia): CallToolResult {
+  const prose = `Media ready (${idOf({ id: r.outputId, appUrl: r.appUrl })}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`
+  return renderableMedia(prose, r.outputId, r.url, r.contentType, r.appUrl)
 }
 
 /**
@@ -1444,7 +1419,7 @@ function renderableMedia(
   outputId: string | null,
   url: string,
   contentType: string | undefined,
-  baseUrl: string,
+  appUrl: string | null | undefined,
 ): CallToolResult {
   const medium =
     contentType === 'image' || contentType === 'video' || contentType === 'audio' ? contentType : undefined
@@ -1460,7 +1435,7 @@ function renderableMedia(
           name: outputId,
           contentType: medium,
           reference: outputId,
-          openUrl: studioUrlFor(baseUrl, outputId, 0, 1),
+          openUrl: appUrl ?? undefined,
         },
       ],
     }),
@@ -1485,19 +1460,19 @@ function renderableMedia(
  * Saying "already imported" without naming what it is would send someone hunting for a library item that
  * does not exist. That is the exact confusion this whole fix came from.
  */
-export function importedMediaResult(r: ImportedMedia, baseUrl = DEFAULT_APP_URL): CallToolResult {
+export function importedMediaResult(r: ImportedMedia): CallToolResult {
   if (!r.alreadyExisted) {
     return renderableMedia(
-      `Media ready (id ${r.outputId}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
+      `Media ready (${idOf({ id: r.outputId, appUrl: r.appUrl })}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
       r.outputId,
       r.url,
       r.contentType,
-      baseUrl,
+      r.appUrl,
     )
   }
   if (r.outputId) {
     return text(
-      `Already in your library (id ${r.outputId}): ${r.url}. Nothing was imported: these exact bytes are already there. Reference it by outputId as usual.`,
+      `Already in your library (${idOf({ id: r.outputId, appUrl: r.appUrl })}): ${r.url}. Nothing was imported: these exact bytes are already there. Reference it by outputId as usual.`,
     )
   }
   const what = r.existing?.role ? `a ${r.existing.role}` : 'an existing file'
@@ -1523,7 +1498,7 @@ export function elementListResult(items: Element[]): CallToolResult {
   }
   const rows = items.map((e) => {
     const media = e.input_video_url ? '1 video' : `${e.input_urls.length} image(s)`
-    return `- ${e.name} (id ${e.id}) | ${e.category} | ${media}${e.description ? ` | ${e.description.slice(0, 60)}` : ''}`
+    return `- ${e.name} (${idOf(e)}) | ${e.category} | ${media}${e.description ? ` | ${e.description.slice(0, 60)}` : ''}`
   })
   return text([`${items.length} element(s):`, ...rows].join('\n'))
 }
@@ -1536,11 +1511,11 @@ export function elementDeletedResult(id: string): CallToolResult {
 /** One saved reference element. */
 export function elementResult(e: Element, verb?: string): CallToolResult {
   if (verb) {
-    return text(`${verb} element "${e.name}" (id ${e.id}, ${e.category}). Reference it in a Kling generation via references.elements [{ elementId: "${e.id}" }] and @${e.name} in the prompt.`)
+    return text(`${verb} element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via references.elements [{ elementId: "${e.id}" }] and @${e.name} in the prompt.`)
   }
   return text(
     lines([
-      `${e.name} (id ${e.id}) | ${e.category}`,
+      `${e.name} (${idOf(e)}) | ${e.category}`,
       e.description ? `description: ${e.description}` : null,
       e.input_video_url ? `video: ${e.input_video_url}` : `images (${e.input_urls.length}): ${e.input_urls.join(', ')}`,
       `Reference in a Kling prompt as @${e.name}; pass references.elements [{ elementId: "${e.id}" }].`,
@@ -1722,7 +1697,7 @@ function cardLine(p: CardSummary): string {
       : ''
   // `[archived]` rather than a status. The list excludes archived cards unless asked for, so when one
   // appears here the agent asked for it and the flag confirms the filter did what it said.
-  return `- ${p.title || '(untitled)'} (id ${p.id})${p.isArchived ? ' [archived]' : ''} | ${where}${when}`
+  return `- ${p.title || '(untitled)'} (${idOf(p)})${p.isArchived ? ' [archived]' : ''} | ${where}${when}`
 }
 
 /** List of posts with pagination context. */
@@ -1760,14 +1735,14 @@ export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResu
   // Without it a caller who just set a publish time gets no confirmation of what time was actually stored.
   const scheduled = p.scheduledAt ? ` | Scheduled: ${p.scheduledAt}` : ''
   const archived = p.isArchived ? ' | ARCHIVED' : ''
-  return text(`${prefix}: ${p.title || '(untitled)'} (id ${p.id})${stage}${scheduled}${archived}`)
+  return text(`${prefix}: ${p.title || '(untitled)'} (${idOf(p)})${stage}${scheduled}${archived}`)
 }
 
 /** One card in full, with its posts and assets. */
 export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
-      `${p.title || '(untitled)'} (id ${p.id}) | platform: ${p.platform ?? 'general'}`,
+      `${p.title || '(untitled)'} (${idOf(p)}) | platform: ${p.platform ?? 'general'}`,
       p.stageId ? `stage: ${p.stageId}` : null,
       // Stated only when archived, and it says WHEN, because "archived" with no date is half a fact.
       p.archivedAt ? `archived: ${p.archivedAt}` : null,
@@ -1788,7 +1763,7 @@ export function cardResult(p: CardDetail): CallToolResult {
       `posts (${p.posts.length}):`,
       ...p.posts.map((d) => {
         const set = settingsKeys(d.platformSettings)
-        return `  - ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}${set ? ` | settings: ${set}` : ''}`
+        return `  - ${d.platform} (${idOf(d)})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account'}${set ? ` | settings: ${set}` : ''}`
       }),
       `assets (${p.assets.length}):`,
       ...p.assets.map((a) => {
@@ -1824,7 +1799,7 @@ export function cardResult(p: CardDetail): CallToolResult {
             ? ` | project ${a.projectId} (pass to get_project)`
             : ''
         const head = [a.displayName, a.projectId ? null : (a.assetUrl ?? '(no url)')].filter(Boolean).join(' | ')
-        return `  - [${a.assetType ?? '?'}] ${head || '(untitled)'}${triage}${ref} (id ${a.id})`
+        return `  - [${a.assetType ?? '?'}] ${head || '(untitled)'}${triage}${ref} (${idOf(a)})`
       }),
     ]),
   )
@@ -1840,7 +1815,7 @@ export function cardResult(p: CardDetail): CallToolResult {
 export function spaceListResult(spaces: Space[]): CallToolResult {
   if (!spaces.length) return text('No spaces found.')
   const rows = spaces.map((s) => {
-    const bits = [`id ${s.id}`, `${s.postCount ?? 0} card(s)`]
+    const bits = [idOf(s), `${s.postCount ?? 0} card(s)`]
     if (s.isFavorite) bits.push('favorite')
     if (s.archivedAt) bits.push('ARCHIVED')
     return `- ${s.name} (${bits.join(', ')})`
@@ -1856,7 +1831,7 @@ export function spaceDeletedResult(id: string): CallToolResult {
 /** One space. */
 export function spaceResult(s: Space): CallToolResult {
   const lines = [
-    `${s.name} (id ${s.id})`,
+    `${s.name} (${idOf(s)})`,
     `Cards: ${s.postCount ?? 0}`,
     `Favorite: ${s.isFavorite ? 'yes' : 'no'}`,
     s.archivedAt ? `Archived: ${s.archivedAt}` : 'Archived: no',
@@ -1876,14 +1851,14 @@ export function stageListResult(result: StageListResult): CallToolResult {
    */
   const where = result.space ? ` in ${result.space.name}` : ''
   if (!result.stages.length) return text(`No stages found${where}.`)
-  const rows = result.stages.map((s) => `- ${s.name} (id ${s.id}${s.slug ? `, slug ${s.slug}` : ''})`)
+  const rows = result.stages.map((s) => `- ${s.name} (${idOf(s)}${s.slug ? `, slug ${s.slug}` : ''})`)
   return text([`${result.stages.length} stage(s)${where} (in order):`, ...rows].join('\n'))
 }
 
 /** One created or updated stage. */
 export function stageResult(s: Stage, respaced = false): CallToolResult {
   const lines = [
-    `Stage ${s.name} (id ${s.id})`,
+    `Stage ${s.name} (${idOf(s)})`,
     s.slug ? `Slug: ${s.slug}` : null,
     s.color ? `Color: ${s.color}` : null,
     `Position: ${s.sortOrder}`,
@@ -1905,7 +1880,7 @@ export function stageDeletedResult(id: string, movedCards: number, stages: Stage
     movedCards > 0
       ? `${movedCards} ${movedCards === 1 ? 'card' : 'cards'} moved to the target stage.`
       : 'It held no cards.'
-  const rows = stages.map((s) => `- ${s.name} (id ${s.id})`)
+  const rows = stages.map((s) => `- ${s.name} (${idOf(s)})`)
   return text([`Deleted stage ${id}. ${moved}`, '', `${stages.length} stage(s) remaining:`, ...rows].join('\n'))
 }
 
@@ -1926,13 +1901,13 @@ function settingsKeys(settings: Record<string, unknown> | null | undefined): str
 export function postResult(d: Post): CallToolResult {
   const set = settingsKeys(d.platformSettings)
   return text(
-    `Post: ${d.platform} (id ${d.id})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}${set ? ` | settings: ${set}` : ' | no settings (set platformSettings to make it publishable)'}.`,
+    `Post: ${d.platform} (${idOf(d)})${d.format ? ` ${d.format}` : ''} | ${d.status ?? 'draft'}${d.connectedAccountId ? ` | account ${d.connectedAccountId}` : ' | no connected account (set one before publishing)'}${set ? ` | settings: ${set}` : ' | no settings (set platformSettings to make it publishable)'}.`,
   )
 }
 
 /** An attached asset. */
 export function assetResult(a: CardAsset): CallToolResult {
-  return text(`Asset attached: [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id}).`)
+  return text(`Asset attached: [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (${idOf(a)}).`)
 }
 
 /** A post's assets in their (new) order. */
@@ -1941,37 +1916,37 @@ export function assetOrderResult(assets: CardAsset[]): CallToolResult {
   return text(
     [
       `Assets reordered (${assets.length}):`,
-      ...assets.map((a, i) => `  ${i + 1}. [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (id ${a.id})`),
+      ...assets.map((a, i) => `  ${i + 1}. [${a.assetType ?? '?'}] ${a.assetUrl ?? '(no url)'} (${idOf(a)})`),
     ].join('\n'),
   )
 }
 
 /** Confirmation of a detached asset. */
 export function assetRemovedResult(r: { id: string }): CallToolResult {
-  return text(`Asset removed (id ${r.id}).`)
+  return text(`Asset removed (${idOf(r)}).`)
 }
 
 /** Confirmation of a detached post. */
 export function postRemovedResult(r: { id: string }): CallToolResult {
-  return text(`Post removed (id ${r.id}).`)
+  return text(`Post removed (${idOf(r)}).`)
 }
 
 /** The account's tags. */
 export function tagListResult(tags: Tag[]): CallToolResult {
   if (!tags.length) return text('No tags yet. Create one with create_tag.')
   return text(
-    [`${tags.length} tag(s):`, ...tags.map((t) => `- ${t.name} (id ${t.id})`)].join('\n'),
+    [`${tags.length} tag(s):`, ...tags.map((t) => `- ${t.name} (${idOf(t)})`)].join('\n'),
   )
 }
 
 /** A created or renamed tag. */
 export function tagResult(t: Tag, verb = 'Tag'): CallToolResult {
-  return text(`${verb}: ${t.name} (id ${t.id}).`)
+  return text(`${verb}: ${t.name} (${idOf(t)}).`)
 }
 
 /** Confirmation of a deleted tag. */
 export function tagDeletedResult(r: { id: string }): CallToolResult {
-  return text(`Tag deleted (id ${r.id}). It was removed from all posts.`)
+  return text(`Tag deleted (${idOf(r)}). It was removed from all posts.`)
 }
 
 /** The result of publishing a card's posts (one outcome per post). */
@@ -2004,7 +1979,7 @@ function accountLine(a: TrackedAccount): string {
   // The kind is on every line because the list is MIXED by default: without it a reader cannot tell the
   // owner's own profile from a competitor they watch, and those mean opposite things.
   const kind = a.accountType === 'brand' ? ' [yours]' : a.accountType === 'inspiration' ? ' [watching]' : ''
-  return `- ${handle} (id ${a.id})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`
+  return `- ${handle} (${idOf(a)})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`
 }
 
 /** List of tracked accounts, either kind. */
@@ -2019,7 +1994,7 @@ function outlierLine(o: ContentSummary): string {
   const creator = o.sourceCreator || (o.accountHandle ? `@${o.accountHandle}` : '')
   // One list spans the owner's posts and the creators they watch, so each line has to say which it is.
   const own = o.isOwn ? ' [yours]' : ''
-  return `- [${score}] ${o.title ?? '(untitled)'}${own}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (id ${o.id})`
+  return `- [${score}] ${o.title ?? '(untitled)'}${own}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (${idOf(o)})`
 }
 
 /** A page of outliers. */
@@ -2048,7 +2023,7 @@ export function accountDetailResult(d: AccountDetail): CallToolResult {
   const avgScore = d.averages.outlierScore != null ? `${d.averages.outlierScore.toFixed(2)}x` : 'n/a'
   return text(
     lines([
-      `${handle} (id ${a.id})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
+      `${handle} (${idOf(a)})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`,
       `content tracked: ${d.contentCount}`,
       `totals: ${compactNum(d.totals.views)} views, ${compactNum(d.totals.likes)} likes, ${compactNum(d.totals.comments)} comments`,
       `averages: ${compactNum(d.averages.views)} views/post, ${avgEng} engagement, ${avgScore} outlier score`,
@@ -2080,7 +2055,7 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
   return text(
     lines([
-      `${c.title ?? '(untitled)'} (id ${c.id})${c.isOwn ? ' [yours]' : ''}`,
+      `${c.title ?? '(untitled)'} (${idOf(c)})${c.isOwn ? ' [yours]' : ''}`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
       `${stats}${score ? ` | ${score}` : ''}`,
       c.url ? `url: ${c.url}` : null,
@@ -2118,7 +2093,7 @@ function analysisLines(analysis: ContentDetail['analysis']): Array<string | null
 function connectedAccountLine(a: ConnectedAccount): string {
   const handle = a.accountHandle ? `@${a.accountHandle}` : (a.accountName ?? '(unnamed)')
   const status = a.connectionStatus ? ` | ${a.connectionStatus}` : ''
-  return `- ${handle} (id ${a.id}) | ${a.platform ?? '?'}${a.isDefault ? ' [default]' : ''}${status}`
+  return `- ${handle} (${idOf(a)}) | ${a.platform ?? '?'}${a.isDefault ? ' [default]' : ''}${status}`
 }
 
 /** List of connected accounts (publish targets). */
@@ -2137,7 +2112,7 @@ export function connectedAccountResult(a: ConnectedAccount): CallToolResult {
   const caps = a.capabilities ? Object.keys(a.capabilities).filter((k) => (a.capabilities as Record<string, unknown>)[k]) : []
   return text(
     lines([
-      `${handle} (id ${a.id}) | ${a.platform ?? '?'}${a.isDefault ? ' [default]' : ''}`,
+      `${handle} (${idOf(a)}) | ${a.platform ?? '?'}${a.isDefault ? ' [default]' : ''}`,
       `status: ${a.connectionStatus ?? 'unknown'}${a.connectionType ? ` (${a.connectionType})` : ''}`,
       a.accountUrl ? `url: ${a.accountUrl}` : null,
       caps.length ? `capabilities: ${caps.join(', ')}` : null,
@@ -2226,6 +2201,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   state: 'rendered',
   renderUrl: 'rendered (opt-in)',
   brandKitId: 'rendered',
+  appUrl: 'rendered',
   // Deliberately omitted, with the reason. Each of these is reachable through a dedicated tool, or is
   // list-view metadata that tells a single-project reader nothing it did not already know by fetching it.
   assetReferences: 'omitted: large payload; the composition state already names what is in use',
@@ -2245,7 +2221,7 @@ void PROJECT_DETAIL_EXPOSURE
 /** A single project's full detail (read-before-write): metadata, type, revision, and the state JSON. */
 export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
-    `Project ${p.id}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
       // The output resolution above is NOT the coordinate space layer geometry uses. Stating both, adjacent
       // and labeled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large
@@ -2356,7 +2332,7 @@ export function projectListResult(projects: ProjectSummary[]): CallToolResult {
   if (projects.length === 0) return text('No projects found.')
   const lines = projects.map((p) => {
     const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
-    return `- ${p.id}  [${p.type}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}`
+    return `- ${p.id}  [${p.type}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}${linkAfter(p.appUrl)}`
   })
   return text(`${projects.length} project(s):\n${lines.join('\n')}`)
 }
@@ -2364,7 +2340,7 @@ export function projectListResult(projects: ProjectSummary[]): CallToolResult {
 /** A freshly created project: the id + kind to start editing against. */
 export function projectCreatedResult(p: ProjectDetail, linkedCardId?: string): CallToolResult {
   return text(
-    `Created ${p.type} project ${p.id}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Created ${p.type} project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       (linkedCardId ? `Linked to card ${linkedCardId}.\n` : '') +
       // The TOOL is still called update_timeline; `kind` is what says which one applies.
       `Use this id with update_${p.type === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
@@ -2411,7 +2387,6 @@ const EXPORT_MEDIUM: Record<string, 'image' | 'video'> = { mp4: 'video', png: 'i
 export function completedExportResult(
   job: ExportJob,
   format: string,
-  baseUrl = DEFAULT_APP_URL,
 ): CallToolResult {
   const prose = `Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`
   const medium = EXPORT_MEDIUM[format]
@@ -2425,9 +2400,8 @@ export function completedExportResult(
      * on. Omitting `reference` is what hides them, and Download, the verb that actually applies to a
      * rendered file, stays.
      *
-     * ⚠️ NO `openUrl` EITHER, and not because it is hard to compute. An export's home is a download; the
-     * project it came from is a different destination with a different meaning, and `/editor/{id}` versus
-     * `/canvas/{id}` is not knowable from here anyway.
+     * ⚠️ NO `openUrl` EITHER. An export's home is a download. The job's `appUrl` lands on the project it came
+     * from, which is a different destination with a different meaning, so it stays in the data, not on a tile.
      */
     return {
       content: [{ type: 'text', text: prose }],
@@ -2441,9 +2415,10 @@ export function completedExportResult(
 }
 
 /** An export, REPORTED. No widget: a poll does not know the format, so it cannot draw the file. */
-export function exportJobResult(job: ExportJob): CallToolResult {
+/** `appUrl` is optional here: a timed-out wait knows only the export's id and status. */
+export function exportJobResult(job: Omit<ExportJob, 'appUrl'> & { appUrl?: string }): CallToolResult {
   if (job.status === 'completed') {
-    return text(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`)
+    return text(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`)
   }
   if (job.status === 'failed') {
     return text(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, true)

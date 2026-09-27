@@ -9,10 +9,11 @@ import {
   completedResult,
   generationWidgetData,
   pollAfterSecondsFor,
-  studioUrlFor,
   audioResult,
   completedExportResult,
   exportJobResult,
+  idOf,
+  tagListResult,
 } from './format.js'
 
 /**
@@ -413,57 +414,40 @@ test('video is polled less often than image, because it takes longer', () => {
 
 
 /**
- * ⭐ THE OPEN BUTTON'S URL.
+ * ⭐ THE OPEN BUTTON'S URL IS THE SERVER'S.
  *
- * ⛔ This asserts the real `studioUrlFor`, not a copy of its arithmetic. An earlier version of this test
- * restated the index conversion inline, which cannot fail when the function is wrong: it only proves the
- * test agrees with itself.
- *
- * ⚠️ ONE-BASED IN THE NAME, ZERO-BASED IN THE URL. `<id>-3` is what a person reads as "variation 3" and
- * `variation=2` is the studio's slot. Getting it wrong opens the WRONG PICTURE, which reads as a broken
- * link rather than an off-by-one.
+ * The app owns its URLs and returns one per output. This module used to compose them itself, and its format
+ * drifted from the app's. A tile takes the link at its own index, so output 3 opens output 3.
  */
-test('the url names the variation a PERSON reads, which is one-based', () => {
+test('each tile opens the server link at its own index', () => {
   const id = 'cfe3bafb-ddc5-4e51-bae6-68ec61112a23'
-  const base = 'https://app.contenthero.ai'
-  // Output 0 is "Variation 1 of 4" in the detail view and `<id>-1` in a reference. The url must agree.
-  assert.equal(studioUrlFor(base, id, 0, 4), `${base}/studio?output=${id}&variation=1`)
-  assert.equal(studioUrlFor(base, id, 3, 4), `${base}/studio?output=${id}&variation=4`)
-  // ⛔ Zero must never appear: it is slot space, and slot space is not a number to show anyone.
-  assert.ok(!studioUrlFor(base, id, 0, 4).includes('variation=0'))
-})
-
-test('a single output names no variation, because there was no choice to record', () => {
-  const id = 'fff25b52-2974-4594-892e-39310475e760'
-  assert.equal(studioUrlFor('https://app.contenthero.ai', id, 0, 1), `https://app.contenthero.ai/studio?output=${id}`)
-})
-
-test('a trailing slash on the base url does not produce a double slash', () => {
-  assert.match(studioUrlFor('https://app.contenthero.ai/', 'o', 0, 1), /^https:\/\/app\.contenthero\.ai\/studio\?/)
-})
-
-/**
- * ⚠️ The base url is a PARAMETER so a local server deep-links to itself. Hardcoding production meant Open
- * always left for the live app even while testing against localhost.
- */
-test('the widget payload carries a studio url per output', () => {
-  const data = generationWidgetData(
-    {
-      ...baseGen,
-      outputId: 'o1',
-      contentType: 'image',
-      outputUrls: ['https://media.contenthero.ai/a.png', 'https://media.contenthero.ai/b.png'],
-    } as never,
-    [],
-    'http://localhost:3000',
+  const appUrls = [1, 2, 3, 4].map((n) => `https://app.contenthero.ai/media/${id}-${n}`)
+  const data = generationWidgetData({
+    outputId: id,
+    appUrl: appUrls[0]!,
+    appUrls,
+    status: 'completed',
+    contentType: 'image',
+    modelId: 'm',
+    outputUrls: ['https://a/1.png', 'https://a/2.png', 'https://a/3.png', 'https://a/4.png'],
+  } as Generation)
+  assert.deepEqual(
+    data.items.map((it) => it.openUrl),
+    appUrls,
   )
-  /**
-   * ⚠️ `openUrl`, NOT `studioUrl`. The field means "where this lives in the product", and naming it after
-   * one destination is what made an earlier version treat a project export as a studio question.
-   */
-  assert.equal(data.items[0]!.openUrl, 'http://localhost:3000/studio?output=o1&variation=1')
-  assert.equal(data.items[1]!.openUrl, 'http://localhost:3000/studio?output=o1&variation=2')
 })
+
+test('with no server link, a tile offers no Open rather than a guessed one', () => {
+  const data = generationWidgetData({
+    outputId: 'o',
+    status: 'completed',
+    contentType: 'image',
+    modelId: 'm',
+    outputUrls: ['https://a/1.png'],
+  } as unknown as Generation)
+  assert.equal(data.items[0]!.openUrl, null)
+})
+
 
 
 /**
@@ -512,15 +496,14 @@ test('a generation emits items that all share its medium and shape', () => {
       contentType: 'image',
       displayAspect: '9:16',
       outputUrls: ['https://media.contenthero.ai/a.png', 'https://media.contenthero.ai/b.png'],
+      appUrls: ['https://app.contenthero.ai/media/o1-1', 'https://app.contenthero.ai/media/o1-2'],
     } as never,
-    [],
-    'https://app.contenthero.ai',
   )
   assert.equal(data.items.length, 2)
   for (const it of data.items) {
     assert.equal(it.contentType, 'image')
     assert.equal(it.displayAspect, '9:16')
-    assert.ok(it.openUrl, 'a generation lives in the studio, so every item knows where to open')
+    assert.ok(it.openUrl, 'every output has a server link, so every item knows where to open')
   }
   // The shared values stay too: their PRESENCE is what tells the widget to lay this out as a row.
   assert.equal(data.displayAspect, '9:16')
@@ -614,4 +597,27 @@ test('a poll reports and never displays', () => {
   const res = exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.mp4' })
   assert.equal(res._meta, undefined)
   assert.equal((res as { structuredContent?: unknown }).structuredContent, undefined)
+})
+
+/**
+ * ⭐ PROSE NAMES AN ITEM WITH ITS LINK, ONE SPELLING EVERYWHERE, so an agent reading text can hyperlink any item.
+ * The link is the server's; with none, the id stands alone rather than a guessed url.
+ */
+test('an item is named by its id and then its appUrl', () => {
+  assert.equal(idOf({ id: 'c1', appUrl: 'https://app.contenthero.ai/cards/c1' }), 'id c1, appUrl https://app.contenthero.ai/cards/c1')
+  assert.equal(idOf({ id: 'c1' }), 'id c1')
+  const out = tagListResult([{ id: 't1', name: 'long-form', appUrl: 'https://app.contenthero.ai/tags/t1' } as never])
+  assert.match((out.content[0] as { text: string }).text, /- long-form \(id t1, appUrl https:\/\/app\.contenthero\.ai\/tags\/t1\)/)
+})
+
+test('each generated output names its own link, index-aligned', () => {
+  const res = completedResult({
+    ...baseGen,
+    contentType: 'image',
+    outputUrls: ['https://m/a.png', 'https://m/b.png'],
+    appUrls: ['https://app.contenthero.ai/media/o1-1', 'https://app.contenthero.ai/media/o1-2'],
+  } as never)
+  const t = (res.content[0] as { text: string }).text
+  assert.match(t, /1\. https:\/\/m\/a\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/o1-1\)/)
+  assert.match(t, /2\. https:\/\/m\/b\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/o1-2\)/)
 })

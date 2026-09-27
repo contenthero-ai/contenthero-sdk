@@ -13,7 +13,7 @@ import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
 import type { ImportedMedia, MediaBatchItem, MediaItem, MediaKind, MediaSource, MediaSummary, MediaType, SearchMediaResult, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table } from '../output.js'
+import { emit, keyValues, table, linkRow } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt, toList } from '../args.js'
 
@@ -262,7 +262,7 @@ export function registerMedia(program: Command): void {
 
       emit(item, ctx, (m: MediaItem) => {
         const head = keyValues([
-          ['Id', m.id],
+          ['Id', m.id], ...linkRow(m),
           ['Type', m.type],
           ['Kind', m.kind ?? 'creation'],
           ['Model', m.model ?? ''],

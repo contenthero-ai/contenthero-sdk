@@ -56,6 +56,8 @@ export interface ReferenceElement {
 /** A saved reference element in the account's library (the persistent form). */
 export interface Element {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string
   /** 'auto' | 'character' | 'location' | 'prop'. */
   category: string
@@ -212,6 +214,10 @@ export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed'
  */
 export interface GenerateResult {
   outputId: string
+  /** This generation in the app (its first output, or its pending state while it runs). */
+  appUrl: string
+  /** One link per landed output, index-aligned with `outputUrls`. Present once outputs exist. */
+  appUrls?: string[]
   status: 'processing' | 'completed'
   /** Estimated credit cost computed server-side. */
   creditsEstimate?: number
@@ -370,6 +376,10 @@ export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
 /** A generation record as returned by `getGeneration` and `generateAndWait`. */
 export interface Generation {
   outputId: string
+  /** This generation in the app (its first output, or its pending state while it runs). */
+  appUrl: string
+  /** One link per landed output, index-aligned with `outputUrls`: the same `<id>-<n>` token the output is named by. */
+  appUrls?: string[]
   status: GenerationStatus
   contentType: 'image' | 'video' | 'audio'
   modelId: string
@@ -494,6 +504,8 @@ export interface Transcription {
 /** An avatar as returned by `listAvatars` (the list projection). */
 export interface AvatarSummary {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string
   /** The avatar's base image (profile photo); the default look for lip-sync. */
   imageUrl: string | null
@@ -618,6 +630,8 @@ export interface AddAvatarLooksResult {
 /** A voice as returned by `listVoices` (the list projection). */
 export interface VoiceSummary {
   voiceId: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string | null
   provider: string | null
   isFavorited: boolean
@@ -644,6 +658,8 @@ export interface ListVoicesOptions {
 /** A brand kit as returned by `listBrandKits` (the list projection). */
 export interface BrandKitSummary {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string
   isDefault: boolean
   isActive: boolean
@@ -775,6 +791,8 @@ export interface BrandKitKnowledge {
 /** A knowledge-base item in the dedicated list/get surface (metadata). */
 export interface BrandKnowledgeItem {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   title: string | null
   sourceType: string | null
   sourceUrl: string | null
@@ -994,6 +1012,8 @@ export interface MediaVariation {
  */
 export interface MediaSummary {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   type: MediaType
   model: string | null
   prompt: string | null
@@ -1058,6 +1078,8 @@ export type MediaBatchItem = ({ url: string } | { mediaId: string; variation?: n
  */
 export interface ResolvedMediaBatchItem {
   ok: boolean
+  /** Where this item opens in the app. Absent for a url that is not one of the account's media items. */
+  appUrl?: string
   /** Echo of the requested item, to correlate results with inputs. */
   input: MediaBatchItem
   /** The media itself (image master, or video master). */
@@ -1231,6 +1253,8 @@ export interface SmartFolderQuery {
 
 export interface Folder {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string
   type: FolderType
   query: SmartFolderQuery | null
@@ -1326,6 +1350,8 @@ export interface ImportMediaInput {
 export interface UploadedMedia {
   outputId: string
   url: string
+  /** Where the upload opens in the app. */
+  appUrl: string
   /**
    * What the bytes ARE: `'image' | 'video' | 'audio' | 'document'`.
    *
@@ -1353,6 +1379,8 @@ export interface ImportedMedia {
    */
   outputId: string | null
   url: string
+  /** Where the item opens in the app; null exactly when `outputId` is. */
+  appUrl: string | null
   /** True when nothing was created because the account already held these exact bytes. NOT an error. */
   alreadyExisted: boolean
   /** What the bytes already ARE, when `alreadyExisted`, so a caller can say which thing rather than "duplicate". */
@@ -1465,6 +1493,8 @@ export type PostPlatform =
  */
 export interface Space {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   accountId: string
   name: string
   coverUrl: string | null
@@ -1484,6 +1514,8 @@ export interface Space {
 
 export interface Stage {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string
   slug: string | null
   color: string | null
@@ -1505,6 +1537,8 @@ export interface Stage {
 /** A post as returned by `listCards` (the list projection). */
 export interface CardSummary {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   title: string
   platform: string | null
   stageId: string | null
@@ -1624,6 +1658,8 @@ export interface CardDetail extends CardSummary {
 /** An account tag (the organizational tag library). */
 export interface Tag {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   name: string
   isDefault: boolean
   isSystem: boolean
@@ -1861,6 +1897,8 @@ export interface PublishResult {
 /** A tracked account: an inspiration creator or one of the caller's brand accounts. */
 export interface TrackedAccount {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   platform: string | null
   /** Platform-level account id (the shared key into tracked content). */
   accountId: string | null
@@ -1876,6 +1914,8 @@ export interface TrackedAccount {
 /** A piece of tracked content: the list projection. */
 export interface ContentSummary {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   platform: string | null
   contentType: string | null
   title: string | null
@@ -2051,6 +2091,8 @@ export interface ContentListResult {
  */
 export interface ConnectedAccount {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   platform: string | null
   accountId: string | null
   accountName: string | null
@@ -2228,6 +2270,8 @@ export type ProjectSurface = ProjectType
 /** Lightweight project list item (spans both types), from `listProjects`. */
 export interface ProjectSummary {
   id: string
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
+  appUrl: string
   /** 'editor' or 'canvas'. */
   type: string
   /** @deprecated Alias for `type`, still emitted for one release window. */
@@ -2503,6 +2547,8 @@ export interface StartExportInput {
 /** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */
 export interface ExportJob {
   exportId: string
+  /** This export in the app (it opens its project). */
+  appUrl: string
   /** 'pending' | 'rendering' | 'transferring' | 'completed' | 'failed'. */
   status: string
   /** The final file URL, present when status is 'completed'. */
