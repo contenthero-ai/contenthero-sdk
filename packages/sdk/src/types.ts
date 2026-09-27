@@ -991,10 +991,12 @@ export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
 /**
  * Which library a media read targets. 'creations' = studio generations (with variations);
  * 'uploads' = the editor Uploads tab (the user-level upload library); 'stock' = stock media
- * the user has used (cached and reusable); 'all' = every library merged newest-first, each item
- * self-describing via its `source` (list only; a `get` uses the item's specific source).
+ * the user has used (cached and reusable); 'files' = any stored file the Library shows (a brand
+ * upload, a planner upload, a canvas render; get only); 'all' = every library merged newest-first,
+ * each item self-describing via its `source` (list only). A get without a source finds the item in
+ * whichever library holds it.
  */
-export type MediaSource = 'creations' | 'uploads' | 'stock' | 'all'
+export type MediaSource = 'creations' | 'uploads' | 'stock' | 'files' | 'all'
 
 /** One variation (slot) of a studio output. */
 export interface MediaVariation {
@@ -1048,7 +1050,7 @@ export interface MediaSummary {
   kind: string | null
   /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
   boardType: string | null
-  /** Which library this item came from ('creations' | 'uploads' | 'stock'); self-describing. */
+  /** Which library this item came from ('creations' | 'uploads' | 'stock' | 'files'); self-describing. */
   source: MediaSource
   /** Original file name (uploads); null for studio outputs. */
   fileName: string | null
