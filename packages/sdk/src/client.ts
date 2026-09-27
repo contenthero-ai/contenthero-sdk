@@ -1412,7 +1412,10 @@ export class ContentHero {
   async listProjects(input: ListProjectsInput = {}): Promise<ProjectSummary[]> {
     const q = new URLSearchParams()
     if (input.filter) q.set('filter', input.filter)
-    if (input.kind) q.set('kind', input.kind)
+    // One field on the wire: `type`, with the deprecated aliases folded into it here. Until sdk 0.4.16 this sent only
+    // `kind`, so a `surface` filter was silently dropped and every caller got both types back.
+    const type = input.type ?? input.surface ?? input.kind
+    if (type) q.set('type', type)
     if (input.search) q.set('search', input.search)
     const qs = q.toString()
     const { projects } = await this.request<{ projects: ProjectSummary[] }>(
@@ -1541,7 +1544,7 @@ export class ContentHero {
 
   /**
    * Apply a batch of ops to a project's composition (canvas slides or editor timeline) and persist
-   * atomically. The project's `surface` selects the op vocabulary; the ops run through the same reducers the manual
+   * atomically. The project's `type` selects the op vocabulary; the ops run through the same reducers the manual
    * UI and in-app agent use. Requires the `editor:write` scope.
    *
    * Optimistic concurrency: pass `expectedRevision` (from `getProject`) to fail with a 409 ConflictError if

@@ -423,7 +423,7 @@ export function completedResult(
   const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}`)]
   const p = gen.placement
   if (p) {
-    if (p.surface === 'canvas') {
+    if (p.projectType === 'canvas') {
       lines.push(
         `Placed as a canvas layer (id ${p.layerId ?? p.itemId ?? 'resolved'}) on slide ${p.slideId ?? 'resolved'}. Use that layer id to chain further ops (animate, reposition, reorder, set as background).`,
       )
@@ -1792,7 +1792,6 @@ export function cardResult(p: CardDetail): CallToolResult {
       }),
       `assets (${p.assets.length}):`,
       ...p.assets.map((a) => {
-        const name = a.displayName ? ` ${a.displayName} |` : ''
         /**
          * ⭐ AN INSPIRATION ATTACHMENT'S `assetId` IS THE TRACKED-CONTENT ID, AND IT IS PRINTED BECAUSE IT
          * IS AN INPUT TO THE NEXT CALL, same rule as `revision` above. It is exactly what `get_content`
@@ -1817,15 +1816,15 @@ export function cardResult(p: CardDetail): CallToolResult {
               .map((v) => ` | ${v}`)
               .join('')
           : ''
-        // A linked project prints its id for the same reason: it is what get_project takes.
-        const ref = !a.assetId
-          ? ''
-          : a.assetType === 'inspiration'
-            ? ` | content ${a.assetId} (pass to get_content)`
-            : a.assetType === 'editor' || a.assetType === 'canvas'
-              ? ` | project ${a.assetId} (pass to get_project)`
-              : ''
-        return `  - [${a.assetType ?? '?'}]${name} ${a.assetUrl ?? '(no url)'}${triage}${ref} (id ${a.id})`
+        // A linked project prints its id for the same reason: it is what get_project takes. It has no url, so none
+        // is printed.
+        const ref = a.contentId
+          ? ` | content ${a.contentId} (pass to get_content)`
+          : a.projectId
+            ? ` | project ${a.projectId} (pass to get_project)`
+            : ''
+        const head = [a.displayName, a.projectId ? null : (a.assetUrl ?? '(no url)')].filter(Boolean).join(' | ')
+        return `  - [${a.assetType ?? '?'}] ${head || '(untitled)'}${triage}${ref} (id ${a.id})`
       }),
     ]),
   )
@@ -2245,7 +2244,7 @@ void PROJECT_DETAIL_EXPOSURE
 /** A single project's full detail (read-before-write): metadata, surface, revision, and the state JSON. */
 export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
-    `Project ${p.id}: "${p.title}" (${p.kind}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Project ${p.id}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
       // The output resolution above is NOT the coordinate space layer geometry uses. Stating both, adjacent
       // and labeled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large
@@ -2356,7 +2355,7 @@ export function projectListResult(projects: ProjectSummary[]): CallToolResult {
   if (projects.length === 0) return text('No projects found.')
   const lines = projects.map((p) => {
     const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
-    return `- ${p.id}  [${p.kind}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}`
+    return `- ${p.id}  [${p.type}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}`
   })
   return text(`${projects.length} project(s):\n${lines.join('\n')}`)
 }
@@ -2364,10 +2363,10 @@ export function projectListResult(projects: ProjectSummary[]): CallToolResult {
 /** A freshly created project: the id + kind to start editing against. */
 export function projectCreatedResult(p: ProjectDetail, linkedCardId?: string): CallToolResult {
   return text(
-    `Created ${p.kind} project ${p.id}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Created ${p.type} project ${p.id}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       (linkedCardId ? `Linked to card ${linkedCardId}.\n` : '') +
       // The TOOL is still called update_timeline; `kind` is what says which one applies.
-      `Use this id with update_${p.kind === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
+      `Use this id with update_${p.type === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
   )
 }
 
@@ -2456,7 +2455,7 @@ export function exportJobResult(job: ExportJob): CallToolResult {
 
 /** The export-format catalog as readable text + JSON. */
 export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
-  const lines = cat.formats.map((f) => `- ${f.format} (${f.surfaces.join('/')}${f.async ? ', async' : ''}): ${f.description}`)
+  const lines = cat.formats.map((f) => `- ${f.format} (${f.projectTypes.join('/')}${f.async ? ', async' : ''}): ${f.description}`)
   return text(
     `Export formats:\n${lines.join('\n')}\n\nResolutions (mp4): ${cat.resolutions.join(', ')}. Qualities: ${cat.qualities.join(', ')}.\n\n` +
       JSON.stringify(cat, null, 2),

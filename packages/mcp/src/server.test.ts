@@ -369,20 +369,20 @@ function fakeClient(overrides = {}) {
     archive: async () => {},
     applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
     listProjects: async () => [
-      { id: 'p1', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
+      { id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],
-    getProject: async (projectId, options) => ({ id: projectId, kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
+    getProject: async (projectId, options) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
     getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
-    createProject: async (input) => ({ id: 'new1', kind: input.kind ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: (input.kind === 'canvas' ? 'canvas' : 'editor'), revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
+    createProject: async (input) => ({ id: 'new1', type: input.type ?? 'editor', kind: input.type ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: input.type ?? 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
-    importProject: async (input) => ({ id: 'imp1', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
-    getLayerTypes: async () => ({ surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
-    getTimelineTypes: async () => ({ surface: 'editor', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
+    importProject: async (input) => ({ id: 'imp1', type: 'canvas', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
+    getLayerTypes: async () => ({ projectType: 'canvas', surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
+    getTimelineTypes: async () => ({ projectType: 'editor', surface: 'editor', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
     exportProjectAndWait: async (_projectId, input) => (input?.format && input.format !== 'mp4'
       ? { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.zip', progress: 1 }
       : { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.mp4', progress: 1 }),
     getExport: async (exportId) => ({ exportId, status: 'completed', outputUrl: 'https://x/out.mp4', progress: 1 }),
-    getExportFormats: async () => ({ formats: [{ format: 'mp4', surfaces: ['editor', 'canvas'], async: true, description: 'video', options: ['resolution'] }, { format: 'pptx', surfaces: ['canvas'], async: false, description: 'powerpoint', options: [] }], resolutions: ['720p', '1080p'], qualities: ['recommended'] }),
+    getExportFormats: async () => ({ formats: [{ format: 'mp4', projectTypes: ['editor', 'canvas'], surfaces: ['editor', 'canvas'], async: true, description: 'video', options: ['resolution'] }, { format: 'pptx', projectTypes: ['canvas'], surfaces: ['canvas'], async: false, description: 'powerpoint', options: [] }], resolutions: ['720p', '1080p'], qualities: ['recommended'] }),
     ...overrides,
   }
 }
@@ -2497,7 +2497,7 @@ test('get_connected_account lists enabled capabilities', async () => {
   assert.match(res.content[0].text, /connectedAccountId on a post in update_card/)
 })
 
-test('list_projects lists projects with kind + title', async () => {
+test('list_projects lists projects with type + title', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_projects', arguments: {} })
   const body = (res.content[0]).text
@@ -2624,7 +2624,7 @@ test('get_project with includeRenderUrl surfaces the preview URL', async () => {
 
 test('create_project returns the new id + revision', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'create_project', arguments: { kind: 'canvas', title: 'Deck' } })
+  const res = await mcp.callTool({ name: 'create_project', arguments: { type: 'canvas', title: 'Deck' } })
   assert.ok(!res.isError)
   const body = (res.content[0]).text
   assert.match(body, /Created canvas project new1/)
@@ -2658,7 +2658,7 @@ test('get_export polls an export job', async () => {
   assert.match((res.content[0]).text, /exp1/)
 })
 
-test('get_export_formats lists formats per surface', async () => {
+test('get_export_formats lists formats per project type', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_export_formats', arguments: {} })
   const body = (res.content[0]).text
@@ -3327,11 +3327,11 @@ test('no tool text uses the retired "pipeline stage" vocabulary', async () => {
  */
 test('create_project and import_project pass cardId through, and say the project is linked', async () => {
   const seen: Array<Record<string, unknown>> = []
-  const project = { id: 'p1', kind: 'editor', surface: 'editor', title: 'T', orientation: '16:9', width: 1920, height: 1080, revision: 1 }
+  const project = { id: 'p1', type: 'editor', kind: 'editor', surface: 'editor', title: 'T', orientation: '16:9', width: 1920, height: 1080, revision: 1 }
   const mcp = await connect(
     fakeClient({
       createProject: async (input: Record<string, unknown>) => (seen.push(input), project),
-      importProject: async (input: Record<string, unknown>) => (seen.push(input), { ...project, kind: 'canvas' }),
+      importProject: async (input: Record<string, unknown>) => (seen.push(input), { ...project, type: 'canvas', kind: 'canvas', surface: 'canvas' }),
     }),
   )
   const created = await mcp.callTool({ name: 'create_project', arguments: { cardId: 'c1' } })

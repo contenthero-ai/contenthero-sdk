@@ -283,8 +283,8 @@ const PLACEMENT_SCHEMA = z.union([TIMELINE_PLACEMENT_SCHEMA, CANVAS_PLACEMENT_SC
 
 /** The optional one-call placement input fields, shared across the generative tools that gain projectId. */
 const PLACEMENT_INPUT_FIELDS = {
-  projectId: z.string().optional().describe('The project to place the result on. Omit for a standalone library output. The server interprets placement against the project\'s surface (video timeline or canvas design).'),
-  placement: PLACEMENT_SCHEMA.optional().describe('Where the asset lands, interpreted against the project\'s surface. VIDEO TIMELINE: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range (omitted places it at the playhead when known, else appends). CANVAS DESIGN: a layer on a slide (slideId / slideIndex, default the focused slide; fit contain|cover|none; a nine-point anchor; and design-pixel x/y/width/height).'),
+  projectId: z.string().optional().describe('The project to place the result on. Omit for a standalone library output. The server interprets placement against the project\'s type (video timeline or canvas design).'),
+  placement: PLACEMENT_SCHEMA.optional().describe('Where the asset lands, interpreted against the project\'s type. VIDEO TIMELINE: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range (omitted places it at the playhead when known, else appends). CANVAS DESIGN: a layer on a slide (slideId / slideIndex, default the focused slide; fit contain|cover|none; a nine-point anchor; and design-pixel x/y/width/height).'),
   playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative timeline placement.'),
 } as const
 
@@ -1177,7 +1177,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       .string()
       .optional()
       .describe(
-        "ADD an inspiration post: a tracked post's content id, as list_content and get_content use it and as get_card returns an inspiration asset's assetId. It lands on the card's Inspiration tab.",
+        "ADD an inspiration post: a tracked post's content id, as list_content and get_content use it and as get_card returns it (the asset's contentId). It lands on the card's Inspiration tab.",
       ),
     projectId: z.string().optional().describe('ADD a link to an editor or canvas project: its project id.'),
     assetType: z
@@ -3503,7 +3503,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Card',
       annotations: WRITE,
       description:
-        "Update a card: its fields (title, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (its files, links, linked projects and inspiration posts, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, and add a new one by EXACTLY ONE reference: outputId (media: a generation, an upload or an import), assetUrl (a link), contentId (an inspiration post, shown on the card's Inspiration tab; get_card reads it back with that id as assetId) or projectId (an editor or canvas project). To attach one thing, read the card, append the entry to its assets, and send the whole list back. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, cover) still need exactly one. WRITING notes REQUIRES expectedRevision: read the card first and pass the revision it reported, or the call is refused. Requires the planner:write scope.",
+        "Update a card: its fields (title, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (its files, links, linked projects and inspiration posts, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, and add a new one by EXACTLY ONE reference: outputId (media: a generation, an upload or an import), assetUrl (a link), contentId (an inspiration post, shown on the card's Inspiration tab) or projectId (an editor or canvas project); get_card reads each back under the same field name. Listing the same thing twice is refused. To attach one thing, read the card, append the entry to its assets, and send the whole list back. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, cover) still need exactly one. WRITING notes REQUIRES expectedRevision: read the card first and pass the revision it reported, or the call is refused. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
         title: z.string().optional().describe('Rename the card. Keep it short: a long title wraps and makes the column unreadable.'),
@@ -3982,11 +3982,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Projects',
       annotations: READ,
       description:
-        "List the account's editor (video timeline) and canvas (slides/layers) projects. Filter by state (archived / favorited), by surface (editor / canvas), or by a title search. Returns lightweight summaries; call get_project for a single project's full composition. Requires the editor:read scope.",
+        "List the account's editor (video timeline) and canvas (slides/layers) projects. Filter by state (archived / favorited), by type (editor / canvas), or by a title search. Returns lightweight summaries; call get_project for a single project's full composition. Requires the editor:read scope.",
       inputSchema: {
         filter: z.enum(['archived', 'favorited']).optional().describe('archived -> only archived; favorited -> favorited and not archived; omitted -> active (not archived).'),
-        surface: z.enum(['editor', 'canvas']).optional().describe('Restrict to one surface; omitted returns both.'),
-        kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `surface`. Prefer `surface`; this is accepted for one release window.'),
+        type: z.enum(['editor', 'canvas']).optional().describe('Restrict to one project type; omitted returns both.'),
+        surface: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
+        kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
         search: z.string().optional().describe('Case-insensitive title search.'),
       },
     },
@@ -4207,10 +4208,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Project',
       annotations: WRITE,
       description:
-        "Create a new project. `surface` picks where it lives: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor surface). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. When the project is for a planned piece, pass cardId to link it to that card in the same call. Returns the new project id + revision. Requires the editor:write scope (and planner:write with cardId).",
+        "Create a new project. `type` picks what it is: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, an editor project). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. When the project is for a planned piece, pass cardId to link it to that card in the same call. Returns the new project id + revision. Requires the editor:write scope (and planner:write with cardId).",
       inputSchema: {
-        surface: z.enum(['editor', 'canvas']).optional().describe("The surface. Defaults to 'editor'."),
-        kind: z.enum(['editor', 'canvas']).optional().describe("Deprecated alias for `surface`. Prefer `surface`; accepted for one release window."),
+        type: z.enum(['editor', 'canvas']).optional().describe("The project type. Defaults to 'editor'."),
+        surface: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
+        kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
         title: z.string().optional().describe("Project title. Defaults to 'Untitled'."),
         orientation: z.string().optional().describe("Aspect ratio, e.g. '16:9', '9:16', '1:1'. Defaults to '16:9'."),
         width: z.number().optional().describe('Pixel width. Defaults from the orientation.'),
@@ -4267,10 +4269,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Exporting the project'),
       annotations: WRITE,
       description:
-        "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use get_context with render (ephemeral, stored nowhere). format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both surfaces too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. Resolution and watermark apply to EVERY format, not just mp4: a free account never exports above 720p and never removes the watermark, on any format or surface. `quality` is mp4 only. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
+        "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use get_context with render (ephemeral, stored nowhere). format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both project types too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. Resolution and watermark apply to EVERY format, not just mp4: a free account never exports above 720p and never removes the watermark, on any format or project type. `quality` is mp4 only. Returns the download URL when the render finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The project to export.'),
-        format: z.enum(['mp4', 'png', 'jpg', 'pdf', 'pptx']).optional().describe("Output format. Defaults to 'mp4'. mp4/png/jpg work for both surfaces (png/jpg on an editor project render one timeline frame); pdf/pptx are canvas-only."),
+        format: z.enum(['mp4', 'png', 'jpg', 'pdf', 'pptx']).optional().describe("Output format. Defaults to 'mp4'. mp4/png/jpg work for both project types (png/jpg on an editor project render one timeline frame); pdf/pptx are canvas-only."),
         resolution: z.enum(['480p', '720p', '1080p', '2k', '4k']).optional().describe("Output resolution, for EVERY format including stills. Defaults '720p' for an editor mp4 and the project's NATIVE size for a still or canvas mp4, in both cases clamped to your plan. 1080p and above are plan-gated: NAMING one above your plan is a 403, omitting one clamps instead."),
         quality: z.enum(['low', 'recommended', 'high']).optional().describe('mp4 ONLY: video bitrate. Meaningless for a still, which has no duration to spread bits over. Defaults recommended.'),
         watermark: z.boolean().optional().describe('Keep the watermark. Defaults true; removing it is plan-gated.'),
@@ -4321,7 +4323,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Export Formats',
       annotations: READ,
       description:
-        'List the export formats (and their options) available per project surface, so you know what export_project accepts. Requires the editor:read scope.',
+        'List the export formats (and their options) available per project type, so you know what export_project accepts. Requires the editor:read scope.',
       inputSchema: {},
     },
     async (_args, extra) => {

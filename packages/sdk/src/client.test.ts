@@ -12,6 +12,7 @@ import {
   ConflictError,
 } from './errors.js'
 import type { FetchLike } from './client.js'
+import type { ListProjectsInput } from './types.js'
 
 /** Build a fetch stub that replays a queue of [status, body] responses and records calls. */
 function stubFetch(
@@ -446,18 +447,18 @@ test('getProject with includeRenderUrl appends the query param', async () => {
 })
 
 test('listProjects GETs /api/v1/projects with filters and unwraps { projects }', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [{ id: 'p1', kind: 'editor', title: 'A', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null }] } }])
+  const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [{ id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'A', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null }] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const rows = await client.listProjects({ kind: 'editor', search: 'A' })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects?kind=editor&search=A')
+  const rows = await client.listProjects({ type: 'editor', search: 'A' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects?type=editor&search=A')
   assert.equal(rows.length, 1)
   assert.equal(rows[0]?.id, 'p1')
 })
 
 test('createProject POSTs to /api/v1/projects and unwraps { project }', async () => {
-  const { fetch, calls } = stubFetch([{ status: 201, body: { project: { id: 'new1', kind: 'editor', title: 'Untitled', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } }])
+  const { fetch, calls } = stubFetch([{ status: 201, body: { project: { id: 'new1', type: 'editor', kind: 'editor', title: 'Untitled', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedPostId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null } } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const p = await client.createProject({ kind: 'editor' })
+  const p = await client.createProject({ type: 'editor' })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects')
   assert.equal(calls[0]?.init?.method, 'POST')
   assert.equal(p.id, 'new1')
@@ -802,4 +803,29 @@ test('getContent sends analysisSections camelCase, the one spelling the API acce
   const url = new URL(calls[0]!.url)
   assert.equal(url.searchParams.get('analysisSections'), 'hook,structure')
   assert.equal(url.searchParams.has('analysis_sections'), false)
+})
+
+test('every listProjects filter reaches the request, aliases included', async () => {
+  // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
+  // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both
+  // project types back (found by a Cowork test, 2026-09-27).
+  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', surface: 'canvas', kind: 'canvas', search: 'deck' }
+  for (const key of Object.keys(every) as Array<keyof ListProjectsInput>) {
+    const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [] } }])
+    const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+    await client.listProjects({ [key]: every[key] } as ListProjectsInput)
+    const params = new URL(calls[0]!.url).searchParams
+    const sent = [...params.values()]
+    assert.ok(sent.includes(String(every[key])), `${key} did not reach the request: ${calls[0]!.url}`)
+  }
+})
+
+test('listProjects sends one type field, and type wins over its aliases', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.listProjects({ type: 'editor', surface: 'canvas', kind: 'canvas' })
+  const params = new URL(calls[0]!.url).searchParams
+  assert.equal(params.get('type'), 'editor')
+  assert.equal(params.get('surface'), null)
+  assert.equal(params.get('kind'), null)
 })

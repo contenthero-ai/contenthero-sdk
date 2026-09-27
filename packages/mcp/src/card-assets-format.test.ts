@@ -16,15 +16,21 @@ const card = {
   tags: [],
   posts: [],
   assets: [
-    { id: 'att-1', assetType: 'editor', assetId: 'proj-1', assetUrl: null, displayName: 'Cut', sortOrder: 0, inspiration: null },
-    { id: 'att-2', assetType: 'inspiration', assetId: 'content-1', assetUrl: 'https://instagram.com/p/x', displayName: null, sortOrder: 1, inspiration: null },
+    { id: 'att-1', assetType: 'editor', contentId: null, projectId: 'proj-1', assetId: 'proj-1', assetUrl: null, displayName: 'Cut', sortOrder: 0, inspiration: null },
+    { id: 'att-2', assetType: 'inspiration', contentId: 'content-1', projectId: null, assetId: 'content-1', assetUrl: 'https://instagram.com/p/x', displayName: null, sortOrder: 1, inspiration: null },
+    { id: 'att-3', assetType: 'image', contentId: null, projectId: null, assetId: 'obj-1', assetUrl: 'https://media.contenthero.ai/a.png', displayName: 'Cover', sortOrder: 2, inspiration: null },
   ],
 } as unknown as CardDetail
 
 const text = () => (cardResult(card).content[0] as { text: string }).text
 
-test('a linked project prints the id get_project takes', () => {
-  assert.match(text(), /\[editor\] Cut \| .*project proj-1 \(pass to get_project\)/)
+test('a linked project prints the id get_project takes, and no url it does not have', () => {
+  assert.match(text(), /- \[editor\] Cut \| project proj-1 \(pass to get_project\) \(id att-1\)/)
+  assert.doesNotMatch(text(), /no url/)
+})
+
+test('a media asset still prints its name and url', () => {
+  assert.match(text(), /- \[image\] Cover \| https:\/\/media\.contenthero\.ai\/a\.png \(id att-3\)/)
 })
 
 test('an inspiration post still prints the id get_content takes', () => {

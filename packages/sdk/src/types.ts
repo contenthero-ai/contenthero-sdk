@@ -232,8 +232,9 @@ export interface PlacementResult {
   projectId: string
   /** The placed clip / layer id (deterministic). Chain further ops (animate, reposition, reorder) onto it. */
   itemId?: string
-  /** 'canvas' when placed as a layer on a slide, 'editor' when placed as a clip on a track. Mirrors
-   *  `project.kind` exactly, rather than renaming it. */
+  /** 'canvas' when placed as a layer on a slide, 'editor' when placed as a clip on a track: the project's type. */
+  projectType?: ProjectType
+  /** @deprecated Alias for `projectType`, still emitted for one release window. */
   surface?: 'canvas' | 'editor'
   /** Canvas only: the placed layer id (same as itemId) and the resolved target slide. */
   layerId?: string
@@ -1529,7 +1530,17 @@ export interface CardSummary {
 export interface CardAsset {
   id: string
   assetType: string | null
-  /** For an `inspiration` asset this is the tracked-content id, which is what `getContent` takes. */
+  /**
+   * An inspiration post's tracked-content id: what `getContent` takes, and the same `contentId` that attached it.
+   * Null for every other kind.
+   */
+  contentId: string | null
+  /** A linked project's id: what `getProject` takes, and the same `projectId` that attached it. Null otherwise. */
+  projectId: string | null
+  /**
+   * @deprecated The id an attachment points at under one name for every kind (a content id, a project id, a media
+   * object id). Read `contentId` or `projectId`, which match the field that attached it. Emitted for one window.
+   */
   assetId: string | null
   assetUrl: string | null
   displayName: string | null
@@ -2151,7 +2162,7 @@ export interface ArchiveInput {
 export type EditorSurface = 'canvas' | 'editor'
 
 /** One op in the shared editor/canvas op vocabulary. Opaque here: shaped by the reducer for the
- *  project's surface (canvas layer/slide ops, or timeline clip ops). Every op has an `op` name. */
+ *  project's type (canvas layer/slide ops, or timeline clip ops). Every op has an `op` name. */
 export interface EditorOp {
   op: string
   /**
@@ -2166,7 +2177,7 @@ export interface EditorOp {
 
 /** Input to `applyEditorOps`. */
 export interface ApplyEditorOpsInput {
-  /** The project to edit. Its `surface` selects the op vocabulary (canvas layers vs timeline clips). */
+  /** The project to edit. Its `type` selects the op vocabulary (canvas layers vs timeline clips). */
   projectId: string
   /** The ops to apply, in order. */
   ops: EditorOp[]
@@ -2178,7 +2189,7 @@ export interface ApplyEditorOpsInput {
   includeRenderUrl?: boolean
 }
 
-/** The per-op outcome (surface-agnostic; created ids normalized across surfaces). */
+/** The per-op outcome (type-agnostic; created ids normalized across project types). */
 export interface EditorOpResult {
   op: string
   /** The op's stable id (the one you sent, or the one generated for you), echoed back for every op. */
@@ -2202,22 +2213,26 @@ export interface ApplyEditorOpsResult {
   renderUrl?: string | null
 }
 
-/** Which surface a project is: an editor (video timeline) or a canvas (slides/layers). */
 /**
- * Which surface a project lives on.
+ * A project's type: an editor project (video timeline) or a canvas project (slides and layers).
  *
- * Named `ProjectKind` for source compatibility; the field it describes is now `surface`. The API column was
- * renamed because `canvas` and `editor` are two of the product's eleven surfaces, while `kind` now means the
- * document shape (`tracks` | `slides`) on a project version.
+ * Named `type` since sdk 0.4.16 (2026-09-27). It was `kind`, then `surface`; neither read as what it is.
+ * `ProjectKind` and `ProjectSurface` stay as aliases so no import breaks.
  */
-export type ProjectKind = 'editor' | 'canvas'
-export type ProjectSurface = ProjectKind
+export type ProjectType = 'editor' | 'canvas'
+/** @deprecated Use `ProjectType`. */
+export type ProjectKind = ProjectType
+/** @deprecated Use `ProjectType`. */
+export type ProjectSurface = ProjectType
 
-/** Lightweight project list item (spans both surfaces), from `listProjects`. */
+/** Lightweight project list item (spans both types), from `listProjects`. */
 export interface ProjectSummary {
   id: string
+  /** 'editor' or 'canvas'. */
+  type: string
+  /** @deprecated Alias for `type`, still emitted for one release window. */
   surface: string
-  /** @deprecated Alias for `surface`, still emitted for one release window. Prefer `surface`. */
+  /** @deprecated Alias for `type`, still emitted for one release window. */
   kind: string
   title: string
   orientation: string
@@ -2424,20 +2439,24 @@ export interface EditorSelectedItem {
 export interface ListProjectsInput {
   /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */
   filter?: 'archived' | 'favorited'
-  /** Restrict to one surface. Omitted returns both. */
-  surface?: ProjectSurface
-  /** @deprecated Alias for `surface`, accepted for one release window. `surface` wins if both are set. */
-  kind?: ProjectKind
+  /** Restrict to one type. Omitted returns both. */
+  type?: ProjectType
+  /** @deprecated Alias for `type`, accepted for one release window. `type` wins if both are set. */
+  surface?: ProjectType
+  /** @deprecated Alias for `type`, accepted for one release window. `type` wins if both are set. */
+  kind?: ProjectType
   /** Case-insensitive title search. */
   search?: string
 }
 
 /** Input to `createProject`. All optional; the server applies the same defaults as the in-app new-project
- *  flow (16:9 landscape, `editor` kind, an empty composition the app lazy-inits). */
+ *  flow (16:9 landscape, an `editor` project, an empty composition the app lazy-inits). */
 export interface CreateProjectInput {
-  surface?: ProjectSurface
-  /** @deprecated Alias for `surface`, accepted for one release window. */
-  kind?: ProjectKind
+  type?: ProjectType
+  /** @deprecated Alias for `type`, accepted for one release window. */
+  surface?: ProjectType
+  /** @deprecated Alias for `type`, accepted for one release window. */
+  kind?: ProjectType
   title?: string
   orientation?: string
   width?: number
@@ -2469,7 +2488,7 @@ export interface ImportProjectInput {
 
 /** Options for starting a project export. All optional; defaults: format 'mp4', 720p, watermark on. */
 export interface StartExportInput {
-  /** 'mp4' (both surfaces) or 'png'/'jpg' (both surfaces) or 'pdf'/'pptx' (canvas only). */
+  /** 'mp4' (both project types) or 'png'/'jpg' (both) or 'pdf'/'pptx' (canvas only). */
   format?: string
   /** Video resolution (mp4): '480p'|'720p'|'1080p'|'2k'|'4k'. 1080p+ is plan-gated. */
   resolution?: string
@@ -2496,6 +2515,9 @@ export interface ExportJob {
 /** One format in the export catalog. */
 export interface ExportFormatSpec {
   format: string
+  /** The project types that can export this format. */
+  projectTypes: ProjectType[]
+  /** @deprecated Alias for `projectTypes`, still emitted for one release window. */
   surfaces: string[]
   /** true = async render job (poll it); false = returned completed immediately. */
   async: boolean
@@ -2552,6 +2574,8 @@ export interface EditorSharedProps {
 
 /** The canvas layer-type catalog, from `getLayerTypes`. Makes `update_canvas` self-describing. */
 export interface LayerTypeCatalog {
+  projectType: 'canvas'
+  /** @deprecated Alias for `projectType`, still emitted for one release window. */
   surface: 'canvas'
   description: string
   sharedProps: EditorSharedProps
@@ -2563,6 +2587,8 @@ export interface LayerTypeCatalog {
 /** The editor timeline clip + track-type catalog, from `getTimelineTypes`. Makes `update_timeline`
  *  self-describing. */
 export interface TimelineTypeCatalog {
+  projectType: 'editor'
+  /** @deprecated Alias for `projectType`, still emitted for one release window. */
   surface: 'editor'
   description: string
   sharedProps: EditorSharedProps

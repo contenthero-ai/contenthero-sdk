@@ -1,9 +1,9 @@
 /**
  * `contenthero project` - manage projects (canvas slides or editor timeline) and edit them via ops.
  *
- *   project list  [--filter <state>] [--surface <s>] [--search <text>]   (requires editor:read)
+ *   project list  [--filter <state>] [--type <t>] [--search <text>]      (requires editor:read)
  *   project get   <projectId>                                            (requires editor:read)
- *   project create [--surface <s>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
+ *   project create [--type <t>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--wait]
@@ -24,12 +24,17 @@
  * that revision as --expected-revision for safe concurrent edits. All edits require the editor:write scope.
  */
 import { readFileSync } from 'node:fs'
-import type { Command } from 'commander'
+import { Option, type Command } from 'commander'
 import type { EditorOp, ImportProjectSource } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt } from '../args.js'
+
+/** `--surface`, the project type's name before cli 0.3.12, still accepted and hidden from help. `--type` wins. */
+function deprecatedTypeAlias(): Option {
+  return new Option('--surface <type>', 'deprecated alias for --type').choices(['editor', 'canvas']).hideHelp()
+}
 
 function parseOps(raw: string): EditorOp[] {
   let parsed: unknown
@@ -56,19 +61,20 @@ export function registerProject(program: Command): void {
     .command('list')
     .description('List projects, both editor + canvas (requires editor:read)')
     .option('--filter <state>', 'archived | favorited (omitted = active)')
-    .option('--surface <surface>', 'editor | canvas (omitted = both)')
+    .option('--type <type>', 'editor | canvas (omitted = both)')
+    .addOption(deprecatedTypeAlias())
     .option('--search <text>', 'case-insensitive title search')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const projects = await client.listProjects({
         filter: opts.filter as 'archived' | 'favorited' | undefined,
-        surface: opts.surface as 'editor' | 'canvas' | undefined,
+        type: (opts.type ?? opts.surface) as 'editor' | 'canvas' | undefined,
         search: opts.search as string | undefined,
       })
       emit(projects, ctx, () =>
         projects.length === 0
           ? 'No projects found.'
-          : projects.map((p) => `${p.id}  [${p.surface}]  ${p.title}  ${p.orientation}`).join('\n'),
+          : projects.map((p) => `${p.id}  [${p.type}]  ${p.title}  ${p.orientation}`).join('\n'),
       )
     })
 
@@ -93,7 +99,7 @@ export function registerProject(program: Command): void {
         includeRenderUrl: opts.includeRenderUrl ? true : undefined,
       })
       emit(p, ctx, () =>
-        `Project ${p.id} "${p.title}" (${p.surface}), revision ${p.revision}` +
+        `Project ${p.id} "${p.title}" (${p.type}), revision ${p.revision}` +
         (p.renderUrl ? `\nPreview still: ${p.renderUrl}` : '') +
         // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
         // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
@@ -156,7 +162,8 @@ export function registerProject(program: Command): void {
   project
     .command('create')
     .description('Create a project (requires editor:write)')
-    .option('--surface <surface>', "editor | canvas (default: editor)")
+    .option('--type <type>', "editor | canvas (default: editor)")
+    .addOption(deprecatedTypeAlias())
     .option('--title <text>', "project title (default: Untitled)")
     .option('--orientation <ratio>', "e.g. 16:9, 9:16, 1:1 (default: 16:9)")
     .option('--width <n>', 'pixel width (default: from orientation)', toInt)
@@ -166,7 +173,7 @@ export function registerProject(program: Command): void {
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.createProject({
-        surface: opts.surface as 'editor' | 'canvas' | undefined,
+        type: (opts.type ?? opts.surface) as 'editor' | 'canvas' | undefined,
         title: opts.title as string | undefined,
         orientation: opts.orientation as string | undefined,
         width: opts.width as number | undefined,
@@ -175,7 +182,7 @@ export function registerProject(program: Command): void {
         cardId: opts.card as string | undefined,
       })
       emit(p, ctx, () =>
-        `Created ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
+        `Created ${p.type} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
         (opts.card ? `, linked to card ${opts.card}` : ''),
       )
     })
@@ -220,14 +227,14 @@ export function registerProject(program: Command): void {
       const { client, ctx } = makeClient(command)
       const p = await client.importProject({ source, title: opts.title as string | undefined, cardId: opts.card as string | undefined })
       emit(p, ctx, () =>
-        `Imported ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
+        `Imported ${p.type} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
         (opts.card ? `, linked to card ${opts.card}` : ''),
       )
     })
 
   project
     .command('export')
-    .description('Export a project to a file (mp4/png/jpg both surfaces; pdf/pptx canvas) (requires editor:write)')
+    .description('Export a project to a file (mp4/png/jpg both project types; pdf/pptx canvas) (requires editor:write)')
     .argument('<projectId>', 'the project id')
     .option('--format <format>', 'mp4 | png | jpg | pdf | pptx (default mp4)')
     .option('--resolution <res>', 'output resolution for ANY format: 480p|720p|1080p|2k|4k. Defaults 720p for an editor mp4, the project native size for a still. 1080p+ is plan-gated')
@@ -274,7 +281,7 @@ export function registerProject(program: Command): void {
     .action(async (_opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const cat = await client.getExportFormats()
-      emit(cat, ctx, () => cat.formats.map((f) => `${f.format} (${f.surfaces.join('/')}): ${f.description}`).join('\n'))
+      emit(cat, ctx, () => cat.formats.map((f) => `${f.format} (${f.projectTypes.join('/')}): ${f.description}`).join('\n'))
     })
 
   project
