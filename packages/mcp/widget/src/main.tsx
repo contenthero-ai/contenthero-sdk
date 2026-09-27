@@ -714,6 +714,9 @@ const styles = `
   .full.narrow .tools .pill.warn { width: auto; padding: 0 12px; }
   .full.narrow .line { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
   .full.narrow .line > * { flex: 0 0 auto; }
+  /* Centered like the icon row above it; the same auto margins as the strip give way before anything clips. */
+  .full.narrow .line > :first-child { margin-left: auto; }
+  .full.narrow .line > :last-child { margin-right: auto; }
   .full.narrow .line .badge.model { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 `
 
