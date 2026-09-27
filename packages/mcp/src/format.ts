@@ -1817,7 +1817,14 @@ export function cardResult(p: CardDetail): CallToolResult {
               .map((v) => ` | ${v}`)
               .join('')
           : ''
-        const ref = a.assetType === 'inspiration' && a.assetId ? ` | content ${a.assetId} (pass to get_content)` : ''
+        // A linked project prints its id for the same reason: it is what get_project takes.
+        const ref = !a.assetId
+          ? ''
+          : a.assetType === 'inspiration'
+            ? ` | content ${a.assetId} (pass to get_content)`
+            : a.assetType === 'editor' || a.assetType === 'canvas'
+              ? ` | project ${a.assetId} (pass to get_project)`
+              : ''
         return `  - [${a.assetType ?? '?'}]${name} ${a.assetUrl ?? '(no url)'}${triage}${ref} (id ${a.id})`
       }),
     ]),
