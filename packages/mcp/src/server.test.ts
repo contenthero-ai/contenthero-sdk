@@ -3275,3 +3275,24 @@ test('the widget template does not answer for uris it should not own', async () 
     )
   }
 })
+
+/**
+ * update_card can ADD every kind of attachment get_card reads back (2026-09-27). The assets entry took only
+ * assetUrl or outputId, so an inspiration post or a linked project could be read over the connector and never
+ * attached; an agent passing assetType 'inspiration' with a url got a plain link. The entry now names one of
+ * outputId, assetUrl, contentId or projectId, and the tool's description says which does what.
+ */
+test('update_card assets take contentId and projectId, and the description says so', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const tool = tools.find((t) => t.name === 'update_card')
+  assert.ok(tool, 'update_card is registered')
+  const assets = (tool.inputSchema.properties as Record<string, any>).assets
+  const entry = Object.keys(assets.items.properties)
+  for (const field of ['id', 'outputId', 'assetUrl', 'contentId', 'projectId']) {
+    assert.ok(entry.includes(field), `assets entry takes ${field}`)
+  }
+  for (const phrase of ['contentId (an inspiration post', 'projectId (an editor or canvas project)']) {
+    assert.ok(tool.description?.includes(phrase), `description names ${phrase}`)
+  }
+})

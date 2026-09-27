@@ -1163,9 +1163,27 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   const postAssetSchema = z.object({
     id: z.string().optional().describe('Keep an existing asset, at this position in the order.'),
-    assetUrl: z.string().optional().describe('A public url for a NEW asset.'),
-    outputId: z.string().optional().describe('A generation for a NEW asset.'),
-    assetType: z.string().optional().describe('Required with assetUrl; inferred from outputId.'),
+    outputId: z
+      .string()
+      .optional()
+      .describe(
+        'ADD media in ContentHero by its output id: a generation, a file uploaded from a device (create_media_upload then complete_media_upload), or a file imported from a url (import_media). "<id>-2" is variation 2 of a batch.',
+      ),
+    assetUrl: z
+      .string()
+      .optional()
+      .describe('ADD a link by its url. Nothing is copied; to keep a copy of a file on the web, import_media it and add the outputId.'),
+    contentId: z
+      .string()
+      .optional()
+      .describe(
+        "ADD an inspiration post: a tracked post's content id, as list_content and get_content use it and as get_card returns an inspiration asset's assetId. It lands on the card's Inspiration tab.",
+      ),
+    projectId: z.string().optional().describe('ADD a link to an editor or canvas project: its project id.'),
+    assetType: z
+      .string()
+      .optional()
+      .describe("Accepted and not needed: the kind is read from what the entry points at. Never 'inspiration' or a project type: use contentId or projectId."),
     displayName: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   })
@@ -3144,7 +3162,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Card',
       annotations: READ,
       description:
-        'Get one CARD in full: its fields (title, description, script, notes, status, stage, schedule), plus its posts (one per platform, which is how it publishes) and its attached assets in carousel order. An [inspiration] asset is a tracked post attached as a reference; its line already carries the headline metrics (creator, outlier score, views, likes, duration) plus transcript and breakdown availability, and a content id to pass to get_content for the transcript and the full Break It Down analysis.',
+        'Get one CARD in full: its fields (title, description, script, notes, status, stage, schedule), plus its posts (one per platform, which is how it publishes) and its attached assets in carousel order. An [inspiration] asset is a tracked post attached as a reference; its line already carries the headline metrics (creator, outlier score, views, likes, duration) plus transcript and breakdown availability, and a content id to pass to get_content for the transcript and the full Break It Down analysis. To attach one, add { contentId } to the assets list of update_card; a linked editor or canvas project is added the same way with { projectId }.',
       inputSchema: {
         cardId: z.string().describe('The card id from list_cards.'),
       },
@@ -3485,7 +3503,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Card',
       annotations: WRITE,
       description:
-        "Update a card: its fields (title, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (the media on it, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, add a new one by assetUrl or outputId. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, cover) still need exactly one. WRITING notes REQUIRES expectedRevision: read the card first and pass the revision it reported, or the call is refused. Requires the planner:write scope.",
+        "Update a card: its fields (title, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (its files, links, linked projects and inspiration posts, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, and add a new one by EXACTLY ONE reference: outputId (media: a generation, an upload or an import), assetUrl (a link), contentId (an inspiration post, shown on the card's Inspiration tab; get_card reads it back with that id as assetId) or projectId (an editor or canvas project). To attach one thing, read the card, append the entry to its assets, and send the whole list back. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, cover) still need exactly one. WRITING notes REQUIRES expectedRevision: read the card first and pass the revision it reported, or the call is refused. Requires the planner:write scope.",
       inputSchema: {
         cardId: z.string().describe('The card id.'),
         title: z.string().optional().describe('Rename the card. Keep it short: a long title wraps and makes the column unreadable.'),
@@ -3537,7 +3555,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         assets: z
           .array(postAssetSchema)
           .optional()
-          .describe("The post's assets IN ORDER, each { id } to keep an existing one or { assetUrl | outputId, assetType?, displayName? } to add. REPLACES the list; [] clears it."),
+          .describe("The post's assets IN ORDER, each { id } to keep an existing one or ONE of { outputId } | { assetUrl, assetType? } | { contentId } | { projectId } to add. REPLACES the list; [] clears it."),
       },
     },
     async (args, extra) => {

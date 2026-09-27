@@ -1742,10 +1742,28 @@ export interface PostInput {
 }
 
 /** One asset on a post: keep an existing one by `id`, or add a new one by `assetUrl` / `outputId`. */
+/**
+ * One entry in a card's declarative `assets` list: `{ id }` keeps an existing asset at this position; anything else
+ * ADDS one, naming EXACTLY ONE reference.
+ */
 export interface CardAssetInput {
+  /** Keep an existing asset, at this position in the order. */
   id?: string
-  assetUrl?: string
+  /**
+   * Add media in ContentHero by its output id: a generation, a file uploaded from a device (`uploadMedia`), or
+   * one imported from a url (`importMedia`). "<id>-2" is variation 2 of a batch.
+   */
   outputId?: string
+  /** Add a link by its url. Nothing is copied; to keep a copy of a file on the web, import it and add its `outputId`. */
+  assetUrl?: string
+  /**
+   * Add an inspiration post, shown on the card's Inspiration tab: a tracked post's content id, as `listContent` and
+   * `getContent` use it, and as `getCard` returns an inspiration asset's `assetId`.
+   */
+  contentId?: string
+  /** Add a link to an editor or canvas project: its project id. */
+  projectId?: string
+  /** Accepted and not needed: the kind is read from what the entry points at. Never `inspiration` or a project type: the server refuses it, naming `contentId` or `projectId`. */
   assetType?: string
   displayName?: string
   metadata?: Record<string, unknown> | null

@@ -259,7 +259,11 @@ export function registerCard(program: Command): void {
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)', toList)
     .option('--schedule <when>', 'ISO-8601 publish time for the card AND its posts, or "clear"')
     .option('--posts <json>', 'the card\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
-    .option('--assets <json>', 'the post\'s assets as JSON, IN ORDER. REPLACES the list; [] clears it', toJson)
+    .option(
+      '--assets <json>',
+      'the card\'s assets as JSON, IN ORDER: [{"id":...}] keeps one; add one with exactly one of {"outputId"} (media: generated, uploaded or imported), {"assetUrl"} (a link), {"contentId"} (an inspiration post) or {"projectId"} (an editor or canvas project). REPLACES the list; [] clears it',
+      toJson,
+    )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
       assertNotesCarryRevision(id, opts.notes, opts.expectedRevision)
