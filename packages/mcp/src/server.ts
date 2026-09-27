@@ -3310,7 +3310,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'list_stages',
     {
-      title: 'List Pipeline Stages',
+      title: 'List Stages',
       annotations: READ,
       description:
         "List one SPACE's stages, in order. ⚠️ STAGES ARE PER-SPACE: without spaceId this is the account's DEFAULT space, and two spaces can each hold a stage named 'Published' with different ids, so a stage name resolved against the wrong space is a different column. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a card; pass a stage's id (most stable), slug, or name to create_card / update_card.",
@@ -3463,7 +3463,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe(
             "Which board to create the card on, from list_spaces. Omit only when you mean the account's default space.",
           ),
-        stage: z.string().optional().describe('Pipeline stage id, slug, or name. Defaults to the first stage.'),
+        stage: z.string().optional().describe('Stage id, slug, or name. Defaults to the first stage.'),
         coverUrl: z.string().optional().describe('Public URL for the post cover (the card thumbnail).'),
         coverOutputId: z
           .string()
@@ -4207,7 +4207,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Project',
       annotations: WRITE,
       description:
-        "Create a new project. `surface` picks where it lives: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor surface). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. Returns the new project id + revision. Requires the editor:write scope.",
+        "Create a new project. `surface` picks where it lives: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, editor surface). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); a new editor starts with an empty timeline. When the project is for a planned piece, pass cardId to link it to that card in the same call. Returns the new project id + revision. Requires the editor:write scope (and planner:write with cardId).",
       inputSchema: {
         surface: z.enum(['editor', 'canvas']).optional().describe("The surface. Defaults to 'editor'."),
         kind: z.enum(['editor', 'canvas']).optional().describe("Deprecated alias for `surface`. Prefer `surface`; accepted for one release window."),
@@ -4216,12 +4216,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         width: z.number().optional().describe('Pixel width. Defaults from the orientation.'),
         height: z.number().optional().describe('Pixel height. Defaults from the orientation.'),
         brandKitId: z.string().optional().describe('Optional brand kit to associate.'),
+        cardId: z.string().optional().describe('The card this project is for: the new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return projectCreatedResult(await client.createProject(args))
+        return projectCreatedResult(await client.createProject(args), args.cardId)
       } catch (err) {
         return errorResult(err)
       }
@@ -4234,12 +4235,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Import Project',
       annotations: WRITE,
       description:
-        "Import a PowerPoint / Google Slides file (by URL) or a Canva design (by id) into a NEW canvas project with editable layers. Set sourceType to 'pptx' and pass fileUrl (a URL to a .pptx / slides file), or set sourceType to 'canva' and pass designId (uses the account's Canva connection; fails with canva_not_connected if not linked). Returns the new project id + revision. Requires the editor:write scope.",
+        "Import a PowerPoint / Google Slides file (by URL) or a Canva design (by id) into a NEW canvas project with editable layers. Set sourceType to 'pptx' and pass fileUrl (a URL to a .pptx / slides file), or set sourceType to 'canva' and pass designId (uses the account's Canva connection; fails with canva_not_connected if not linked). Pass cardId to link the new project to its card in the same call. Returns the new project id + revision. Requires the editor:write scope (and planner:write with cardId).",
       inputSchema: {
         sourceType: z.enum(['pptx', 'canva']).describe("'pptx' for a file URL, 'canva' for a Canva design id."),
         fileUrl: z.string().optional().describe("Required when sourceType is 'pptx': a URL to the .pptx / slides file."),
         designId: z.string().optional().describe("Required when sourceType is 'canva': the Canva design id."),
         title: z.string().optional().describe("Title for the created project. Defaults to 'Imported deck'."),
+        cardId: z.string().optional().describe('The card this project is for: the new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
       },
     },
     async (args, extra) => {
@@ -4251,7 +4253,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             ? ({ type: 'pptx', fileUrl: args.fileUrl as string } as const)
             : ({ type: 'canva', designId: args.designId as string } as const)
         const client = await getClient(extra)
-        return projectCreatedResult(await client.importProject({ source, title: args.title }))
+        return projectCreatedResult(await client.importProject({ source, title: args.title, cardId: args.cardId }), args.cardId)
       } catch (err) {
         return errorResult(err)
       }

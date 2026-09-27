@@ -3296,3 +3296,51 @@ test('update_card assets take contentId and projectId, and the description says 
     assert.ok(tool.description?.includes(phrase), `description names ${phrase}`)
   }
 })
+
+/**
+ * The retired "pipeline stage" vocabulary appears nowhere a caller reads: tool titles, descriptions, or parameter
+ * descriptions. Claude shows a tool's TITLE, and `list_stages` was titled "List Pipeline Stages" long after stages
+ * stopped being called that, which is how the old word surfaced in a Claude session (2026-09-27) while every tool
+ * NAME was already clean. A search over names alone missed it.
+ */
+test('no tool text uses the retired "pipeline stage" vocabulary', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const retired = /pipeline[ _-]?stage/i
+  const offenders: string[] = []
+  const walk = (label: string, value: unknown): void => {
+    if (typeof value === 'string') {
+      if (retired.test(value)) offenders.push(label)
+    } else if (value && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value)) walk(`${label}.${k}`, v)
+    }
+  }
+  for (const t of tools) walk(t.name, { title: t.title, annotations: t.annotations, description: t.description, inputSchema: t.inputSchema })
+  assert.ok(tools.length > 50, 'read the real tool list')
+  assert.deepEqual(offenders, [])
+})
+
+/**
+ * create_project and import_project hand cardId to the client (2026-09-27). import_project builds its input field by
+ * field, so a new parameter it does not copy would be accepted by the schema and silently dropped: the project would
+ * be made and never linked.
+ */
+test('create_project and import_project pass cardId through, and say the project is linked', async () => {
+  const seen: Array<Record<string, unknown>> = []
+  const project = { id: 'p1', kind: 'editor', surface: 'editor', title: 'T', orientation: '16:9', width: 1920, height: 1080, revision: 1 }
+  const mcp = await connect(
+    fakeClient({
+      createProject: async (input: Record<string, unknown>) => (seen.push(input), project),
+      importProject: async (input: Record<string, unknown>) => (seen.push(input), { ...project, kind: 'canvas' }),
+    }),
+  )
+  const created = await mcp.callTool({ name: 'create_project', arguments: { cardId: 'c1' } })
+  const imported = await mcp.callTool({
+    name: 'import_project',
+    arguments: { sourceType: 'pptx', fileUrl: 'https://x/d.pptx', cardId: 'c1' },
+  })
+  assert.deepEqual(seen.map((s) => s.cardId), ['c1', 'c1'])
+  for (const res of [created, imported]) {
+    assert.match((res.content as Array<{ text: string }>)[0].text, /Linked to card c1/)
+  }
+})

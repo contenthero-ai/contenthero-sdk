@@ -2443,6 +2443,12 @@ export interface CreateProjectInput {
   width?: number
   height?: number
   brandKitId?: string
+  /**
+   * The card this project is for: the new project is linked to it in the same call, so the card opens the edit from
+   * the moment it exists. Also needs the `planner:write` scope; a card that is not the caller's fails the call before
+   * any project is made.
+   */
+  cardId?: string
 }
 
 /** A source for `importProject`: a PowerPoint / Google Slides file URL, or a Canva design id. */
@@ -2457,6 +2463,8 @@ export interface ImportProjectInput {
   title?: string
   /** Optional slide count for an early page-cap check. */
   pageCount?: number
+  /** The card this project is for: linked to it in the same call (needs `planner:write` too). */
+  cardId?: string
 }
 
 /** Options for starting a project export. All optional; defaults: format 'mp4', 720p, watermark on. */

@@ -162,6 +162,7 @@ export function registerProject(program: Command): void {
     .option('--width <n>', 'pixel width (default: from orientation)', toInt)
     .option('--height <n>', 'pixel height (default: from orientation)', toInt)
     .option('--brand-kit <id>', 'associate this brand kit with the project')
+    .option('--card <id>', 'link the new project to this card in the same call (also needs planner:write)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.createProject({
@@ -171,8 +172,12 @@ export function registerProject(program: Command): void {
         width: opts.width as number | undefined,
         height: opts.height as number | undefined,
         brandKitId: opts.brandKit as string | undefined,
+        cardId: opts.card as string | undefined,
       })
-      emit(p, ctx, () => `Created ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
+      emit(p, ctx, () =>
+        `Created ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
+        (opts.card ? `, linked to card ${opts.card}` : ''),
+      )
     })
 
   project
@@ -199,6 +204,7 @@ export function registerProject(program: Command): void {
     .option('--file-url <url>', "PPTX / slides file URL (when --source-type pptx)")
     .option('--design-id <id>', "Canva design id (when --source-type canva)")
     .option('--title <text>', "title for the created project")
+    .option('--card <id>', 'link the new project to this card in the same call (also needs planner:write)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const sourceType = opts.sourceType as string | undefined
       let source: ImportProjectSource
@@ -212,8 +218,11 @@ export function registerProject(program: Command): void {
         throw new CliError('--source-type must be pptx or canva.', EXIT.USAGE)
       }
       const { client, ctx } = makeClient(command)
-      const p = await client.importProject({ source, title: opts.title as string | undefined })
-      emit(p, ctx, () => `Imported ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}`)
+      const p = await client.importProject({ source, title: opts.title as string | undefined, cardId: opts.card as string | undefined })
+      emit(p, ctx, () =>
+        `Imported ${p.surface} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
+        (opts.card ? `, linked to card ${opts.card}` : ''),
+      )
     })
 
   project

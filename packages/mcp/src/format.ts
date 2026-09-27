@@ -2355,9 +2355,10 @@ export function projectListResult(projects: ProjectSummary[]): CallToolResult {
 }
 
 /** A freshly created project: the id + kind to start editing against. */
-export function projectCreatedResult(p: ProjectDetail): CallToolResult {
+export function projectCreatedResult(p: ProjectDetail, linkedCardId?: string): CallToolResult {
   return text(
     `Created ${p.kind} project ${p.id}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+      (linkedCardId ? `Linked to card ${linkedCardId}.\n` : '') +
       // The TOOL is still called update_timeline; `kind` is what says which one applies.
       `Use this id with update_${p.kind === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
   )

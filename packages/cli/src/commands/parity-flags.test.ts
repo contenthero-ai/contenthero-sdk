@@ -81,6 +81,13 @@ test('folder update --text re-queries a smart folder', async () => {
   assert.deepEqual(r.body?.query, { text: 'sunsets' })
 })
 
+test('project create and import --card link the new project to that card', async () => {
+  const created = await run('project', 'create', '--card', 'c1')
+  assert.equal(created.body?.cardId, 'c1')
+  const imported = await run('project', 'import', '--source-type', 'pptx', '--file-url', 'https://x/d.pptx', '--card', 'c1')
+  assert.equal(imported.body?.cardId, 'c1')
+})
+
 test('project create --brand-kit associates the kit', async () => {
   const r = await run('project', 'create', '--brand-kit', 'bk1')
   assert.equal(r.body?.brandKitId, 'bk1')
