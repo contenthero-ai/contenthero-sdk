@@ -2211,11 +2211,12 @@ const PROJECT_DETAIL_EXPOSURE = {
   // Rendered in the summary line or the JSON body below.
   id: 'rendered',
   title: 'rendered',
-  kind: 'rendered',
+  type: 'rendered',
+  kind: 'omitted: deprecated alias of type, same value',
   // Added when `surface` joined ProjectDetail (8aecfd0). It went unnoticed because `dist/` is gitignored
   // and this file typechecks against the BUILT SDK, so a stale dist hid the missing key until the next
   // rebuild. Same value as `kind`, which is the name it used to have.
-  surface: 'rendered',
+  surface: 'omitted: deprecated alias of type, same value',
   orientation: 'rendered',
   width: 'rendered',
   height: 'rendered',
@@ -2241,7 +2242,7 @@ const PROJECT_DETAIL_EXPOSURE = {
 } satisfies Record<keyof ProjectDetail, string>
 void PROJECT_DETAIL_EXPOSURE
 
-/** A single project's full detail (read-before-write): metadata, surface, revision, and the state JSON. */
+/** A single project's full detail (read-before-write): metadata, type, revision, and the state JSON. */
 export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
     `Project ${p.id}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
