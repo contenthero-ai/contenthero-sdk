@@ -56,6 +56,8 @@ export interface ReferenceElement {
 /** A saved reference element in the account's library (the persistent form). */
 export interface Element {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
@@ -504,6 +506,8 @@ export interface Transcription {
 /** An avatar as returned by `listAvatars` (the list projection). */
 export interface AvatarSummary {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
@@ -658,6 +662,8 @@ export interface ListVoicesOptions {
 /** A brand kit as returned by `listBrandKits` (the list projection). */
 export interface BrandKitSummary {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
@@ -782,6 +788,10 @@ export interface BrandKitSectionWrite {
 /** A knowledge-base item (body truncated to a preview), as embedded in `getBrandKit`. */
 export interface BrandKitKnowledge {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
+  /** This knowledge item in the app. */
+  appUrl: string
   title: string | null
   sourceType: string | null
   sourceUrl: string | null
@@ -791,6 +801,8 @@ export interface BrandKitKnowledge {
 /** A knowledge-base item in the dedicated list/get surface (metadata). */
 export interface BrandKnowledgeItem {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   title: string | null
@@ -1012,6 +1024,8 @@ export interface MediaVariation {
  */
 export interface MediaSummary {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   type: MediaType
@@ -1080,6 +1094,8 @@ export interface ResolvedMediaBatchItem {
   ok: boolean
   /** Where this item opens in the app. Absent for a url that is not one of the account's media items. */
   appUrl?: string
+  /** The item's 8-character public id. Absent for a url that is not one of the account's media items. */
+  shortId?: string
   /** Echo of the requested item, to correlate results with inputs. */
   input: MediaBatchItem
   /** The media itself (image master, or video master). */
@@ -1253,6 +1269,8 @@ export interface SmartFolderQuery {
 
 export interface Folder {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
@@ -1349,6 +1367,8 @@ export interface ImportMediaInput {
 /** A finalized upload/import: a first-class media output (referenceable by outputId). */
 export interface UploadedMedia {
   outputId: string
+  /** The upload's 8-character public id, used in app links and shown to people; `outputId` stays the UUID. */
+  shortId: string
   url: string
   /** Where the upload opens in the app. */
   appUrl: string
@@ -1381,6 +1401,8 @@ export interface ImportedMedia {
   url: string
   /** Where the item opens in the app; null exactly when `outputId` is. */
   appUrl: string | null
+  /** The item's 8-character public id; null exactly when `outputId` is. */
+  shortId: string | null
   /** True when nothing was created because the account already held these exact bytes. NOT an error. */
   alreadyExisted: boolean
   /** What the bytes already ARE, when `alreadyExisted`, so a caller can say which thing rather than "duplicate". */
@@ -1493,6 +1515,8 @@ export type PostPlatform =
  */
 export interface Space {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   accountId: string
@@ -1514,6 +1538,8 @@ export interface Space {
 
 export interface Stage {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
@@ -1537,6 +1563,8 @@ export interface Stage {
 /** A post as returned by `listCards` (the list projection). */
 export interface CardSummary {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   title: string
@@ -1658,6 +1686,8 @@ export interface CardDetail extends CardSummary {
 /** An account tag (the organizational tag library). */
 export interface Tag {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
@@ -1897,6 +1927,8 @@ export interface PublishResult {
 /** A tracked account: an inspiration creator or one of the caller's brand accounts. */
 export interface TrackedAccount {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   platform: string | null
@@ -1914,6 +1946,8 @@ export interface TrackedAccount {
 /** A piece of tracked content: the list projection. */
 export interface ContentSummary {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   platform: string | null
@@ -2091,6 +2125,8 @@ export interface ContentListResult {
  */
 export interface ConnectedAccount {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   platform: string | null
@@ -2270,6 +2306,8 @@ export type ProjectSurface = ProjectType
 /** Lightweight project list item (spans both types), from `listProjects`. */
 export interface ProjectSummary {
   id: string
+  /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
+  shortId: string
   /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   /** 'editor' or 'canvas'. */
@@ -2547,6 +2585,8 @@ export interface StartExportInput {
 /** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */
 export interface ExportJob {
   exportId: string
+  /** The export's 8-character public id, used in app links and shown to people; `exportId` stays the UUID. */
+  shortId: string
   /** This export in the app (it opens its project). */
   appUrl: string
   /** 'pending' | 'rendering' | 'transferring' | 'completed' | 'failed'. */

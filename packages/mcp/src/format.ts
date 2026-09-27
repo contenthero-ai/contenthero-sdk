@@ -2202,6 +2202,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   renderUrl: 'rendered (opt-in)',
   brandKitId: 'rendered',
   appUrl: 'rendered',
+  shortId: 'omitted: the appUrl carries it, and every tool accepts either id',
   // Deliberately omitted, with the reason. Each of these is reachable through a dedicated tool, or is
   // list-view metadata that tells a single-project reader nothing it did not already know by fetching it.
   assetReferences: 'omitted: large payload; the composition state already names what is in use',
@@ -2415,8 +2416,8 @@ export function completedExportResult(
 }
 
 /** An export, REPORTED. No widget: a poll does not know the format, so it cannot draw the file. */
-/** `appUrl` is optional here: a timed-out wait knows only the export's id and status. */
-export function exportJobResult(job: Omit<ExportJob, 'appUrl'> & { appUrl?: string }): CallToolResult {
+/** `appUrl` and `shortId` are optional here: a timed-out wait knows only the export's id and status. */
+export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
   if (job.status === 'completed') {
     return text(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`)
   }
