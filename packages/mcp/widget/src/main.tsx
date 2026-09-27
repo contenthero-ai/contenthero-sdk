@@ -682,7 +682,14 @@ const styles = `
   .full .stage img, .full .stage video { width: 100%; height: 100%; object-fit: contain; }
   /* ⚠️ The host's composer overlays the bottom of a fullscreen frame, so the strip needs room BELOW it or
      it sits behind the message box. Measured: clipped by roughly a composer's height. */
-  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 8px 16px 10px; overflow-x: auto; justify-content: center; }
+  .full .strip { flex: 0 0 auto; display: flex; gap: 8px; padding: 8px 16px 10px; overflow-x: auto; }
+  /*
+   * CENTERED WHEN THE THUMBNAILS FIT, SCROLLABLE FROM THE FIRST WHEN THEY DO NOT. justify-content center on a
+   * scrolling row pushes its overflow off BOTH ends, and the start is then unreachable. Auto margins on the ends
+   * take up only spare room, so they center a short row and collapse to zero on a long one.
+   */
+  .full .strip > :first-child { margin-left: auto; }
+  .full .strip > :last-child { margin-right: auto; }
   .full .strip .t { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; background: none; flex: 0 0 auto; }
   .full .strip .t[aria-current="true"] { border-color: ${GOLD}; }
   .full .strip .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -699,7 +706,7 @@ const styles = `
    * pushed the picture up; icons fit one row, and the badges hold one line that clips rather than wraps.
    */
   .full.narrow .stage { padding: 8px; }
-  .full.narrow .strip { padding: 6px 12px 8px; justify-content: flex-start; }
+  .full.narrow .strip { padding: 6px 12px 8px; }
   .full.narrow .strip .t { width: 44px; height: 44px; }
   .full.narrow .foot { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 8px; padding: 8px 12px 10px; }
   .full.narrow .tools { display: flex; justify-content: center; gap: 12px; }
