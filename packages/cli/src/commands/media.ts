@@ -5,7 +5,7 @@
  *   media get <id>                                 one output, with its variations
  *
  * Spans creations, reference boards, and looks; filter with --kind. An id may be
- * the full output id, its first 8 chars, or either with a "-N" variation suffix.
+ * its short id, the full output id or its first 8 chars, any with a "-N" variation suffix.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
@@ -13,7 +13,7 @@ import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
 import type { ImportedMedia, MediaBatchItem, MediaItem, MediaKind, MediaSource, MediaSummary, MediaType, SearchMediaResult, UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt, toList } from '../args.js'
 
@@ -171,7 +171,7 @@ export function registerMedia(program: Command): void {
         table(
           ['ID', 'VAR', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
           rows.map((m) => [
-            m.id.slice(0, 8),
+            displayId(m),
             m.generationSize > 1 ? `${m.variant + 1}/${m.generationSize}${m.isFavorited ? '★' : ''}` : (m.isFavorited ? '★' : ''),
             m.type,
             m.kind ?? '',
@@ -207,7 +207,7 @@ export function registerMedia(program: Command): void {
         table(
           ['ID', 'KIND', 'REL', 'SCENES', 'SUMMARY'],
           rows.map((r) => [
-            r.id.slice(0, 8),
+            displayId(r),
             r.kind ?? '',
             `${Math.round(r.relevance * 100)}%`,
             r.scenes.length
@@ -222,7 +222,7 @@ export function registerMedia(program: Command): void {
   media
     .command('get')
     .description('Get one media item by id (studio output, or an upload/stock item with --source)')
-    .argument('<id>', 'media id (full or first-8); creations also accept a "-N" variation suffix')
+    .argument('<id>', 'media id (short id, full id or first 8 characters); creations also accept a "-N" variation suffix')
     .option('--source <source>', `which library the id belongs to: ${GET_SOURCES.join(', ')} (default creations)`)
     .option(
       '--save <dir>',
@@ -254,7 +254,7 @@ export function registerMedia(program: Command): void {
               EXIT.GENERAL,
             )
           }
-          const file = join(dir, `${item.id.slice(0, 8)}-v${v.variation}${saveExt(v.url, item.type)}`)
+          const file = join(dir, `${displayId(item)}-v${v.variation}${saveExt(v.url, item.type)}`)
           await writeFile(file, Buffer.from(await res.arrayBuffer()))
           saved.push(file)
         }
@@ -262,7 +262,7 @@ export function registerMedia(program: Command): void {
 
       emit(item, ctx, (m: MediaItem) => {
         const head = keyValues([
-          ['Id', m.id], ...linkRow(m),
+          ['Id', displayId(m)], ...linkRow(m),
           ['Type', m.type],
           ['Kind', m.kind ?? 'creation'],
           ['Model', m.model ?? ''],
@@ -299,7 +299,7 @@ export function registerMedia(program: Command): void {
   media
     .command('watch')
     .description('Watch a VIDEO as low-res keyframes across a time window (inspect raw footage)')
-    .argument('<idOrUrl>', 'a studio output id (first-8 ok) OR a media URL on our storage')
+    .argument('<idOrUrl>', 'a studio output id (short id, full id or first 8 characters) OR a media URL on our storage')
     .option('--from <sec>', 'start of the source-time window (seconds)', (v) => parseFloat(v))
     .option('--to <sec>', 'end of the source-time window (seconds)', (v) => parseFloat(v))
     .option('--frames <n>', 'how many keyframes (default 8)', (v) => parseInt(v, 10))

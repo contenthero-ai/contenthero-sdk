@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { table, keyValues } from './output.js'
+import { readdirSync, readFileSync } from 'node:fs'
+import { table, keyValues, displayId } from './output.js'
 
 /**
  * ⚠️ **THESE ASSERT LAYOUT, NOT COLOR, AND THE TEST SCRIPT SETS `NO_COLOR=1` TO KEEP THAT TRUE.**
@@ -48,4 +49,24 @@ test('keyValues pads keys and renders values', () => {
   const lines = out.split('\n')
   assert.match(lines[0], /^Tier:\s+legend$/)
   assert.match(lines[1], /^Auto top-up:\s+off$/)
+})
+
+test('displayId shows the short id, and falls back to the FULL id, never a truncated one', () => {
+  const uuid = '3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b'
+  assert.equal(displayId({ id: uuid, shortId: 'Ab3xY9kQ' }), 'Ab3xY9kQ')
+  assert.equal(displayId({ id: uuid, shortId: null }), uuid)
+  assert.equal(displayId({ id: uuid }), uuid)
+})
+
+/**
+ * A UUID's first 8 characters resolve only as a media token, so a table that printed them handed people ids that
+ * `space get`, `brandkit get` and the rest refuse (measured 2026-09-28: 17 places across 8 command files did). Every command prints ids
+ * through `displayId`. The count assertion keeps this from passing on an empty directory.
+ */
+test('no command prints a truncated UUID', () => {
+  const dir = new URL('./commands/', import.meta.url)
+  const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+  assert.ok(files.length >= 10, `expected the command sources, found ${files.length}`)
+  const offenders = files.filter((f) => /\b(id|Id)\.slice\(0,\s*8\)/.test(readFileSync(new URL(f, dir), 'utf8')))
+  assert.deepEqual(offenders, [])
 })

@@ -11,7 +11,7 @@
 import type { Command } from 'commander'
 import type { Folder, DerivedFolder, FolderItem } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, table } from '../output.js'
+import { emit, table, displayId } from '../output.js'
 import { collect } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 
@@ -33,7 +33,7 @@ export function registerFolder(program: Command): void {
         table(
           ['ID', 'NAME', 'TYPE', 'PARENT'],
           [
-            ...d.folders.map((f) => [f.id.slice(0, 8), f.name, f.type, f.parentId ? f.parentId.slice(0, 8) : '']),
+            ...d.folders.map((f) => [displayId(f), f.name, f.type, f.parentId ? displayId(d.folders.find((x) => x.id === f.parentId) ?? { id: f.parentId }) : '']),
             ...d.derived.map((x) => [x.key, x.name, 'derived', '']),
           ],
         ),
@@ -52,8 +52,8 @@ export function registerFolder(program: Command): void {
           ['KIND', 'REF', 'DETAIL'],
           rows.map((i) =>
             i.type === 'media'
-              ? [i.kind ?? 'media', `${i.sourceTable}/${i.sourceRecordId.slice(0, 8)} v${i.variant}`, clip(i.summary)]
-              : [i.type, i.id.slice(0, 8), clip(i.name)],
+              ? [i.kind ?? 'media', `${i.sourceTable}/${i.sourceRecordId} v${i.variant}`, clip(i.summary)]
+              : [i.type, displayId(i), clip(i.name)],
           ),
         ),
       )

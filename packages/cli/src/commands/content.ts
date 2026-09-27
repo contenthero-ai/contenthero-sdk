@@ -29,7 +29,7 @@ import type {
 } from '@contenthero/sdk'
 import { CONTENT_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table } from '../output.js'
+import { emit, keyValues, table, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toFloat, toInt, toList } from '../args.js'
 
@@ -38,7 +38,7 @@ export function trackedAccountsTable(rows: TrackedAccount[]): string {
   return table(
     ['ID', 'KIND', 'PLATFORM', 'HANDLE', 'NAME', 'FOLLOWERS'],
     rows.map((a) => [
-      a.id.slice(0, 8),
+      displayId(a),
       a.accountType === 'brand' ? 'yours' : a.accountType === 'inspiration' ? 'watching' : '',
       a.platform ?? '',
       a.handle ?? '',
@@ -53,7 +53,7 @@ export function outliersTable(rows: ContentSummary[]): string {
   return table(
     ['ID', 'OWN', 'PLATFORM', 'SCORE', 'VIEWS', 'TITLE'],
     rows.map((o) => [
-      o.id.slice(0, 8),
+      displayId(o),
       o.isOwn ? 'yes' : '',
       o.platform ?? '',
       o.outlierScore != null ? o.outlierScore.toFixed(1) : '',

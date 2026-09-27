@@ -15,7 +15,7 @@
 import type { Command } from 'commander'
 import type { Avatar, AvatarSummary, Voice, VoiceSummary } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { collect, toJson } from '../args.js'
 
 export function registerIdentity(program: Command): void {
@@ -31,7 +31,7 @@ export function registerIdentity(program: Command): void {
         table(
           ['ID', 'NAME', 'DEFAULT', 'VOICE', 'STATUS'],
           rows.map((a) => [
-            a.id.slice(0, 8),
+            displayId(a),
             a.name,
             a.isDefault ? 'yes' : '',
             a.defaultVoiceId ?? '',
@@ -51,7 +51,7 @@ export function registerIdentity(program: Command): void {
       emit(a, ctx, (av: Avatar) => {
         const head = keyValues([
           ['Name', av.name],
-          ['Id', av.id], ...linkRow(av),
+          ['Id', displayId(av)], ...linkRow(av),
           ['Default voice', av.defaultVoiceId ?? ''],
           ['Image', av.imageUrl ?? ''],
           ...(av.gender ? [['Gender', av.gender] as [string, string]] : []),
@@ -63,7 +63,7 @@ export function registerIdentity(program: Command): void {
             table(
               ['ID', 'NAME', 'TYPE', 'DEFAULT'],
               av.looks.map((l) => [
-                l.id.slice(0, 8),
+                displayId(l),
                 l.name ?? '',
                 l.lookType ?? '',
                 l.isDefault ? 'yes' : '',
@@ -114,7 +114,7 @@ export function registerIdentity(program: Command): void {
       emit(created, ctx, () =>
         keyValues([
           ['Created', created.avatar.name],
-          ['Id', created.avatar.id], ...linkRow(created.avatar),
+          ['Id', displayId(created.avatar)], ...linkRow(created.avatar),
           ['Status', created.status],
         ]) +
         `\n\nNot ready yet: the first look is generating. Poll with:\n  contenthero avatar get ${created.avatar.id}`,

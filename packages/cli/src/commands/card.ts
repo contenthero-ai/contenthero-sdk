@@ -26,7 +26,7 @@ import type {
   UpdateCardInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, toInt, toJson, toList } from '../args.js'
@@ -73,7 +73,7 @@ export function assertNotesCarryRevision(cardId: string, notes: unknown, expecte
 function summaryHuman(p: CardSummary, action?: string): string {
   return keyValues([
     ...(action ? [[action, p.title] as [string, string]] : [['Title', p.title] as [string, string]]),
-    ['Id', p.id], ...linkRow(p),
+    ['Id', displayId(p)], ...linkRow(p),
     ['Platform', p.platform ?? ''],
     // A card has no status. Archive is the one lifecycle flag it carries on itself, and it is only shown
     // when true: a line reading "Archived: no" on every live card is noise.
@@ -162,7 +162,7 @@ export function registerCard(program: Command): void {
         if (!r.cards.length) return `No cards found${where}.`
         const t = table(
           ['ID', 'PLATFORM', 'TITLE'],
-          r.cards.map((p) => [p.id.slice(0, 8), p.platform ?? '', p.title]),
+          r.cards.map((p) => [displayId(p), p.platform ?? '', p.title]),
         )
         return `${t}\n\n${r.cards.length} of ${r.total}${where}${r.hasMore ? ' (more available)' : ''}`
       })
@@ -178,7 +178,7 @@ export function registerCard(program: Command): void {
       emit(p, ctx, (post: CardDetail) => {
         const head = keyValues([
           ['Title', post.title],
-          ['Id', post.id], ...linkRow(post),
+          ['Id', displayId(post)], ...linkRow(post),
           ['Platform', post.platform ?? ''],
           // ⚠️ A CARD HAS NO STATUS. The POSTS table below keeps its own `STATUS` column, which is a
           // real per-destination publish state and a different thing entirely.
@@ -222,7 +222,7 @@ export function registerCard(program: Command): void {
     .option('--space <space>', "which space's board (from `contenthero space list`); default space if omitted")
     .option('--stage <stage>', 'stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
-    .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
+    .option('--cover-output-id <id>', 'media token (short id, output id or first 8 characters, optionally with "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)', toList)
     .action(async (title: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string)
@@ -255,7 +255,7 @@ export function registerCard(program: Command): void {
       toInt,
     )
     .option('--cover-url <url>', 'public URL for the post cover')
-    .option('--cover-output-id <id>', 'media token (output id, first-8, or "-N") for the cover')
+    .option('--cover-output-id <id>', 'media token (short id, output id or first 8 characters, optionally with "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)', toList)
     .option('--schedule <when>', 'ISO-8601 publish time for the card AND its posts, or "clear"')
     .option('--posts <json>', 'the card\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)

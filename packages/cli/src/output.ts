@@ -40,6 +40,16 @@ export function keyValues(pairs: Array<[string, string | number | boolean]>): st
 }
 
 /**
+ * The id a person sees for an item: its short id, the one the app shows and copies, and which every command accepts
+ * back. With none (a type that has no short id, or an older server) the full id, never a truncated one: a UUID's
+ * first 8 characters resolve only as a media token, so a list that printed them handed people ids most commands
+ * refuse. `--json` keeps both fields untouched.
+ */
+export function displayId(item: { id: string; shortId?: string | null }): string {
+  return item.shortId || item.id
+}
+
+/**
  * The item's app link as a key-value row, after its Id. The link is the server's `appUrl`; with none (a type that
  * has no page, or an older server) there is no row rather than a guessed url.
  */

@@ -25,7 +25,7 @@ import type {
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, toInt, toJson, toList } from '../args.js'
@@ -148,7 +148,7 @@ export function registerBrandKit(program: Command): void {
         table(
           ['ID', 'NAME', 'DEFAULT', 'FAV'],
           rows.map((k) => [
-            k.id.slice(0, 8),
+            displayId(k),
             k.name,
             k.isDefault ? 'yes' : '',
             k.isFavorited ? 'yes' : '',
@@ -206,7 +206,7 @@ export function registerBrandKit(program: Command): void {
       emit(kit, ctx, (k: BrandKit) =>
         keyValues([
           ['Name', k.name],
-          ['Id', k.id], ...linkRow(k),
+          ['Id', displayId(k)], ...linkRow(k),
           ['Sections', k.sections.map((s) => s.sectionName).join(', ')],
           ['Brand accounts', k.brandAccounts.length],
           ['Inspiration accounts', k.inspirationAccounts.length],
@@ -255,7 +255,7 @@ export function registerBrandKit(program: Command): void {
       emit({ brandKit, import: started }, ctx, () =>
         keyValues([
           ['Created', brandKit.name],
-          ['Id', brandKit.id], ...linkRow(brandKit),
+          ['Id', displayId(brandKit)], ...linkRow(brandKit),
           // Said plainly, because a kit that is still filling in otherwise reads as a kit that came back empty.
           ...(started ? importRows(started, brandKit.id) : []),
         ]),
@@ -280,7 +280,7 @@ export function registerBrandKit(program: Command): void {
       const { client, ctx } = makeClient(command)
       const kits = await client.reorderBrandKits(ids)
       emit(kits, ctx, (rows: BrandKitSummary[]) =>
-        table(['#', 'ID', 'NAME'], rows.map((k, i) => [String(i + 1), k.id.slice(0, 8), k.name])),
+        table(['#', 'ID', 'NAME'], rows.map((k, i) => [String(i + 1), displayId(k), k.name])),
       )
     })
 
@@ -316,7 +316,7 @@ export function registerBrandKit(program: Command): void {
       emit(kit, ctx, (k: BrandKit) =>
         keyValues([
           ['Updated', k.name],
-          ['Id', k.id], ...linkRow(k),
+          ['Id', displayId(k)], ...linkRow(k),
         ]),
       )
     })
@@ -340,7 +340,7 @@ export function registerBrandKit(program: Command): void {
       emit(result, ctx, (r: BrandKnowledgeListResult) =>
         table(
           ['ID', 'TITLE', 'SOURCE', 'CREATED'],
-          r.items.map((k) => [k.id.slice(0, 8), k.title ?? '', k.sourceType ?? '', k.createdAt ?? '']),
+          r.items.map((k) => [displayId(k), k.title ?? '', k.sourceType ?? '', k.createdAt ?? '']),
         ),
       )
     })
@@ -356,7 +356,7 @@ export function registerBrandKit(program: Command): void {
       emit(item, ctx, (k: BrandKnowledgeDetail) =>
         keyValues([
           ['Title', k.title ?? ''],
-          ['Id', k.id], ...linkRow(k),
+          ['Id', displayId(k)], ...linkRow(k),
           ['Source type', k.sourceType ?? ''],
           ['Source url', k.sourceUrl ?? ''],
           ['Body', k.content ?? '(use search for the full depth)'],
@@ -444,7 +444,7 @@ export function registerBrandKit(program: Command): void {
       emit(item, ctx, (k: BrandKnowledgeItem) =>
         keyValues([
           ['Added', k.title ?? '(untitled)'],
-          ['Id', k.id], ...linkRow(k),
+          ['Id', displayId(k)], ...linkRow(k),
           ['Source type', k.sourceType ?? ''],
         ]),
       )

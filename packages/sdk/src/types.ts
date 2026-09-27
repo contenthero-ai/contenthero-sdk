@@ -15,7 +15,7 @@
  * Every value may be either a media URL OR one of your own output ids, so you
  * can chain generations: pass a previous generation's id and the server
  * substitutes that output's URL (ownership-checked). The id may be the full
- * output id, its first 8 characters, or either with a `-N` variation suffix
+ * output id, its short id or its first 8 characters, any with a `-N` variation suffix
  * (1-based), e.g. `"a1b2c3d4-2"`. Without a suffix the first variation is used.
  */
 export interface References {
@@ -1792,7 +1792,7 @@ export interface CreateCardInput {
   stage?: string | null
   /** A public URL for the post cover (the card thumbnail). */
   coverUrl?: string | null
-  /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
+  /** A media token (short id, output id or first 8 characters, optionally with "-N") for the cover; resolved to its URL. */
   coverOutputId?: string | null
   /** Tag names to set on the post (must already exist; replaces the set). */
   tags?: string[]
@@ -1866,7 +1866,7 @@ export interface UpdateCardInput {
   spaceId?: string | null
   isFavorite?: boolean
   coverUrl?: string | null
-  /** A media token (output id, first-8, or "-N") for the cover; resolved to its URL. */
+  /** A media token (short id, output id or first 8 characters, optionally with "-N") for the cover; resolved to its URL. */
   coverOutputId?: string | null
   /** Cover framing as `{x, y}` percentages. Sent alone, it reframes without replacing the image. */
   coverPosition?: { x: number; y: number } | null

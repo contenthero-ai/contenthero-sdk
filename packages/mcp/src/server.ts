@@ -2617,7 +2617,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        */
       annotations: READ,
       description:
-        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id, full or first-8; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id: its short id, full id or first 8 characters; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
@@ -2629,7 +2629,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                 frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
               }),
               z.object({
-                mediaId: z.string().describe('A studio output id (full or first-8 characters).'),
+                mediaId: z.string().describe('A studio output id: its short id, full id or first 8 characters.'),
                 variation: z
                   .number()
                   .int()
@@ -2703,7 +2703,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                 url: z.string().url().describe('A media URL on one of our storage hosts.'),
               }),
               z.object({
-                mediaId: z.string().min(1).describe('A studio output id, full or first-8.'),
+                mediaId: z.string().min(1).describe('A studio output id: its short id, full id or first 8 characters.'),
                 variation: z
                   .number()
                   .int()
@@ -3465,7 +3465,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         coverOutputId: z
           .string()
           .optional()
-          .describe('A media token (output id, first-8, or "-N") for the cover, resolved to its URL. Use this or coverUrl.'),
+          .describe('A media token (short id, output id or first 8 characters, optionally with "-N") for the cover, resolved to its URL. Use this or coverUrl.'),
         tags: z
           .array(z.string())
           .optional()
@@ -3535,7 +3535,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         coverOutputId: z
           .string()
           .optional()
-          .describe('A media token (output id, first-8, or "-N") for the cover, resolved to its URL.'),
+          .describe('A media token (short id, output id or first 8 characters, optionally with "-N") for the cover, resolved to its URL.'),
         tags: z
           .array(z.string())
           .optional()

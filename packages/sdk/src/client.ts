@@ -683,7 +683,7 @@ export class ContentHero {
   /**
    * Get one media item by id token (the get half). `source` selects the library the
    * id belongs to: 'creations' (default, a studio output; token may be the full id,
-   * its first 8 characters, or either with a `-N` variation suffix), 'uploads' (an
+   * its short id or first 8 characters, any with a `-N` variation suffix), 'uploads' (an
    * editor Uploads-tab file; full id or short id, no variations), or 'stock' (a used
    * stock item; full id or short id, no variations). Pass the same source the item
    * reported in listMedia. Throws NotFoundError if absent.
