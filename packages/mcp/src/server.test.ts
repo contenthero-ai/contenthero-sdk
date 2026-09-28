@@ -3364,6 +3364,7 @@ test("get_schema kind 'link' prints the grammar, the origin and each noun with i
         grammar: ['{origin}/{noun}/{id}[/{tab}[/{item}]][?{declared params}]'],
         nouns: [
           { noun: 'card', resource: 'cards', id: 'the short id or the UUID', opens: 'the card open on its planner board', tabs: ['details', 'inspiration'] },
+          { noun: 'planner', resource: 'spaces', id: 'the short id or the UUID', opens: 'the board', params: { sort: { means: 'sorts the board', values: ['title', 'created_at'] }, tags: { means: 'filters', value: 'tag ids, comma-separated' } } },
           { noun: 'brand', resource: 'brand-kits', id: 'the short id or the UUID', opens: 'the brand kit', tabs: ['overview', 'social'], tabItems: { social: { id: 'a view', values: ['brand', 'inspiration'] } } },
         ],
         sections: [{ section: 'studio', opens: 'the Studio', tabs: ['gallery', 'creations'], defaultTab: null }],
@@ -3376,5 +3377,6 @@ test("get_schema kind 'link' prints the grammar, the origin and each noun with i
   assert.match(body, /origin: https:\/\/app\.contenthero\.ai/)
   assert.match(body, /- \/card\/\{id\}: the card open on its planner board\. \{id\}: the short id or the UUID; tabs: details\|inspiration/)
   assert.match(body, /items: social\/\{item\} = brand\|inspiration/)
+  assert.match(body, /params: \?sort=title\|created_at \(sorts the board\), \?tags=\{tag ids, comma-separated\} \(filters\)/)
   assert.match(body, /- \/studio: the Studio; tabs: gallery\|creations \(bare path shows the last-used tab, so spell the tab\)/)
 })

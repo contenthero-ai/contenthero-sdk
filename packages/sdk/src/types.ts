@@ -2625,6 +2625,15 @@ export interface LinkTabItem {
   values?: string[]
 }
 
+/** A query parameter a page reads from a link, in the link contract. */
+export interface LinkParam {
+  /** What it does for the person. */
+  means: string
+  /** The values it accepts; absent when it takes a free value (described in `value`). */
+  values?: string[]
+  value?: string
+}
+
 /** One linkable noun: `{origin}/{noun}/{id}[/{tab}[/{item}]]`. */
 export interface LinkNoun {
   noun: string
@@ -2637,6 +2646,8 @@ export interface LinkNoun {
   /** The page's tabs in order; the first is the default, which is the bare address. Absent: no tabs. */
   tabs?: string[]
   tabItems?: Record<string, LinkTabItem>
+  /** Query parameters the page reads. */
+  params?: Record<string, LinkParam>
 }
 
 /** One section page: `{origin}/{section}[/{tab}[/{item}]]`. */
@@ -2647,6 +2658,8 @@ export interface LinkSection {
   /** The tab the bare path shows; null when it shows the tab last used (then spell the tab). */
   defaultTab: string | null
   tabItems?: Record<string, LinkTabItem>
+  /** Query parameters the page reads. */
+  params?: Record<string, LinkParam>
 }
 
 /** The link contract, from `getLinkFormats`: how to build any address in the app from a noun and an id. */

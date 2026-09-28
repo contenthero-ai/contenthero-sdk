@@ -2449,11 +2449,15 @@ export function linkFormatsResult(f: LinkFormats): CallToolResult {
     t && Object.keys(t).length
       ? `; items: ${Object.entries(t).map(([tab, it]) => `${tab}/{item} = ${it.values ? it.values.join('|') : it.id}`).join(', ')}`
       : ''
+  const params = (p?: Record<string, { means: string; values?: string[]; value?: string }>) =>
+    p && Object.keys(p).length
+      ? `; params: ${Object.entries(p).map(([k, v]) => `?${k}=${v.values ? v.values.join('|') : `{${v.value}}`} (${v.means})`).join(', ')}`
+      : ''
   const nouns = f.nouns.map(
-    (n) => `- /${n.noun}/{id}: ${n.opens}. {id}: ${n.id}${n.tabs ? `; tabs: ${n.tabs.join('|')} (first is the bare address)` : ''}${items(n.tabItems)}`,
+    (n) => `- /${n.noun}/{id}: ${n.opens}. {id}: ${n.id}${n.tabs ? `; tabs: ${n.tabs.join('|')} (first is the bare address)` : ''}${items(n.tabItems)}${params(n.params)}`,
   )
   const sections = f.sections.map(
-    (s) => `- /${s.section}: ${s.opens}; tabs: ${s.tabs.join('|')}${s.defaultTab ? ` (bare path shows ${s.defaultTab})` : ' (bare path shows the last-used tab, so spell the tab)'}${items(s.tabItems)}`,
+    (s) => `- /${s.section}: ${s.opens}; tabs: ${s.tabs.join('|')}${s.defaultTab ? ` (bare path shows ${s.defaultTab})` : ' (bare path shows the last-used tab, so spell the tab)'}${items(s.tabItems)}${params(s.params)}`,
   )
   return text(
     [`Links: ${f.grammar.join('  or  ')}`, `origin: ${f.origin}`, '', 'Nouns:', ...nouns, '', 'Sections:', ...sections].join('\n'),

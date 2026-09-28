@@ -156,6 +156,7 @@ export type {
   ExportFormatSpec,
   ExportFormatCatalog,
   LinkFormats,
+  LinkParam,
   LinkNoun,
   LinkSection,
   LinkTabItem,
