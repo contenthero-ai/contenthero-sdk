@@ -18,7 +18,7 @@
 import type { Command } from 'commander'
 import type { GenerateRequest, GenerateBoardRequest, BoardType } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { runGeneration, runBoard, compact, references, type RunOptions } from '../generation.js'
+import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
 import { collect, toFloat, toInt, toJson } from '../args.js'
 
@@ -34,7 +34,6 @@ const BOARD_TYPES: BoardType[] = [
   'shot',
 ]
 
-const DEFAULT_TIMEOUT_SEC = 600
 
 /** Add the shared async flags to a waitable generate command. */
 function addRunFlags(cmd: Command): Command {

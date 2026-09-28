@@ -10,11 +10,10 @@
 import type { Command } from 'commander'
 import type { GenerateRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { compact, runGeneration } from '../generation.js'
+import { compact, runGeneration, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
 import { toFloat, toInt } from '../args.js'
 
-const DEFAULT_TIMEOUT_SEC = 600
 
 export function registerUpscale(program: Command): void {
   program

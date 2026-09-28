@@ -206,8 +206,13 @@ export interface GenerateBoardRequest {
   outputId?: string
 }
 
-/** Lifecycle state of a generation. */
-export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed'
+/**
+ * Lifecycle state of a generation.
+ *
+ * `abandoned` is terminal and NOT a failure: the row was set aside with no output of its own. An import whose bytes
+ * were already in the account ends this way (see `Generation.alreadyExisted`), as does a discarded voice variant.
+ */
+export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'abandoned'
 
 /**
  * Result of submitting a generation. Image/video return `status: 'processing'`
@@ -423,6 +428,8 @@ export interface Generation {
   partialUrls?: (string | null)[]
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
+  /** Present when an import ended `abandoned` because the account already held these exact bytes: where they are. */
+  alreadyExisted?: ImportDuplicate
   createdAt: string
   completedAt: string | null
   /** The terminal signal to await when a generation carries a project PLACEMENT (a fresh asset placed on a canvas
@@ -1364,6 +1371,29 @@ export interface ImportMediaInput {
   url: string
   contentType?: string
   fileName?: string
+}
+
+/**
+ * An import that has been accepted and is running. The server fetches the url in a background job, so the answer
+ * arrives through the generation status: `importMedia` waits for it, `startImport` hands this back at once.
+ */
+export interface ImportStarted {
+  outputId: string
+  status: 'processing'
+  shortId: string
+  appUrl: string
+}
+
+/** Where an import's bytes already live, when the account already held them. */
+export interface ImportDuplicate {
+  /** The library item holding them, or null when they belong to something that is not one (an export, a look). */
+  outputId: string | null
+  shortId: string | null
+  appUrl: string | null
+  url: string
+  objectName: string
+  role: string | null
+  ownedBy: string | null
 }
 
 /** A finalized upload/import: a first-class media output (referenceable by outputId). */

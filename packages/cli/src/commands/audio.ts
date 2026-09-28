@@ -10,12 +10,11 @@
 import type { Command } from 'commander'
 import type { EditAudioRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { compact, runEditAudio, renderEnhanceClips } from '../generation.js'
+import { compact, runEditAudio, renderEnhanceClips, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { toFloat, toInt, toJson } from '../args.js'
 
 const VOICE_ISOLATION_MODEL_ID = 'elevenlabs-voice-isolator'
 const AUDIO_ENHANCE_MODEL_ID = 'auphonic-enhance'
-const DEFAULT_TIMEOUT_SEC = 600
 
 export function registerAudio(program: Command): void {
   const audio = program.command('audio').description('Audio editing (existing audio -> audio)')

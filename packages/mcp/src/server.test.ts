@@ -407,7 +407,7 @@ function urlsIn(result) {
 
 async function connect(client) {
   // analyze_content waits up to 40s in production; a test needs only the shape of the wait.
-  const server = await buildServer({ getClient: () => client, analysisWait: { waitMs: 300, pollMs: 50 } })
+  const server = await buildServer({ getClient: () => client, jobWait: { waitMs: 300, pollMs: 50 } })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const mcp = new Client({ name: 'test', version: '0' })
   await Promise.all([server.connect(serverTransport), mcp.connect(clientTransport)])
@@ -891,6 +891,27 @@ test('get_generation_status blocks by default and returns the final URLs', async
   const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1'] } })
   assert.match(urlsIn(res), /https:\/\/cdn\/v\.mp4/)
   assert.ok(!res.isError)
+})
+
+test('import_media waits within the call, and hands back the outputId as pending when the job is still running', async () => {
+  let options
+  const mcp = await connect(fakeClient({ importMedia: async (_input, opts) => { options = opts; throw new GenerationTimeoutError('im9') } }))
+  const res = await mcp.callTool({ name: 'import_media', arguments: { url: 'https://example.com/a.mp4' } })
+  assert.deepEqual(options, { timeoutMs: 300, pollIntervalMs: 50 })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /Import im9 is still running/)
+  assert.match(res.content[0].text, /get_generation_status \{ outputIds: \["im9"\] \}/)
+})
+
+test('get_generation_status: an abandoned import says where the bytes already are, and never asks to poll again', async () => {
+  const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
+  const abandoned = (id, extra = {}) => ({ outputId: id, status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputUrls: [], error: null, ...extra })
+  const mcp = await connect(fakeClient({ waitForGeneration: async (id) => abandoned(id, id === 'imp1' ? { alreadyExisted: dup } : {}) }))
+  const dupRes = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['imp1'] } })
+  assert.match(dupRes.content[0].text, /Already in your library/)
+  assert.match(dupRes.content[0].text, /https:\/\/cdn\/old\.png/)
+  const other = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['voice1'] } })
+  assert.doesNotMatch(other.content[0].text, /again/)
 })
 
 test('get_generation_status takes wait:false for an instant snapshot', async () => {

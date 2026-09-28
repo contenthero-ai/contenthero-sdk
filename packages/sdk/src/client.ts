@@ -96,6 +96,7 @@ import type {
   CreateMediaUploadResult,
   ImportMediaInput,
   ImportedMedia,
+  ImportStarted,
   UploadedMedia,
   ModelInfo,
   PlatformSummary,
@@ -316,7 +317,8 @@ export class ContentHero {
   /**
    * Poll an already-submitted generation to a terminal state. Pass an outputId
    * from a prior `generate` / `generateBoard` (e.g. one you got back when a
-   * render was still in progress). Resolves with the completed `Generation`,
+   * render was still in progress). Resolves with the completed `Generation` (or an
+   * `abandoned` one, which is terminal without being a failure),
    * throws `GenerationFailedError` on failure, or `GenerationTimeoutError` if it
    * does not finish within `timeoutMs` (the server-side job may still complete;
    * re-poll). Also backs `generateAndWait` / `generateBoardAndWait`.
@@ -334,6 +336,8 @@ export class ContentHero {
       // cutout side-effect has landed (see Generation.settled). `settled !== false` keeps older servers (which
       // omit the field) working as before, and a no-placement output is settled the moment it completes.
       if (generation.status === 'completed' && generation.settled !== false) return generation
+      // Terminal without being a failure: set aside with no output of its own (see GenerationStatus).
+      if (generation.status === 'abandoned') return generation
       if (generation.status === 'failed') {
         throw new GenerationFailedError(
           generation.outputId,
@@ -855,9 +859,22 @@ export class ContentHero {
    * is true; `outputId` is then the item that already owns them, or NULL when the bytes belong to something
    * that is not a library item (an export from a project, an avatar look). A duplicate import is a
    * successful no-op, not an error, so check the flag rather than assuming a new row.
+   *
+   * The server fetches the url in a background job; this waits for it (`options` as `waitForGeneration`). Throws
+   * `GenerationFailedError` when the url cannot be imported (not https, not a public address, not readable media),
+   * or `GenerationTimeoutError` carrying the outputId when it has not finished yet: resume with `waitForGeneration`.
    */
-  async importMedia(input: ImportMediaInput): Promise<ImportedMedia> {
-    return this.request<ImportedMedia>('POST', '/api/v1/media/imports', input)
+  async importMedia(input: ImportMediaInput, options: WaitOptions = {}): Promise<ImportedMedia> {
+    const started = await this.startImport(input)
+    // A server from before imports ran as a job answers with the finished result.
+    if ((started as { status?: string }).status !== 'processing') return started as unknown as ImportedMedia
+    const gen = await this.#waitAfterSubmit(started.outputId, options)
+    return importedMediaFrom(gen, started.shortId)
+  }
+
+  /** Start an import and return at once; follow it with `waitForGeneration` or `getGeneration`. See `importMedia`. */
+  async startImport(input: ImportMediaInput): Promise<ImportStarted> {
+    return this.request<ImportStarted>('POST', '/api/v1/media/imports', input)
   }
 
   /**
@@ -1750,4 +1767,31 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener('abort', onAbort, { once: true })
   })
+}
+
+/**
+ * The finished import a settled generation describes: the new item when it completed, or the one that already held
+ * these bytes when it ended `abandoned`. `shortId` is the import's own, from `startImport`, since a generation
+ * carries only its link. The one mapping, so `importMedia` and anything reading an import's status agree.
+ */
+export function importedMediaFrom(gen: Generation, shortId: string | null): ImportedMedia {
+  const dup = gen.alreadyExisted
+  if (gen.status === 'abandoned' && dup) {
+    return {
+      outputId: dup.outputId,
+      url: dup.url,
+      appUrl: dup.appUrl,
+      shortId: dup.shortId,
+      alreadyExisted: true,
+      existing: { objectName: dup.objectName, role: dup.role, ownedBy: dup.ownedBy },
+    }
+  }
+  return {
+    outputId: gen.outputId,
+    url: gen.outputUrls[0] ?? '',
+    appUrl: gen.appUrl,
+    shortId,
+    alreadyExisted: false,
+    contentType: gen.contentType,
+  }
 }

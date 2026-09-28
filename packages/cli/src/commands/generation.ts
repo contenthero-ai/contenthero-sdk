@@ -12,11 +12,10 @@ import type { Command } from 'commander'
 import { GenerationTimeoutError, type Generation } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
-import { generationHuman } from '../generation.js'
+import { generationHuman, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { EXIT } from '../errors.js'
 import { toInt } from '../args.js'
 
-const DEFAULT_TIMEOUT_SEC = 600
 
 export function registerGeneration(program: Command): void {
   const generation = program

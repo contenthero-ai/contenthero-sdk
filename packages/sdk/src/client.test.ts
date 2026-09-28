@@ -241,6 +241,54 @@ test('generateAndWait throws GenerationTimeoutError past the deadline', async ()
   )
 })
 
+test('importMedia waits for the import job and returns the new item', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 202, body: { outputId: 'imp1', status: 'processing', shortId: 'Imp00001', appUrl: 'https://app/media/Imp00001', url: null, alreadyExisted: false } },
+    { status: 200, body: { outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'processing', contentType: 'image', modelId: 'import', outputUrls: [], error: null, createdAt: 't', completedAt: null } },
+    { status: 200, body: { outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'completed', contentType: 'video', modelId: 'import', outputUrls: ['https://cdn/a.mp4'], error: null, createdAt: 't', completedAt: 't2' } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
+  const m = await client.importMedia({ url: 'https://example.com/a.mp4' }, { pollIntervalMs: 1 })
+  assert.deepEqual(m, { outputId: 'imp1', url: 'https://cdn/a.mp4', appUrl: 'https://app/media/Imp00001', shortId: 'Imp00001', alreadyExisted: false, contentType: 'video' })
+  assert.ok(calls[0].url.endsWith('/api/v1/media/imports'))
+  assert.ok(calls[1].url.endsWith('/api/v1/studio/generate/imp1'))
+})
+
+test('importMedia: an import whose bytes were already there settles abandoned and names the item holding them', async () => {
+  const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
+  const { fetch } = stubFetch([
+    { status: 202, body: { outputId: 'imp2', status: 'processing', shortId: 'Imp00002', appUrl: 'https://app/media/Imp00002', url: null, alreadyExisted: false } },
+    { status: 200, body: { outputId: 'imp2', appUrl: 'https://app/media/Imp00002', status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputUrls: [], error: null, alreadyExisted: dup, createdAt: 't', completedAt: null } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
+  const m = await client.importMedia({ url: 'https://example.com/old.png' }, { pollIntervalMs: 1 })
+  assert.deepEqual(m, {
+    outputId: 'old1', url: 'https://cdn/old.png', appUrl: 'https://app/media/Old00001', shortId: 'Old00001', alreadyExisted: true,
+    existing: { objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' },
+  })
+})
+
+test('importMedia: a refused url fails, and an unfinished one times out carrying its outputId', async () => {
+  const started = { status: 202, body: { outputId: 'imp3', status: 'processing', shortId: 'Imp00003', appUrl: 'a', url: null, alreadyExisted: false } }
+  const failed = stubFetch([started, { status: 200, body: { outputId: 'imp3', status: 'failed', contentType: 'image', modelId: 'import', outputUrls: [], error: 'Import failed: not a public address', createdAt: 't', completedAt: 't2' } }])
+  await assert.rejects(
+    () => new ContentHero({ apiKey: 'ch_live_test', fetch: failed.fetch }).importMedia({ url: 'https://x' }, { pollIntervalMs: 1 }),
+    (err: unknown) => err instanceof GenerationFailedError && /public address/.test(err.message),
+  )
+  const slow = stubFetch([started, { status: 200, body: { outputId: 'imp3', status: 'processing', contentType: 'image', modelId: 'import', outputUrls: [], error: null, createdAt: 't', completedAt: null } }])
+  await assert.rejects(
+    () => new ContentHero({ apiKey: 'ch_live_test', fetch: slow.fetch }).importMedia({ url: 'https://x' }, { pollIntervalMs: 1, timeoutMs: 0 }),
+    (err: unknown) => err instanceof GenerationTimeoutError && err.outputId === 'imp3',
+  )
+})
+
+test('importMedia returns an older server\'s finished answer as is', async () => {
+  const finished = { outputId: 'imp4', url: 'https://cdn/b.png', appUrl: 'a', shortId: 'Imp00004', alreadyExisted: false, contentType: 'image' }
+  const { fetch, calls } = stubFetch([{ status: 200, body: finished }])
+  assert.deepEqual(await new ContentHero({ apiKey: 'ch_live_test', fetch }).importMedia({ url: 'https://x' }), finished)
+  assert.equal(calls.length, 1)
+})
+
 test('favorite posts to /api/v1/favorite with the asset target', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { favorited: true } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

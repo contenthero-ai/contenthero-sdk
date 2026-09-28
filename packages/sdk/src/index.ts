@@ -5,7 +5,7 @@
  * audio generation. The shared kernel the ContentHero MCP and CLI sit on.
  */
 
-export { ContentHero } from './client.js'
+export { ContentHero, importedMediaFrom } from './client.js'
 export { CONTENT_SORTS } from './types.js'
 export type { ContentSort } from './types.js'
 export type { ContentHeroOptions, FetchLike } from './client.js'
@@ -98,6 +98,8 @@ export type {
   CreateMediaUploadResult,
   ImportMediaInput,
   ImportedMedia,
+  ImportStarted,
+  ImportDuplicate,
   UploadedMedia,
   PostPlatform,
   Stage,

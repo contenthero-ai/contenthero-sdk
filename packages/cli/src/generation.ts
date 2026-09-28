@@ -37,6 +37,9 @@ export function references(
   return Object.keys(refs).length > 0 ? (refs as GenerateRequest['references']) : undefined
 }
 
+/** How long a waiting command blocks by default before handing back the outputId (seconds). */
+export const DEFAULT_TIMEOUT_SEC = 600
+
 export interface RunOptions {
   cost: boolean
   wait: boolean
@@ -74,6 +77,11 @@ function generationHuman(g: Generation): string {
     ['Type', g.contentType],
   ]
   if (g.error) pairs.push(['Error', g.error])
+  // An import whose bytes were already in the account: nothing new, so say where they already are.
+  if (g.alreadyExisted) {
+    pairs.push(['Already in your account', g.alreadyExisted.outputId ?? g.alreadyExisted.objectName])
+    pairs.push(['URL', g.alreadyExisted.url])
+  }
   for (const [i, url] of g.outputUrls.entries()) pairs.push([`URL ${i + 1}`, url])
   if (g.status === 'processing' || g.status === 'pending') {
     pairs.push(['Next', `contenthero generation status ${g.outputId}`])

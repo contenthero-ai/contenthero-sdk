@@ -11,8 +11,9 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import type { ImportedMedia, MediaBatchItem, MediaItem, MediaKind, MediaSource, MediaSummary, MediaType, SearchMediaResult, UploadedMedia } from '@contenthero/sdk'
+import { pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaSummary, type MediaType, type SearchMediaResult, type UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
+import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt, toList } from '../args.js'
@@ -98,6 +99,14 @@ function uploadedHuman(m: UploadedMedia): string {
  * ⚠️ `--json` is unaffected and still emits the full object. This is the HUMAN rendering only, so a script
  * reading `alreadyExisted` keeps working unchanged.
  */
+export function importStartedHuman(m: Pick<ImportStarted, 'outputId' | 'status'>): string {
+  return keyValues([
+    ['Output id', m.outputId],
+    ['Status', m.status],
+    ['Next', `contenthero generation status ${m.outputId}`],
+  ])
+}
+
 export function importedHuman(m: ImportedMedia): string {
   if (!m.alreadyExisted) {
     // Non-null whenever something was created; the fallback exists so a null can never render as a blank
@@ -364,16 +373,27 @@ export function registerMedia(program: Command): void {
   media
     .command('import')
     .description('Import a remote URL as first-class media (requires assets:write)')
-    .argument('<url>', 'public http(s) URL to fetch and re-host')
+    .argument('<url>', 'public https URL to fetch and re-host')
     .option('--content-type <mime>', 'MIME type override (else taken from the response)')
     .option('--name <name>', 'file name override (used for the extension)')
+    .option('--no-wait', 'return the outputId immediately instead of waiting for the import')
+    .option('--timeout <seconds>', 'how long to wait before handing back the outputId', toInt, DEFAULT_TIMEOUT_SEC)
     .action(async (url: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const m = await client.importMedia({
-        url,
-        contentType: opts.contentType as string | undefined,
-        fileName: opts.name as string | undefined,
-      })
-      emit(m, ctx, importedHuman)
+      const input = { url, contentType: opts.contentType as string | undefined, fileName: opts.name as string | undefined }
+      if (opts.wait === false) {
+        emit(await client.startImport(input), ctx, importStartedHuman)
+        return
+      }
+      try {
+        emit(await client.importMedia(input, { timeoutMs: ((opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC) * 1000 }), ctx, importedHuman)
+      } catch (err) {
+        // Accepted and still running (or the poll dropped): the import is not lost, so hand back its id and exit
+        // TIMEOUT, never an error that invites running it again. A refused url is terminal and still throws.
+        const outputId = pendingOutputId(err)
+        if (!outputId) throw err
+        emit({ outputId, status: 'processing' }, ctx, importStartedHuman)
+        process.exitCode = EXIT.TIMEOUT
+      }
     })
 }

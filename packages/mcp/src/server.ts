@@ -124,6 +124,7 @@ import {
   mediaDisplayResult,
   mediaUploadResult,
   importedMediaResult,
+  importPendingResult,
   uploadedMediaResult,
   assetOrderResult,
   assetRemovedResult,
@@ -250,9 +251,12 @@ function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio
 const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 
-/** How long analyze_content waits for a running analysis within one call (the hosted route allows 60s), and how often it looks. */
-const ANALYSIS_WAIT_MS = 40_000
-const ANALYSIS_POLL_MS = 4_000
+/**
+ * How long a tool that starts a background job (analyze_content, import_media) waits for it within one call, and how
+ * often it looks. The hosted route allows 60s; past this the tool answers pending and the agent asks again.
+ */
+const JOB_WAIT_MS = 40_000
+const JOB_POLL_MS = 4_000
 const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
 
 /**
@@ -959,11 +963,11 @@ export interface RegisterToolsOptions {
   getClient: GetClient
   /** Per-tool model enums, fixed at registration (see resolveModelEnums). */
   models: ResolvedModelEnums
-  /** How long analyze_content waits within one call, and how often it looks. Tests shorten it. */
-  analysisWait?: AnalysisWait
+  /** How long a job-starting tool waits within one call, and how often it looks. Tests shorten it. */
+  jobWait?: JobWait
 }
 
-export interface AnalysisWait {
+export interface JobWait {
   waitMs: number
   pollMs: number
 }
@@ -971,8 +975,8 @@ export interface AnalysisWait {
 export interface BuildServerOptions {
   /** Override the SDK client (for tests). Defaults to the env-configured client. */
   getClient?: () => ContentHero
-  /** Override analyze_content's wait (for tests). */
-  analysisWait?: AnalysisWait
+  /** Override the job-starting tools' wait (for tests). */
+  jobWait?: JobWait
 }
 
 /** Drop undefined values so the request payload stays minimal. */
@@ -991,7 +995,7 @@ function buildReferences(parts: References): References | undefined {
  */
 export function registerTools(server: McpServer, opts: RegisterToolsOptions): void {
   const { getClient, models } = opts
-  const analysisWait = opts.analysisWait ?? { waitMs: ANALYSIS_WAIT_MS, pollMs: ANALYSIS_POLL_MS }
+  const jobWait = opts.jobWait ?? { waitMs: JOB_WAIT_MS, pollMs: JOB_POLL_MS }
 
   /**
    * 🚨🚨 **EVERY TOOL'S INPUT IS STRICT. AN UNDECLARED PARAMETER IS A 400, NEVER A SILENT DROP.**
@@ -2816,7 +2820,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
       inputSchema: {
-        url: z.string().describe('A public http(s) URL to fetch and re-host.'),
+        url: z.string().describe('A public https URL to fetch and re-host.'),
         contentType: z.string().optional().describe('Optional MIME override (else taken from the response).'),
         fileName: z.string().optional().describe('Optional file name (used for its extension).'),
       },
@@ -2824,14 +2828,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
+        // The server fetches the url in a background job; wait for it within this call, then answer pending.
         return importedMediaResult(
-          await client.importMedia({
-            url: args.url,
-            contentType: args.contentType,
-            fileName: args.fileName,
-          }),
+          await client.importMedia(
+            { url: args.url, contentType: args.contentType, fileName: args.fileName },
+            { timeoutMs: jobWait.waitMs, pollIntervalMs: jobWait.pollMs },
+          ),
         )
       } catch (err) {
+        if (err instanceof GenerationTimeoutError) return importPendingResult(err.outputId)
         return errorResult(err)
       }
     },
@@ -3886,9 +3891,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         let result = await client.analyzeContent(args.contentId)
         // The analysis runs as a job. Wait a while within this call (the hosted route allows 60s), reading the
         // post's analysis status, which starts nothing; past that the agent calls again, which is also free.
-        const deadline = Date.now() + analysisWait.waitMs
-        while (result.analysis.status === 'running' && Date.now() + analysisWait.pollMs < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, analysisWait.pollMs))
+        const deadline = Date.now() + jobWait.waitMs
+        while (result.analysis.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
           const post = await client.getContent(args.contentId, { analysis: 'full' })
           if (post.analysis.status !== 'running') result = { contentId: result.contentId, analysis: post.analysis }
         }
@@ -4519,6 +4524,6 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
   const getClient = options.getClient ?? defaultGetClient
   const models = await resolveModelEnums(getClient)
   const server = new McpServer({ ...SERVER_INFO })
-  registerTools(server, { getClient: () => getClient(), models, analysisWait: options.analysisWait })
+  registerTools(server, { getClient: () => getClient(), models, jobWait: options.jobWait })
   return server
 }

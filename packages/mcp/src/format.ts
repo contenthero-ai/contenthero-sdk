@@ -91,7 +91,7 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
+import { ContentHeroError, InsufficientCreditsError, RateLimitError, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -671,6 +671,11 @@ export function generationStatusResult(
   }
   if (gen.status === 'failed') {
     return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
+  }
+  // Terminal and not a failure. Without this branch it read "still abandoned, call again", a poll that never ends.
+  if (gen.status === 'abandoned') {
+    if (gen.alreadyExisted) return importedMediaResult(importedMediaFrom(gen, null))
+    return text(`Generation ${gen.outputId} was set aside and produced nothing of its own. It will not change.`)
   }
   const secs = pollAfterSecondsFor(gen.contentType)
   const ready = gen.outputUrls ?? []
@@ -1483,6 +1488,11 @@ export function importedMediaResult(r: ImportedMedia): CallToolResult {
       `${r.existing?.objectName ? ` (${r.existing.objectName})` : ''}. ` +
       `It is not a library item, so there is no outputId to reference. Use its URL directly: ${r.url}`,
   )
+}
+
+/** import_media's answer when the import is still running at the end of the call. */
+export function importPendingResult(outputId: string): CallToolResult {
+  return text(`Import ${outputId} is still running. Check it with ${getStatusCall([outputId])}.`)
 }
 
 export function balanceResult(b: Balance): CallToolResult {
