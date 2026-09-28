@@ -80,6 +80,7 @@ import type {
   StartExportInput,
   ExportJob,
   ExportFormatCatalog,
+  LinkFormats,
   LayerTypeCatalog,
   TimelineTypeCatalog,
   TranscriptResult,
@@ -1575,6 +1576,11 @@ export class ContentHero {
   /** Poll an export job by id. Requires the `editor:read` scope. */
   async getExport(exportId: string): Promise<ExportJob> {
     return this.request<ExportJob>('GET', `/api/v1/exports/${encodeURIComponent(exportId)}`)
+  }
+
+  /** The link contract: the grammar, nouns and sections of app addresses, and the origin. Any valid key reads it. */
+  async getLinkFormats(): Promise<LinkFormats> {
+    return this.request<LinkFormats>('GET', '/api/v1/link-formats')
   }
 
   /** The kind-aware catalog of export formats + their options. Requires the `editor:read` scope. */

@@ -2618,6 +2618,46 @@ export interface ExportFormatSpec {
   options: string[]
 }
 
+/** What a tab's `{item}` segment names, in the link contract. */
+export interface LinkTabItem {
+  id: string
+  /** Allowed values, when the item is a fixed view rather than an id. */
+  values?: string[]
+}
+
+/** One linkable noun: `{origin}/{noun}/{id}[/{tab}[/{item}]]`. */
+export interface LinkNoun {
+  noun: string
+  /** The API resource whose items it addresses: an item's `id` or `shortId` fits `{id}`. */
+  resource: string
+  /** What `{id}` accepts. */
+  id: string
+  /** What the address opens. */
+  opens: string
+  /** The page's tabs in order; the first is the default, which is the bare address. Absent: no tabs. */
+  tabs?: string[]
+  tabItems?: Record<string, LinkTabItem>
+}
+
+/** One section page: `{origin}/{section}[/{tab}[/{item}]]`. */
+export interface LinkSection {
+  section: string
+  opens: string
+  tabs: string[]
+  /** The tab the bare path shows; null when it shows the tab last used (then spell the tab). */
+  defaultTab: string | null
+  tabItems?: Record<string, LinkTabItem>
+}
+
+/** The link contract, from `getLinkFormats`: how to build any address in the app from a noun and an id. */
+export interface LinkFormats {
+  /** The app's origin, for `{origin}`. */
+  origin: string
+  grammar: string[]
+  nouns: LinkNoun[]
+  sections: LinkSection[]
+}
+
 /** The export-format catalog, from `getExportFormats`. */
 export interface ExportFormatCatalog {
   formats: ExportFormatSpec[]

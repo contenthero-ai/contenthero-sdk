@@ -88,6 +88,7 @@ import type {
   TranscriptResult,
   ExportJob,
   ExportFormatCatalog,
+  LinkFormats,
   BrandImportOutcome,} from '@contenthero/sdk'
 import { ContentHeroError, InsufficientCreditsError, RateLimitError } from '@contenthero/sdk'
 
@@ -2436,6 +2437,26 @@ export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
   return text(
     `Export formats:\n${lines.join('\n')}\n\nResolutions (mp4): ${cat.resolutions.join(', ')}. Qualities: ${cat.qualities.join(', ')}.\n\n` +
       JSON.stringify(cat, null, 2),
+  )
+}
+
+/**
+ * The link contract as text: the grammar, then one line per noun and section with what it opens, its tabs, and what a
+ * tab's item names. Text, not JSON, because an agent reads it to build links and the prose is a third of the size.
+ */
+export function linkFormatsResult(f: LinkFormats): CallToolResult {
+  const items = (t?: Record<string, { id: string; values?: string[] }>) =>
+    t && Object.keys(t).length
+      ? `; items: ${Object.entries(t).map(([tab, it]) => `${tab}/{item} = ${it.values ? it.values.join('|') : it.id}`).join(', ')}`
+      : ''
+  const nouns = f.nouns.map(
+    (n) => `- /${n.noun}/{id}: ${n.opens}. {id}: ${n.id}${n.tabs ? `; tabs: ${n.tabs.join('|')} (first is the bare address)` : ''}${items(n.tabItems)}`,
+  )
+  const sections = f.sections.map(
+    (s) => `- /${s.section}: ${s.opens}; tabs: ${s.tabs.join('|')}${s.defaultTab ? ` (bare path shows ${s.defaultTab})` : ' (bare path shows the last-used tab, so spell the tab)'}${items(s.tabItems)}`,
+  )
+  return text(
+    [`Links: ${f.grammar.join('  or  ')}`, `origin: ${f.origin}`, '', 'Nouns:', ...nouns, '', 'Sections:', ...sections].join('\n'),
   )
 }
 

@@ -167,6 +167,7 @@ import {
   exportJobResult,
   completedExportResult,
   exportFormatsResult,
+  linkFormatsResult,
   trackedAccountListResult,
   transcriptResult,
   voiceListResult,
@@ -2879,9 +2880,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Schema',
       annotations: READ,
       description:
-        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline clip types (video, image, text, solid, audio, graphic) with their editable props, the track types and what each holds, a copy-pasteable `example` clip skeleton per type, and a `creation` section documenting the CREATE ops (create_clip, insert_track, insert_prebuilt_track); read it before building any clip with update_timeline. 'layer': the CANVAS layer types (image, text, solid/shape, video, graphic) with their editable props and the shared prop groups (transform, decoration, adjust), so you know what update_canvas ops can create and set. 'export': the export formats and their options per project type, so you know what export_project accepts. 'timeline', 'layer' and 'export' require the editor:read scope.",
+        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline clip types (video, image, text, solid, audio, graphic) with their editable props, the track types and what each holds, a copy-pasteable `example` clip skeleton per type, and a `creation` section documenting the CREATE ops (create_clip, insert_track, insert_prebuilt_track); read it before building any clip with update_timeline. 'layer': the CANVAS layer types (image, text, solid/shape, video, graphic) with their editable props and the shared prop groups (transform, decoration, adjust), so you know what update_canvas ops can create and set. 'export': the export formats and their options per project type, so you know what export_project accepts. 'link': the grammar of app addresses and every noun and section it takes (what each opens, its tabs, what a tab's item names) plus the app's origin, so you can build a link to any item from its noun and id. 'timeline', 'layer' and 'export' require the editor:read scope.",
       inputSchema: {
-        kind: z.enum(['platform', 'timeline', 'layer', 'export']).describe('Which vocabulary to read.'),
+        kind: z.enum(['platform', 'timeline', 'layer', 'export', 'link']).describe('Which vocabulary to read.'),
         platform: z
           .enum(POST_PLATFORMS)
           .optional()
@@ -2914,6 +2915,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             return layerTypesResult(await client.getLayerTypes())
           case 'export':
             return exportFormatsResult(await client.getExportFormats())
+          case 'link':
+            return linkFormatsResult(await client.getLinkFormats())
         }
       } catch (err) {
         return errorResult(err)

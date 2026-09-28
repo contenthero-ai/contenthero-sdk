@@ -3355,3 +3355,26 @@ test('create_project and import_project pass cardId through, and say the project
     assert.match((res.content as Array<{ text: string }>)[0].text, /Linked to card c1/)
   }
 })
+
+test("get_schema kind 'link' prints the grammar, the origin and each noun with its tabs and items", async () => {
+  const mcp = await connect(
+    fakeClient({
+      getLinkFormats: async () => ({
+        origin: 'https://app.contenthero.ai',
+        grammar: ['{origin}/{noun}/{id}[/{tab}[/{item}]][?{declared params}]'],
+        nouns: [
+          { noun: 'card', resource: 'cards', id: 'the short id or the UUID', opens: 'the card open on its planner board', tabs: ['details', 'inspiration'] },
+          { noun: 'brand', resource: 'brand-kits', id: 'the short id or the UUID', opens: 'the brand kit', tabs: ['overview', 'social'], tabItems: { social: { id: 'a view', values: ['brand', 'inspiration'] } } },
+        ],
+        sections: [{ section: 'studio', opens: 'the Studio', tabs: ['gallery', 'creations'], defaultTab: null }],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'link' } })
+  assert.ok(!res.isError)
+  const body = res.content[0].text
+  assert.match(body, /origin: https:\/\/app\.contenthero\.ai/)
+  assert.match(body, /- \/card\/\{id\}: the card open on its planner board\. \{id\}: the short id or the UUID; tabs: details\|inspiration/)
+  assert.match(body, /items: social\/\{item\} = brand\|inspiration/)
+  assert.match(body, /- \/studio: the Studio; tabs: gallery\|creations \(bare path shows the last-used tab, so spell the tab\)/)
+})

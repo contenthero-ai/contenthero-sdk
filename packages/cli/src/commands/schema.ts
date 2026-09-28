@@ -9,6 +9,7 @@
  *   schema timeline                              editor clip + track types, with copy-pasteable `example` skeletons
  *   schema layer                                 canvas layer types + editable props
  *   schema export                                export formats per project type
+ *   schema link                                  the link contract: how to build any app address from a noun + id
  *
  * timeline, layer and export require editor:read.
  */
@@ -83,13 +84,13 @@ function collectLeaves(cmd: Command, prefix: string[]): CommandSchema[] {
   return out
 }
 
-const KINDS = ['commands', 'platform', 'timeline', 'layer', 'export'] as const
+const KINDS = ['commands', 'platform', 'timeline', 'layer', 'export', 'link'] as const
 type Kind = (typeof KINDS)[number]
 
 export function registerSchema(program: Command): void {
   program
     .command('schema')
-    .description('Read a vocabulary another command accepts: commands, platform, timeline, layer or export')
+    .description('Read a vocabulary another command accepts: commands, platform, timeline, layer, export or link')
     .argument('<kind>', `which vocabulary: ${KINDS.join(', ')}`)
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
     .option('--platform <platform>', 'kind platform only: the platform to read; omit to list every platform')
@@ -198,6 +199,17 @@ export function registerSchema(program: Command): void {
       if (k === 'layer') {
         const cat = await client.getLayerTypes()
         emit(cat, ctx, () => cat.layerTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n'))
+        return
+      }
+      if (k === 'link') {
+        const f = await client.getLinkFormats()
+        emit(f, ctx, () =>
+          [
+            `${f.grammar.join('\n')}\norigin: ${f.origin}`,
+            table(['NOUN', 'OPENS', 'TABS'], f.nouns.map((n) => [`/${n.noun}/{id}`, n.opens, n.tabs?.join('|') ?? ''])),
+            table(['SECTION', 'OPENS', 'TABS'], f.sections.map((s) => [`/${s.section}`, s.opens, s.tabs.join('|')])),
+          ].join('\n\n'),
+        )
         return
       }
       const cat = await client.getExportFormats()
