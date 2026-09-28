@@ -105,7 +105,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     // 'inspiration' is the creators and competitors they watch, 'brand' is their OWN
     // profiles." Filing them under "Account" misreads the entire research surface, which
     // is what the first draft of this list did.
-    tools: ['list_accounts', 'get_account', 'list_content', 'get_content'],
+    tools: ['list_accounts', 'get_account', 'list_content', 'get_content', 'analyze_content'],
   },
   {
     slug: 'account',

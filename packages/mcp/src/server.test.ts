@@ -406,7 +406,8 @@ function urlsIn(result) {
 }
 
 async function connect(client) {
-  const server = await buildServer({ getClient: () => client })
+  // analyze_content waits up to 40s in production; a test needs only the shape of the wait.
+  const server = await buildServer({ getClient: () => client, analysisWait: { waitMs: 300, pollMs: 50 } })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const mcp = new Client({ name: 'test', version: '0' })
   await Promise.all([server.connect(serverTransport), mcp.connect(clientTransport)])
@@ -568,15 +569,16 @@ const METERED_WITHOUT_PREFLIGHT = new Set(['transcribe'])
  * two correct tools: update_timeline and update_canvas each mention that ONE op inside
  * them (video background removal) is metered, which is operation-level, not tool-level. A
  * guard that flags correct code gets switched off, so the signal has to be something a
- * tool states about itself rather than something a regex infers about its prose.
+ * tool states about itself rather than something a regex infers about its prose. The phrase is matched in any
+ * case: most tools shout it, and analyze_content's approved description (2026-09-28) says it in a sentence.
  */
-const SPEND_MARKER = 'SPENDS CREDITS'
+const SPEND_MARKER = /\bspends credits\b/i
 
 test('spending is declared and priceable in both directions', async () => {
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
 
-  const declares = (t) => (t.description ?? '').includes(SPEND_MARKER)
+  const declares = (t) => SPEND_MARKER.test(t.description ?? '')
   const hasPreflight = (t) => Object.keys(t.inputSchema?.properties ?? {}).includes('getCost')
 
   // 1. Anything that declares a spend must be priceable first, so an agent can tell the
@@ -2160,6 +2162,39 @@ test('list_content passes filters through to the client', async () => {
   // scope and the published window are the two things the API could not express at all before.
   assert.equal(captured.scope, 'brand')
   assert.equal(captured.publicationDate, 'month')
+})
+
+test('analyze_content prices first, waits for a running analysis, and returns it', async () => {
+  let reads = 0
+  const mcp = await connect(
+    fakeClient({
+      estimateAnalysisCost: async () => ({ getCost: true, creditsEstimate: 10 }),
+      analyzeContent: async (id) => ({ contentId: id, analysis: { status: 'running' } }),
+      getContent: async () => {
+        reads++
+        return { analysis: { status: 'complete', sections: ['hook'], data: { hook: { text: 'wait for it' } } } }
+      },
+    }),
+  )
+  const cost = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', getCost: true } })
+  assert.match(cost.content[0].text, /costs 10 credits\. Nothing ran and nothing was charged/)
+
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1' } })
+  assert.equal(reads, 1)
+  assert.match(res.content[0].text, /analysis: complete/)
+  assert.match(res.content[0].text, /wait for it/)
+})
+
+test('analyze_content says pending when the analysis outlasts the call', async () => {
+  const mcp = await connect(
+    fakeClient({
+      analyzeContent: async (id) => ({ contentId: id, analysis: { status: 'running' } }),
+      getContent: async () => ({ analysis: { status: 'running' } }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1' } })
+  assert.match(res.content[0].text, /pending, still running \(call analyze_content again for the result\)/)
+  assert.equal(res.structuredContent.status, 'pending')
 })
 
 test('get_content omits the transcript unless it is asked for', async () => {

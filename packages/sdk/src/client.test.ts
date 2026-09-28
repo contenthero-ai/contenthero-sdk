@@ -805,6 +805,21 @@ test('getContent sends analysisSections camelCase, the one spelling the API acce
   assert.equal(url.searchParams.has('analysis_sections'), false)
 })
 
+test('analyzeContent posts to the analysis route, and its price check sends getCost', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 202, body: { contentId: 'c1', analysis: { status: 'running' } } },
+    { status: 200, body: { getCost: true, creditsEstimate: 10, contentId: 'c1' } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const started = await client.analyzeContent('c1')
+  assert.equal(started.analysis.status, 'running')
+  const cost = await client.estimateAnalysisCost('c1')
+  assert.equal(cost.creditsEstimate, 10)
+  assert.equal(new URL(calls[0]!.url).pathname, '/api/v1/content/c1/analysis')
+  assert.equal(calls[0]!.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), { getCost: true })
+})
+
 test('every listProjects filter reaches the request, aliases included', async () => {
   // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
   // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both

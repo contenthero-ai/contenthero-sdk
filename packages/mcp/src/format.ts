@@ -74,6 +74,7 @@ import type {
   TrackedAccount,
   ContentSummary,
   ContentDetail,
+  ContentAnalysisResult,
   ContentListResult,
   AccountDetail,
   Transcription,
@@ -2075,8 +2076,12 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
  * make the surgical pull undiscoverable.
  */
 function analysisLines(analysis: ContentDetail['analysis']): Array<string | null> {
+  if (analysis?.status === 'running') return ['analysis: running (call analyze_content again for the result)']
+  if (analysis?.status === 'failed') {
+    return [`analysis: failed (${analysis.error ?? 'no reason recorded'}); analyze_content tries it again`]
+  }
   if (!analysis || analysis.status !== 'complete') {
-    return ['analysis: absent (run Break It Down in the app to create one)']
+    return ['analysis: absent (analyze_content creates one)']
   }
   const provenance = [analysis.model, analysis.analyzedAt?.slice(0, 10)].filter(Boolean).join(', ')
   const head = `analysis: complete${provenance ? ` (${provenance})` : ''}${
@@ -2088,6 +2093,29 @@ function analysisLines(analysis: ContentDetail['analysis']): Array<string | null
       )
     : []
   return [head, ...body]
+}
+
+/** analyze_content's price check: nothing ran and nothing was charged. */
+export function analysisCostResult(est: CostEstimate): CallToolResult {
+  const credits = `${est.creditsEstimate} credit${est.creditsEstimate === 1 ? '' : 's'}`
+  return text(
+    est.creditsEstimate === 0
+      ? 'This post already has an analysis: viewing it costs 0 credits. Nothing ran and nothing was charged.'
+      : `Analyzing this post costs ${credits}. Nothing ran and nothing was charged.`,
+  )
+}
+
+/** analyze_content's answer: the post's analysis with every section, or that it is still running. */
+export function contentAnalysisResult(r: ContentAnalysisResult): CallToolResult {
+  // "pending" is the word the tool's description uses for a run still going.
+  const body =
+    r.analysis.status === 'running'
+      ? ['analysis: pending, still running (call analyze_content again for the result)']
+      : analysisLines(r.analysis)
+  return {
+    content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body]) }],
+    structuredContent: { contentId: r.contentId, status: r.analysis.status === 'running' ? 'pending' : r.analysis.status },
+  }
 }
 
 /** One line summarizing a connected account (a publish target). */

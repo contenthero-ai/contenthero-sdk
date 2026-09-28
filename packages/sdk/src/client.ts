@@ -44,6 +44,7 @@ import type {
   GetContentOptions,
   ContentListResult,
   ContentDetail,
+  ContentAnalysisResult,
   AccountDetail,
   SearchBrandKnowledgeOptions,
   CostEstimate,
@@ -1349,6 +1350,23 @@ export class ContentHero {
       'GET',
       `/api/v1/content/${encodeURIComponent(contentId)}${qs ? `?${qs}` : ''}`,
     )
+  }
+
+  /**
+   * Run Break It Down on a post. One analysis per post, read by everyone: when the post has one it is returned
+   * at no charge. Otherwise this starts one and returns `analysis.status: 'running'`; calling again is safe (a
+   * running post starts nothing and charges nothing) and returns the analysis once it is stored, which is when
+   * the credits are charged, once. Price it first with `estimateAnalysisCost`.
+   */
+  async analyzeContent(contentId: string): Promise<ContentAnalysisResult> {
+    return this.request<ContentAnalysisResult>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {})
+  }
+
+  /** What `analyzeContent` would charge for this post: 0 when it already has an analysis. Runs nothing. */
+  async estimateAnalysisCost(contentId: string): Promise<CostEstimate> {
+    return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
+      getCost: true,
+    })
   }
 
   // -------------------------------------------------------------------------

@@ -114,6 +114,8 @@ import {
   postResult,
   accountDetailResult,
   inspirationContentResult,
+  contentAnalysisResult,
+  analysisCostResult,
   mediaListResult,
   mediaSearchResult,
   folderListResult,
@@ -247,6 +249,10 @@ function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio
  */
 const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
+
+/** How long analyze_content waits for a running analysis within one call (the hosted route allows 60s), and how often it looks. */
+const ANALYSIS_WAIT_MS = 40_000
+const ANALYSIS_POLL_MS = 4_000
 const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
 
 /**
@@ -953,11 +959,20 @@ export interface RegisterToolsOptions {
   getClient: GetClient
   /** Per-tool model enums, fixed at registration (see resolveModelEnums). */
   models: ResolvedModelEnums
+  /** How long analyze_content waits within one call, and how often it looks. Tests shorten it. */
+  analysisWait?: AnalysisWait
+}
+
+export interface AnalysisWait {
+  waitMs: number
+  pollMs: number
 }
 
 export interface BuildServerOptions {
   /** Override the SDK client (for tests). Defaults to the env-configured client. */
   getClient?: () => ContentHero
+  /** Override analyze_content's wait (for tests). */
+  analysisWait?: AnalysisWait
 }
 
 /** Drop undefined values so the request payload stays minimal. */
@@ -976,6 +991,7 @@ function buildReferences(parts: References): References | undefined {
  */
 export function registerTools(server: McpServer, opts: RegisterToolsOptions): void {
   const { getClient, models } = opts
+  const analysisWait = opts.analysisWait ?? { waitMs: ANALYSIS_WAIT_MS, pollMs: ANALYSIS_POLL_MS }
 
   /**
    * 🚨🚨 **EVERY TOOL'S INPUT IS STRICT. AN UNDECLARED PARAMETER IS A 400, NEVER A SILENT DROP.**
@@ -3831,7 +3847,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         analysis: z
           .enum(['none', 'full'])
           .optional()
-          .describe("How much of the owner's Break It Down analysis to include. Default 'none' (availability + section names still report)."),
+          .describe("How much of the post's Break It Down analysis to include. Default 'none' (availability + section names still report)."),
         analysisSections: z
           .array(z.string())
           .optional()
@@ -3843,6 +3859,40 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const { contentId, ...options } = args
         return inspirationContentResult(await client.getContent(contentId, options))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- analyze_content ------------------------------------------------------
+  server.registerTool(
+    'analyze_content',
+    {
+      title: 'Analyze Content',
+      // It can spend credits, so it is never read-only (see transcribe).
+      annotations: WRITE,
+      description:
+        'Run Break It Down on a tracked post: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. Viewing an existing analysis is free; creating one spends credits, so pass getCost to see the price first. If it returns pending, call it again for the result.',
+      inputSchema: {
+        contentId: z.string().describe('The content id from list_content, get_account, or a get_card inspiration asset.'),
+        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when an analysis exists.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        if (args.getCost) return analysisCostResult(await client.estimateAnalysisCost(args.contentId))
+        let result = await client.analyzeContent(args.contentId)
+        // The analysis runs as a job. Wait a while within this call (the hosted route allows 60s), reading the
+        // post's analysis status, which starts nothing; past that the agent calls again, which is also free.
+        const deadline = Date.now() + analysisWait.waitMs
+        while (result.analysis.status === 'running' && Date.now() + analysisWait.pollMs < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, analysisWait.pollMs))
+          const post = await client.getContent(args.contentId, { analysis: 'full' })
+          if (post.analysis.status !== 'running') result = { contentId: result.contentId, analysis: post.analysis }
+        }
+        return contentAnalysisResult(result)
       } catch (err) {
         return errorResult(err)
       }
@@ -4469,6 +4519,6 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Mcp
   const getClient = options.getClient ?? defaultGetClient
   const models = await resolveModelEnums(getClient)
   const server = new McpServer({ ...SERVER_INFO })
-  registerTools(server, { getClient: () => getClient(), models })
+  registerTools(server, { getClient: () => getClient(), models, analysisWait: options.analysisWait })
   return server
 }

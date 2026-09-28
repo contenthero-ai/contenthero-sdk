@@ -121,6 +121,8 @@ export type {
   TrackedAccount,
   ContentSummary,
   ContentDetail,
+  ContentAnalysis,
+  ContentAnalysisResult,
   ContentTranscript,
   ContentTranscriptSegment,
   ContentScope,

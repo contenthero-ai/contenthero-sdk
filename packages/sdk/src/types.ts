@@ -2018,19 +2018,30 @@ export interface ContentDetail extends ContentSummary {
 }
 
 /**
- * The caller's Break It Down analysis for one post. Availability is always reported; the content is
- * opt-in (a full analysis is ~60KB). `transcriptSegments` is excluded from `analysis: 'full'` because
- * the transcript has its own opt-in surface with windowing and search; name it explicitly to pull it.
+ * A post's Break It Down analysis (one per post, read by everyone). Availability is always reported; the
+ * content is opt-in (a full analysis is ~60KB). `transcriptSegments` is excluded from `analysis: 'full'`
+ * because the transcript has its own opt-in surface with windowing and search; name it explicitly to pull it.
  */
 export interface ContentAnalysis {
-  /** `complete` when this account holds a Break It Down for the post; `absent` otherwise. */
-  status: 'complete' | 'absent'
+  /**
+   * `complete` when stored, `running` while one is being made, `failed` when the last run gave up (`error`
+   * says why), `absent` when none was asked for. `analyzeContent` creates one.
+   */
+  status: 'complete' | 'running' | 'failed' | 'absent'
+  /** Only when `failed`. */
+  error?: string
   analyzedAt?: string
   model?: string | null
   /** The section names `analysisSections` accepts. Listed even when data was not requested. */
   sections?: string[]
   /** The requested sections, keyed by name. */
   data?: Record<string, unknown>
+}
+
+/** Result of `analyzeContent`: the post's analysis with every section, or `status: 'running'` while it is made. */
+export interface ContentAnalysisResult {
+  contentId: string
+  analysis: ContentAnalysis
 }
 
 /** One tracked account with its performance. */

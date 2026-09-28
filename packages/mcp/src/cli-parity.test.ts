@@ -101,6 +101,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   get_account: ['tracked-account get'],
   list_content: ['content list'],
   get_content: ['content get'],
+  analyze_content: ['content analyze'],
   list_connected_accounts: ['connected-account list'],
   get_connected_account: ['connected-account get'],
   get_balance: ['account balance'],

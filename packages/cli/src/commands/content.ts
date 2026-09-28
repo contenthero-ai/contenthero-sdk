@@ -20,7 +20,10 @@
 import type { Command } from 'commander'
 import type {
   AccountDetail,
+  ContentAnalysis,
+  ContentAnalysisResult,
   ContentDetail,
+  CostEstimate,
   ContentListResult,
   ContentSummary,
   ContentScope,
@@ -260,27 +263,56 @@ export function registerContent(program: Command): void {
           }
         }
         // Availability always prints: the section names are the vocabulary --analysis-sections accepts.
-        const an = c.analysis
-        if (an) {
-          if (an.status === 'complete') {
-            const provenance = [an.model, an.analyzedAt?.slice(0, 10)].filter(Boolean).join(', ')
-            out += `\n\nAnalysis: complete${provenance ? ` (${provenance})` : ''}`
-            if (an.sections?.length) out += `\n  sections: ${an.sections.join(', ')}`
-            if (an.data) {
-              for (const [section, value] of Object.entries(an.data)) {
-                out += `\n\n${section}:\n${JSON.stringify(value, null, 2)}`
-              }
-            }
-          } else {
-            out += '\n\nAnalysis: absent (run Break It Down in the app to create one)'
-          }
-        }
+        if (c.analysis) out += `\n\n${analysisText(c.analysis)}`
         return out
       })
+    })
+
+  content
+    .command('analyze')
+    .description('Run Break It Down on a tracked post: free when it already has an analysis, otherwise it spends credits (see --cost)')
+    .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
+    .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
+    .option('--no-wait', 'return at once instead of waiting for a running analysis')
+    .option('--timeout <sec>', `how long to wait for a running analysis (default ${ANALYZE_TIMEOUT_SEC})`, toInt)
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      if (opts.cost) {
+        const est = await client.estimateAnalysisCost(id)
+        emit(est, ctx, (e: CostEstimate) => `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`)
+        return
+      }
+      let result = await client.analyzeContent(id)
+      // It runs as a job: wait for it by reading the post's analysis status, which starts nothing.
+      const deadline = Date.now() + ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
+      while (opts.wait !== false && result.analysis.status === 'running' && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
+        const post = await client.getContent(id, { analysis: 'full' })
+        result = { contentId: result.contentId, analysis: post.analysis }
+      }
+      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${r.contentId}\n\n${analysisText(r.analysis)}`)
     })
 }
 
 /** Repeatable --account. */
 function collectAccount(value: string, previous: string[] = []): string[] {
   return [...previous, value]
+}
+
+/** How long `content analyze` waits for a running analysis by default, and how often it looks. */
+const ANALYZE_TIMEOUT_SEC = 600
+const ANALYZE_POLL_MS = 5_000
+
+/** A post's Break It Down: its status always, and the sections when they were returned. */
+function analysisText(an: ContentAnalysis): string {
+  if (an.status === 'running') return 'Analysis: running (run content analyze again for the result)'
+  if (an.status === 'failed') return `Analysis: failed (${an.error ?? 'no reason recorded'}); content analyze tries it again`
+  if (an.status !== 'complete') return 'Analysis: absent (content analyze creates one)'
+  const provenance = [an.model, an.analyzedAt?.slice(0, 10)].filter(Boolean).join(', ')
+  let out = `Analysis: complete${provenance ? ` (${provenance})` : ''}`
+  if (an.sections?.length) out += `\n  sections: ${an.sections.join(', ')}`
+  for (const [section, value] of Object.entries(an.data ?? {})) {
+    out += `\n\n${section}:\n${JSON.stringify(value, null, 2)}`
+  }
+  return out
 }
