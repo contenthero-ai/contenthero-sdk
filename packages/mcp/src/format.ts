@@ -75,6 +75,8 @@ import type {
   ContentSummary,
   ContentDetail,
   ContentAnalysisResult,
+  ContentAnalysisKind,
+  ContentScenesResult,
   ContentListResult,
   AccountDetail,
   Transcription,
@@ -2106,13 +2108,34 @@ function analysisLines(analysis: ContentDetail['analysis']): Array<string | null
 }
 
 /** analyze_content's price check: nothing ran and nothing was charged. */
-export function analysisCostResult(est: CostEstimate): CallToolResult {
+export function analysisCostResult(est: CostEstimate, kind: ContentAnalysisKind = 'breakdown'): CallToolResult {
   const credits = `${est.creditsEstimate} credit${est.creditsEstimate === 1 ? '' : 's'}`
+  if (kind === 'scenes') {
+    return text(
+      est.creditsEstimate === 0
+        ? 'This post already has its scenes: viewing them costs 0 credits. Nothing ran and nothing was charged.'
+        : `Preparing this post's scenes costs ${credits} (priced per started minute of video). Nothing ran and nothing was charged.`,
+    )
+  }
   return text(
     est.creditsEstimate === 0
       ? 'This post already has an analysis: viewing it costs 0 credits. Nothing ran and nothing was charged.'
       : `Analyzing this post costs ${credits}. Nothing ran and nothing was charged.`,
   )
+}
+
+/** analyze_content's answer for kind scenes: ready (and how to read them), or still being prepared. */
+export function contentScenesResult(r: ContentScenesResult): CallToolResult {
+  const running = r.scenes.status === 'running'
+  const body = running
+    ? "scenes: pending, still being prepared (call analyze_content again for the result)"
+    : r.scenes.status === 'complete'
+      ? `${r.scenes.sceneCount} scene${r.scenes.sceneCount === 1 ? '' : 's'} ready. Read them with get_content scenes='map', or scenes='frames' to see them.`
+      : `scenes: ${r.scenes.status}`
+  return {
+    content: [{ type: 'text', text: lines([`Scenes for post ${r.contentId}`, body]) }],
+    structuredContent: { contentId: r.contentId, status: running ? 'pending' : r.scenes.status },
+  }
 }
 
 /** analyze_content's answer: the post's analysis with every section, or that it is still running. */

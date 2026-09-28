@@ -2206,6 +2206,25 @@ test('analyze_content prices first, waits for a running analysis, and returns it
   assert.match(res.content[0].text, /wait for it/)
 })
 
+test('analyze_content kind scenes prices by kind, waits on the scene availability, and says how to read them', async () => {
+  const seen = { estimate: null, analyze: null }
+  const mcp = await connect(
+    fakeClient({
+      estimateAnalysisCost: async (_id, opts) => ((seen.estimate = opts), { getCost: true, creditsEstimate: 5 }),
+      analyzeContent: async (id, opts) => ((seen.analyze = opts), { contentId: id, kind: 'scenes', scenes: { status: 'running' } }),
+      getContent: async () => ({ analysis: { status: 'absent' }, scenes: { status: 'complete', sceneCount: 7 } }),
+    }),
+  )
+  const cost = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes', getCost: true } })
+  assert.deepEqual(seen.estimate, { kind: 'scenes' })
+  assert.match(cost.content[0].text, /scenes costs 5 credits \(priced per started minute of video\)/)
+
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes' } })
+  assert.deepEqual(seen.analyze, { kind: 'scenes' })
+  assert.match(res.content[0].text, /7 scenes ready\. Read them with get_content scenes='map'/)
+  assert.equal(res.structuredContent.status, 'complete')
+})
+
 test('analyze_content says pending when the analysis outlasts the call', async () => {
   const mcp = await connect(
     fakeClient({

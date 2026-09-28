@@ -116,6 +116,7 @@ import {
   inspirationContentResult,
   contentAnalysisResult,
   analysisCostResult,
+  contentScenesResult,
   mediaListResult,
   mediaSearchResult,
   folderListResult,
@@ -3878,16 +3879,33 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
       description:
-        'Run Break It Down on a tracked post: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. Viewing an existing analysis is free; creating one spends credits, so pass getCost to see the price first. If it returns pending, call it again for the result.',
+        'Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. If it returns pending, call it again for the result.',
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_account, or a get_card inspiration asset.'),
-        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when an analysis exists.'),
+        kind: z
+          .enum(['breakdown', 'scenes'])
+          .optional()
+          .describe('breakdown (default): the Break It Down analysis. scenes: the scene map and a frame of each scene, priced per minute of video.'),
+        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        if (args.getCost) return analysisCostResult(await client.estimateAnalysisCost(args.contentId))
+        const kind = args.kind ?? 'breakdown'
+        if (args.getCost) return analysisCostResult(await client.estimateAnalysisCost(args.contentId, { kind }), kind)
+        if (kind === 'scenes') {
+          let scenes = await client.analyzeContent(args.contentId, { kind: 'scenes' })
+          // Same wait as the breakdown: read the post's scene availability, which starts nothing, until they are
+          // ready or the call's budget is spent.
+          const deadline = Date.now() + jobWait.waitMs
+          while (scenes.scenes.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
+            const post = await client.getContent(args.contentId)
+            if (post.scenes && post.scenes.status !== 'running') scenes = { ...scenes, scenes: post.scenes }
+          }
+          return contentScenesResult(scenes)
+        }
         let result = await client.analyzeContent(args.contentId)
         // The analysis runs as a job. Wait a while within this call (the hosted route allows 60s), reading the
         // post's analysis status, which starts nothing; past that the agent calls again, which is also free.

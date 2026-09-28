@@ -19,6 +19,8 @@
 
 import type { Command } from 'commander'
 import type {
+  ContentScenes,
+  ContentScenesResult,
   AccountDetail,
   ContentAnalysis,
   ContentAnalysisResult,
@@ -270,21 +272,38 @@ export function registerContent(program: Command): void {
 
   content
     .command('analyze')
-    .description('Run Break It Down on a tracked post: free when it already has an analysis, otherwise it spends credits (see --cost)')
+    .description('Analyze a tracked post: Break It Down, or its scenes with --kind scenes. Free when the result exists, otherwise it spends credits (see --cost)')
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
+    .option('--kind <kind>', 'breakdown (default) or scenes (the scene map and a frame of each scene, priced per minute of video)')
     .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
     .option('--no-wait', 'return at once instead of waiting for a running analysis')
     .option('--timeout <sec>', `how long to wait for a running analysis (default ${ANALYZE_TIMEOUT_SEC})`, toInt)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
+      const kind = (opts.kind as string | undefined) ?? 'breakdown'
+      if (kind !== 'breakdown' && kind !== 'scenes') throw new CliError("--kind must be 'breakdown' or 'scenes'", EXIT.USAGE)
       if (opts.cost) {
-        const est = await client.estimateAnalysisCost(id)
-        emit(est, ctx, (e: CostEstimate) => `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`)
+        const est = await client.estimateAnalysisCost(id, { kind })
+        emit(est, ctx, (e: CostEstimate) =>
+          kind === 'scenes'
+            ? `Preparing this post's scenes costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`
+            : `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`,
+        )
+        return
+      }
+      const deadline = Date.now() + ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
+      if (kind === 'scenes') {
+        let scenes = await client.analyzeContent(id, { kind: 'scenes' })
+        while (opts.wait !== false && scenes.scenes.status === 'running' && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
+          const post = await client.getContent(id)
+          if (post.scenes) scenes = { ...scenes, scenes: post.scenes }
+        }
+        emit(scenes, ctx, (r: ContentScenesResult) => `Scenes for post ${r.contentId}\n\n${scenesText(r.scenes)}`)
         return
       }
       let result = await client.analyzeContent(id)
       // It runs as a job: wait for it by reading the post's analysis status, which starts nothing.
-      const deadline = Date.now() + ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
       while (opts.wait !== false && result.analysis.status === 'running' && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
         const post = await client.getContent(id, { analysis: 'full' })
@@ -302,6 +321,15 @@ function collectAccount(value: string, previous: string[] = []): string[] {
 /** How long `content analyze` waits for a running analysis by default, and how often it looks. */
 const ANALYZE_TIMEOUT_SEC = 600
 const ANALYZE_POLL_MS = 5_000
+
+/** A post's scenes: whether they exist, and how to read them. */
+function scenesText(sc: ContentScenes): string {
+  if (sc.status === 'running') return 'Scenes: running (run content analyze --kind scenes again for the result)'
+  if (sc.status === 'complete') return `Scenes: ${sc.sceneCount} ready (read them with content get <id> --scenes map, or --scenes frames)`
+  if (sc.status === 'failed') return `Scenes: failed (${sc.error}); content analyze --kind scenes tries it again`
+  if (sc.status === 'unavailable') return `Scenes: unavailable (${sc.reason})`
+  return 'Scenes: absent (content analyze --kind scenes prepares them)'
+}
 
 /** A post's Break It Down: its status always, and the sections when they were returned. */
 function analysisText(an: ContentAnalysis): string {

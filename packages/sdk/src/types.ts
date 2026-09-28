@@ -2045,6 +2045,30 @@ export interface ContentDetail extends ContentSummary {
   transcript?: ContentTranscript
   /** Always present: availability at minimum, plus `data` when analysis content was requested. */
   analysis: ContentAnalysis
+  /** Whether the post's scenes exist (`analyzeContent` kind `scenes`). Availability only. Absent on older servers. */
+  scenes?: ContentScenes
+}
+
+/**
+ * Whether a post's scenes (its scene map and a frame per scene) exist. `complete` when stored, `running` while
+ * being prepared, `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
+ * them (`reason` says why: no video, or long-form YouTube for now), `absent` when none was asked for.
+ */
+export type ContentScenes =
+  | { status: 'complete'; sceneCount: number }
+  | { status: 'running' }
+  | { status: 'failed'; error: string }
+  | { status: 'unavailable'; reason: string }
+  | { status: 'absent' }
+
+/** What `analyzeContent` makes: `breakdown` (the default), or `scenes`. */
+export type ContentAnalysisKind = 'breakdown' | 'scenes'
+
+/** Result of `analyzeContent` with `kind: 'scenes'`. The scenes themselves are read with `getContent`. */
+export interface ContentScenesResult {
+  contentId: string
+  kind: 'scenes'
+  scenes: ContentScenes
 }
 
 /**

@@ -45,6 +45,8 @@ import type {
   ContentListResult,
   ContentDetail,
   ContentAnalysisResult,
+  ContentAnalysisKind,
+  ContentScenesResult,
   AccountDetail,
   SearchBrandKnowledgeOptions,
   CostEstimate,
@@ -1374,15 +1376,25 @@ export class ContentHero {
    * at no charge. Otherwise this starts one and returns `analysis.status: 'running'`; calling again is safe (a
    * running post starts nothing and charges nothing) and returns the analysis once it is stored, which is when
    * the credits are charged, once. Price it first with `estimateAnalysisCost`.
+   *
+   * `kind: 'scenes'` prepares the post to be seen instead: its scene map and a frame per scene, read afterwards
+   * with `getContent`, priced per started minute of video. Same rules: free when it exists, charged once when
+   * stored, safe to call again while it runs. A post with no video is refused with the reason.
    */
-  async analyzeContent(contentId: string): Promise<ContentAnalysisResult> {
-    return this.request<ContentAnalysisResult>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {})
+  async analyzeContent(contentId: string, options?: { kind?: 'breakdown' }): Promise<ContentAnalysisResult>
+  async analyzeContent(contentId: string, options: { kind: 'scenes' }): Promise<ContentScenesResult>
+  async analyzeContent(
+    contentId: string,
+    options: { kind?: ContentAnalysisKind } = {},
+  ): Promise<ContentAnalysisResult | ContentScenesResult> {
+    return this.request('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, options.kind ? { kind: options.kind } : {})
   }
 
-  /** What `analyzeContent` would charge for this post: 0 when it already has an analysis. Runs nothing. */
-  async estimateAnalysisCost(contentId: string): Promise<CostEstimate> {
+  /** What `analyzeContent` would charge for this post and kind: 0 when the result already exists. Runs nothing. */
+  async estimateAnalysisCost(contentId: string, options: { kind?: ContentAnalysisKind } = {}): Promise<CostEstimate> {
     return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
       getCost: true,
+      ...(options.kind ? { kind: options.kind } : {}),
     })
   }
 
