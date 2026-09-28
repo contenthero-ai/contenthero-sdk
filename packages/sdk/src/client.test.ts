@@ -881,6 +881,15 @@ test('analyzeContent and its price check carry kind scenes when asked, and nothi
   assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), { getCost: true, kind: 'scenes' })
 })
 
+test('getContent asks for scenes on the wire only when a grain is named', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: {} }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContent('c1', { scenes: 'frames', startMs: 2000 })
+  await client.getContent('c1', { scenes: 'none' })
+  assert.equal(new URL(calls[0]!.url).search, '?start_ms=2000&scenes=frames')
+  assert.equal(new URL(calls[1]!.url).search, '')
+})
+
 test('every listProjects filter reaches the request, aliases included', async () => {
   // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
   // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both

@@ -128,6 +128,8 @@ export type {
   ContentAnalysisKind,
   ContentScenes,
   ContentScenesResult,
+  ContentScenesDetail,
+  ContentScene,
   ContentTranscript,
   ContentTranscriptSegment,
   ContentScope,

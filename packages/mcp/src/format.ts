@@ -2064,10 +2064,10 @@ function transcriptLines(t: NonNullable<ContentDetail['transcript']>): string[] 
 }
 
 /** One tracked post in full, with its transcript when it was asked for. */
-export function inspirationContentResult(c: ContentDetail): CallToolResult {
+export function inspirationContentResult(c: ContentDetail, frames: InlinedImageSlot[] = []): CallToolResult {
   const stats = `${compactNum(c.viewCount)} views, ${compactNum(c.likeCount)} likes, ${compactNum(c.commentCount)} comments`
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
-  return text(
+  const body = text(
     lines([
       `${c.title ?? '(untitled)'} (${idOf(c)})${c.isOwn ? ' [yours]' : ''}`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
@@ -2078,8 +2078,52 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
       c.description ? `description: ${c.description}` : null,
       ...(c.transcript ? transcriptLines(c.transcript) : []),
       ...analysisLines(c.analysis),
+      ...scenesLines(c.scenes, frames),
     ]),
   )
+  // Each shown frame follows its label, so the picture and the scene it belongs to cannot be mismatched.
+  const detail = c.scenes?.status === 'complete' ? c.scenes.detail : undefined
+  frames.forEach((slot, i) => {
+    const scene = detail?.scenes[i]
+    if (!slot?.image || !scene) return
+    body.content.push({ type: 'text', text: `scene ${scene.index + 1} frame (${seconds(scene.startMs)} to ${seconds(scene.endMs)}):` })
+    body.content.push({ type: 'image', data: slot.image.data, mimeType: slot.image.mimeType })
+  })
+  return body
+}
+
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+/**
+ * The scenes availability line, always, and the scene map when it was asked for. A frame that was shown says so; one
+ * that did not fit this result is given as its link, with the reason, so nothing is silently missing.
+ */
+function scenesLines(scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]): Array<string | null> {
+  if (!scenes) return []
+  if (scenes.status === 'running') return ['scenes: running (call analyze_content with kind scenes again for the result)']
+  if (scenes.status === 'failed') return [`scenes: failed (${scenes.error}); analyze_content with kind scenes tries them again`]
+  if (scenes.status === 'unavailable') return [`scenes: unavailable (${scenes.reason})`]
+  if (scenes.status !== 'complete') return ['scenes: absent (analyze_content with kind scenes prepares them)']
+  const detail = scenes.detail
+  if (!detail) return [`scenes: complete (${scenes.sceneCount}; pass scenes='map' or 'frames' to read them)`]
+  const out: Array<string | null> = [
+    `scenes: complete (${scenes.sceneCount}${detail.windowed ? `, ${detail.scenes.length} in this window` : ''})`,
+    detail.summary ? `scenes.summary: ${detail.summary}` : null,
+    detail.timedTranscript ? null : 'scenes.said: this post has no timed transcript, so what is said in each scene is unknown',
+  ]
+  detail.scenes.forEach((sc, i) => {
+    const slot = frames[i]
+    const frame = slot?.image
+      ? 'frame: shown below'
+      : sc.frameUrl
+        ? `frame: ${sc.frameUrl}${slot?.skipped ? ` (not shown: ${slot.skipped})` : ''}`
+        : 'frame: none'
+    const said = sc.said === null ? null : `said: ${sc.said ? JSON.stringify(sc.said) : '(nothing)'}`
+    out.push(`scene ${sc.index + 1} [${seconds(sc.startMs)} to ${seconds(sc.endMs)}] ${sc.description}${said ? ` | ${said}` : ''} | ${frame}`)
+  })
+  return out
 }
 
 /**

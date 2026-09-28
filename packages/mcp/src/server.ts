@@ -3837,15 +3837,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Tracked Content',
       annotations: READ,
       description:
-        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
+        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said, or scenes='frames' to also see a frame of each scene. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_account, or a get_card inspiration asset.'),
         transcript: z
           .enum(['none', 'text', 'segments'])
           .optional()
           .describe("How much transcript to include. Default 'none'."),
-        startMs: z.number().optional().describe('Window start, ms from the start of the media. Implies segments.'),
-        endMs: z.number().optional().describe('Window end, ms from the start of the media. Implies segments.'),
+        startMs: z.number().optional().describe('Window start, ms from the start of the media. Narrows transcript segments and scenes.'),
+        endMs: z.number().optional().describe('Window end, ms from the start of the media. Narrows transcript segments and scenes.'),
         transcriptSearch: z
           .string()
           .optional()
@@ -3858,13 +3858,24 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('Only these analysis sections (names come from the availability line, e.g. contentStructure, recreationSteps).'),
+        scenes: z
+          .enum(['none', 'map', 'frames'])
+          .optional()
+          .describe("How much of the post's scene map to include. Default 'none' (availability still reports). 'frames' adds an image of each scene, as many as fit this result; the rest are listed as links."),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         const { contentId, ...options } = args
-        return inspirationContentResult(await client.getContent(contentId, options))
+        const post = await client.getContent(contentId, options)
+        // Frames are small agent-sized images, inlined in scene order within the result's one byte budget.
+        const detail = post.scenes?.status === 'complete' ? post.scenes.detail : undefined
+        const frames =
+          args.scenes === 'frames' && detail
+            ? await inlineImagesWithinBudget(detail.scenes.map((sc) => ({ url: sc.frameUrl ?? null })))
+            : []
+        return inspirationContentResult(post, frames)
       } catch (err) {
         return errorResult(err)
       }

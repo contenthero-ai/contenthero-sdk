@@ -2225,6 +2225,59 @@ test('analyze_content kind scenes prices by kind, waits on the scene availabilit
   assert.equal(res.structuredContent.status, 'complete')
 })
 
+test('get_content scenes: the map always names each scene, frames are shown inline, and one that does not load is a link', async () => {
+  const scenes = {
+    status: 'complete',
+    sceneCount: 2,
+    detail: {
+      summary: 'A creator unboxes a phone.',
+      timedTranscript: true,
+      windowed: false,
+      scenes: [
+        { index: 0, startMs: 0, endMs: 3000, description: 'box on a desk', said: 'Look at this.', frameUrl: 'https://media.contenthero.ai/a1/scenes/1500.webp' },
+        { index: 1, startMs: 3000, endMs: 8000, description: 'phone lifted out', said: '', frameUrl: 'https://media.contenthero.ai/a1/scenes/5500.webp' },
+      ],
+    },
+  }
+  let asked
+  const origFetch = globalThis.fetch
+  globalThis.fetch = (async (input) =>
+    String(input).includes('5500')
+      ? new Response('gone', { status: 404 })
+      : new Response(new Uint8Array([1, 2, 3, 4]), { headers: { 'content-type': 'image/webp' } })) as typeof fetch
+  try {
+    const mcp = await connect(
+      fakeClient({
+        getContent: async (_id, opts) => ((asked = opts), { title: 'Unboxing', hashtags: [], analysis: { status: 'absent' }, scenes }),
+      }),
+    )
+    const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', scenes: 'frames', startMs: 0 } })
+    assert.deepEqual(asked, { scenes: 'frames', startMs: 0 })
+    const body = res.content[0].text
+    assert.match(body, /scenes: complete \(2\)/)
+    assert.match(body, /scene 1 \[0\.0s to 3\.0s\] box on a desk \| said: "Look at this\." \| frame: shown below/)
+    assert.match(body, /scene 2 \[3\.0s to 8\.0s\] phone lifted out \| said: \(nothing\) \| frame: https:\/\/media\.contenthero\.ai\/a1\/scenes\/5500\.webp \(not shown/)
+    const images = res.content.filter((c) => c.type === 'image')
+    assert.equal(images.length, 1)
+    assert.match(res.content[1].text, /scene 1 frame/)
+
+    // 'map' names the same scenes and shows no images.
+    const map = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', scenes: 'map' } })
+    assert.equal(map.content.filter((c) => c.type === 'image').length, 0)
+    assert.match(map.content[0].text, /frame: https:\/\/media\.contenthero\.ai\/a1\/scenes\/1500\.webp/)
+  } finally {
+    globalThis.fetch = origFetch
+  }
+})
+
+test('get_content without scenes reports only whether they exist', async () => {
+  const mcp = await connect(
+    fakeClient({ getContent: async () => ({ title: 'x', hashtags: [], analysis: { status: 'absent' }, scenes: { status: 'complete', sceneCount: 4 } }) }),
+  )
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.match(res.content[0].text, /scenes: complete \(4; pass scenes='map' or 'frames' to read them\)/)
+})
+
 test('analyze_content says pending when the analysis outlasts the call', async () => {
   const mcp = await connect(
     fakeClient({

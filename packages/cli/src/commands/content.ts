@@ -213,9 +213,15 @@ export function registerContent(program: Command): void {
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
     .option('--analysis', 'include the full Break It Down analysis (availability always reports)')
     .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)', toList)
+    .option('--scenes <grain>', "the post's scenes: map, or frames (the same map with each scene's frame url); --start-ms/--end-ms narrow them")
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+      const scenes = opts.scenes as string | undefined
+      if (scenes != null && !['none', 'map', 'frames'].includes(scenes)) {
+        throw new CliError(`Invalid --scenes "${scenes}". Expected one of: none, map, frames.`, EXIT.USAGE)
+      }
+      const wantsScenes = scenes === 'map' || scenes === 'frames'
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
-      // be honored against flat text.
+      // be honored against flat text. With --scenes, a window narrows the scenes instead.
       const raw = opts.transcript
       let grain: 'none' | 'text' | 'segments' | undefined
       if (raw === true) grain = 'segments'
@@ -224,7 +230,7 @@ export function registerContent(program: Command): void {
           throw new CliError(`Invalid --transcript "${raw}". Expected one of: ${GRAINS.join(', ')}.`, EXIT.USAGE)
         }
         grain = raw as 'none' | 'text' | 'segments'
-      } else if (opts.startMs != null || opts.endMs != null || opts.transcriptSearch) {
+      } else if (opts.transcriptSearch || (!wantsScenes && (opts.startMs != null || opts.endMs != null))) {
         grain = 'segments'
       }
 
@@ -236,6 +242,7 @@ export function registerContent(program: Command): void {
         transcriptSearch: opts.transcriptSearch as string | undefined,
         analysis: opts.analysis ? 'full' : undefined,
         analysisSections: opts.analysisSections as string[] | undefined,
+        scenes: wantsScenes ? (scenes as 'map' | 'frames') : undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
         const pairs: Array<[string, string | number]> = [
@@ -266,6 +273,7 @@ export function registerContent(program: Command): void {
         }
         // Availability always prints: the section names are the vocabulary --analysis-sections accepts.
         if (c.analysis) out += `\n\n${analysisText(c.analysis)}`
+        if (c.scenes) out += `\n\n${scenesText(c.scenes)}`
         return out
       })
     })
@@ -325,6 +333,17 @@ const ANALYZE_POLL_MS = 5_000
 /** A post's scenes: whether they exist, and how to read them. */
 function scenesText(sc: ContentScenes): string {
   if (sc.status === 'running') return 'Scenes: running (run content analyze --kind scenes again for the result)'
+  if (sc.status === 'complete' && sc.detail) {
+    const d = sc.detail
+    const head = `Scenes: ${sc.sceneCount}${d.windowed ? ` (${d.scenes.length} in this window)` : ''}`
+    const rows = d.scenes.map((s) => {
+      const said = s.said === null ? '' : `\n    said: ${s.said || '(nothing)'}`
+      return `  ${s.index + 1}. [${(s.startMs / 1000).toFixed(1)}s to ${(s.endMs / 1000).toFixed(1)}s] ${s.description}${said}${s.frameUrl ? `\n    frame: ${s.frameUrl}` : ''}`
+    })
+    return [head, d.summary ? `  ${d.summary}` : null, d.timedTranscript ? null : '  (no timed transcript: what is said per scene is unknown)', ...rows]
+      .filter(Boolean)
+      .join('\n')
+  }
   if (sc.status === 'complete') return `Scenes: ${sc.sceneCount} ready (read them with content get <id> --scenes map, or --scenes frames)`
   if (sc.status === 'failed') return `Scenes: failed (${sc.error}); content analyze --kind scenes tries it again`
   if (sc.status === 'unavailable') return `Scenes: unavailable (${sc.reason})`

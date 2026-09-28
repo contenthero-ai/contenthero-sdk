@@ -2055,11 +2055,32 @@ export interface ContentDetail extends ContentSummary {
  * them (`reason` says why: no video, or long-form YouTube for now), `absent` when none was asked for.
  */
 export type ContentScenes =
-  | { status: 'complete'; sceneCount: number }
+  | { status: 'complete'; sceneCount: number; detail?: ContentScenesDetail }
   | { status: 'running' }
   | { status: 'failed'; error: string }
   | { status: 'unavailable'; reason: string }
   | { status: 'absent' }
+
+/** A post's scenes, when `getContent` was asked for them with `scenes: 'map'` or `'frames'`. */
+export interface ContentScenesDetail {
+  /** What the whole post shows, in a sentence or two. */
+  summary: string | null
+  /** False when the post has no timed transcript, so every scene's `said` is null ("unknown", not "silent"). */
+  timedTranscript: boolean
+  /** True when `startMs`/`endMs` narrowed the list; `sceneCount` is always the whole post's. */
+  windowed: boolean
+  scenes: ContentScene[]
+}
+
+/** One scene: its range, what happens in it, what is said, and its frame when one is stored. */
+export interface ContentScene {
+  index: number
+  startMs: number
+  endMs: number
+  description: string
+  said: string | null
+  frameUrl?: string
+}
 
 /** What `analyzeContent` makes: `breakdown` (the default), or `scenes`. */
 export type ContentAnalysisKind = 'breakdown' | 'scenes'
@@ -2170,6 +2191,12 @@ export interface GetContentOptions {
   analysis?: 'none' | 'full'
   /** Return only these analysis sections (see `ContentAnalysis.sections` for what exists). */
   analysisSections?: string[]
+  /**
+   * The post's scenes (made by `analyzeContent` kind `scenes`). `none` (default) reports availability; `map` adds
+   * each scene's range, what happens, what is said and its frame's url; `frames` is the same data for a caller
+   * that will show the frames. `startMs`/`endMs` narrow the scenes (and then do not imply transcript segments).
+   */
+  scenes?: 'none' | 'map' | 'frames'
 }
 
 /** Options for `listAccounts`. */
