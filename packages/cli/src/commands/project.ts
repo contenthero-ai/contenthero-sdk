@@ -8,9 +8,6 @@
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--wait]
  *   project export-status <exportId>                                     (requires editor:read)
- *   project export-formats                                               (requires editor:read)
- *   project layer-types                                                  (canvas types, requires editor:read)
- *   project timeline-types                                               (editor types, requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
@@ -18,7 +15,7 @@
  * new clips/tracks/transitions; EDIT ops (move_clip, trim_clip, update_clip, delete_clip, remove_background,
  * disable_ranges, update_transition, remove_transition, ...) act on existing clips + transitions. CAPTION ops (add_captions,
  * update_captions, remove_captions) generate / restyle / remove transcript-driven captions.
- * Run `project timeline-types` (or `layer-types`) first: each clip type carries a copy-pasteable `example`
+ * Run `schema timeline` (or `schema layer`) first: each clip type carries a copy-pasteable `example`
  * clip skeleton and the catalog carries a `creation` section with the exact op shapes, so you know both what
  * to create and the item shape to pass. Then read `project get` for the current state + revision, and pass
  * that revision as --expected-revision for safe concurrent edits. All edits require the editor:write scope.
@@ -276,45 +273,9 @@ export function registerProject(program: Command): void {
     })
 
   project
-    .command('export-formats')
-    .description('List available export formats (requires editor:read)')
-    .action(async (_opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const cat = await client.getExportFormats()
-      emit(cat, ctx, () => cat.formats.map((f) => `${f.format} (${f.projectTypes.join('/')}): ${f.description}`).join('\n'))
-    })
-
-  project
-    .command('layer-types')
-    .description('List canvas layer types + editable props (requires editor:read)')
-    .action(async (_opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const cat = await client.getLayerTypes()
-      emit(cat, ctx, () => cat.layerTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n'))
-    })
-
-  project
-    .command('timeline-types')
-    .description(
-      'List editor timeline clip + track types with editable props. Each clip type also carries a copy-pasteable `example` clip skeleton, and the catalog carries a `creation` section documenting the CREATE ops (create_clip, insert_track, insert_prebuilt_track, add_transition). Read this before building any clip with `project apply`; use --json for the full skeletons. Requires editor:read.',
-    )
-    .action(async (_opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const cat = await client.getTimelineTypes()
-      emit(cat, ctx, () => {
-        const clips = cat.clipTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n')
-        const tracks = cat.trackTypes.map((t) => `${t.trackType} holds ${t.holds.join(', ')}`).join('\n')
-        const creation = cat.creation
-          ? `\n\nCreate ops:\n${cat.creation.ops.map((o) => `${o.op}: ${o.shape}`).join('\n')}\n(each clip type carries an \`example\` skeleton; use --json to see them)`
-          : ''
-        return `Clips:\n${clips}\n\nTracks:\n${tracks}${creation}`
-      })
-    })
-
-  project
     .command('apply')
     .description(
-      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...). One-shot cleanups: remove_silence, remove_filler_words, extract_audio (see `project timeline-types` for shapes). Build items from the `example` skeletons in `project timeline-types` / `layer-types`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
+      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...). One-shot cleanups: remove_silence, remove_filler_words, extract_audio (see `schema timeline` for shapes). Build items from the `example` skeletons in `schema timeline` / `schema layer`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
     )
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')

@@ -19,7 +19,6 @@ test('every top-level command group is registered', () => {
     'config',
     'account',
     'model',
-    'platform',
     'generate',
     'upscale',
     'transcribe',
@@ -187,9 +186,12 @@ test('media and brand-kit list expose the favorite/archived filters', () => {
   assert.ok(kitFlags.includes('--favorite') && kitFlags.includes('--archived'))
 })
 
-test('model and platform expose list + get', () => {
+test('model exposes list + get; platforms are read through schema', () => {
   assert.deepEqual(subcommands('model').sort(), ['get', 'list'])
-  assert.deepEqual(subcommands('platform').sort(), ['get', 'list'])
+  // One reference command replaced the platform group and three project commands (agreed 2026-09-28).
+  const names = buildProgram().commands.map((c) => c.name())
+  assert.ok(!names.includes('platform'))
+  for (const gone of ['export-formats', 'layer-types', 'timeline-types']) assert.ok(!subcommands('project').includes(gone))
 })
 
 test('content and tracked-account each expose list + get', () => {
@@ -215,7 +217,7 @@ test('schema dumps a scoped command with its options, needing no key', async () 
     return true
   }
   try {
-    await program.parseAsync(['node', 'contenthero', 'schema', 'generate', 'image'])
+    await program.parseAsync(['node', 'contenthero', 'schema', 'commands', 'generate', 'image'])
   } finally {
     ;(process.stdout as { write: unknown }).write = orig
   }

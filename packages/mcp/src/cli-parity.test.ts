@@ -72,8 +72,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   delete_folder: ['folder delete'],
   list_models: ['model list'],
   get_model: ['model get'],
-  list_platforms: ['platform list'],
-  get_platform: ['platform get'],
+  get_schema: ['schema'],
   list_elements: ['element list'],
   get_element: ['element get'],
   create_element: ['element create'],
@@ -113,11 +112,8 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   import_project: ['project import'],
   export_project: ['project export'],
   get_export: ['project export-status'],
-  get_export_formats: ['project export-formats'],
   delete_project: ['project delete'],
   get_transcript: ['project transcript'],
-  get_layer_types: ['project layer-types'],
-  get_timeline_types: ['project timeline-types'],
   update_timeline: ['project apply'],
   update_canvas: ['project apply'],
   get_context: ['context', 'preview'],
@@ -139,7 +135,6 @@ const CLI_ONLY: Record<string, string> = {
   'config list': 'local CLI configuration file',
   'config set': 'local CLI configuration file',
   'config path': 'local CLI configuration file',
-  schema: "introspects the CLI's own commands for agents; MCP hosts get tool schemas from the protocol",
 }
 
 /**

@@ -1630,7 +1630,7 @@ export function platformListResult(platforms: PlatformSummary[]): CallToolResult
   })
   return text(
     [
-      `${platforms.length} publish platform(s). Call get_platform(platform[, format]) for the exact fields, options, and limits a post requires:`,
+      `${platforms.length} publish platform(s). Call get_schema (kind 'platform', with the platform and optionally a format) for the exact fields, options, and limits a post requires:`,
       ...rows,
     ].join('\n'),
   )

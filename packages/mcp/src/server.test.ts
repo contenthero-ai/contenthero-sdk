@@ -1463,17 +1463,17 @@ test('get_model passes the id through and renders the full request shape', async
   assert.match(res.content[0].text, /@Image\{n\} \(up to 9\)/)
 })
 
-test('list_platforms surfaces platforms, formats, and the connected flag', async () => {
+test("get_schema kind 'platform' with no platform lists the platforms, formats, and the connected flag", async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_platforms', arguments: {} })
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'platform' } })
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /instagram \(Instagram\) \[connected\]/)
   assert.match(res.content[0].text, /youtube \(YouTube\)/)
-  // Points the agent to get_platform for the full shape.
-  assert.match(res.content[0].text, /get_platform/)
+  // Points the agent to the one-platform read for the full shape.
+  assert.match(res.content[0].text, /get_schema \(kind 'platform', with the platform/)
 })
 
-test('get_platform passes platform + format through and renders the field shape', async () => {
+test("get_schema kind 'platform' passes platform + format through and renders the field shape", async () => {
   let captured: { platform?: string; format?: string } = {}
   const mcp = await connect(
     fakeClient({
@@ -1494,8 +1494,8 @@ test('get_platform passes platform + format through and renders the field shape'
     }),
   )
   const res = await mcp.callTool({
-    name: 'get_platform',
-    arguments: { platform: 'instagram', format: 'post' },
+    name: 'get_schema',
+    arguments: { kind: 'platform', platform: 'instagram', format: 'post' },
   })
   assert.ok(!res.isError)
   assert.equal(captured.platform, 'instagram')
@@ -2601,17 +2601,17 @@ test('get_context mode=video returns the renderId handle; get_preview returns th
   assert.match((poll.content[0]).text, /https:\/\/x\/preview\.mp4/)
 })
 
-test('get_layer_types lists canvas layer types + props', async () => {
+test("get_schema kind 'layer' lists canvas layer types + props", async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_layer_types', arguments: {} })
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer' } })
   const body = (res.content[0]).text
   assert.match(body, /Canvas layer types/)
   assert.match(body, /text/)
 })
 
-test('get_timeline_types lists clip + track types', async () => {
+test("get_schema kind 'timeline' lists clip + track types", async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_timeline_types', arguments: {} })
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline' } })
   const body = (res.content[0]).text
   assert.match(body, /Track types/)
   assert.match(body, /media/)
@@ -2659,12 +2659,22 @@ test('get_export polls an export job', async () => {
   assert.match((res.content[0]).text, /exp1/)
 })
 
-test('get_export_formats lists formats per project type', async () => {
+test("get_schema kind 'export' lists formats per project type", async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_export_formats', arguments: {} })
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'export' } })
   const body = (res.content[0]).text
   assert.match(body, /mp4/)
   assert.match(body, /pptx/)
+})
+
+test('get_schema refuses an input its kind does not take, instead of ignoring it', async () => {
+  const mcp = await connect(fakeClient())
+  const wrongKind = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', platform: 'instagram' } })
+  assert.ok(wrongKind.isError)
+  assert.match(wrongKind.content[0].text, /kind 'layer' takes no platform or format/)
+  const formatAlone = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'platform', format: 'reel' } })
+  assert.ok(formatAlone.isError)
+  assert.match(formatAlone.content[0].text, /format narrows one platform/)
 })
 
 test('delete_project requires confirm:true and reports the permanent delete', async () => {

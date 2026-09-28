@@ -2162,7 +2162,7 @@ export interface PlatformFormatInfo {
 }
 
 /**
- * A publish target in the catalog (the list_platforms item): the platform, its
+ * A publish target in the catalog (an item of get_schema kind 'platform'): the platform, its
  * formats, and whether the caller has an active connected account for it. Call
  * getPlatform for the full per-format request shape.
  */

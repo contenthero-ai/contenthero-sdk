@@ -35,7 +35,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
       'generate_image', 'generate_video', 'generate_audio', 'generate_board',
       'generate_lip_sync', 'upscale', 'edit_audio', 'transcribe',
       'get_generation_status', 'get_preview',
-      'list_models', 'get_model', 'get_layer_types', 'get_timeline_types',
+      'list_models', 'get_model',
     ],
   },
   {
@@ -90,7 +90,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb: 'Projects, their timelines and canvases, the elements on them, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'delete_project',
-      'import_project', 'export_project', 'get_export', 'get_export_formats',
+      'import_project', 'export_project', 'get_export',
       'update_timeline', 'update_canvas', 'get_transcript',
       'list_elements', 'get_element', 'create_element', 'update_element', 'delete_element',
     ],
@@ -112,7 +112,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     title: 'Account',
     blurb:
       'Your balance and tier, the platforms available to publish to, and what the user is looking at.',
-    tools: ['get_balance', 'get_context', 'list_platforms', 'get_platform'],
+    tools: ['get_balance', 'get_context', 'get_schema'],
   },
 ]
 
