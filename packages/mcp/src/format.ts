@@ -160,6 +160,14 @@ export function idOf(item: { id: string | null; appUrl?: string | null }, label 
   return item.appUrl ? `${label} ${item.id}, appUrl ${item.appUrl}` : `${label} ${item.id}`
 }
 
+/**
+ * An item page's tabs, for a DETAIL view: the agent links a tab as `{appUrl}/{tab}` and the first is the bare appUrl.
+ * Lists leave it out, where it would repeat on every row.
+ */
+function tabsOf(item: { appTabs?: readonly string[] }): string {
+  return item.appTabs?.length ? `, tabs ${item.appTabs.join('|')}` : ''
+}
+
 /** The same appUrl, after a url a line already shows. */
 function linkAfter(appUrl: string | null | undefined): string {
   return appUrl ? ` (appUrl ${appUrl})` : ''
@@ -887,7 +895,7 @@ function accountForModel(a: BrandKitAccount): Omit<BrandKitAccount, 'avatarUrl' 
 }
 
 export function brandKitResult(kit: BrandKit, started?: BrandImportOutcome): CallToolResult {
-  const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (${idOf(kit)}):`
+  const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (${idOf(kit)}${tabsOf(kit)}):`
   // Stated in words, not just left in the JSON, because the caller has to know the kit it just got back is
   // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes the import failed.
   const note = started ? importNote(started) : null
@@ -1742,7 +1750,7 @@ export function postSummaryResult(p: CardSummary, prefix = 'Post'): CallToolResu
 export function cardResult(p: CardDetail): CallToolResult {
   return text(
     lines([
-      `${p.title || '(untitled)'} (${idOf(p)}) | platform: ${p.platform ?? 'general'}`,
+      `${p.title || '(untitled)'} (${idOf(p)}${tabsOf(p)}) | platform: ${p.platform ?? 'general'}`,
       p.stageId ? `stage: ${p.stageId}` : null,
       // Stated only when archived, and it says WHEN, because "archived" with no date is half a fact.
       p.archivedAt ? `archived: ${p.archivedAt}` : null,
