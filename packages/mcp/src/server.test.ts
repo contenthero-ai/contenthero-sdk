@@ -1405,6 +1405,31 @@ test('get_media returns an image block per video keyframe when a window is reque
   assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB'])
 })
 
+test('get_media keyframes spend the one result budget: in order, and the ones that do not fit are counted', async () => {
+  // Three frames of 400,000 base64 characters against a ~900,000 allowance: two fit, the third cannot.
+  const frame = (c) => ({ atSec: 0, dataUrl: `data:image/jpeg;base64,${c.repeat(400_000)}` })
+  const mcp = await connect(
+    fakeClient({
+      getMediaBatch: async (items) => ({
+        items: [
+          {
+            ok: true, input: items[0], url: 'https://cdn/clip.mp4', imageUrl: null, type: 'video', model: null, prompt: null,
+            mediaId: 'vid-1', variation: 1, otherVariations: [], keyframes: [frame('A'), frame('B'), frame('C')],
+          },
+        ],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 3 }] } })
+  const images = res.content.filter((c) => c.type === 'image')
+  assert.equal(images.length, 2)
+  assert.deepEqual(images.map((i) => i.data[0]), ['A', 'B'])
+  const total = res.content.reduce((n, c) => n + (c.type === 'image' ? c.data.length : 0), 0)
+  assert.ok(total <= 900_000, `inline bytes ${total} exceed the allowance`)
+  assert.match(res.content[0].text, /1 keyframe\(s\) not attached \(over this result's size limit\): ask for fewer frames or a narrower fromSec\/toSec/)
+  assert.ok(res.content.some((c) => c.type === 'text' && /2 of 3 keyframe\(s\) for item \[1\]/.test(c.text)))
+})
+
 test('list_models surfaces ids, content type, and a capability summary', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_models', arguments: {} })

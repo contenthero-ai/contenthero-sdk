@@ -1255,10 +1255,33 @@ export interface InlinedImageSlot {
 export function mediaBatchResult(
   result: MediaBatchResult,
   images: InlinedImageSlot[],
+  /**
+   * What is left of the result's inline allowance after `images`. Keyframes arrive already encoded, so they were
+   * added with no size check at all: 24 frames at 640px is about 2 MB against a 1 MB ceiling for the whole result.
+   * They now spend the same budget, in order, and the ones that do not fit are counted rather than dropped silently.
+   */
+  keyframeBudget: number,
 ): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
-  const keyframeCount = items.reduce((n, it) => n + (it.keyframes?.length ?? 0), 0)
+  let remaining = keyframeBudget
+  let keyframesDropped = 0
+  const admitted = items.map((it) => {
+    const out: Array<{ data: string; mimeType: string }> = []
+    for (const kf of it.keyframes ?? []) {
+      const parsed = parseDataUrl(kf.dataUrl)
+      if (!parsed) continue
+      // In order, and contiguous: once one does not fit, the rest are reported, never a scattered subset.
+      if (keyframesDropped > 0 || parsed.data.length > remaining) {
+        keyframesDropped++
+        continue
+      }
+      remaining -= parsed.data.length
+      out.push(parsed)
+    }
+    return out
+  })
+  const keyframeCount = admitted.reduce((n, a) => n + a.length, 0)
   const shownImages = images.filter((s) => s?.image).length + keyframeCount
   /**
    * ⚠️ REPORTED ONCE PER DISTINCT CAUSE, not once per item. Eight items failing the same way is one fact,
@@ -1275,9 +1298,12 @@ export function mediaBatchResult(
     (keyframeCount > 0 ? ` (incl. ${keyframeCount} video keyframe(s))` : '') +
     (reasons.length > 0 ? `; not attached: ${reasons.join('; ')}` : '') +
     (crowdedOut ? '. Ask for fewer items per call to see the rest' : '') +
+    (keyframesDropped > 0
+      ? `; ${keyframesDropped} keyframe(s) not attached (over this result's size limit): ask for fewer frames or a narrower fromSec/toSec`
+      : '') +
     `.\n\n` +
     items
-      .map((it, i) => batchItemLine(it, i, Boolean(images[i]?.image) || (it.keyframes?.length ?? 0) > 0))
+      .map((it, i) => batchItemLine(it, i, Boolean(images[i]?.image) || (admitted[i]?.length ?? 0) > 0))
       .join('\n')
   const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
   items.forEach((it, i) => {
@@ -1286,13 +1312,12 @@ export function mediaBatchResult(
       content.push({ type: 'text', text: `Image for item [${i + 1}]:` })
       content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
     }
-    const keyframes = it.keyframes ?? []
+    const keyframes = admitted[i] ?? []
+    const total = it.keyframes?.length ?? 0
     if (keyframes.length > 0) {
-      content.push({ type: 'text', text: `${keyframes.length} keyframe(s) for item [${i + 1}] (raw footage, in order):` })
-      for (const kf of keyframes) {
-        const parsed = parseDataUrl(kf.dataUrl)
-        if (parsed) content.push({ type: 'image', data: parsed.data, mimeType: parsed.mimeType })
-      }
+      const of = keyframes.length < total ? ` of ${total}` : ''
+      content.push({ type: 'text', text: `${keyframes.length}${of} keyframe(s) for item [${i + 1}] (raw footage, in order):` })
+      for (const kf of keyframes) content.push({ type: 'image', data: kf.data, mimeType: kf.mimeType })
     }
   })
   /**

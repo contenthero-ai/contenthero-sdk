@@ -2690,7 +2690,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
               : { url: null },
           ),
         )
-        return mediaBatchResult(result, images)
+        const spent = images.reduce((n, slot) => n + (slot.image?.data.length ?? 0), 0)
+        return mediaBatchResult(result, images, MAX_INLINE_BASE64_CHARS - spent)
       } catch (err) {
         return errorResult(err)
       }
