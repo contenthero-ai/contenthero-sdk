@@ -47,9 +47,3 @@ test('an attachment prints the app link of what it points at, so a card links it
   const out = (cardResult(linked).content[0] as { text: string }).text
   assert.match(out, /\(id att-2, appUrl https:\/\/app\.contenthero\.ai\/content\/P0stAbcD\)/)
 })
-
-test('a card detail names its page tabs, so the agent links a tab as {appUrl}/{tab}', () => {
-  const tabbed = { ...card, appUrl: 'https://app.contenthero.ai/card/CardAbcD', appTabs: ['details', 'inspiration'] } as unknown as CardDetail
-  const out = (cardResult(tabbed).content[0] as { text: string }).text
-  assert.match(out, /\(id card-1, appUrl https:\/\/app\.contenthero\.ai\/card\/CardAbcD, tabs details\|inspiration\)/)
-})

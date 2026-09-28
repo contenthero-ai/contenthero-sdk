@@ -58,7 +58,7 @@ export interface Element {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
   /** 'auto' | 'character' | 'location' | 'prop'. */
@@ -508,7 +508,7 @@ export interface AvatarSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
   /** The avatar's base image (profile photo); the default look for lip-sync. */
@@ -634,7 +634,7 @@ export interface AddAvatarLooksResult {
 /** A voice as returned by `listVoices` (the list projection). */
 export interface VoiceSummary {
   voiceId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string | null
   provider: string | null
@@ -664,10 +664,8 @@ export interface BrandKitSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
-  /** The page's tabs: link one as `{appUrl}/{tab}`; the first is the default, which is the bare `appUrl`. Absent on an older server. */
-  appTabs?: string[]
   name: string
   isDefault: boolean
   isActive: boolean
@@ -805,7 +803,7 @@ export interface BrandKnowledgeItem {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   title: string | null
   sourceType: string | null
@@ -1030,7 +1028,7 @@ export interface MediaSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   type: MediaType
   model: string | null
@@ -1275,7 +1273,7 @@ export interface Folder {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
   type: FolderType
@@ -1521,7 +1519,7 @@ export interface Space {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   accountId: string
   name: string
@@ -1544,7 +1542,7 @@ export interface Stage {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
   slug: string | null
@@ -1569,10 +1567,8 @@ export interface CardSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
-  /** The page's tabs: link one as `{appUrl}/{tab}`; the first is the default, which is the bare `appUrl`. Absent on an older server. */
-  appTabs?: string[]
   title: string
   platform: string | null
   stageId: string | null
@@ -1699,7 +1695,7 @@ export interface Tag {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   name: string
   isDefault: boolean
@@ -1940,7 +1936,7 @@ export interface TrackedAccount {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   platform: string | null
   /** Platform-level account id (the shared key into tracked content). */
@@ -1959,7 +1955,7 @@ export interface ContentSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   platform: string | null
   contentType: string | null
@@ -2138,7 +2134,7 @@ export interface ConnectedAccount {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   platform: string | null
   accountId: string | null
@@ -2319,7 +2315,7 @@ export interface ProjectSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Use it as given; extend it only by the published grammar. */
+  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
   appUrl: string
   /** 'editor' or 'canvas'. */
   type: string
