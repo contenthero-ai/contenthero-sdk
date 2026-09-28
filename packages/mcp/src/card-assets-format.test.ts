@@ -36,3 +36,14 @@ test('a media asset still prints its name and url', () => {
 test('an inspiration post still prints the id get_content takes', () => {
   assert.match(text(), /content content-1 \(pass to get_content\)/)
 })
+
+test('an attachment prints the app link of what it points at, so a card links its references directly', () => {
+  const linked = {
+    ...card,
+    assets: [
+      { id: 'att-2', assetType: 'inspiration', contentId: 'content-1', projectId: null, assetId: 'content-1', assetUrl: 'https://instagram.com/p/x', appUrl: 'https://app.contenthero.ai/content/P0stAbcD', displayName: 'Reel', sortOrder: 0, inspiration: null },
+    ],
+  } as unknown as CardDetail
+  const out = (cardResult(linked).content[0] as { text: string }).text
+  assert.match(out, /\(id att-2, appUrl https:\/\/app\.contenthero\.ai\/content\/P0stAbcD\)/)
+})

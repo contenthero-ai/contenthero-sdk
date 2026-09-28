@@ -1607,6 +1607,11 @@ export interface CardAsset {
    */
   assetId: string | null
   assetUrl: string | null
+  /**
+   * Where the attached thing opens in the app: an inspiration post's page, a project's editor or canvas, a file's media
+   * page. Link a reference by this. Null for an outside link, and on an older server.
+   */
+  appUrl?: string | null
   displayName: string | null
   sortOrder: number
   /**
