@@ -2052,7 +2052,7 @@ export interface ContentDetail extends ContentSummary {
 /**
  * Whether a post's scenes (its scene map and a frame per scene) exist. `complete` when stored, `running` while
  * being prepared, `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
- * them (`reason` says why: no video, or long-form YouTube for now), `absent` when none was asked for.
+ * them (`reason` says why: no video, or longer than the 4-hour limit), `absent` when none was asked for.
  */
 export type ContentScenes =
   | { status: 'complete'; sceneCount: number; detail?: ContentScenesDetail }
