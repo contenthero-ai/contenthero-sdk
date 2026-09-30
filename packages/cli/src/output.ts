@@ -58,7 +58,7 @@ export function linkRow(item: { appUrl?: string | null }): Array<[string, string
   return item.appUrl ? [['App URL', item.appUrl]] : []
 }
 
-/** The cost row for a paid result, labelled by the SDK's one wording ("Cost" or "Estimated cost"); none without a receipt. */
+/** The cost row for a paid result, labeled by the SDK's one wording ("Cost" or "Estimated cost"); none without a receipt. */
 export function costRows(charge: Charge | null | undefined): Array<[string, string]> {
   const cost = describeCharge(charge)
   return cost ? [[cost.label, cost.text]] : []

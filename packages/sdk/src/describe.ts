@@ -9,7 +9,7 @@ import type { LimitError } from './errors.js'
 const credits = (n: number) => `${n.toLocaleString('en-US')} credit${n === 1 ? '' : 's'}`
 
 /**
- * What a paid call cost, labelled (approved 2026-09-30): the cost once charged, or the estimate while the work runs
+ * What a paid call cost, labeled (approved 2026-09-30): the cost once charged, or the estimate while the work runs
  * (nothing is charged until it finishes, and only for what succeeds). Null when there is no receipt (an older server,
  * or a call that is not charged).
  *
