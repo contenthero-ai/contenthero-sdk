@@ -2110,11 +2110,11 @@ export interface ContentScenesDetail {
   /** False when the post has no timed transcript, so every scene's `said` is null ("unknown", not "silent"). */
   timedTranscript: boolean
   /**
-   * How finely `said` is placed: `phrase` means each transcript phrase (a few seconds each) is said in the one scene
-   * holding its midpoint, so a scene shorter than a phrase can read as having nothing said. Null without a timed
-   * transcript.
+   * How finely `said` is placed: `word` places each word in the scene it was said in; `phrase` places each caption
+   * phrase (a few seconds each) in the one scene holding its midpoint, so a scene shorter than a phrase can read as
+   * having nothing said. Null without a timed transcript.
    */
-  saidTiming: 'phrase' | null
+  saidTiming: 'word' | 'phrase' | null
   /** True when `startMs`/`endMs` narrowed the list; `sceneCount` is always the whole post's. */
   windowed: boolean
   scenes: ContentScene[]
@@ -2126,7 +2126,7 @@ export interface ContentScene {
   startMs: number
   endMs: number
   description: string
-  /** The transcript phrases said in this scene, joined; null without a timed transcript (see `saidTiming`). */
+  /** What is said in this scene, joined; null without a timed transcript (see `saidTiming`). */
   said: string | null
   frameUrl?: string
 }
