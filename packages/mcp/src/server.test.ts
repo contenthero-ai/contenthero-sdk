@@ -25,7 +25,15 @@ function cap(modelId, contentType, kind, outputType) {
 /** A minimal fake of the SDK client; override any method per test. */
 function fakeClient(overrides = {}) {
   return {
-    getBalance: async () => ({ balance: 1234, tier: 'legend', autoTopupEnabled: true }),
+    getBalance: async () => ({
+      balance: 1234,
+      available: 1200,
+      held: 34,
+      spentThisMonth: 300,
+      spendCap: { limit: 5000, remaining: 4700, resetsAt: '2026-11-01T00:00:00Z' },
+      tier: 'legend',
+      autoTopupEnabled: true,
+    }),
     transcribe: async () => ({
       outputId: 'tr1',
       transcript: 'hello there',
@@ -557,7 +565,7 @@ test('no tool that spends credits is advertised as read-only', async () => {
  *
  * - transcribe: POST /api/v1/studio/transcribe accepts no getCost flag, and pricing it
  *   means reading the audio's duration before transcribing. The cost is knowable only
- *   afterwards, from creditsUsed on the result.
+ *   afterwards, from `charge` on the result.
  */
 const METERED_WITHOUT_PREFLIGHT = new Set(['transcribe'])
 
@@ -613,9 +621,15 @@ test('get_balance formats balance, tier, and top-up state', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_balance', arguments: {} })
   const out = res.content[0].text
-  assert.match(out, /1234 credits/)
-  assert.match(out, /legend/)
-  assert.match(out, /auto top-up: on/)
+  assert.equal(
+    out,
+    [
+      'Balance: 1234 credits, 1200 available (34 held for work still running).',
+      'Spent this month: 300 credits.',
+      'Monthly spend cap: 5000 credits, 4700 left this month (resets 2026-11-01).',
+      'Tier: legend. Auto top-up: on.',
+    ].join('\n'),
+  )
 })
 
 test('generate_image submits and hands back a pollable id, rather than waiting', async () => {
@@ -845,11 +859,18 @@ test('generate_audio returns the audio URL synchronously', async () => {
   assert.match(urlsIn(res), /https:\/\/cdn\/a\.mp3/)
 })
 
-test('insufficient credits comes back as an isError result with detail', async () => {
+test('a limit refusal comes back as an isError result: the message as written, then the ranked ways out', async () => {
   const mcp = await connect(
     fakeClient({
       generate: async () => {
-        throw new InsufficientCreditsError('Insufficient credits', { balance: 2, required: 10 })
+        throw new InsufficientCreditsError("You don't have enough credits for this one. It needs 10 credits, and you have 2 available.", {
+          needed: 10,
+          available: 2,
+          actions: [
+            { id: 'auto_top_up', label: 'Turn on auto top-up', url: 'https://app.contenthero.ai/billing#auto-topup' },
+            { id: 'top_up', label: 'Top up credits', url: 'https://app.contenthero.ai/billing?open=top-up' },
+          ],
+        })
       },
     }),
   )
@@ -858,8 +879,15 @@ test('insufficient credits comes back as an isError result with detail', async (
     arguments: { modelId: 'nano-banana-2', prompt: 'x' },
   })
   assert.equal(res.isError, true)
-  assert.match(res.content[0].text, /need 10/)
-  assert.match(res.content[0].text, /have 2/)
+  assert.equal(
+    res.content[0].text,
+    [
+      "You don't have enough credits for this one. It needs 10 credits, and you have 2 available.",
+      'Ways to continue:',
+      '- Turn on auto top-up: https://app.contenthero.ai/billing#auto-topup',
+      '- Top up credits: https://app.contenthero.ai/billing?open=top-up',
+    ].join('\n'),
+  )
 })
 
 test('rejects an unknown model at the schema boundary', async () => {
@@ -2215,10 +2243,18 @@ test('analyze_content prices first, waits for a running analysis, and returns it
   const mcp = await connect(
     fakeClient({
       estimateAnalysisCost: async () => ({ getCost: true, creditsEstimate: 10 }),
-      analyzeContent: async (id) => ({ contentId: id, analysis: { status: 'running' } }),
+      // Running when asked; once the post reads finished, asked again: the analysis with its final charge.
+      analyzeContent: async (id) =>
+        reads === 0
+          ? { contentId: id, analysis: { status: 'running' }, charge: { credits: 0, held: 10, state: 'pending', balanceAfter: null } }
+          : {
+              contentId: id,
+              analysis: { status: 'complete', sections: ['hook'], data: { hook: { text: 'wait for it' } } },
+              charge: { credits: 10, held: 0, state: 'charged', balanceAfter: 90 },
+            },
       getContent: async () => {
         reads++
-        return { analysis: { status: 'complete', sections: ['hook'], data: { hook: { text: 'wait for it' } } } }
+        return { analysis: { status: 'complete' } }
       },
     }),
   )
@@ -2229,14 +2265,21 @@ test('analyze_content prices first, waits for a running analysis, and returns it
   assert.equal(reads, 1)
   assert.match(res.content[0].text, /analysis: complete/)
   assert.match(res.content[0].text, /wait for it/)
+  // The charge is the finished one, not the hold the first answer carried (it used to be dropped entirely).
+  assert.match(res.content[0].text, /Cost: 10 credits charged\. Balance after: 90 credits\./)
 })
 
 test('analyze_content kind scenes prices by kind, waits on the scene availability, and says how to read them', async () => {
-  const seen = { estimate: null, analyze: null }
+  const seen = { estimate: null, analyze: null, asked: 0 }
   const mcp = await connect(
     fakeClient({
       estimateAnalysisCost: async (_id, opts) => ((seen.estimate = opts), { getCost: true, creditsEstimate: 5 }),
-      analyzeContent: async (id, opts) => ((seen.analyze = opts), { contentId: id, kind: 'scenes', scenes: { status: 'running' } }),
+      analyzeContent: async (id, opts) => (
+        (seen.analyze = opts),
+        seen.asked++
+          ? { contentId: id, kind: 'scenes', scenes: { status: 'complete', sceneCount: 7 } }
+          : { contentId: id, kind: 'scenes', scenes: { status: 'running' } }
+      ),
       getContent: async () => ({ analysis: { status: 'absent' }, scenes: { status: 'complete', sceneCount: 7 } }),
     }),
   )
@@ -2598,7 +2641,10 @@ test('add_brand_knowledge ingests a text note', async () => {
     fakeClient({
       addBrandKnowledge: async (id, input) => {
         captured = { id, input }
-        return { id: 'kn-new', title: input.title ?? 'Note', sourceType: input.sourceType, sourceUrl: null, createdAt: 't', updatedAt: 't' }
+        return {
+          item: { id: 'kn-new', title: input.title ?? 'Note', sourceType: input.sourceType, sourceUrl: null, createdAt: 't', updatedAt: 't' },
+          charge: { credits: 0, held: 0, state: 'free', balanceAfter: null },
+        }
       },
     }),
   )
@@ -2609,6 +2655,7 @@ test('add_brand_knowledge ingests a text note', async () => {
   assert.equal(captured.input.sourceType, 'text')
   assert.equal(captured.input.text, 'Always credit the customer.')
   assert.match(res.content[0].text, /Added knowledge item: "Tone rule" \[text\] \(id kn-new\)/)
+  assert.match(res.content[0].text, /\nCost: Nothing was charged\.$/)
 })
 
 test('remove_brand_knowledge removes by id', async () => {
@@ -3532,4 +3579,58 @@ test("get_schema kind 'link' prints the grammar, the origin and each noun with i
   assert.match(body, /items: social\/\{item\} = brand\|inspiration/)
   assert.match(body, /params: \?sort=title\|created_at \(sorts the board\), \?tags=\{tag ids, comma-separated\} \(filters\)/)
   assert.match(body, /- \/studio: the Studio; tabs: gallery\|creations \(bare path shows the last-used tab, so spell the tab\)/)
+})
+
+/**
+ * Every tool that spends reports what it cost (the receipt, `charge`), in the same line: an unattended agent logs and
+ * caps its spending from it. The lesson 2.5 run found `analyze_content` returned no charge at all, and the cause was
+ * a class (each route improvised), so this covers the class. A new tool that declares a spend fails until it is here.
+ */
+const CHARGE = { credits: 7, held: 0, state: 'charged', balanceAfter: 93 }
+const SPENDING_CALLS = {
+  generate_image: { modelId: 'nano-banana-2', prompt: 'a cat' },
+  generate_board: { boardType: 'character', prompt: 'a stoic ranger' },
+  generate_video: { modelId: 'veo-3.1-fast', prompt: 'a city at dusk' },
+  generate_audio: { modelId: 'elevenlabs-tts', text: 'hello', voiceId: 'v1' },
+  edit_audio: { modelId: 'elevenlabs-voice-isolator', sourceUrl: 'https://cdn/in.mp3' },
+  upscale: { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' },
+  generate_lip_sync: { modelId: 'infinitalk', imageUrl: 'https://cdn/face.png', script: 'hi', voiceId: 'v1' },
+  transcribe: { audioUrl: 'https://cdn/clip.mp3' },
+  create_avatar: { name: 'Mika', age: '20s', gender: 'female' },
+  analyze_content: { contentId: 'c1' },
+}
+
+test('every tool that spends reports its cost the same way', async () => {
+  const done = { outputId: 'o1', appUrl: 'https://app/o1', status: 'completed', contentType: 'image', modelId: 'm', outputUrls: ['https://cdn/o1.png'], error: null, createdAt: 't', completedAt: 't', charge: CHARGE }
+  const mcp = await connect(
+    fakeClient({
+      generate: async (req) =>
+        req.modelId === 'elevenlabs-tts'
+          ? { outputId: 'a1', appUrl: 'https://app/a1', status: 'completed', outputUrls: ['https://cdn/a1.mp3'], charge: CHARGE }
+          : { outputId: 'o1', appUrl: 'https://app/o1', status: 'processing', charge: CHARGE },
+      generateBoardAndWait: async () => done,
+      editAudio: async () => ({ outputId: 'e1', appUrl: 'https://app/e1', status: 'completed', outputUrls: ['https://cdn/e1.mp3'], charge: CHARGE }),
+      transcribe: async () => ({ outputId: 'tr1', transcript: 'hi', language: 'en', wordCount: 1, durationSeconds: 1, charge: CHARGE }),
+      createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
+      analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  const spending = tools.filter((t) => SPEND_MARKER.test(t.description ?? '')).map((t) => t.name).sort()
+  assert.deepEqual(spending, Object.keys(SPENDING_CALLS).sort(), 'a tool that spends must be covered here')
+
+  for (const [name, args] of Object.entries(SPENDING_CALLS)) {
+    const res = await mcp.callTool({ name, arguments: args })
+    const textOut = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')
+    assert.ok(!res.isError, `${name}: ${textOut}`)
+    assert.match(textOut, /Cost: 7 credits charged\. Balance after: 93 credits\./, `${name} does not report its cost`)
+  }
+})
+
+test('the cost line says held while running and nothing when free', async () => {
+  const { chargeLine } = await import('./format.js')
+  assert.equal(chargeLine({ credits: 0, held: 120, state: 'pending', balanceAfter: null }), 'Cost: 120 credits held while it runs, charged for what finishes.')
+  assert.equal(chargeLine({ credits: 0, held: 0, state: 'free', balanceAfter: null }), 'Cost: Nothing was charged.')
+  assert.equal(chargeLine({ credits: 1, held: 0, state: 'charged', balanceAfter: null }), 'Cost: 1 credit charged.')
+  assert.equal(chargeLine(undefined), null)
 })

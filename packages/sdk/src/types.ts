@@ -215,6 +215,22 @@ export interface GenerateBoardRequest {
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'abandoned'
 
 /**
+ * What a paid call cost: the receipt on every paid response and status read (one shape everywhere).
+ *
+ * - `charged`: `credits` is what was charged, in total (the sum of this item's ledger rows, refunds included).
+ * - `pending`: still running; `held` is what is set aside for it, charged when it finishes (per output landed).
+ * - `free`: nothing was charged (it already existed, or cost nothing).
+ *
+ * `balanceAfter` is the account balance right after the last charge for this item, when there was one.
+ */
+export interface Charge {
+  credits: number
+  held: number
+  state: 'charged' | 'pending' | 'free'
+  balanceAfter: number | null
+}
+
+/**
  * Result of submitting a generation. Image/video return `status: 'processing'`
  * (poll with `getGeneration`, or use `generateAndWait`). Audio is synchronous
  * and returns `status: 'completed'` with `outputUrls` already populated.
@@ -226,8 +242,8 @@ export interface GenerateResult {
   /** One link per landed output, index-aligned with `outputUrls`. Present once outputs exist. */
   appUrls?: string[]
   status: 'processing' | 'completed'
-  /** Estimated credit cost computed server-side. */
-  creditsEstimate?: number
+  /** What it cost: held while it runs, charged per output when it finishes. */
+  charge?: Charge
   /** Present when the result is already complete (audio). */
   outputUrls?: string[]
   /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
@@ -354,7 +370,8 @@ export interface EditAudioRequest {
 /** One in-place enhancement job: the clips of a single source, concatenated and enhanced together. */
 export interface EnhanceClipsJob {
   outputId: string
-  creditsEstimate?: number
+  /** What this job cost (held while it runs). */
+  charge?: Charge
   /** Every clip this job's pieces will be applied to. */
   clipIds: string[]
   /** How many distinct windows were concatenated into this job. */
@@ -428,6 +445,8 @@ export interface Generation {
   partialUrls?: (string | null)[]
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
+  /** What it cost: held while it runs, charged per output that landed. Absent on an older server. */
+  charge?: Charge
   /** Present when an import ended `abandoned` because the account already held these exact bytes: where they are. */
   alreadyExisted?: ImportDuplicate
   createdAt: string
@@ -471,6 +490,14 @@ export type SubscriptionTier = 'mortal' | 'hero' | 'champion' | 'legend'
 /** Account credit standing as returned by `getBalance`. */
 export interface Balance {
   balance: number
+  /** What can be spent now: the balance less `held`. */
+  available: number
+  /** Credits set aside for work still running (charged when it finishes, returned if it fails). */
+  held: number
+  /** Credits charged this calendar month (UTC). */
+  spentThisMonth: number
+  /** The account's monthly spend cap, or null when none is set (no cap). */
+  spendCap: { limit: number; remaining: number; resetsAt: string } | null
   tier: SubscriptionTier
   autoTopupEnabled: boolean
 }
@@ -504,10 +531,10 @@ export interface Transcription {
   /** Source audio length in seconds, when known. */
   durationSeconds: number | null
   /**
-   * ContentHero credits charged for the run. Zero only when the user's own ElevenLabs
-   * key covered it, in which case the provider billed them directly.
+   * What the run cost. `free` only when the user's own ElevenLabs key covered it, in which case the provider
+   * billed them directly.
    */
-  creditsUsed: number
+  charge?: Charge
 }
 
 /** An avatar as returned by `listAvatars` (the list projection). */
@@ -587,6 +614,8 @@ export interface CreateAvatarResult {
   avatar: Avatar
   status: string
   message: string
+  /** What it cost: the first look, held now and charged when it finishes. */
+  charge?: Charge
 }
 
 /** Fields `updateAvatar` can change. Omitted fields are left alone. */
@@ -817,6 +846,12 @@ export interface BrandKnowledgeItem {
   sourceUrl: string | null
   createdAt: string | null
   updatedAt: string | null
+}
+
+/** Result of `addBrandKnowledge`: the item, and what adding it cost (images, audio and video are metered). */
+export interface AddBrandKnowledgeResult {
+  item: BrandKnowledgeItem
+  charge?: Charge
 }
 
 /** A knowledge item with its stored body (a capped anchor; use search for depth). */
@@ -1071,7 +1106,8 @@ export interface MediaItem extends MediaSummary {
   aspectRatio: string | null
   resolution: string | null
   duration: number | null
-  creditsUsed: number | null
+  /** What it cost, for a studio output; null for anything that was not charged as a generation (an upload). */
+  charge: Charge | null
   variations: MediaVariation[]
   /** Set when the requested token addressed a single variation; else null. */
   selectedVariation: number | null
@@ -2090,6 +2126,8 @@ export interface ContentScenesResult {
   contentId: string
   kind: 'scenes'
   scenes: ContentScenes
+  /** What it cost: held while the scenes are made, charged once when stored, free when they already existed. */
+  charge?: Charge
 }
 
 /**
@@ -2117,6 +2155,8 @@ export interface ContentAnalysis {
 export interface ContentAnalysisResult {
   contentId: string
   analysis: ContentAnalysis
+  /** What it cost: held while it runs, charged once when stored, free when it already existed. */
+  charge?: Charge
 }
 
 /** One tracked account with its performance. */

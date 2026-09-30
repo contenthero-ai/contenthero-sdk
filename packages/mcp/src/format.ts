@@ -31,6 +31,7 @@ import type {
   Avatar,
   AvatarSummary,
   Balance,
+  Charge,
   BrandKit,
   BrandKitAccount,
   BrandKitSummaryRead,
@@ -93,10 +94,27 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, InsufficientCreditsError, RateLimitError, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, describeCharge, describeLimit, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
+}
+
+/** What a paid call cost, in one line: "Cost: " and the SDK's one wording (`describeCharge`). */
+export function chargeLine(charge: Charge | null | undefined): string | null {
+  const sentence = describeCharge(charge)
+  return sentence ? `Cost: ${sentence}` : null
+}
+
+/** `result` with the cost line added to its text, so every paid tool reports what it cost the same way. */
+export function withCharge(result: CallToolResult, charge: Charge | null | undefined): CallToolResult {
+  const line = chargeLine(charge)
+  if (!line) return result
+  const content = [...result.content]
+  const first = content.findIndex((c) => c.type === 'text')
+  if (first === -1) content.unshift({ type: 'text', text: line })
+  else content[first] = { ...content[first], text: `${(content[first] as { text: string }).text}\n${line}` } as (typeof content)[number]
+  return { ...result, content }
 }
 
 /**
@@ -416,6 +434,8 @@ export function completedResult(
     }
     if (p.warnings?.length) lines.push(`Placement notes: ${p.warnings.join('; ')}`)
   }
+  const cost = chargeLine(gen.charge)
+  if (cost) lines.push(cost)
 
   // ⚠️ A TRAILING NEWLINE, because a host concatenates blocks without inserting one. Without it the last
   // url ran straight into the next block's rendering, producing `...MBCo_Kkcfe3bafb-...-1.png: https://...`
@@ -565,7 +585,9 @@ export function pendingResult(
 export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
   const urls = result.outputUrls ?? []
   const header = `Done. Audio generated (outputId ${result.outputId}):`
-  const prose = [header, ...urls.map((u, i) => `${i + 1}. ${u}${linkAfter(result.appUrls?.[i])}`)].join('\n')
+  const prose = [header, ...urls.map((u, i) => `${i + 1}. ${u}${linkAfter(result.appUrls?.[i])}`), chargeLine(result.charge)]
+    .filter((l): l is string => !!l)
+    .join('\n')
   if (!urls.length) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],
@@ -600,7 +622,8 @@ export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
   const lines = jobs.map(
     (j, i) =>
       `${i + 1}. outputId ${j.outputId} covers ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}` +
-      ` from one source (${j.windows} window${j.windows === 1 ? '' : 's'})`,
+      ` from one source (${j.windows} window${j.windows === 1 ? '' : 's'})` +
+      (chargeLine(j.charge) ? `. ${chargeLine(j.charge)}` : ''),
   )
   const poll = `Poll with ${getStatusCall(jobs.map((j) => j.outputId))}`
   const header =
@@ -777,9 +800,8 @@ export function generationBatchResult(
 /** A finished transcription: header line plus the transcript body. */
 export function transcriptResult(t: Transcription): CallToolResult {
   const lang = t.language ? ` (${t.language})` : ''
-  const cost = t.creditsUsed > 0 ? `, ${t.creditsUsed} credits` : ''
-  const header = `Transcript${lang}, ${t.wordCount} words${cost} (outputId ${t.outputId}):`
-  return text([header, '', t.transcript].join('\n'))
+  const header = `Transcript${lang}, ${t.wordCount} words (outputId ${t.outputId}):`
+  return withCharge(text([header, '', t.transcript].join('\n')), t.charge)
 }
 
 /** Join the non-empty lines (drops null/empty entries). */
@@ -841,6 +863,7 @@ export function avatarPendingResult(created: CreateAvatarResult): CallToolResult
       `Poll with: get_avatar { "avatarId": "${a.id}" } until status is "completed" (usually 1-4 minutes).`,
       '',
       'Credits are charged when that look completes, not now, so a failed generation is not charged.',
+      chargeLine(created.charge),
     ]),
   )
 }
@@ -1009,8 +1032,8 @@ export function brandKnowledgeRemovedResult(r: { id: string }): CallToolResult {
   return text(`Knowledge item removed (id ${r.id}).`)
 }
 
-export function brandKnowledgeItemResult(item: BrandKnowledgeItem, verb = 'Added'): CallToolResult {
-  return text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (${idOf(item)}).`)
+export function brandKnowledgeItemResult(item: BrandKnowledgeItem, verb = 'Added', charge?: Charge): CallToolResult {
+  return withCharge(text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (${idOf(item)}).`), charge)
 }
 
 /**
@@ -1115,7 +1138,8 @@ export function mediaResult(m: MediaItem): CallToolResult {
       m.prompt ? `prompt: ${m.prompt}` : null,
       m.script ? `script: ${m.script}` : null,
       specs || null,
-      `status: ${m.status}${m.creditsUsed != null ? ` | ${m.creditsUsed} credits` : ''}`,
+      `status: ${m.status}`,
+      chargeLine(m.charge),
       `variations (${m.generationSize}):`,
       ...m.variations.map(
         (v) => `  ${v.variation}. ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}${v.isArchived ? ' [archived]' : ''}`,
@@ -1523,8 +1547,16 @@ export function importPendingResult(outputId: string): CallToolResult {
 }
 
 export function balanceResult(b: Balance): CallToolResult {
+  const cap = b.spendCap
+    ? `Monthly spend cap: ${b.spendCap.limit} credits, ${b.spendCap.remaining} left this month (resets ${b.spendCap.resetsAt.slice(0, 10)}).`
+    : 'Monthly spend cap: none.'
   return text(
-    `Balance: ${b.balance} credits (tier: ${b.tier}, auto top-up: ${b.autoTopupEnabled ? 'on' : 'off'}).`,
+    lines([
+      `Balance: ${b.balance} credits, ${b.available} available (${b.held} held for work still running).`,
+      `Spent this month: ${b.spentThisMonth} credits.`,
+      cap,
+      `Tier: ${b.tier}. Auto top-up: ${b.autoTopupEnabled ? 'on' : 'off'}.`,
+    ]),
   )
 }
 
@@ -2202,7 +2234,7 @@ export function contentScenesResult(r: ContentScenesResult): CallToolResult {
       ? `${r.scenes.sceneCount} scene${r.scenes.sceneCount === 1 ? '' : 's'} ready. Read them with get_content scenes='map', or scenes='frames' to see them.`
       : `scenes: ${r.scenes.status}`
   return {
-    content: [{ type: 'text', text: lines([`Scenes for post ${r.contentId}`, body]) }],
+    content: [{ type: 'text', text: lines([`Scenes for post ${r.contentId}`, body, chargeLine(r.charge)]) }],
     structuredContent: { contentId: r.contentId, status: running ? 'pending' : r.scenes.status },
   }
 }
@@ -2215,7 +2247,7 @@ export function contentAnalysisResult(r: ContentAnalysisResult): CallToolResult 
       ? ['analysis: pending, still running (call analyze_content again for the result)']
       : analysisLines(r.analysis)
   return {
-    content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body]) }],
+    content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body, chargeLine(r.charge)]) }],
     structuredContent: { contentId: r.contentId, status: r.analysis.status === 'running' ? 'pending' : r.analysis.status },
   }
 }
@@ -2255,13 +2287,9 @@ export function connectedAccountResult(a: ConnectedAccount): CallToolResult {
 
 /** Map any thrown error onto a readable isError result. */
 export function errorResult(err: unknown): CallToolResult {
-  if (err instanceof InsufficientCreditsError) {
-    const parts: string[] = []
-    if (err.required != null) parts.push(`need ${err.required}`)
-    if (err.balance != null) parts.push(`have ${err.balance}`)
-    const detail = parts.length ? ` (${parts.join(', ')})` : ''
-    return text(`Insufficient credits${detail}. Top up to continue.`, true)
-  }
+  // A limit (credits, the spend cap, storage, a plan limit): the message is written for the person, so it is relayed
+  // as is, with the ways out in the order to offer them. Nothing ran and nothing was charged.
+  if (err instanceof LimitError) return text(describeLimit(err), true)
   if (err instanceof RateLimitError) {
     const wait = err.retryAfter != null ? ` Retry in ${err.retryAfter}s.` : ''
     return text(`Rate limit exceeded.${wait || ' Wait a moment before retrying.'}`, true)

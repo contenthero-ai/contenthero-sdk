@@ -11,7 +11,7 @@
 import { CommanderError } from 'commander'
 import pc from 'picocolors'
 import { buildProgram } from './program.js'
-import { EXIT, exitCodeForError, messageForError } from './errors.js'
+import { EXIT, errorFieldsFor, exitCodeForError, messageForError } from './errors.js'
 import { releaseCliPresence } from './context.js'
 
 /**
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
       if (process.argv.includes('--human')) {
         process.stderr.write(pc.red(`Error: ${message}`) + '\n')
       } else {
-        process.stderr.write(JSON.stringify({ error: message, exitCode: exitCode }, null, 2) + '\n')
+        process.stderr.write(JSON.stringify({ error: message, ...errorFieldsFor(err), exitCode: exitCode }, null, 2) + '\n')
       }
     }
   }

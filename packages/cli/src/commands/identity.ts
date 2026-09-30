@@ -12,6 +12,7 @@
  * use `generate image --avatar <id>`, which spends credits.
  */
 
+import { describeCharge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type { Avatar, AvatarSummary, Voice, VoiceSummary } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -116,6 +117,7 @@ export function registerIdentity(program: Command): void {
           ['Created', created.avatar.name],
           ['Id', displayId(created.avatar)], ...linkRow(created.avatar),
           ['Status', created.status],
+          ...(created.charge ? [['Cost', describeCharge(created.charge) ?? ''] as [string, string]] : []),
         ]) +
         `\n\nNot ready yet: the first look is generating. Poll with:\n  contenthero avatar get ${created.avatar.id}`,
       )

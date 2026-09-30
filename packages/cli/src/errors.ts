@@ -9,6 +9,8 @@
  *   3  authentication error (missing / invalid / unauthorized key)
  *   4  timeout: the work was accepted but did not finish in time (an outputId
  *      is still emitted, so the caller can keep polling)
+ *   5  limit: a limit refused it (credits, the monthly spend cap, storage, a plan limit); nothing ran and
+ *      nothing was charged, and the message says the ways to continue
  *
  * SDK errors are mapped here; `CliError` carries an explicit code for problems
  * the CLI itself raises (e.g. no key configured).
@@ -20,6 +22,8 @@ import {
   ValidationError,
   GenerationTimeoutError,
   GenerationInterruptedError,
+  LimitError,
+  describeLimit,
 } from '@contenthero/sdk'
 
 export const EXIT = {
@@ -28,6 +32,7 @@ export const EXIT = {
   USAGE: 2,
   AUTH: 3,
   TIMEOUT: 4,
+  LIMIT: 5,
 } as const
 
 /** An error the CLI raises itself, carrying the exit code it should produce. */
@@ -49,11 +54,18 @@ export function exitCodeForError(err: unknown): number {
   // the correct response is to poll its outputId, never to resubmit.
   if (err instanceof GenerationTimeoutError) return EXIT.TIMEOUT
   if (err instanceof GenerationInterruptedError) return EXIT.TIMEOUT
+  if (err instanceof LimitError) return EXIT.LIMIT
   return EXIT.GENERAL
 }
 
 /** A human-readable message for any thrown value. */
 export function messageForError(err: unknown): string {
+  if (err instanceof LimitError) return describeLimit(err)
   if (err instanceof Error) return err.message
   return String(err)
+}
+
+/** The fields a machine reads from an error in JSON output: a limit also names its code and ranked actions. */
+export function errorFieldsFor(err: unknown): Record<string, unknown> {
+  return err instanceof LimitError ? { code: err.code, actions: err.actions } : {}
 }

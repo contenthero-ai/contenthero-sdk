@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import { pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaSummary, type MediaType, type SearchMediaResult, type UploadedMedia } from '@contenthero/sdk'
+import { describeCharge, pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaSummary, type MediaType, type SearchMediaResult, type UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { emit, keyValues, table, linkRow, displayId } from '../output.js'
@@ -277,7 +277,7 @@ export function registerMedia(program: Command): void {
           ['Model', m.model ?? ''],
           ['Status', m.status],
           ...(m.prompt ? [['Prompt', clip(m.prompt, 80)] as [string, string]] : []),
-          ...(m.creditsUsed != null ? [['Credits used', m.creditsUsed] as [string, number]] : []),
+          ...(m.charge ? [['Cost', describeCharge(m.charge) ?? ''] as [string, string]] : []),
         ])
         const variations = table(
           ['VAR', 'STATUS', 'FAV', 'ARCH', 'SIZE', 'URL'],

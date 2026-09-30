@@ -145,6 +145,7 @@ import {
   outlierListResult,
   enhanceClipsResult,
   pendingResult,
+  withCharge,
   pollAfterSecondsFor,
   type PendingShape,
   stageListResult,
@@ -1286,10 +1287,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
          * here and is reported; only the WAITING is gone, not the reporting.
          */
         const submitted = await client.generate(request)
-        return pendingResult(
-          submitted.outputId,
-          pollAfterSecondsFor('image'),
-          pendingShapeFrom(args, 'image'),
+        return withCharge(
+          pendingResult(
+            submitted.outputId,
+            pollAfterSecondsFor('image'),
+            pendingShapeFrom(args, 'image'),
+          ),
+          submitted.charge,
         )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
@@ -1479,10 +1483,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
          * here and is reported; only the WAITING is gone, not the reporting.
          */
         const submitted = await client.generate(request)
-        return pendingResult(
-          submitted.outputId,
-          pollAfterSecondsFor('video'),
-          pendingShapeFrom(args, 'video'),
+        return withCharge(
+          pendingResult(
+            submitted.outputId,
+            pollAfterSecondsFor('video'),
+            pendingShapeFrom(args, 'video'),
+          ),
+          submitted.charge,
         )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
@@ -1599,7 +1606,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // first: polling only `outputId` would report the whole edit as done when one recording had finished.
         if (result.outputs) return enhanceClipsResult(result)
         // Enhancement is async (status 'processing'); isolation returns URLs inline.
-        if (result.status === 'processing') return pendingResult(result.outputId)
+        if (result.status === 'processing') return withCharge(pendingResult(result.outputId), result.charge)
         return audioResult(result)
       } catch (err) {
         return errorResult(err)
@@ -1659,10 +1666,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
          * here and is reported; only the WAITING is gone, not the reporting.
          */
         const submitted = await client.generate(request)
-        return pendingResult(
-          submitted.outputId,
-          pollAfterSecondsFor('image'),
-          pendingShapeFrom(args, 'image'),
+        return withCharge(
+          pendingResult(
+            submitted.outputId,
+            pollAfterSecondsFor('image'),
+            pendingShapeFrom(args, 'image'),
+          ),
+          submitted.charge,
         )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
@@ -1748,10 +1758,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
          * here and is reported; only the WAITING is gone, not the reporting.
          */
         const submitted = await client.generate(request)
-        return pendingResult(
-          submitted.outputId,
-          pollAfterSecondsFor('video'),
-          pendingShapeFrom(args, 'video'),
+        return withCharge(
+          pendingResult(
+            submitted.outputId,
+            pollAfterSecondsFor('video'),
+            pendingShapeFrom(args, 'video'),
+          ),
+          submitted.charge,
         )
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
@@ -1786,7 +1799,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // ⚠️ This tool has NO getCost, and that is a server limitation, not an oversight:
       // POST /api/v1/studio/transcribe does not accept the flag, and pricing the call
       // means knowing the audio's duration before transcribing it. Until the route can
-      // price it, the cost is only knowable after the fact, from creditsUsed on the
+      // price it, the cost is only knowable after the fact, from `charge` on the
       // result. It is the single documented entry in METERED_WITHOUT_PREFLIGHT.
       description:
         'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, no polling). SPENDS CREDITS, metered per minute of audio, and the cost cannot be previewed: the result reports the credits it cost after the fact. Zero only when the account runs on its own ElevenLabs key.',
@@ -2355,17 +2368,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return brandKnowledgeItemResult(
-          await client.addBrandKnowledge(args.brandKitId, {
-            sourceType: args.sourceType,
-            text: args.text,
-            url: args.url,
-            fileData: args.fileData,
-            fileUrl: args.fileUrl,
-            fileExt: args.fileExt,
-            title: args.title,
-          }),
-        )
+        const added = await client.addBrandKnowledge(args.brandKitId, {
+          sourceType: args.sourceType,
+          text: args.text,
+          url: args.url,
+          fileData: args.fileData,
+          fileUrl: args.fileUrl,
+          fileExt: args.fileExt,
+          title: args.title,
+        })
+        return brandKnowledgeItemResult(added.item, 'Added', added.charge)
       } catch (err) {
         return errorResult(err)
       }
@@ -3914,7 +3926,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           while (scenes.scenes.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
             await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
             const post = await client.getContent(args.contentId)
-            if (post.scenes && post.scenes.status !== 'running') scenes = { ...scenes, scenes: post.scenes }
+            // Finished: ask once more, which starts nothing for a finished post and answers with the final charge.
+            if (post.scenes && post.scenes.status !== 'running') scenes = await client.analyzeContent(args.contentId, { kind: 'scenes' })
           }
           return contentScenesResult(scenes)
         }
@@ -3924,8 +3937,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const deadline = Date.now() + jobWait.waitMs
         while (result.analysis.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
           await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
-          const post = await client.getContent(args.contentId, { analysis: 'full' })
-          if (post.analysis.status !== 'running') result = { contentId: result.contentId, analysis: post.analysis }
+          const post = await client.getContent(args.contentId)
+          // Finished: ask once more, which starts nothing for a finished post and answers with the analysis and its
+          // final charge. Taking the analysis from the post dropped the charge, so the tool this card began with
+          // still reported no cost whenever it waited.
+          if (post.analysis.status !== 'running') result = await client.analyzeContent(args.contentId)
         }
         return contentAnalysisResult(result)
       } catch (err) {

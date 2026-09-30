@@ -78,23 +78,137 @@ export class NotFoundError extends ContentHeroError {
   }
 }
 
+/** Why a request was refused for a limit (the `code` of every 402). */
+export type LimitCode = 'insufficient_credits' | 'spend_cap_reached' | 'storage_full' | 'plan_limit'
+
+/** A way out of a limit, ranked: what to show a person, and where it happens in the app. */
+export interface LimitAction {
+  id: 'upgrade' | 'auto_top_up' | 'top_up' | 'update_payment_method' | 'raise_cap' | 'manage_storage' | 'request_limit'
+  label: string
+  url: string
+}
+
 /**
- * 402: the account does not have enough credits for the requested generation.
- * Carries the current `balance` and the `required` amount when the API reports
- * them, so callers can surface a precise top-up prompt.
+ * 402: a limit refused the request, and nothing ran or was charged. `message` is written for a person (relay it as
+ * is), `actions` are the ways out in the order to offer them, and the numbers say how far off it was. Catch this for
+ * every limit, or one of its four kinds below.
  */
-export class InsufficientCreditsError extends ContentHeroError {
+export class LimitError extends ContentHeroError {
+  readonly code: LimitCode
+  readonly actions: LimitAction[]
+
+  constructor(code: LimitCode, message: string, options?: ContentHeroErrorOptions & { actions?: LimitAction[] }) {
+    super(message, options)
+    this.name = 'LimitError'
+    this.code = code
+    this.actions = options?.actions ?? []
+  }
+}
+
+interface CreditNumbers {
+  /** Credits this needed. */
+  needed?: number
+  /** What could be spent (the balance less what is held for running work). */
+  available?: number
+  balance?: number
+  held?: number
+}
+
+/** 402 `insufficient_credits`: not enough credits for this. */
+export class InsufficientCreditsError extends LimitError {
+  readonly needed?: number
+  readonly available?: number
   readonly balance?: number
-  readonly required?: number
+  readonly held?: number
+
+  constructor(message = 'Insufficient credits', options?: ContentHeroErrorOptions & { actions?: LimitAction[] } & CreditNumbers) {
+    super('insufficient_credits', message, options)
+    this.name = 'InsufficientCreditsError'
+    this.needed = options?.needed
+    this.available = options?.available
+    this.balance = options?.balance
+    this.held = options?.held
+  }
+}
+
+/** 402 `spend_cap_reached`: this would cross the account's monthly spend cap. Topping up does not pass it. */
+export class SpendCapReachedError extends LimitError {
+  readonly needed?: number
+  readonly cap?: number
+  readonly spent?: number
+  /** When the cap resets (the start of next month, UTC). */
+  readonly resetsAt?: string
 
   constructor(
-    message = 'Insufficient credits',
-    options?: ContentHeroErrorOptions & { balance?: number; required?: number },
+    message = 'Monthly spend cap reached',
+    options?: ContentHeroErrorOptions & { actions?: LimitAction[]; needed?: number; cap?: number; spent?: number; resetsAt?: string },
   ) {
-    super(message, options)
-    this.name = 'InsufficientCreditsError'
-    this.balance = options?.balance
-    this.required = options?.required
+    super('spend_cap_reached', message, options)
+    this.name = 'SpendCapReachedError'
+    this.needed = options?.needed
+    this.cap = options?.cap
+    this.spent = options?.spent
+    this.resetsAt = options?.resetsAt
+  }
+}
+
+/** 402 `storage_full`: the plan's storage is used up. */
+export class StorageFullError extends LimitError {
+  readonly fileBytes?: number
+  readonly remainingBytes?: number
+
+  constructor(message = 'Storage full', options?: ContentHeroErrorOptions & { actions?: LimitAction[]; fileBytes?: number; remainingBytes?: number }) {
+    super('storage_full', message, options)
+    this.name = 'StorageFullError'
+    this.fileBytes = options?.fileBytes
+    this.remainingBytes = options?.remainingBytes
+  }
+}
+
+/** 402 `plan_limit`: a count the plan allows is reached (tracked accounts, connected accounts, brand kits). */
+export class PlanLimitError extends LimitError {
+  readonly feature?: string
+  readonly current?: number
+  readonly limit?: number
+  /** The first plan that raises this limit; null at the top plan (the action is then `request_limit`). */
+  readonly plan?: string | null
+
+  constructor(
+    message = 'Plan limit reached',
+    options?: ContentHeroErrorOptions & { actions?: LimitAction[]; feature?: string; current?: number; limit?: number; plan?: string | null },
+  ) {
+    super('plan_limit', message, options)
+    this.name = 'PlanLimitError'
+    this.feature = options?.feature
+    this.current = options?.current
+    this.limit = options?.limit
+    this.plan = options?.plan
+  }
+}
+
+/** The limit error a 402 body describes, by its `code`; a plain error when the body is not a limit refusal. */
+function limitErrorFrom(message: string, record: Record<string, unknown> | undefined, options: ContentHeroErrorOptions): ContentHeroError {
+  const num = (k: string) => (typeof record?.[k] === 'number' ? (record[k] as number) : undefined)
+  const str = (k: string) => (typeof record?.[k] === 'string' ? (record[k] as string) : undefined)
+  const actions = Array.isArray(record?.actions) ? (record.actions as LimitAction[]) : []
+  switch (record?.code) {
+    case 'insufficient_credits':
+      return new InsufficientCreditsError(message, { ...options, actions, needed: num('needed'), available: num('available'), balance: num('balance'), held: num('held') })
+    case 'spend_cap_reached':
+      return new SpendCapReachedError(message, { ...options, actions, needed: num('needed'), cap: num('cap'), spent: num('spent'), resetsAt: str('resetsAt') })
+    case 'storage_full':
+      return new StorageFullError(message, { ...options, actions, fileBytes: num('fileBytes'), remainingBytes: num('remainingBytes') })
+    case 'plan_limit':
+      return new PlanLimitError(message, {
+        ...options,
+        actions,
+        feature: str('feature'),
+        current: num('current'),
+        limit: num('limit'),
+        plan: typeof record?.plan === 'string' ? record.plan : null,
+      })
+    default:
+      return new ContentHeroError(message, options)
   }
 }
 
@@ -200,11 +314,7 @@ export function errorFromResponse(status: number, body: unknown): ContentHeroErr
     case 401:
       return new AuthenticationError(message, options)
     case 402:
-      return new InsufficientCreditsError(message, {
-        ...options,
-        balance: typeof record?.balance === 'number' ? record.balance : undefined,
-        required: typeof record?.required === 'number' ? record.required : undefined,
-      })
+      return limitErrorFrom(message, record, options)
     case 403:
       return new PermissionError(message, options)
     case 404:

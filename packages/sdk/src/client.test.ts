@@ -3,7 +3,12 @@ import assert from 'node:assert/strict'
 import { ContentHero } from './client.js'
 import {
   AuthenticationError,
+  ContentHeroError,
   InsufficientCreditsError,
+  LimitError,
+  PlanLimitError,
+  SpendCapReachedError,
+  StorageFullError,
   ValidationError,
   GenerationFailedError,
   GenerationTimeoutError,
@@ -52,21 +57,32 @@ test('generate posts to the right path with bearer auth', async () => {
   assert.equal(headers.Authorization, 'Bearer ch_live_test')
 })
 
-test('402 maps to InsufficientCreditsError with balance and required', async () => {
+test('402 maps each limit refusal to its typed error, with the message, numbers and ranked actions', async () => {
+  const actions = [{ id: 'auto_top_up', label: 'Turn on auto top-up', url: 'https://app.contenthero.ai/billing#auto-topup' }]
   const { fetch } = stubFetch([
-    { status: 402, body: { error: 'Insufficient credits', balance: 2, required: 10 } },
+    { status: 402, body: { code: 'insufficient_credits', error: "You don't have enough credits for this one.", needed: 10, available: 2, balance: 2, held: 0, actions } },
+    { status: 402, body: { code: 'spend_cap_reached', error: "You've reached your monthly spend cap.", needed: 10, cap: 500, spent: 495, resetsAt: '2026-11-01T00:00:00Z', actions: [] } },
+    { status: 402, body: { code: 'storage_full', error: "You've run out of storage.", fileBytes: 10, remainingBytes: 1, actions: [] } },
+    { status: 402, body: { code: 'plan_limit', error: 'Having more than 1 brand kit is part of the Hero plan.', feature: 'brand_kits', current: 1, limit: 1, plan: 'hero', actions: [] } },
+    { status: 402, body: { error: 'Payment required' } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
-  await assert.rejects(
-    () => client.generate({ modelId: 'veo-3', prompt: 'x' }),
-    (err: unknown) => {
-      assert.ok(err instanceof InsufficientCreditsError)
-      assert.equal(err.balance, 2)
-      assert.equal(err.required, 10)
-      assert.equal(err.status, 402)
-      return true
-    },
-  )
+  const call = () => client.generate({ modelId: 'veo-3', prompt: 'x' })
+
+  await assert.rejects(call, (err: unknown) => {
+    assert.ok(err instanceof InsufficientCreditsError && err instanceof LimitError)
+    assert.equal(err.code, 'insufficient_credits')
+    assert.equal(err.message, "You don't have enough credits for this one.")
+    assert.equal(err.needed, 10)
+    assert.equal(err.available, 2)
+    assert.deepEqual(err.actions, actions)
+    return true
+  })
+  await assert.rejects(call, (err: unknown) => err instanceof SpendCapReachedError && err.cap === 500 && err.spent === 495)
+  await assert.rejects(call, (err: unknown) => err instanceof StorageFullError && err.remainingBytes === 1)
+  await assert.rejects(call, (err: unknown) => err instanceof PlanLimitError && err.plan === 'hero' && err.limit === 1)
+  // A 402 that is not a limit refusal is a plain error, never mistaken for one.
+  await assert.rejects(call, (err: unknown) => err instanceof ContentHeroError && !(err instanceof LimitError))
 })
 
 test('401 maps to AuthenticationError, 400 to ValidationError', async () => {

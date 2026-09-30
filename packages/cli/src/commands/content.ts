@@ -17,6 +17,7 @@
  * Reads only.
  */
 
+import { describeCharge, type Charge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -305,19 +306,22 @@ export function registerContent(program: Command): void {
         while (opts.wait !== false && scenes.scenes.status === 'running' && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
           const post = await client.getContent(id)
-          if (post.scenes) scenes = { ...scenes, scenes: post.scenes }
+          // Finished: ask once more, which starts nothing for a finished post and answers with the final charge.
+          if (post.scenes && post.scenes.status !== 'running') scenes = await client.analyzeContent(id, { kind: 'scenes' })
         }
-        emit(scenes, ctx, (r: ContentScenesResult) => `Scenes for post ${r.contentId}\n\n${scenesText(r.scenes)}`)
+        emit(scenes, ctx, (r: ContentScenesResult) => `Scenes for post ${r.contentId}\n\n${scenesText(r.scenes)}${costAfter(r.charge)}`)
         return
       }
       let result = await client.analyzeContent(id)
       // It runs as a job: wait for it by reading the post's analysis status, which starts nothing.
       while (opts.wait !== false && result.analysis.status === 'running' && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
-        const post = await client.getContent(id, { analysis: 'full' })
-        result = { contentId: result.contentId, analysis: post.analysis }
+        const post = await client.getContent(id)
+        // Finished: ask once more, which starts nothing for a finished post and answers with the analysis and its
+        // final charge (taking the analysis from the post dropped the charge).
+        if (post.analysis.status !== 'running') result = await client.analyzeContent(id)
       }
-      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${r.contentId}\n\n${analysisText(r.analysis)}`)
+      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${r.contentId}\n\n${analysisText(r.analysis)}${costAfter(r.charge)}`)
     })
 }
 
@@ -362,4 +366,10 @@ function analysisText(an: ContentAnalysis): string {
     out += `\n\n${section}:\n${JSON.stringify(value, null, 2)}`
   }
   return out
+}
+
+/** The cost line under an analysis, when the server sent a receipt. */
+function costAfter(charge: Charge | undefined): string {
+  const cost = describeCharge(charge)
+  return cost ? `\n\nCost: ${cost}` : ''
 }

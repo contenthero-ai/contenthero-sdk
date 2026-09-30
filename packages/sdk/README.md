@@ -87,23 +87,31 @@ Every non-2xx response maps to a typed error; all extend `ContentHeroError`.
 | --- | --- | --- |
 | `ValidationError` | 400 | Malformed or model-unsupported request |
 | `AuthenticationError` | 401 | Missing, revoked, or expired key |
-| `InsufficientCreditsError` | 402 | Not enough credits (carries `balance`, `required`) |
+| `LimitError` | 402 | A limit refused it; nothing ran or was charged. `message` is written for a person, `actions` are the ranked ways to continue. One subclass per `code`: |
+| `InsufficientCreditsError` | 402 | `insufficient_credits`: carries `needed`, `available`, `balance`, `held` |
+| `SpendCapReachedError` | 402 | `spend_cap_reached`: the account's monthly spend cap; carries `needed`, `cap`, `spent`, `resetsAt` |
+| `StorageFullError` | 402 | `storage_full`: carries `fileBytes`, `remainingBytes` |
+| `PlanLimitError` | 402 | `plan_limit`: carries `feature`, `current`, `limit`, `plan` (the plan that raises it; null at the top plan) |
 | `PermissionError` | 403 | Key lacks the required scope |
 | `NotFoundError` | 404 | Unknown generation id |
 | `GenerationFailedError` | n/a | `generateAndWait` saw a terminal failure |
 | `GenerationTimeoutError` | n/a | `generateAndWait` exceeded `timeoutMs` |
 
 ```ts
-import { InsufficientCreditsError } from '@contenthero/sdk'
+import { LimitError, describeLimit } from '@contenthero/sdk'
 
 try {
   await client.generateAndWait({ modelId: 'veo-3', prompt: '...' })
 } catch (err) {
-  if (err instanceof InsufficientCreditsError) {
-    console.error(`Need ${err.required}, have ${err.balance}`)
+  if (err instanceof LimitError) {
+    // The message and the ways to continue, as every ContentHero surface says them.
+    console.error(describeLimit(err))
   }
 }
 ```
+
+Every paid result carries `charge` (what it cost): `{ credits, held, state, balanceAfter }`, where `state` is
+`charged`, `pending` (running; `held` is set aside) or `free`. `describeCharge(charge)` says it in one sentence.
 
 ## Configuration
 

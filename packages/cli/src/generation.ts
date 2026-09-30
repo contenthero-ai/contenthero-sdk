@@ -9,6 +9,7 @@
  * the caller can keep polling and still script around it.
  */
 
+import { describeCharge } from '@contenthero/sdk'
 import {
   ContentHero,
   GenerationFailedError,
@@ -61,7 +62,8 @@ function resultHuman(r: GenerateResult): string {
     ['Status', r.status],
   ]
   if (r.idempotentReplay) pairs.push(['Idempotent replay', 'yes'])
-  if (r.creditsEstimate != null) pairs.push(['Credits', r.creditsEstimate])
+  const cost = describeCharge(r.charge)
+  if (cost) pairs.push(['Cost', cost])
   for (const [i, url] of (r.outputUrls ?? []).entries()) pairs.push([`URL ${i + 1}`, url])
   if (r.status === 'processing') {
     pairs.push(['Next', `contenthero generation status ${r.outputId}`])
@@ -83,6 +85,8 @@ function generationHuman(g: Generation): string {
     pairs.push(['URL', g.alreadyExisted.url])
   }
   for (const [i, url] of g.outputUrls.entries()) pairs.push([`URL ${i + 1}`, url])
+  const cost = describeCharge(g.charge)
+  if (cost) pairs.push(['Cost', cost])
   if (g.status === 'processing' || g.status === 'pending') {
     pairs.push(['Next', `contenthero generation status ${g.outputId}`])
   }

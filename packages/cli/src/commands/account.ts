@@ -20,6 +20,10 @@ export function registerAccount(program: Command): void {
       emit(balance, ctx, (b: Balance) =>
         keyValues([
           ['Balance', `${b.balance} credits`],
+          ['Available', `${b.available} credits`],
+          ['Held', `${b.held} credits (work still running)`],
+          ['Spent this month', `${b.spentThisMonth} credits`],
+          ['Monthly spend cap', b.spendCap ? `${b.spendCap.limit} credits, ${b.spendCap.remaining} left (resets ${b.spendCap.resetsAt.slice(0, 10)})` : 'none'],
           ['Tier', b.tier],
           ['Auto top-up', b.autoTopupEnabled ? 'on' : 'off'],
         ]),

@@ -7,6 +7,7 @@
  * minute, and only a user on their own ElevenLabs key is charged nothing.
  */
 
+import { describeCharge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type { Transcription } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
@@ -34,7 +35,7 @@ export function registerTranscribe(program: Command): void {
           ...(r.durationSeconds != null
             ? [['Duration (s)', r.durationSeconds] as [string, number]]
             : []),
-          ['Credits used', r.creditsUsed],
+          ['Cost', describeCharge(r.charge) ?? ''],
           ['Transcript', r.transcript],
         ]),
       )

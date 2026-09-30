@@ -72,6 +72,8 @@ export type {
   BrandKnowledgeMatch,
   BrandKnowledgeSourceType,
   AddBrandKnowledgeInput,
+  AddBrandKnowledgeResult,
+  Charge,
   SearchBrandKnowledgeOptions,
   MediaType,
   MediaSource,
@@ -185,11 +187,16 @@ export {
   ValidationError,
   NotFoundError,
   ConflictError,
+  LimitError,
   InsufficientCreditsError,
+  SpendCapReachedError,
+  StorageFullError,
+  PlanLimitError,
   RateLimitError,
   GenerationFailedError,
   GenerationTimeoutError,
   GenerationInterruptedError,
   pendingOutputId,
 } from './errors.js'
-export type { ContentHeroErrorOptions } from './errors.js'
+export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
+export { describeCharge, describeLimit } from './describe.js'

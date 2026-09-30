@@ -107,4 +107,6 @@ contenthero schema generate image  # just one command
 ## Exit codes
 
 `0` success, `1` general error, `2` usage error, `3` authentication error,
-`4` timeout (the work was accepted but did not finish in time).
+`4` timeout (the work was accepted but did not finish in time), `5` a limit refused it (credits, the monthly
+spend cap, storage, a plan limit; nothing ran and nothing was charged). In JSON mode a limit error also carries its
+`code` and ranked `actions`.

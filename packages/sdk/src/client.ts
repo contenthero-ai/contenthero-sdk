@@ -21,6 +21,7 @@ import type {
   UpdateFolderInput,
   BrandKitAccountInput,
   AddBrandKnowledgeInput,
+  AddBrandKnowledgeResult,
   Avatar,
   AvatarSummary,
   CreateAvatarRequest,
@@ -359,8 +360,8 @@ export class ContentHero {
   }
 
   /**
-   * Transcribe an audio URL to text (ElevenLabs Scribe). Synchronous: the
-   * transcript comes back inline. Free (no credit charge).
+   * Transcribe an audio URL to text (ElevenLabs Scribe). Synchronous: the transcript comes back inline, with what it
+   * cost in `charge` (free only when the account's own ElevenLabs key covered it).
    */
   async transcribe(request: TranscribeRequest): Promise<Transcription> {
     return this.request<Transcription>('POST', '/api/v1/studio/transcribe', request)
@@ -645,13 +646,8 @@ export class ContentHero {
   }
 
   /** Add an item to a brand kit's knowledge base (text/url/youtube/file). Requires `brandkit:write`. */
-  async addBrandKnowledge(brandKitId: string, input: AddBrandKnowledgeInput): Promise<BrandKnowledgeItem> {
-    const data = await this.request<{ item: BrandKnowledgeItem }>(
-      'POST',
-      `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge`,
-      input,
-    )
-    return data.item
+  async addBrandKnowledge(brandKitId: string, input: AddBrandKnowledgeInput): Promise<AddBrandKnowledgeResult> {
+    return this.request<AddBrandKnowledgeResult>('POST', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge`, input)
   }
 
   /** Remove a knowledge item and its embedding chunks. Requires `brandkit:write`. */

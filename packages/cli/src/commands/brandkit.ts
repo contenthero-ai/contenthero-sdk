@@ -7,6 +7,7 @@
  * written by key with `update --sections` (JSON). A section is archived with `archive brand_kit_section <id>`.
  */
 
+import { describeCharge, type AddBrandKnowledgeResult } from '@contenthero/sdk'
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import type { Command } from 'commander'
@@ -437,15 +438,16 @@ export function registerBrandKit(program: Command): void {
         }
         input = { sourceType: 'file' as const, fileData, fileExt: ext }
       }
-      const item = await client.addBrandKnowledge(brandKitId, {
+      const added = await client.addBrandKnowledge(brandKitId, {
         ...input,
         title: opts.title as string | undefined,
       })
-      emit(item, ctx, (k: BrandKnowledgeItem) =>
+      emit(added, ctx, ({ item: k, charge }: AddBrandKnowledgeResult) =>
         keyValues([
           ['Added', k.title ?? '(untitled)'],
           ['Id', displayId(k)], ...linkRow(k),
           ['Source type', k.sourceType ?? ''],
+          ...(charge ? [['Cost', describeCharge(charge) ?? ''] as [string, string]] : []),
         ]),
       )
     })
