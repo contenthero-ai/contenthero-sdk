@@ -1515,7 +1515,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       inputSchema: {
         modelId: z.enum(models.audio).describe(AUDIO_MODEL_GUIDANCE),
         prompt: z.string().optional().describe('For music / sfx: what to generate.'),
-        text: z.string().optional().describe('For TTS (elevenlabs-tts): the words to speak.'),
+        text: z.string().optional().describe('For TTS (elevenlabs-tts): the words to speak. Read the model\'s promptGuide with get_model before writing directions into it.'),
         voiceId: z.string().optional().describe('For TTS: the ElevenLabs voice id.'),
         voiceName: z.string().optional().describe('For TTS: human-readable voice name (display only).'),
         durationSeconds: z.number().optional().describe('For music / sfx: length in seconds.'),
@@ -1705,7 +1705,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         script: z
           .string()
           .optional()
-          .describe('Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl.'),
+          .describe('Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl. Spoken by elevenlabs-tts: read its promptGuide with get_model before writing directions into the script.'),
         voiceId: z.string().optional().describe('ElevenLabs voice id to speak the script (required with script).'),
         voiceName: z.string().optional().describe('Human-readable voice name (display only).'),
         motionPrompt: z
