@@ -607,6 +607,11 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
       ...mediaWidgetData({
         outputId: result.outputId,
         contentType: 'audio',
+        // The model travels on the completed audio response, so the card names it like any other generation.
+        modelId: result.modelId,
+        modelDisplayName: result.modelDisplayName,
+        modelBrandColor: result.modelBrandColor,
+        modelIconKey: result.modelIconKey,
         items: urls.map((url, i) => ({
           url,
           name: `${result.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
@@ -1686,6 +1691,7 @@ export function modelResult(m: ModelInfo): CallToolResult {
       '',
       'Request shape:',
       `  prompt: ${cap(m, 'promptMode') ?? 'optional'}${cap(m, 'promptMaxChars') ? ` (max ${cap(m, 'promptMaxChars')} chars)` : ''}`,
+      cap(m, 'promptGuide') ? `  writing the prompt: ${cap(m, 'promptGuide')}` : null,
       Array.isArray(cap(m, 'inputTypes')) && cap(m, 'inputTypes').length
         ? `  input types: ${cap(m, 'inputTypes').join(', ')}`
         : null,

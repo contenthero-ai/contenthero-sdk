@@ -87,6 +87,7 @@ export function registerModel(program: Command): void {
             'Prompt',
             `${cap(model, 'promptMode') ?? 'optional'}${cap(model, 'promptMaxChars') ? ` (max ${cap(model, 'promptMaxChars')} chars)` : ''}`,
           ],
+          ...(cap(model, 'promptGuide') ? [['Writing the prompt', String(cap(model, 'promptGuide'))] as [string, string]] : []),
           ...(Array.isArray(inputs) && inputs.length ? [['Inputs', inputs.join(', ')] as [string, string]] : []),
           ...(res?.supported?.length ? [['Resolution', res.supported.join(', ')] as [string, string]] : []),
           ...(ar?.supported?.length ? [['Aspect ratio', ar.supported.join(', ')] as [string, string]] : []),

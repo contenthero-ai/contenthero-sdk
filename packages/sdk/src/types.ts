@@ -246,6 +246,15 @@ export interface GenerateResult {
   charge?: Charge
   /** Present when the result is already complete (audio). */
   outputUrls?: string[]
+  /**
+   * Present when the result is already complete (audio): the model that produced it and how to show it,
+   * the same fields a generation's status carries (see `Generation.modelDisplayName`). Null means show
+   * nothing; never substitute the id.
+   */
+  modelId?: string
+  modelDisplayName?: string | null
+  modelBrandColor?: string | null
+  modelIconKey?: string | null
   /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
   idempotentReplay?: boolean
   /** Where the asset is being placed (present only when `projectId` was supplied). Lets a caller chain further
@@ -1504,6 +1513,12 @@ export interface ModelCapabilities {
   kind: ModelKind
   outputType: 'image' | 'video' | 'audio' | 'text' | 'voice'
   promptMode: 'required' | 'optional' | 'none'
+  /**
+   * How to write this model's prompt text, in principles. For a speech model it is how to direct delivery
+   * inside the script. Read it before writing text for the model; absent means the model has no guidance
+   * beyond its request shape.
+   */
+  promptGuide?: string
   [key: string]: unknown
 }
 
