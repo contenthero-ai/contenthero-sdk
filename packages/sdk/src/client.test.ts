@@ -100,6 +100,21 @@ test('getBalance returns the parsed balance', async () => {
   assert.deepEqual(balance, { balance: 1234, tier: 'legend', autoTopupEnabled: true })
 })
 
+test('setSpendCap puts the cap, null included, and returns the balance', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { balance: 10, spendCap: { limit: 25000, remaining: 24000, resetsAt: '2026-10-01T00:00:00Z' } } },
+    { status: 200, body: { balance: 10, spendCap: null } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const set = await client.setSpendCap(25000)
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/account/spend-cap')
+  assert.equal(calls[0]?.init?.method, 'PUT')
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { cap: 25000 })
+  assert.equal(set.spendCap?.limit, 25000)
+  await client.setSpendCap(null)
+  assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { cap: null })
+})
+
 test('transcribe posts the audio URL and returns the transcript', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { outputId: 'tr1', transcript: 'hello there', language: 'en', wordCount: 2, durationSeconds: 1.5 } },

@@ -360,6 +360,15 @@ export class ContentHero {
   }
 
   /**
+   * Set the account's monthly spend cap, in credits; `null` removes it (no cap). Every spend counts toward it, and a
+   * spend that would cross it is refused with `SpendCapReachedError`. Needs an API key with the `billing:write` scope,
+   * which no key has by default, and the account's owner. Returns the balance with the new cap.
+   */
+  async setSpendCap(cap: number | null): Promise<Balance> {
+    return this.request<Balance>('PUT', '/api/v1/account/spend-cap', { cap })
+  }
+
+  /**
    * Transcribe an audio URL to text (ElevenLabs Scribe). Synchronous: the transcript comes back inline, with what it
    * cost in `charge` (free only when the account's own ElevenLabs key covered it).
    */
