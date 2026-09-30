@@ -7,7 +7,7 @@
  * written by key with `update --sections` (JSON). A section is archived with `archive brand_kit_section <id>`.
  */
 
-import { describeCharge, type AddBrandKnowledgeResult } from '@contenthero/sdk'
+import type { AddBrandKnowledgeResult } from '@contenthero/sdk'
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import type { Command } from 'commander'
@@ -26,7 +26,7 @@ import type {
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow, displayId } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, toInt, toJson, toList } from '../args.js'
@@ -401,6 +401,7 @@ export function registerBrandKit(program: Command): void {
     .option('--file-url <url>', 'add a hosted file by URL the server fetches (large files, video, audio)')
     .option('--file-ext <ext>', 'extension for --file-url when not in the URL, e.g. pdf')
     .option('--title <title>', 'optional title (else derived)')
+    .option('--cost', 'estimate the credit cost instead of adding (video and audio are measured, not processed)')
     .action(async (brandKitId: string, opts: Record<string, unknown>, command: Command) => {
       const text = opts.text as string | undefined
       const url = opts.url as string | undefined
@@ -438,6 +439,11 @@ export function registerBrandKit(program: Command): void {
         }
         input = { sourceType: 'file' as const, fileData, fileExt: ext }
       }
+      if (opts.cost) {
+        const est = await client.estimateBrandKnowledgeCost(brandKitId, input)
+        emit(est, ctx, () => `Adding this item costs ${est.creditsEstimate} credits. Nothing ran and nothing was charged.`)
+        return
+      }
       const added = await client.addBrandKnowledge(brandKitId, {
         ...input,
         title: opts.title as string | undefined,
@@ -447,7 +453,7 @@ export function registerBrandKit(program: Command): void {
           ['Added', k.title ?? '(untitled)'],
           ['Id', displayId(k)], ...linkRow(k),
           ['Source type', k.sourceType ?? ''],
-          ...(charge ? [['Cost', describeCharge(charge) ?? ''] as [string, string]] : []),
+          ...costRows(charge),
         ]),
       )
     })

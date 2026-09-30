@@ -5,6 +5,7 @@
  */
 
 import pc from 'picocolors'
+import { describeCharge, type Charge } from '@contenthero/sdk'
 
 /** Print a result: pretty JSON by default, the human formatter under --human. */
 export function emit(
@@ -55,4 +56,10 @@ export function displayId(item: { id: string; shortId?: string | null }): string
  */
 export function linkRow(item: { appUrl?: string | null }): Array<[string, string]> {
   return item.appUrl ? [['App URL', item.appUrl]] : []
+}
+
+/** The cost row for a paid result, labelled by the SDK's one wording ("Cost" or "Estimated cost"); none without a receipt. */
+export function costRows(charge: Charge | null | undefined): Array<[string, string]> {
+  const cost = describeCharge(charge)
+  return cost ? [[cost.label, cost.text]] : []
 }

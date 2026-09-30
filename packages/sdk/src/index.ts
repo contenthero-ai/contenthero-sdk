@@ -199,4 +199,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { describeCharge, describeLimit } from './describe.js'
+export { chargeSentence, describeCharge, describeLimit, describeReserved } from './describe.js'

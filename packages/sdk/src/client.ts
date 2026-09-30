@@ -646,6 +646,14 @@ export class ContentHero {
   }
 
   /** Add an item to a brand kit's knowledge base (text/url/youtube/file). Requires `brandkit:write`. */
+  /**
+   * What `addBrandKnowledge` would charge for this item, without adding it. Text, links, YouTube and documents are
+   * free; an image is one item; video and audio are measured (not processed) and priced per chunk.
+   */
+  async estimateBrandKnowledgeCost(brandKitId: string, input: AddBrandKnowledgeInput): Promise<CostEstimate> {
+    return this.request<CostEstimate>('POST', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge`, { ...input, getCost: true })
+  }
+
   async addBrandKnowledge(brandKitId: string, input: AddBrandKnowledgeInput): Promise<AddBrandKnowledgeResult> {
     return this.request<AddBrandKnowledgeResult>('POST', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge`, input)
   }

@@ -624,7 +624,7 @@ test('get_balance formats balance, tier, and top-up state', async () => {
   assert.equal(
     out,
     [
-      'Balance: 1234 credits, 1200 available (34 held for work still running).',
+      'Balance: 1234 credits, 1200 available (34 credits reserved for work in progress).',
       'Spent this month: 300 credits.',
       'Monthly spend cap: 5000 credits, 4700 left this month (resets 2026-11-01).',
       'Tier: legend. Auto top-up: on.',
@@ -3597,6 +3597,7 @@ const SPENDING_CALLS = {
   generate_lip_sync: { modelId: 'infinitalk', imageUrl: 'https://cdn/face.png', script: 'hi', voiceId: 'v1' },
   transcribe: { audioUrl: 'https://cdn/clip.mp3' },
   create_avatar: { name: 'Mika', age: '20s', gender: 'female' },
+  add_brand_knowledge: { brandKitId: 'bk1', sourceType: 'text', text: 'a note' },
   analyze_content: { contentId: 'c1' },
 }
 
@@ -3613,6 +3614,7 @@ test('every tool that spends reports its cost the same way', async () => {
       transcribe: async () => ({ outputId: 'tr1', transcript: 'hi', language: 'en', wordCount: 1, durationSeconds: 1, charge: CHARGE }),
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
       analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
+      addBrandKnowledge: async () => ({ item: { id: 'kn1', title: 'a note', sourceType: 'text' }, charge: CHARGE }),
     }),
   )
   const { tools } = await mcp.listTools()
@@ -3627,9 +3629,12 @@ test('every tool that spends reports its cost the same way', async () => {
   }
 })
 
-test('the cost line says held while running and nothing when free', async () => {
+test('the cost line: an estimate while it runs, the cost once charged, nothing when free (approved wording)', async () => {
   const { chargeLine } = await import('./format.js')
-  assert.equal(chargeLine({ credits: 0, held: 120, state: 'pending', balanceAfter: null }), 'Cost: 120 credits held while it runs, charged for what finishes.')
+  assert.equal(
+    chargeLine({ credits: 0, held: 120, state: 'pending', balanceAfter: null }),
+    'Estimated cost: 120 credits, charged when it finishes (only for what succeeds).',
+  )
   assert.equal(chargeLine({ credits: 0, held: 0, state: 'free', balanceAfter: null }), 'Cost: Nothing was charged.')
   assert.equal(chargeLine({ credits: 1, held: 0, state: 'charged', balanceAfter: null }), 'Cost: 1 credit charged.')
   assert.equal(chargeLine(undefined), null)

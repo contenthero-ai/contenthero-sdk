@@ -94,17 +94,14 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, describeCharge, describeLimit, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, chargeSentence, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
 }
 
-/** What a paid call cost, in one line: "Cost: " and the SDK's one wording (`describeCharge`). */
-export function chargeLine(charge: Charge | null | undefined): string | null {
-  const sentence = describeCharge(charge)
-  return sentence ? `Cost: ${sentence}` : null
-}
+/** What a paid call cost, in one line: the SDK's one wording (`chargeSentence`). */
+export const chargeLine = (charge: Charge | null | undefined): string | null => chargeSentence(charge)
 
 /** `result` with the cost line added to its text, so every paid tool reports what it cost the same way. */
 export function withCharge(result: CallToolResult, charge: Charge | null | undefined): CallToolResult {
@@ -1552,7 +1549,7 @@ export function balanceResult(b: Balance): CallToolResult {
     : 'Monthly spend cap: none.'
   return text(
     lines([
-      `Balance: ${b.balance} credits, ${b.available} available (${b.held} held for work still running).`,
+      `Balance: ${b.balance} credits, ${b.available} available (${describeReserved(b.held)}).`,
       `Spent this month: ${b.spentThisMonth} credits.`,
       cap,
       `Tier: ${b.tier}. Auto top-up: ${b.autoTopupEnabled ? 'on' : 'off'}.`,

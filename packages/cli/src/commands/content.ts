@@ -17,7 +17,7 @@
  * Reads only.
  */
 
-import { describeCharge, type Charge } from '@contenthero/sdk'
+import { chargeSentence, type Charge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -370,6 +370,6 @@ function analysisText(an: ContentAnalysis): string {
 
 /** The cost line under an analysis, when the server sent a receipt. */
 function costAfter(charge: Charge | undefined): string {
-  const cost = describeCharge(charge)
-  return cost ? `\n\nCost: ${cost}` : ''
+  const cost = chargeSentence(charge)
+  return cost ? `\n\n${cost}` : ''
 }

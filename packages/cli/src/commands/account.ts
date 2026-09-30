@@ -3,6 +3,7 @@
  *   account balance   credit balance, tier, and auto-top-up state
  */
 
+import { describeReserved } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import { makeClient } from '../context.js'
 import { emit, keyValues } from '../output.js'
@@ -21,7 +22,7 @@ export function registerAccount(program: Command): void {
         keyValues([
           ['Balance', `${b.balance} credits`],
           ['Available', `${b.available} credits`],
-          ['Held', `${b.held} credits (work still running)`],
+          ['Reserved', describeReserved(b.held)],
           ['Spent this month', `${b.spentThisMonth} credits`],
           ['Monthly spend cap', b.spendCap ? `${b.spendCap.limit} credits, ${b.spendCap.remaining} left (resets ${b.spendCap.resetsAt.slice(0, 10)})` : 'none'],
           ['Tier', b.tier],

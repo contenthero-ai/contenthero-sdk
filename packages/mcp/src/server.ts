@@ -2353,7 +2353,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Add Brand Knowledge',
       annotations: WRITE,
       description:
-        "Add an item to a brand kit's knowledge base so it can be searched later. This is how the brand's knowledge grows over time: capture a lesson learned, a brand decision, an asset description, an article, or a video. Source can be text (a note), url (a page to scrape), youtube (a video transcript), or file. For a file, pass either fileData (base64, best for small documents and images) or fileUrl (a hosted URL the server fetches, needed for large files and video/audio). Requires the brandkit:write scope.",
+        "Add an item to a brand kit's knowledge base so it can be searched later. This is how the brand's knowledge grows over time: capture a lesson learned, a brand decision, an asset description, an article, or a video. Source can be text (a note), url (a page to scrape), youtube (a video transcript), or file. For a file, pass either fileData (base64, best for small documents and images) or fileUrl (a hosted URL the server fetches, needed for large files and video/audio). Requires the brandkit:write scope. SPENDS CREDITS for images, video and audio (text, links, YouTube and documents are free): pass getCost to preview the price first, which runs nothing and charges nothing.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
         sourceType: z.enum(['text', 'url', 'youtube', 'file']).describe('How the content is provided.'),
@@ -2363,12 +2363,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         fileUrl: z.string().optional().describe('For sourceType "file": a hosted URL the server fetches (large files, video, audio).'),
         fileExt: z.string().optional().describe('For sourceType "file": the extension without a dot, e.g. "pdf". Inferred from fileUrl when omitted.'),
         title: z.string().optional().describe('Optional title (otherwise derived from the content).'),
+        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of adding (video and audio are measured, not processed; nothing is charged).'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const added = await client.addBrandKnowledge(args.brandKitId, {
+        const input = {
           sourceType: args.sourceType,
           text: args.text,
           url: args.url,
@@ -2376,7 +2377,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           fileUrl: args.fileUrl,
           fileExt: args.fileExt,
           title: args.title,
-        })
+        }
+        if (args.getCost) {
+          return costResult({ ...(await client.estimateBrandKnowledgeCost(args.brandKitId, input)), modelId: 'adding this knowledge item' })
+        }
+        const added = await client.addBrandKnowledge(args.brandKitId, input)
         return brandKnowledgeItemResult(added.item, 'Added', added.charge)
       } catch (err) {
         return errorResult(err)

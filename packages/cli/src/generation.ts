@@ -9,7 +9,6 @@
  * the caller can keep polling and still script around it.
  */
 
-import { describeCharge } from '@contenthero/sdk'
 import {
   ContentHero,
   GenerationFailedError,
@@ -22,7 +21,7 @@ import {
   type Generation,
 } from '@contenthero/sdk'
 import { EXIT } from './errors.js'
-import { emit, keyValues } from './output.js'
+import { costRows, emit, keyValues } from './output.js'
 import type { Context } from './context.js'
 
 /** Drop undefined values so the request payload stays minimal. */
@@ -62,8 +61,7 @@ function resultHuman(r: GenerateResult): string {
     ['Status', r.status],
   ]
   if (r.idempotentReplay) pairs.push(['Idempotent replay', 'yes'])
-  const cost = describeCharge(r.charge)
-  if (cost) pairs.push(['Cost', cost])
+  pairs.push(...costRows(r.charge))
   for (const [i, url] of (r.outputUrls ?? []).entries()) pairs.push([`URL ${i + 1}`, url])
   if (r.status === 'processing') {
     pairs.push(['Next', `contenthero generation status ${r.outputId}`])
@@ -85,8 +83,7 @@ function generationHuman(g: Generation): string {
     pairs.push(['URL', g.alreadyExisted.url])
   }
   for (const [i, url] of g.outputUrls.entries()) pairs.push([`URL ${i + 1}`, url])
-  const cost = describeCharge(g.charge)
-  if (cost) pairs.push(['Cost', cost])
+  pairs.push(...costRows(g.charge))
   if (g.status === 'processing' || g.status === 'pending') {
     pairs.push(['Next', `contenthero generation status ${g.outputId}`])
   }
