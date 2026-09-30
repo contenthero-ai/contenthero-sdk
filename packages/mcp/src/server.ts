@@ -3870,7 +3870,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         analysisSections: z
           .array(z.string())
           .optional()
-          .describe('Only these analysis sections (names come from the availability line, e.g. contentStructure, recreationSteps).'),
+          .describe('Only these analysis sections. The names differ by format, so take them from the availability line.'),
         scenes: z
           .enum(['none', 'map', 'frames'])
           .optional()
