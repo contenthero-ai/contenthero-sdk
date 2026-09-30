@@ -632,6 +632,27 @@ test('get_balance formats balance, tier, and top-up state', async () => {
   )
 })
 
+test('update_spend_cap sets the cap (null removes it) and answers with the balance', async () => {
+  const sent: Array<number | null> = []
+  const base = fakeClient()
+  const mcp = await connect(
+    fakeClient({
+      setSpendCap: async (cap: number | null) => {
+        sent.push(cap)
+        return { ...(await base.getBalance()), spendCap: cap == null ? null : { limit: cap, remaining: cap - 300, resetsAt: '2026-11-01T00:00:00Z' } }
+      },
+    }),
+  )
+  const set = await mcp.callTool({ name: 'update_spend_cap', arguments: { cap: 25000 } })
+  assert.match(set.content[0].text, /^Monthly spend cap: 25000 credits, 24700 left this month \(resets 2026-11-01\)\.$/m)
+  const removed = await mcp.callTool({ name: 'update_spend_cap', arguments: { cap: null } })
+  assert.match(removed.content[0].text, /^Monthly spend cap: none\.$/m)
+  assert.deepEqual(sent, [25000, null])
+  const refused = await mcp.callTool({ name: 'update_spend_cap', arguments: { cap: 0 } })
+  assert.equal(refused.isError, true)
+  assert.deepEqual(sent, [25000, null])
+})
+
 test('generate_image submits and hands back a pollable id, rather than waiting', async () => {
   /**
    * ⭐⭐⭐ THE CONTRACT CHANGED ON PURPOSE, AND THIS IS THE ASSERTION THAT SAYS SO.

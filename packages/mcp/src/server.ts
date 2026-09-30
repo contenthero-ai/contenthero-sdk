@@ -4014,6 +4014,34 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- update_spend_cap -----------------------------------------------------
+  server.registerTool(
+    'update_spend_cap',
+    {
+      title: 'Update Spend Cap',
+      annotations: { ...WRITE, idempotentHint: true },
+      // DRAFT wording (pending approval).
+      description:
+        "Set the account's monthly spend cap, in credits, or pass cap:null to remove it (no cap). Every credit spent this month counts toward it, and anything that would cross it is refused until the cap resets on the 1st of the month (UTC). Only the account's owner can change it. Requires the billing:write scope. Returns the balance with the new cap.",
+      inputSchema: {
+        cap: z
+          .number()
+          .int()
+          .min(1)
+          .nullable()
+          .describe('The monthly cap in credits, or null to remove it.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return balanceResult(await client.setSpendCap(args.cap))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // ===========================================================================
   // Favorites & archive (one universal pair each, across asset types)
   // ===========================================================================

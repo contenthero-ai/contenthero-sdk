@@ -105,6 +105,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   list_connected_accounts: ['connected-account list'],
   get_connected_account: ['connected-account get'],
   get_balance: ['account balance'],
+  update_spend_cap: ['account spend-cap'],
   favorite: ['favorite'],
   archive: ['archive'],
   list_projects: ['project list'],

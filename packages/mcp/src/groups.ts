@@ -112,7 +112,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     title: 'Account',
     blurb:
       'Your balance and tier, the platforms available to publish to, and what the user is looking at.',
-    tools: ['get_balance', 'get_context', 'get_schema'],
+    tools: ['get_balance', 'update_spend_cap', 'get_context', 'get_schema'],
   },
 ]
 
