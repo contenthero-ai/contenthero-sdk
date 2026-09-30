@@ -103,7 +103,20 @@ export function text(body: string, isError = false): CallToolResult {
 /** What a paid call cost, in one line: the SDK's one wording (`chargeSentence`). */
 export const chargeLine = (charge: Charge | null | undefined): string | null => chargeSentence(charge)
 
-/** `result` with the cost line added to its text, so every paid tool reports what it cost the same way. */
+/**
+ * The charge as data, for a result's `structuredContent`: the charge itself and its sentence.
+ *
+ * ⭐ A HOST MAY HAND THE MODEL `structuredContent` INSTEAD OF THE TEXT. Measured 2026-09-30 on claude.ai: a
+ * finished generation reached the agent as its widget data alone, so the cost line in the text never arrived and
+ * an agent could not tell what it had spent, which is the whole point of a receipt. Every result that carries
+ * structured data carries its charge there too.
+ */
+export function chargeData(charge: Charge | null | undefined): { charge?: Charge; cost?: string } {
+  const line = chargeLine(charge)
+  return charge && line ? { charge, cost: line } : {}
+}
+
+/** `result` with the cost line added to its text and its charge to its structured data, so every paid tool reports what it cost the same way. */
 export function withCharge(result: CallToolResult, charge: Charge | null | undefined): CallToolResult {
   const line = chargeLine(charge)
   if (!line) return result
@@ -111,7 +124,8 @@ export function withCharge(result: CallToolResult, charge: Charge | null | undef
   const first = content.findIndex((c) => c.type === 'text')
   if (first === -1) content.unshift({ type: 'text', text: line })
   else content[first] = { ...content[first], text: `${(content[first] as { text: string }).text}\n${line}` } as (typeof content)[number]
-  return { ...result, content }
+  const structured = result.structuredContent ? { structuredContent: { ...result.structuredContent, ...chargeData(charge) } } : {}
+  return { ...result, content, ...structured }
 }
 
 /**
@@ -458,7 +472,7 @@ export function completedResult(
   return {
     content,
     isError: false,
-    structuredContent: generationWidgetData(gen, posterUrls),
+    structuredContent: { ...generationWidgetData(gen, posterUrls), ...chargeData(gen.charge) },
     _meta: WIDGET_META,
   }
 }
@@ -588,18 +602,21 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
   if (!urls.length) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],
-    structuredContent: mediaWidgetData({
-      outputId: result.outputId,
-      contentType: 'audio',
-      items: urls.map((url, i) => ({
-        url,
-        name: `${result.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
-        contentType: 'audio' as const,
-        // Audio has no shape, so there is nothing for a tile to take.
-        displayAspect: null,
-        openUrl: result.appUrls?.[i],
-      })),
-    }),
+    structuredContent: {
+      ...chargeData(result.charge),
+      ...mediaWidgetData({
+        outputId: result.outputId,
+        contentType: 'audio',
+        items: urls.map((url, i) => ({
+          url,
+          name: `${result.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+          contentType: 'audio' as const,
+          // Audio has no shape, so there is nothing for a tile to take.
+          displayAspect: null,
+          openUrl: result.appUrls?.[i],
+        })),
+      }),
+    },
     _meta: WIDGET_META,
   }
 }
@@ -640,7 +657,7 @@ export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
 export function costResult(est: CostEstimate): CallToolResult {
   const what = est.modelId ?? est.contentType ?? 'this generation'
   const credits = `${est.creditsEstimate} credit${est.creditsEstimate === 1 ? '' : 's'}`
-  return text(`Estimated cost: ${credits} for ${what}. No generation ran and nothing was charged.`)
+  return text(`Estimated cost: ${credits} for ${what}. Nothing ran and nothing was charged.`)
 }
 
 /**
@@ -751,6 +768,7 @@ export function generationStatusResult(
       // ⚠️ Built from the LANDED slots, not from `outputUrls`: the two differ precisely while the job is
       // still running, which is the only time this branch is reached.
       ...generationWidgetData({ ...gen, outputUrls: landed }),
+      ...chargeData(gen.charge),
       status: 'processing',
       /**
        * ⚠️ NO `expected` HERE, DELIBERATELY. A `Generation` does not carry how many were ASKED for, only
@@ -2232,7 +2250,7 @@ export function contentScenesResult(r: ContentScenesResult): CallToolResult {
       : `scenes: ${r.scenes.status}`
   return {
     content: [{ type: 'text', text: lines([`Scenes for post ${r.contentId}`, body, chargeLine(r.charge)]) }],
-    structuredContent: { contentId: r.contentId, status: running ? 'pending' : r.scenes.status },
+    structuredContent: { contentId: r.contentId, status: running ? 'pending' : r.scenes.status, ...chargeData(r.charge) },
   }
 }
 
@@ -2245,7 +2263,11 @@ export function contentAnalysisResult(r: ContentAnalysisResult): CallToolResult 
       : analysisLines(r.analysis)
   return {
     content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body, chargeLine(r.charge)]) }],
-    structuredContent: { contentId: r.contentId, status: r.analysis.status === 'running' ? 'pending' : r.analysis.status },
+    structuredContent: {
+      contentId: r.contentId,
+      status: r.analysis.status === 'running' ? 'pending' : r.analysis.status,
+      ...chargeData(r.charge),
+    },
   }
 }
 
