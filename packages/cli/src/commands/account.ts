@@ -33,7 +33,6 @@ function accountRows(b: Account) {
 }
 
 export function registerAccount(program: Command): void {
-  // DRAFT wording (pending approval): the descriptions below.
   const account = program.command('account').description('Your ContentHero account: balance, spend cap and plan')
 
   account

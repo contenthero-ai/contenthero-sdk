@@ -4004,7 +4004,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     {
       title: 'Get Account',
       annotations: READ,
-      // DRAFT wording (pending approval).
       description:
         'Get your ContentHero account: the credit balance, what is available to spend, credits reserved for work in progress, what was spent this month, the monthly spend cap, the plan and auto top-up. For a tracked social account, use get_tracked_account.',
     },
@@ -4023,7 +4022,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     {
       title: 'Update Account',
       annotations: { ...WRITE, idempotentHint: true },
-      // DRAFT wording (pending approval).
       description:
         "Update your ContentHero account. Only the fields you pass change. spendCap sets the monthly spend cap in credits, or null removes it: every credit spent this month counts toward it, and anything that would cross it is refused until the cap resets on the 1st of the month (UTC). Changing it needs the billing:write scope and the account's owner. Returns the account as it now is.",
       inputSchema: {
