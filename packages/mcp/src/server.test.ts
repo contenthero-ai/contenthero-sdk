@@ -25,7 +25,7 @@ function cap(modelId, contentType, kind, outputType) {
 /** A minimal fake of the SDK client; override any method per test. */
 function fakeClient(overrides = {}) {
   return {
-    getBalance: async () => ({
+    getAccount: async () => ({
       balance: 1234,
       available: 1200,
       held: 34,
@@ -321,14 +321,14 @@ function fakeClient(overrides = {}) {
     }),
     updatePostDestination: async (_cardId, destinationId, input) => ({ id: destinationId, connectedAccountId: input.connectedAccountId ?? 'ca1', platform: 'instagram', format: input.format ?? 'reel', status: input.status ?? 'draft', scheduledAt: null, publishedAt: null }),
     publishPost: async (cardId) => ({ cardId, results: [{ success: true, platform: 'instagram', destinationId: 'd1', url: 'https://instagram.com/p/x' }], publishedCount: 1, failedCount: 0 }),
-    listAccounts: async (options) => {
+    listTrackedAccounts: async (options) => {
       const all = [
         { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
         { id: 'ba1', platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
       ]
       return options?.accountType ? all.filter((a) => a.accountType === options.accountType) : all
     },
-    getAccount: async (id) => ({
+    getTrackedAccount: async (id) => ({
       account: { id, platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
       contentCount: 50,
       totals: { views: 1_000_000, likes: 50_000, comments: 5_000 },
@@ -617,9 +617,9 @@ test('spending is declared and priceable in both directions', async () => {
   assert.deepEqual(stale, [], `remove from METERED_WITHOUT_PREFLIGHT: ${stale.join(', ')}`)
 })
 
-test('get_balance formats balance, tier, and top-up state', async () => {
+test('get_account formats balance, tier, and top-up state', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_balance', arguments: {} })
+  const res = await mcp.callTool({ name: 'get_account', arguments: {} })
   const out = res.content[0].text
   assert.equal(
     out,
@@ -632,25 +632,26 @@ test('get_balance formats balance, tier, and top-up state', async () => {
   )
 })
 
-test('update_spend_cap sets the cap (null removes it) and answers with the balance', async () => {
-  const sent: Array<number | null> = []
+test('update_account changes only the fields passed (null removes the cap) and answers with the account', async () => {
+  const sent: unknown[] = []
   const base = fakeClient()
   const mcp = await connect(
     fakeClient({
-      setSpendCap: async (cap: number | null) => {
-        sent.push(cap)
-        return { ...(await base.getBalance()), spendCap: cap == null ? null : { limit: cap, remaining: cap - 300, resetsAt: '2026-11-01T00:00:00Z' } }
+      updateAccount: async (fields: { spendCap?: number | null }) => {
+        sent.push(fields)
+        const cap = fields.spendCap
+        return { ...(await base.getAccount()), spendCap: cap == null ? null : { limit: cap, remaining: cap - 300, resetsAt: '2026-11-01T00:00:00Z' } }
       },
     }),
   )
-  const set = await mcp.callTool({ name: 'update_spend_cap', arguments: { cap: 25000 } })
+  const set = await mcp.callTool({ name: 'update_account', arguments: { spendCap: 25000 } })
   assert.match(set.content[0].text, /^Monthly spend cap: 25000 credits, 24700 left this month \(resets 2026-11-01\)\.$/m)
-  const removed = await mcp.callTool({ name: 'update_spend_cap', arguments: { cap: null } })
+  const removed = await mcp.callTool({ name: 'update_account', arguments: { spendCap: null } })
   assert.match(removed.content[0].text, /^Monthly spend cap: none\.$/m)
-  assert.deepEqual(sent, [25000, null])
-  const refused = await mcp.callTool({ name: 'update_spend_cap', arguments: { cap: 0 } })
+  assert.deepEqual(sent, [{ spendCap: 25000 }, { spendCap: null }])
+  const refused = await mcp.callTool({ name: 'update_account', arguments: { spendCap: 0 } })
   assert.equal(refused.isError, true)
-  assert.deepEqual(sent, [25000, null])
+  assert.equal(sent.length, 2)
 })
 
 test('generate_image submits and hands back a pollable id, rather than waiting', async () => {
@@ -2214,18 +2215,18 @@ test('publish_post flags a total failure as an error result', async () => {
 
 // -- inspiration / research ---------------------------------------------------
 
-test('list_accounts returns BOTH kinds, each labeled', async () => {
+test('list_tracked_accounts returns BOTH kinds, each labeled', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_accounts', arguments: {} })
+  const res = await mcp.callTool({ name: 'list_tracked_accounts', arguments: {} })
   // The whole point of merging the two list tools: one call answers both questions, and a reader can still
   // tell the owner's own profile from a creator they watch.
   assert.match(res.content[0].text, /@mrbeast \(id ia1\) \[watching\]/)
   assert.match(res.content[0].text, /@contenthero \(id ba1\) \[yours\]/)
 })
 
-test('list_accounts narrows to one kind when asked', async () => {
+test('list_tracked_accounts narrows to one kind when asked', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'list_accounts', arguments: { accountType: 'brand' } })
+  const res = await mcp.callTool({ name: 'list_tracked_accounts', arguments: { accountType: 'brand' } })
   assert.match(res.content[0].text, /@contenthero/)
   assert.ok(!/@mrbeast/.test(res.content[0].text))
 })
@@ -2420,9 +2421,9 @@ test('get_content forwards a transcript window to the client', async () => {
   assert.equal(captured.options.contentId, undefined)
 })
 
-test('get_account reports totals and averages for either kind of account', async () => {
+test('get_tracked_account reports totals and averages for either kind of account', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_account', arguments: { accountId: 'ba1' } })
+  const res = await mcp.callTool({ name: 'get_tracked_account', arguments: { accountId: 'ba1' } })
   assert.match(res.content[0].text, /content tracked: 50/)
   assert.match(res.content[0].text, /1\.0M views/)
   assert.match(res.content[0].text, /5\.5% engagement/)

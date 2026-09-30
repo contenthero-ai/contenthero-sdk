@@ -73,10 +73,11 @@ await client.generate({
 })
 ```
 
-## Balance
+## Account
 
 ```ts
-const { balance, tier, autoTopupEnabled } = await client.getBalance()
+const { balance, spendCap, tier, autoTopupEnabled } = await client.getAccount()
+await client.updateAccount({ spendCap: 25000 }) // null removes the cap
 ```
 
 ## Errors

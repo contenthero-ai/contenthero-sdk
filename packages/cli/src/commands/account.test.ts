@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseSpendCap } from './account.js'
 
-test('account spend-cap takes whole credits or "none", and refuses anything else', () => {
+test('account update --spend-cap takes whole credits or "none", and refuses anything else', () => {
   assert.equal(parseSpendCap('25000'), 25000)
   assert.equal(parseSpendCap('none'), null)
   assert.equal(parseSpendCap('None'), null)

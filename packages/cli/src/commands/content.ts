@@ -22,7 +22,7 @@ import type { Command } from 'commander'
 import type {
   ContentScenes,
   ContentScenesResult,
-  AccountDetail,
+  TrackedAccountDetail,
   ContentAnalysis,
   ContentAnalysisResult,
   ContentDetail,
@@ -73,7 +73,7 @@ const SCOPES = ['all', 'inspiration', 'brand'] as const
 const WINDOWS = ['week', 'month', '3months', '6months', 'year', '2years'] as const
 const GRAINS = ['none', 'text', 'segments'] as const
 
-function accountDetailHuman(d: AccountDetail): string {
+function accountDetailHuman(d: TrackedAccountDetail): string {
   const head = keyValues([
     ['Account', d.account.name ?? d.account.handle ?? ''],
     ['Kind', d.account.accountType === 'brand' ? 'yours' : 'watching'],
@@ -109,7 +109,7 @@ export function registerTrackedAccount(program: Command): void {
       }
       const { client, ctx } = makeClient(command)
       emit(
-        await client.listAccounts({
+        await client.listTrackedAccounts({
           accountType: kind as 'inspiration' | 'brand' | undefined,
           brandKitId: opts.brandKit as string | undefined,
         }),
@@ -124,7 +124,7 @@ export function registerTrackedAccount(program: Command): void {
     .argument('<id>', 'the tracked account id')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
-      emit(await client.getAccount(id), ctx, accountDetailHuman)
+      emit(await client.getTrackedAccount(id), ctx, accountDetailHuman)
     })
 }
 

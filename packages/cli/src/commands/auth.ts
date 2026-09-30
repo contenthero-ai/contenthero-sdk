@@ -67,9 +67,9 @@ function resultPage(title: string, sub: string): string {
 /** Verify a key against the API, then persist it and report. */
 async function verifyAndStore(key: string, ctx: Context, label?: string): Promise<void> {
   const client = new ContentHero({ apiKey: key, baseUrl: ctx.baseUrl })
-  const balance = await client.getBalance()
+  const account = await client.getAccount()
   writeCredential({ apiKey: key, label, createdAt: new Date().toISOString() })
-  const data = { ok: true, stored: credentialsPath(), tier: balance.tier, balance: balance.balance }
+  const data = { ok: true, stored: credentialsPath(), tier: account.tier, balance: account.balance }
   emit(data, ctx, (d: typeof data) =>
     keyValues([
       ['Logged in', 'stored ' + d.stored],
@@ -210,16 +210,16 @@ async function statusAction(_opts: unknown, command: Command): Promise<void> {
       EXIT.AUTH,
     )
   }
-  // getBalance round-trips the key, so a bad key surfaces as an auth error (exit 3).
+  // getAccount round-trips the key, so a bad key surfaces as an auth error (exit 3).
   const client = new ContentHero({ apiKey: ctx.apiKey, baseUrl: ctx.baseUrl })
-  const balance = await client.getBalance()
+  const account = await client.getAccount()
 
   const data = {
     authenticated: true,
     keySource: ctx.keySource,
     baseUrl: ctx.baseUrl ?? DEFAULT_BASE_URL,
-    tier: balance.tier,
-    balance: balance.balance,
+    tier: account.tier,
+    balance: account.balance,
   }
   emit(data, ctx, (d: typeof data) =>
     keyValues([

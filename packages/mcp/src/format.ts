@@ -30,7 +30,7 @@ import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import type {
   Avatar,
   AvatarSummary,
-  Balance,
+  Account,
   Charge,
   BrandKit,
   BrandKitAccount,
@@ -79,7 +79,7 @@ import type {
   ContentAnalysisKind,
   ContentScenesResult,
   ContentListResult,
-  AccountDetail,
+  TrackedAccountDetail,
   Transcription,
   Voice,
   VoiceSummary,
@@ -1543,7 +1543,7 @@ export function importPendingResult(outputId: string): CallToolResult {
   return text(`Import ${outputId} is still running. Check it with ${getStatusCall([outputId])}.`)
 }
 
-export function balanceResult(b: Balance): CallToolResult {
+export function accountResult(b: Account): CallToolResult {
   const cap = b.spendCap
     ? `Monthly spend cap: ${b.spendCap.limit} credits, ${b.spendCap.remaining} left this month (resets ${b.spendCap.resetsAt.slice(0, 10)}).`
     : 'Monthly spend cap: none.'
@@ -2083,7 +2083,7 @@ export function outlierListResult(result: ContentListResult): CallToolResult {
  * much they showed: the inspiration one omitted totals, averages and recent content for no reason other
  * than which function you happened to call.
  */
-export function accountDetailResult(d: AccountDetail): CallToolResult {
+export function trackedAccountDetailResult(d: TrackedAccountDetail): CallToolResult {
   const a = d.account
   const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
   const kind = a.accountType === 'brand' ? ' [yours]' : a.accountType === 'inspiration' ? ' [watching]' : ''

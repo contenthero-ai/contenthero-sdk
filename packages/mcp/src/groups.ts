@@ -100,19 +100,19 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     title: 'Inspiration',
     blurb:
       'The research surface: the social accounts you track, and their posts ranked by outlier score.',
-    // list_accounts and get_account are TRACKED SOCIAL ACCOUNTS, not the ContentHero
-    // account you are signed in as. list_accounts: "TWO KINDS, in one list: accountType
+    // list_tracked_accounts and get_tracked_account are TRACKED SOCIAL ACCOUNTS, not the ContentHero
+    // account you are signed in as. list_tracked_accounts: "TWO KINDS, in one list: accountType
     // 'inspiration' is the creators and competitors they watch, 'brand' is their OWN
     // profiles." Filing them under "Account" misreads the entire research surface, which
     // is what the first draft of this list did.
-    tools: ['list_accounts', 'get_account', 'list_content', 'get_content', 'analyze_content'],
+    tools: ['list_tracked_accounts', 'get_tracked_account', 'list_content', 'get_content', 'analyze_content'],
   },
   {
     slug: 'account',
     title: 'Account',
     blurb:
-      'Your balance and tier, the platforms available to publish to, and what the user is looking at.',
-    tools: ['get_balance', 'update_spend_cap', 'get_context', 'get_schema'],
+      'Your ContentHero account (balance, spend cap, plan), the platforms available to publish to, and what the user is looking at.',
+    tools: ['get_account', 'update_account', 'get_context', 'get_schema'],
   },
 ]
 

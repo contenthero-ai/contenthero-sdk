@@ -10,7 +10,8 @@ Official [ContentHero](https://contenthero.ai) MCP server. Generate images, vide
 | `generate_video` | Generate video from a prompt (or start/end frame, references). Waits up to ~75s, then returns an `outputId` to poll if the render is still running. |
 | `generate_audio` | ElevenLabs speech (TTS), music, or sound effects. Synchronous: returns the audio URL directly. |
 | `check_generation` | Poll an image/video `outputId` to its final URLs. |
-| `get_balance` | Current credit balance, tier, and auto-top-up state. |
+| `get_account` | Your ContentHero account: balance, spend this month, the monthly spend cap, plan and auto top-up. |
+| `update_account` | Change an account setting (today: the monthly spend cap). |
 
 Three intent-shaped generate tools (not one `generate_media`): image and video share the async smart-wait lifecycle, audio shares almost nothing and runs synchronously, and per-tool `modelId` enums keep each schema clean.
 

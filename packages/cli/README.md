@@ -44,7 +44,7 @@ JSON is the default (built for agents and scripts). Add `--human` for readable
 tables and key/value output.
 
 ```bash
-contenthero account balance
+contenthero account get
 contenthero model list --type image --human
 ```
 

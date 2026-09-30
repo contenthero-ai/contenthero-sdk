@@ -487,8 +487,8 @@ export interface Generation {
 /** Subscription tiers the API normalizes balances against. */
 export type SubscriptionTier = 'mortal' | 'hero' | 'champion' | 'legend'
 
-/** Account credit standing as returned by `getBalance`. */
-export interface Balance {
+/** Your ContentHero account, as `getAccount` returns it (not a tracked social account: `TrackedAccountDetail`). */
+export interface Account {
   balance: number
   /** What can be spent now: the balance less `held`. */
   available: number
@@ -500,6 +500,12 @@ export interface Balance {
   spendCap: { limit: number; remaining: number; resetsAt: string } | null
   tier: SubscriptionTier
   autoTopupEnabled: boolean
+}
+
+/** The fields `updateAccount` can change; only those passed change. */
+export interface AccountUpdate {
+  /** The monthly spend cap in credits, or null for no cap. Needs `billing:write` and the account's owner. */
+  spendCap?: number | null
 }
 
 /** Options for `generateAndWait`'s polling behavior. */
@@ -2160,7 +2166,7 @@ export interface ContentAnalysisResult {
 }
 
 /** One tracked account with its performance. */
-export interface AccountDetail {
+export interface TrackedAccountDetail {
   account: TrackedAccount
   contentCount: number
   totals: { views: number; likes: number; comments: number }
@@ -2239,8 +2245,8 @@ export interface GetContentOptions {
   scenes?: 'none' | 'map' | 'frames'
 }
 
-/** Options for `listAccounts`. */
-export interface ListAccountsOptions {
+/** Options for `listTrackedAccounts`. */
+export interface ListTrackedAccountsOptions {
   /** Narrow to one tier. Omitted, both come back. */
   accountType?: 'inspiration' | 'brand'
   /** Scope to the accounts linked to this brand kit. */

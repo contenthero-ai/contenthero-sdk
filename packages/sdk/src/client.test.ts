@@ -87,32 +87,33 @@ test('402 maps each limit refusal to its typed error, with the message, numbers 
 
 test('401 maps to AuthenticationError, 400 to ValidationError', async () => {
   const auth = new ContentHero({ apiKey: 'bad', fetch: stubFetch([{ status: 401, body: { error: 'Invalid API key' } }]).fetch })
-  await assert.rejects(() => auth.getBalance(), (e: unknown) => e instanceof AuthenticationError)
+  await assert.rejects(() => auth.getAccount(), (e: unknown) => e instanceof AuthenticationError)
 
   const bad = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 400, body: { error: 'unknown model' } }]).fetch })
   await assert.rejects(() => bad.generate({ modelId: 'nope' }), (e: unknown) => e instanceof ValidationError)
 })
 
-test('getBalance returns the parsed balance', async () => {
-  const { fetch } = stubFetch([{ status: 200, body: { balance: 1234, tier: 'legend', autoTopupEnabled: true } }])
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
-  const balance = await client.getBalance()
-  assert.deepEqual(balance, { balance: 1234, tier: 'legend', autoTopupEnabled: true })
+test('getAccount reads your own account', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { balance: 1234, tier: 'legend', autoTopupEnabled: true } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const account = await client.getAccount()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/account')
+  assert.deepEqual(account, { balance: 1234, tier: 'legend', autoTopupEnabled: true })
 })
 
-test('setSpendCap puts the cap, null included, and returns the balance', async () => {
+test('updateAccount patches only the fields passed, null included, and returns the account', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { balance: 10, spendCap: { limit: 25000, remaining: 24000, resetsAt: '2026-10-01T00:00:00Z' } } },
     { status: 200, body: { balance: 10, spendCap: null } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const set = await client.setSpendCap(25000)
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/account/spend-cap')
-  assert.equal(calls[0]?.init?.method, 'PUT')
-  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { cap: 25000 })
+  const set = await client.updateAccount({ spendCap: 25000 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/account')
+  assert.equal(calls[0]?.init?.method, 'PATCH')
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { spendCap: 25000 })
   assert.equal(set.spendCap?.limit, 25000)
-  await client.setSpendCap(null)
-  assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { cap: null })
+  await client.updateAccount({ spendCap: null })
+  assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { spendCap: null })
 })
 
 test('transcribe posts the audio URL and returns the transcript', async () => {

@@ -29,7 +29,8 @@ import type {
   UpdateAvatarRequest,
   UpdateAvatarResult,
   AddAvatarLooksResult,
-  Balance,
+  Account,
+  AccountUpdate,
   BrandKit,
   BrandKitSummaryRead,
   BrandKitSectionFilter,
@@ -40,7 +41,7 @@ import type {
   BrandKnowledgeListResult,
   BrandKnowledgeMatch,
   ConnectedAccount,
-  ListAccountsOptions,
+  ListTrackedAccountsOptions,
   ListContentOptions,
   GetContentOptions,
   ContentListResult,
@@ -48,7 +49,7 @@ import type {
   ContentAnalysisResult,
   ContentAnalysisKind,
   ContentScenesResult,
-  AccountDetail,
+  TrackedAccountDetail,
   SearchBrandKnowledgeOptions,
   CostEstimate,
   CreateCardInput,
@@ -354,18 +355,23 @@ export class ContentHero {
     }
   }
 
-  /** Fetch the authenticated account's credit balance, tier, and auto-top-up state. */
-  async getBalance(): Promise<Balance> {
-    return this.request<Balance>('GET', '/api/v1/account/balance')
+  /**
+   * Your ContentHero account: the credit balance, what is available, credits reserved for work in progress, this
+   * month's spend and the monthly spend cap, the plan and auto top-up. Not a tracked social account
+   * (`getTrackedAccount`).
+   */
+  async getAccount(): Promise<Account> {
+    return this.request<Account>('GET', '/api/v1/account')
   }
 
   /**
-   * Set the account's monthly spend cap, in credits; `null` removes it (no cap). Every spend counts toward it, and a
-   * spend that would cross it is refused with `SpendCapReachedError`. Needs the `billing:write` scope (every key has
-   * it) and the account's owner. Returns the balance with the new cap.
+   * Update your ContentHero account. Only the fields you pass change; a field the account does not have is refused.
+   * `spendCap`: the monthly spend cap in credits, or `null` for no cap. Every credit spent counts toward it, and a
+   * spend that would cross it is refused with `SpendCapReachedError`; it needs the `billing:write` scope (every key
+   * has it) and the account's owner. Returns the account as it now is.
    */
-  async setSpendCap(cap: number | null): Promise<Balance> {
-    return this.request<Balance>('PUT', '/api/v1/account/spend-cap', { cap })
+  async updateAccount(fields: AccountUpdate): Promise<Account> {
+    return this.request<Account>('PATCH', '/api/v1/account', fields)
   }
 
   /**
@@ -1307,7 +1313,7 @@ export class ContentHero {
    * profiles). Every row reports its own `accountType`, so one list answers both questions. This replaces
    * `listInspirationAccounts` and `listBrandAccounts`, which were one query with a different literal.
    */
-  async listAccounts(options: ListAccountsOptions = {}): Promise<TrackedAccount[]> {
+  async listTrackedAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccount[]> {
     const q = new URLSearchParams()
     if (options.accountType) q.set('account_type', options.accountType)
     if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
@@ -1320,8 +1326,8 @@ export class ContentHero {
    * One tracked account with its performance: content count, totals, averages, top and recent content.
    * Works for either tier; the tier is reported, not required.
    */
-  async getAccount(accountId: string): Promise<AccountDetail> {
-    return this.request<AccountDetail>('GET', `/api/v1/accounts/${encodeURIComponent(accountId)}`)
+  async getTrackedAccount(accountId: string): Promise<TrackedAccountDetail> {
+    return this.request<TrackedAccountDetail>('GET', `/api/v1/accounts/${encodeURIComponent(accountId)}`)
   }
 
   /**

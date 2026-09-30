@@ -14,7 +14,7 @@
  *   list_media / get_media    - the account's studio outputs (+ per-variation ids)
  *   search_media              - semantic search of the editable media library (with scene timestamps)
  *   get_generation_status - check 1-8 outputIds; blocks until terminal by default
- *   get_balance       - credit balance + tier
+ *   get_account / update_account - your ContentHero account (balance, spend cap, plan)
  *   ... plus the content-pipeline, brand-kit-write, inspiration, brand-account,
  *   and connected-account tools.
  *
@@ -96,7 +96,7 @@ import {
   avatarListResult,
   avatarResult,
   avatarPendingResult,
-  balanceResult,
+  accountResult,
   brandKitListResult,
   brandKitResult,
   brandKitSummaryResult,
@@ -112,7 +112,7 @@ import {
   connectedAccountResult,
   costResult,
   postResult,
-  accountDetailResult,
+  trackedAccountDetailResult,
   inspirationContentResult,
   contentAnalysisResult,
   analysisCostResult,
@@ -3741,14 +3741,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- list_accounts --------------------------------------------------------
+  // -- list_tracked_accounts --------------------------------------------------------
   server.registerTool(
-    'list_accounts',
+    'list_tracked_accounts',
     {
       title: 'List Tracked Accounts',
       annotations: READ,
       description:
-        "List the social accounts this ContentHero account tracks. TWO KINDS, in one list: accountType 'inspiration' is the creators and competitors they watch for research, 'brand' is their OWN profiles (distinct from list_brand_kits, which are the brand identity documents). Every row reports its own accountType, so omit the filter to see both. Call get_account for one account's performance, or list_content for the posts. Pass brandKitId to scope to the accounts linked to a specific brand kit.",
+        "List the social accounts this ContentHero account tracks. TWO KINDS, in one list: accountType 'inspiration' is the creators and competitors they watch for research, 'brand' is their OWN profiles (distinct from list_brand_kits, which are the brand identity documents). Every row reports its own accountType, so omit the filter to see both. Call get_tracked_account for one account's performance, or list_content for the posts. Pass brandKitId to scope to the accounts linked to a specific brand kit.",
       inputSchema: {
         accountType: z
           .enum(['inspiration', 'brand'])
@@ -3760,30 +3760,30 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return trackedAccountListResult(await client.listAccounts(args))
+        return trackedAccountListResult(await client.listTrackedAccounts(args))
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- get_account ----------------------------------------------------------
+  // -- get_tracked_account ----------------------------------------------------------
   server.registerTool(
-    'get_account',
+    'get_tracked_account',
     {
       title: 'Get Tracked Account',
       annotations: READ,
       description:
         "Get one tracked account with how its content actually performs: post count, total and average views/likes/comments, average engagement and outlier score, plus its top posts by outlier score and its most recent ones. Works for either kind of account: use it on one of the owner's OWN accounts to ground decisions in their real numbers, or on a creator they watch to study what works for that creator.",
       inputSchema: {
-        accountId: z.string().describe('The account id from list_accounts.'),
+        accountId: z.string().describe('The account id from list_tracked_accounts.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const detail = await client.getAccount(args.accountId)
-        return accountDetailResult(detail)
+        const detail = await client.getTrackedAccount(args.accountId)
+        return trackedAccountDetailResult(detail)
       } catch (err) {
         return errorResult(err)
       }
@@ -3830,7 +3830,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("Sort field. Default 'relevance' when search is set, otherwise 'score'. Any other field reorders the same relevant set."),
         sortOrder: z.enum(['asc', 'desc']).optional().describe("Sort direction (default 'desc')."),
-        accountIds: z.array(z.string()).optional().describe('Limit to these tracked account ids (from list_accounts).'),
+        accountIds: z.array(z.string()).optional().describe('Limit to these tracked account ids (from list_tracked_accounts).'),
         addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),
         brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit.'),
         favorited: z.boolean().optional().describe('Only content the account has favorited.'),
@@ -3857,7 +3857,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said, or scenes='frames' to also see a frame of each scene. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
       inputSchema: {
-        contentId: z.string().describe('The content id from list_content, get_account, or a get_card inspiration asset.'),
+        contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         transcript: z
           .enum(['none', 'text', 'segments'])
           .optional()
@@ -3910,7 +3910,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. If it returns pending, call it again for the result.',
       inputSchema: {
-        contentId: z.string().describe('The content id from list_content, get_account, or a get_card inspiration asset.'),
+        contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         kind: z
           .enum(['breakdown', 'scenes'])
           .optional()
@@ -3996,46 +3996,50 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- get_balance ----------------------------------------------------------
+  // -- get_account / update_account -----------------------------------------
+  // Your own ContentHero account, one record per key, so no id. Not a tracked social account (get_tracked_account).
+  // A setting joins the account as a field of update_account, never as a tool of its own.
   server.registerTool(
-    'get_balance',
+    'get_account',
     {
-      title: 'Get Balance',
+      title: 'Get Account',
       annotations: READ,
-      description: 'Get the current ContentHero credit balance, subscription tier, and auto-top-up state.',
+      // DRAFT wording (pending approval).
+      description:
+        'Get your ContentHero account: the credit balance, what is available to spend, credits reserved for work in progress, what was spent this month, the monthly spend cap, the plan and auto top-up. For a tracked social account, use get_tracked_account.',
     },
     async (extra) => {
       try {
         const client = await getClient(extra)
-        return balanceResult(await client.getBalance())
+        return accountResult(await client.getAccount())
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- update_spend_cap -----------------------------------------------------
   server.registerTool(
-    'update_spend_cap',
+    'update_account',
     {
-      title: 'Update Spend Cap',
+      title: 'Update Account',
       annotations: { ...WRITE, idempotentHint: true },
       // DRAFT wording (pending approval).
       description:
-        "Set the account's monthly spend cap, in credits, or pass cap:null to remove it (no cap). Every credit spent this month counts toward it, and anything that would cross it is refused until the cap resets on the 1st of the month (UTC). Only the account's owner can change it. Requires the billing:write scope. Returns the balance with the new cap.",
+        "Update your ContentHero account. Only the fields you pass change. spendCap sets the monthly spend cap in credits, or null removes it: every credit spent this month counts toward it, and anything that would cross it is refused until the cap resets on the 1st of the month (UTC). Changing it needs the billing:write scope and the account's owner. Returns the account as it now is.",
       inputSchema: {
-        cap: z
+        spendCap: z
           .number()
           .int()
           .min(1)
           .nullable()
-          .describe('The monthly cap in credits, or null to remove it.'),
+          .optional()
+          .describe('The monthly spend cap in credits, or null for no cap.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return balanceResult(await client.setSpendCap(args.cap))
+        return accountResult(await client.updateAccount(args))
       } catch (err) {
         return errorResult(err)
       }
