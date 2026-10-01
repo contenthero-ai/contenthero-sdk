@@ -6,8 +6,8 @@
  *   schema commands [command...]                 the CLI's own command inputs as JSON, scoped to a path such as
  *                                                `generate image` (no API key needed: it reflects over the tree)
  *   schema platform [--platform p] [--format f]  the platforms you can publish to, or one platform's post shape
- *   schema timeline                              editor clip + track types, with copy-pasteable `example` skeletons
- *   schema layer                                 canvas layer types + editable props
+ *   schema timeline [--json-schema]              editor clip + track types, with copy-pasteable `example` skeletons
+ *   schema layer [--json-schema]                 canvas layer types and their fields
  *   schema export                                export formats per project type
  *   schema link                                  the link contract: how to build any app address from a noun + id
  *
@@ -95,7 +95,8 @@ export function registerSchema(program: Command): void {
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
     .option('--platform <platform>', 'kind platform only: the platform to read; omit to list every platform')
     .option('--format <format>', 'kind platform with --platform only: narrow to one format (e.g. reel, short, story)')
-    .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string }, command: Command) => {
+    .option('--json-schema', "kinds timeline and layer only: also return each type's full JSON Schema (large)")
+    .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string; jsonSchema?: boolean }, command: Command) => {
       if (!(KINDS as readonly string[]).includes(kind)) {
         throw new CliError(`Unknown kind "${kind}". Use one of: ${KINDS.join(', ')}.`, EXIT.USAGE)
       }
@@ -106,6 +107,9 @@ export function registerSchema(program: Command): void {
         throw new CliError(`kind ${k} takes no --platform or --format; those belong to kind platform.`, EXIT.USAGE)
       }
       if (opts.format && !opts.platform) throw new CliError('--format narrows one platform: pass --platform with it.', EXIT.USAGE)
+      if (opts.jsonSchema && k !== 'timeline' && k !== 'layer') {
+        throw new CliError(`kind ${k} takes no --json-schema; it belongs to kinds timeline and layer.`, EXIT.USAGE)
+      }
       if (k === 'commands') {
         const target = parts.join(' ')
         const all = collectLeaves(program, [])
@@ -185,7 +189,7 @@ export function registerSchema(program: Command): void {
         return
       }
       if (k === 'timeline') {
-        const cat = await client.getTimelineTypes()
+        const cat = await client.getTimelineTypes({ jsonSchema: opts.jsonSchema })
         emit(cat, ctx, () => {
           const clips = cat.clipTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n')
           const tracks = cat.trackTypes.map((t) => `${t.trackType} holds ${t.holds.join(', ')}`).join('\n')
@@ -197,7 +201,7 @@ export function registerSchema(program: Command): void {
         return
       }
       if (k === 'layer') {
-        const cat = await client.getLayerTypes()
+        const cat = await client.getLayerTypes({ jsonSchema: opts.jsonSchema })
         emit(cat, ctx, () => cat.layerTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n'))
         return
       }

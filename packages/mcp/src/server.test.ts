@@ -2839,6 +2839,32 @@ test("get_schema kind 'timeline' lists clip + track types", async () => {
   assert.match(body, /media/)
 })
 
+test("get_schema passes jsonSchema through for kinds 'timeline' and 'layer', and refuses it elsewhere", async () => {
+  const seen: unknown[] = []
+  const mcp = await connect(
+    fakeClient({
+      getTimelineTypes: async (options?: unknown) => {
+        seen.push(options)
+        return { projectType: 'editor', surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [] }
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline', jsonSchema: true } })
+  assert.deepEqual(seen[0], { jsonSchema: true })
+  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'export', jsonSchema: true } })
+  assert.equal(refused.isError, true)
+  assert.match((refused.content[0]).text, /takes no jsonSchema/)
+})
+
+// F23: `solid` was retired 2026-09-13; the tool description offered it to agents for weeks after.
+test('get_schema does not offer the retired solid layer type', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const description = tools.find((t) => t.name === 'get_schema')!.description ?? ''
+  assert.doesNotMatch(description, /\bsolid\b/)
+  assert.match(description, /shape/)
+})
+
 test('get_project with includeRenderUrl surfaces the preview URL', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', includeRenderUrl: true } })

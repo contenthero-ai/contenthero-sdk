@@ -2838,12 +2838,25 @@ export interface ExportFormatCatalog {
   qualities: string[]
 }
 
-/** One editable field on a layer/clip type (from the type-discovery catalogs). */
+/** Who normally writes a field. `editable` fields have an inspector control; `system` fields are written by the
+ *  engine or set on create (media, generation markers, provenance); `structural` fields (timing, grouping, cut
+ *  state) are owned by their ops. Any declared field except `id` and `type` is accepted by an update op. */
+export type EditorFieldClass = 'editable' | 'system' | 'structural' | 'transient'
+
+/** One field on a layer/clip type (from the type-discovery catalogs, generated from the editor's document schemas). */
 export interface EditorTypeProp {
   name: string
   /** A human-readable type hint (e.g. 'string', 'number', "'left' | 'center' | 'right'"). */
   type: string
   description?: string
+  class?: EditorFieldClass
+  /** A create must carry it. */
+  required?: boolean
+  /** The control's range; a value outside it is refused. */
+  min?: number
+  max?: number
+  /** The only values accepted; any other is refused. */
+  options?: (string | number)[]
 }
 
 /** A layer/clip type and its editable props. */
@@ -2855,6 +2868,14 @@ export interface EditorTypeSpec {
   supports: string[]
   /** A copy-pasteable minimal item skeleton for creating this type via add_item / insert_prebuilt_track. */
   example?: Record<string, unknown>
+  /** The stored item's full JSON Schema, control ranges included. Present only when asked for (`{ jsonSchema: true }`). */
+  jsonSchema?: Record<string, unknown>
+}
+
+/** What a type-catalog read may add. */
+export interface TypeCatalogOptions {
+  /** Include each type's full JSON Schema. Most of the catalog's size, so off by default. */
+  jsonSchema?: boolean
 }
 
 /** How to CREATE clips + tracks (the creation ops of update_timeline), documented alongside the edit ops. */
@@ -2873,6 +2894,10 @@ export interface EditorTrackSpec {
 /** Shared prop groups reused across visual types (referenced by each type's `supports`). */
 export interface EditorSharedProps {
   base: EditorTypeProp[]
+  /** Entrance and exit animations. */
+  animation?: EditorTypeProp[]
+  /** Template provenance and artboard geometry. */
+  template?: EditorTypeProp[]
   transform: EditorTypeProp[]
   decoration: EditorTypeProp[]
   adjust: EditorTypeProp[]

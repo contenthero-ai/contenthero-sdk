@@ -88,6 +88,7 @@ import type {
   LinkFormats,
   LayerTypeCatalog,
   TimelineTypeCatalog,
+  TypeCatalogOptions,
   TranscriptResult,
   MediaItem,
   MediaSummary,
@@ -1690,16 +1691,16 @@ export class ContentHero {
    * The canvas layer-type catalog (types + editable props), so you know what `update_canvas` ops can
    * create/edit. Requires the `editor:read` scope.
    */
-  async getLayerTypes(): Promise<LayerTypeCatalog> {
-    return this.request<LayerTypeCatalog>('GET', '/api/v1/editor/layer-types')
+  async getLayerTypes(options: TypeCatalogOptions = {}): Promise<LayerTypeCatalog> {
+    return this.request<LayerTypeCatalog>('GET', `/api/v1/editor/layer-types${catalogQuery(options)}`)
   }
 
   /**
    * The editor timeline clip + track-type catalog (types + editable props), so you know what
    * `update_timeline` ops can create/edit. Requires the `editor:read` scope.
    */
-  async getTimelineTypes(): Promise<TimelineTypeCatalog> {
-    return this.request<TimelineTypeCatalog>('GET', '/api/v1/editor/timeline-types')
+  async getTimelineTypes(options: TypeCatalogOptions = {}): Promise<TimelineTypeCatalog> {
+    return this.request<TimelineTypeCatalog>('GET', `/api/v1/editor/timeline-types${catalogQuery(options)}`)
   }
 
   /**
@@ -1826,4 +1827,9 @@ export function importedMediaFrom(gen: Generation, shortId: string | null): Impo
     alreadyExisted: false,
     contentType: gen.contentType,
   }
+}
+
+/** A type-catalog read's query: the JSON Schema is opt-in on the server too. */
+function catalogQuery(options: TypeCatalogOptions): string {
+  return options.jsonSchema ? '?include=jsonSchema' : ''
 }

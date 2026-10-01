@@ -2545,7 +2545,7 @@ export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
     `Canvas layer types (edit via update_canvas ops):\n${lines.join('\n')}\n\n` +
       (ops.length ? `update_canvas ops (${cat.ops!.description}):\n${ops.join('\n')}\n\n` : '') +
       `Shared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
-      JSON.stringify(cat, null, 2),
+      JSON.stringify(cat), // minified: a model reads it, and indentation was a third of its size
   )
 }
 
@@ -2684,6 +2684,6 @@ export function timelineTypesResult(cat: TimelineTypeCatalog): CallToolResult {
     `Editor timeline clip types (edit via update_timeline ops):\n${clips.join('\n')}\n\nTrack types:\n${tracks.join('\n')}\n\n` +
       (editOps.length ? `update_timeline edit ops (${cat.editOps!.description}):\n${editOps.join('\n')}\n\n` : '') +
       `Shared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
-      JSON.stringify(cat, null, 2),
+      JSON.stringify(cat), // minified: a model reads it, and indentation was a third of its size
   )
 }

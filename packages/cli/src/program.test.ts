@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildProgram } from './program.js'
+import { CliError, EXIT } from './errors.js'
 
 /** Names of the immediate subcommands of a named top-level group. */
 function subcommands(group: string): string[] {
@@ -284,4 +285,14 @@ test('stage update can say "move it to an edge" separately from "do not move it"
   const longs = update.options.map((o) => o.long)
   assert.ok(longs.includes('--to-start'), 'the far left needs a way to be said')
   assert.ok(longs.includes('--to-end'), 'the far right needs a way to be said')
+})
+
+// A flag a kind does not take is refused, not ignored, like --platform and --format.
+test('schema refuses --json-schema for a kind other than timeline or layer', async () => {
+  const program = buildProgram()
+  program.exitOverride()
+  await assert.rejects(
+    program.parseAsync(['node', 'contenthero', 'schema', 'export', '--json-schema']),
+    (err: unknown) => err instanceof CliError && err.exitCode === EXIT.USAGE && /takes no --json-schema/.test(err.message),
+  )
 })

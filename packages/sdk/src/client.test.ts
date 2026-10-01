@@ -610,6 +610,19 @@ test('getTimelineTypes GETs the timeline catalog', async () => {
   assert.equal(cat.surface, 'editor')
 })
 
+// The JSON Schema is opt-in on the server (most of the catalog's size), so the SDK asks for it only when told to.
+test('a type catalog asks for the JSON Schema only when told to', async () => {
+  const body = { surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [], layerTypes: [] }
+  const { fetch, calls } = stubFetch([{ status: 200, body }, { status: 200, body }, { status: 200, body }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getTimelineTypes({ jsonSchema: true })
+  await client.getLayerTypes({ jsonSchema: true })
+  await client.getTimelineTypes({ jsonSchema: false })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/timeline-types?include=jsonSchema')
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/editor/layer-types?include=jsonSchema')
+  assert.equal(calls[2]?.url, 'https://example.test/api/v1/editor/timeline-types')
+})
+
 test('listMedia forwards source=uploads to the query', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { media: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

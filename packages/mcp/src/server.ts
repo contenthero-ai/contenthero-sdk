@@ -2920,7 +2920,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Schema',
       annotations: READ,
       description:
-        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline clip types (video, image, text, solid, audio, graphic) with their editable props, the track types and what each holds, a copy-pasteable `example` clip skeleton per type, and a `creation` section documenting the CREATE ops (create_clip, insert_track, insert_prebuilt_track); read it before building any clip with update_timeline. 'layer': the CANVAS layer types (image, text, solid/shape, video, graphic) with their editable props and the shared prop groups (transform, decoration, adjust), so you know what update_canvas ops can create and set. 'export': the export formats and their options per project type, so you know what export_project accepts. 'link': the grammar of app addresses and every noun and section it takes (what each opens, its tabs, what a tab's item names) plus the app's origin, so you can build a link to any item from its noun and id. 'timeline', 'layer' and 'export' require the editor:read scope.",
+        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline clip types (video, image, text, shape, audio, graphic) with their fields (each with who writes it, its range and its allowed values), the track types and what each holds, a copy-pasteable `example` clip skeleton per type, and a `creation` section documenting the CREATE ops (create_clip, insert_track, insert_prebuilt_track); read it before building any clip with update_timeline. 'layer': the CANVAS layer types (image, text, shape, video, graphic) with their fields and the shared prop groups (base, animation, template, transform, decoration, adjust), so you know what update_canvas ops can create and set. 'export': the export formats and their options per project type, so you know what export_project accepts. 'link': the grammar of app addresses and every noun and section it takes (what each opens, its tabs, what a tab's item names) plus the app's origin, so you can build a link to any item from its noun and id. 'timeline', 'layer' and 'export' require the editor:read scope.",
       inputSchema: {
         kind: z.enum(['platform', 'timeline', 'layer', 'export', 'link']).describe('Which vocabulary to read.'),
         platform: z
@@ -2931,6 +2931,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .optional()
           .describe("kind 'platform' with a platform only: a format to narrow to (e.g. \"reel\", \"short\", \"story\", \"thread\")."),
+        jsonSchema: z
+          .boolean()
+          .optional()
+          .describe("kind 'timeline' or 'layer' only: also return each type's full JSON Schema. It is large; ask for it only to validate a whole item before sending it."),
       },
     },
     async (args, extra) => {
@@ -2939,6 +2943,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // caller did not ask.
         if (args.kind !== 'platform' && (args.platform || args.format)) {
           return errorResult(new Error(`kind '${args.kind}' takes no platform or format; those belong to kind 'platform'.`))
+        }
+        if (args.jsonSchema && args.kind !== 'timeline' && args.kind !== 'layer') {
+          return errorResult(new Error(`kind '${args.kind}' takes no jsonSchema; it belongs to kinds 'timeline' and 'layer'.`))
         }
         if (args.format && !args.platform) {
           return errorResult(new Error("format narrows one platform: pass platform with it, or omit both to list the platforms."))
@@ -2950,9 +2957,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
               ? platformResult(await client.getPlatform(args.platform, { format: args.format }))
               : platformListResult(await client.listPlatforms())
           case 'timeline':
-            return timelineTypesResult(await client.getTimelineTypes())
+            return timelineTypesResult(await client.getTimelineTypes({ jsonSchema: args.jsonSchema }))
           case 'layer':
-            return layerTypesResult(await client.getLayerTypes())
+            return layerTypesResult(await client.getLayerTypes({ jsonSchema: args.jsonSchema }))
           case 'export':
             return exportFormatsResult(await client.getExportFormats())
           case 'link':
