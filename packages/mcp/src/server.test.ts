@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
-import { buildServer, attachmentsFor } from './server.js'
+import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import { PACKAGE_VERSION } from './widget/generation.js'
 import { assertGroupsCoverTools, groupedToolNames } from './groups.js'
@@ -2563,6 +2563,7 @@ test('every declared field on update_brand_kit actually reaches the client', asy
     name: 'n', websiteUrls: ['https://x.test'], logos: [{ url: 'https://x/1.png' }],
     assets: [{ url: 'https://x/2.png' }], sections: [{ key: 'about', body: 'b' }],
     brandAccounts: ['https://youtube.com/@a'], inspirationAccounts: ['https://youtube.com/@b'],
+    brandColors: [{ hex: '#1A2B3C', role: 'primary' }], typography: { titleFont: 'Manrope' },
   }
   let captured
   const mcp = await connect(
@@ -3686,4 +3687,13 @@ test('the cost line: an estimate while it runs, the cost once charged, nothing w
   assert.equal(chargeLine({ credits: 0, held: 0, state: 'free', balanceAfter: null }), 'Cost: Nothing was charged.')
   assert.equal(chargeLine({ credits: 1, held: 0, state: 'charged', balanceAfter: null }), 'Cost: 1 credit charged.')
   assert.equal(chargeLine(undefined), null)
+})
+
+test('a connecting agent is told where the user\'s files live, so a blocked download names its own fix', async () => {
+  // A sandbox that may reach only listed hosts got logo links it could not download (2026-10-02). The fix is the
+  // user allowing these hosts, and only the instructions reach every agent before its first call.
+  const mcp = await connect(fakeClient({}))
+  const instructions = mcp.getInstructions()
+  assert.ok(instructions, 'the server sends no instructions')
+  assert.ok(instructions.includes(MEDIA_HOST), `the instructions do not name ${MEDIA_HOST}`)
 })

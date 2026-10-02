@@ -942,8 +942,9 @@ export interface BrandKit extends BrandKitSummary {
   extractionError?: string | null
   sourceType: string | null
   logos: unknown[]
-  brandColors: unknown[]
-  typography: Record<string, unknown> | null
+  brandColors: BrandColor[]
+  /** The kit's fonts; null when none is set. */
+  typography: BrandTypography | null
   socialAccounts: unknown[]
   assets: unknown[]
   sections: BrandKitSection[]
@@ -952,13 +953,34 @@ export interface BrandKit extends BrandKitSummary {
   knowledge: BrandKitKnowledge[]
 }
 
+/** The roles a palette names. A color without one is an extra swatch. */
+export type BrandColorRole = 'primary' | 'secondary' | 'tertiary' | 'accent'
+
+/** One palette color. `hex` is six-digit `#RRGGBB`; the server stores it uppercase. */
+export interface BrandColor {
+  hex: string
+  name?: string
+  role?: BrandColorRole
+}
+
+/** A kit's fonts, by family name. A font that is not set is absent. */
+export interface BrandTypography {
+  titleFont?: string
+  bodyFont?: string
+}
+
 /** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
 export interface UpdateBrandKitInput {
   name?: string
   /** The brand's websites, primary first. REPLACES the list; `[]` clears it. Stored only: pass `extract` to import. */
   websiteUrls?: string[]
-  brandColors?: unknown[]
-  typography?: Record<string, unknown> | null
+  /** The palette. REPLACES the list: send every color, `[]` to clear. Each role is held by at most one color. */
+  brandColors?: BrandColor[]
+  /**
+   * The fonts. MERGES: a font left out keeps its value, `null` or `''` clears that font, and `typography: null`
+   * clears both, so setting the title font alone keeps the body font.
+   */
+  typography?: { titleFont?: string | null; bodyFont?: string | null } | null
   /**
    * Brand media. A patch REPLACES the list, so pass the whole set; `[]` clears it. These are reconciled into
    * `brand_kit_assets` rather than written as columns, which is why they are not simple fields.

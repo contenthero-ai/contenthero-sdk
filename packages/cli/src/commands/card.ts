@@ -29,7 +29,7 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, toInt, toJson, toList } from '../args.js'
+import { collect, isClear, toInt, toJson, toList } from '../args.js'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -41,7 +41,6 @@ const PLATFORMS: PostPlatform[] = [
   'threads',
   'general',
 ]
-const CLEAR = ['null', 'clear', 'none']
 
 function assertPlatform(value: string | undefined): void {
   if (value && !PLATFORMS.includes(value as PostPlatform)) {
@@ -283,7 +282,7 @@ export function registerCard(program: Command): void {
         scheduledAt:
           opts.schedule === undefined
             ? undefined
-            : CLEAR.includes(String(opts.schedule).toLowerCase())
+            : isClear(opts.schedule)
               ? null
               : (opts.schedule as string),
         posts: opts.posts as UpdateCardInput['posts'],

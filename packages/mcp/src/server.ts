@@ -885,15 +885,25 @@ function renders(progress: string) {
  * Two different questions, deliberately not one constant.
  */
 /**
+ * The one host an agent downloads a user's files from: the gateway, whose capability urls carry their token in
+ * the query string, so a link needs no header and no sign-in. Public-class files come from it too for an agent
+ * (the token names the public store), so a sandbox that reaches only listed hosts needs this one line.
+ *
+ * ⚠️ The app holds the same fact as `AGENT_MEDIA_HOST` (`lib/media/agent-media-url.ts`), derived from its gateway
+ * config; `__tests__/media/agent-media-host-is-published.test.ts` there fails if they differ.
+ */
+export const MEDIA_HOST = 'media.contenthero.ai'
+
+/**
+ * The public CDN, which browsers still read public-class files from. The frame may paint and read it, so a link
+ * stored before every reader moved to the gateway still displays; an agent is never TOLD to reach it.
+ */
+const PUBLIC_CDN_HOST = 'cdn.contenthero.ai'
+
+/**
  * What the frame may PAINT. Named once so the ChatGPT mirror below is derived rather than retyped.
  */
-const WIDGET_RESOURCE_DOMAINS = [
-  // Capability urls for generated assets: the token rides in the query string, so an element src loads
-  // one directly with no header to set.
-  'https://media.contenthero.ai',
-  // Public-class objects (posters, gallery, stock).
-  'https://cdn.contenthero.ai',
-]
+const WIDGET_RESOURCE_DOMAINS = [MEDIA_HOST, PUBLIC_CDN_HOST].map((host) => `https://${host}`)
 
 /**
  * What the frame may READ.
@@ -908,7 +918,7 @@ const WIDGET_RESOURCE_DOMAINS = [
  * different questions (may the frame paint this, may the frame read this) and a future answer to one is not
  * automatically the answer to the other.
  */
-const WIDGET_CONNECT_DOMAINS = ['https://media.contenthero.ai', 'https://cdn.contenthero.ai']
+const WIDGET_CONNECT_DOMAINS = [MEDIA_HOST, PUBLIC_CDN_HOST].map((host) => `https://${host}`)
 
 const WIDGET_CSP = {
   _meta: {
@@ -1147,6 +1157,22 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     url: z.string().optional().describe('A url the kit already has.'),
     outputId: z.string().optional().describe('A generation to copy in.'),
     name: z.string().optional(),
+  })
+
+  /** One palette color. The app holds the rules (`lib/brand-kits/visual-identity.ts`) and tests this shape against them. */
+  const brandColorEntrySchema = z.object({
+    hex: z.string().describe('Six-digit hex, like #1A2B3C.'),
+    name: z.string().optional(),
+    role: z
+      .enum(['primary', 'secondary', 'tertiary', 'accent'])
+      .optional()
+      .describe('At most one color holds each role. Omit for an extra color.'),
+  })
+
+  /** The kit's fonts by family name. */
+  const typographySchema = z.object({
+    titleFont: z.string().nullable().optional().describe("The font family for titles. null or '' clears it."),
+    bodyFont: z.string().nullable().optional().describe("The font family for body text. null or '' clears it."),
   })
 
   /**
@@ -2134,6 +2160,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("Import the kit from websiteUrls and its own accounts in brandAccounts. Returns at once; poll analysisStatus and extractionStatus."),
         duplicateFrom: z.string().optional().describe('Copy an existing brand kit id instead of starting empty.'),
+        brandColors: z.array(brandColorEntrySchema).optional().describe("The kit's palette, each { hex, name?, role? }."),
+        typography: typographySchema.optional().describe("The kit's fonts, { titleFont?, bodyFont? }."),
         logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, is_primary?, layout?, colorMode? }. Use outputId to bring in a generation."),
         assets: z.array(assetEntrySchema).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
         sections: z
@@ -2188,7 +2216,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit: its section content, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
+        "Update a brand kit: its section content, colors and fonts, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
         brandKitId: z.string().optional().describe('The brand kit id. Omit ONLY when reordering with orderedIds.'),
         orderedIds: z
@@ -2205,6 +2233,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(sectionEntrySchema)
           .optional()
           .describe('Section writes: only the sections you change, all or nothing. { key, body, expectedVersion } edits one; { sectionName, tab, body? } adds one.'),
+        brandColors: z
+          .array(brandColorEntrySchema)
+          .optional()
+          .describe("The kit's palette, each { hex, name?, role? }. REPLACES the list; [] clears it."),
+        typography: typographySchema
+          .nullable()
+          .optional()
+          .describe("The kit's fonts, { titleFont?, bodyFont? }. MERGES: a font left out keeps its value; null clears both."),
         isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
         brandAccounts: z
           .array(accountEntrySchema)
@@ -4605,13 +4641,29 @@ export const SERVER_INFO: Implementation = {
 }
 
 /**
+ * What every agent connected to this server is told before its first call, on both transports (the hosted route
+ * passes it to `createMcpHandler`). One rule that no single tool owns: how to get the user's FILES, which any
+ * tool returning a link can lead to.
+ *
+ * ⭐ Measured 2026-10-02: a Claude co-work session received a brand kit's logo links, could not download them
+ * because its sandbox may reach only listed hosts, and proposed shipping the image as base64 through the tool
+ * result instead. That would have cost the whole context window for a 587 KB logo (the 90th percentile of the
+ * kits' PNG logos) and had to be retyped exactly into the file. The fix was one allowed host. This says so.
+ */
+export const SERVER_INSTRUCTIONS =
+  `Links to the user's ContentHero files (images, video, audio, logos) are served from ${MEDIA_HOST}. ` +
+  'They need no sign-in and do not expire, so download a file directly when a task needs the file itself. ' +
+  'If a download is blocked, the environment you run in is not allowed to reach that host: tell the user to ' +
+  `add ${MEDIA_HOST} to their AI tool's allowed network domains, and do not work around it.`
+
+/**
  * Build a stdio-style server bound to a single env-configured client. The model
  * enums are resolved live from the discovery catalog (the client has a key).
  */
 export async function buildServer(options: BuildServerOptions = {}): Promise<McpServer> {
   const getClient = options.getClient ?? defaultGetClient
   const models = await resolveModelEnums(getClient)
-  const server = new McpServer({ ...SERVER_INFO })
+  const server = new McpServer({ ...SERVER_INFO }, { instructions: SERVER_INSTRUCTIONS })
   registerTools(server, { getClient: () => getClient(), models, jobWait: options.jobWait })
   return server
 }

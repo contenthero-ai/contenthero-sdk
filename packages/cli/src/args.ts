@@ -36,6 +36,14 @@ export function toList(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean)
 }
 
+/** The words that clear a value rather than set it (`--schedule clear`, `--title-font none`). One list for every flag. */
+export const CLEAR_WORDS = ['null', 'clear', 'none'] as const
+
+/** Whether an option value asks to clear the field. */
+export function isClear(value: unknown): boolean {
+  return (CLEAR_WORDS as readonly string[]).includes(String(value).toLowerCase())
+}
+
 /** Parse a JSON option value into an unknown, with a usage error on bad JSON. */
 export function toJson(value: string): unknown {
   try {

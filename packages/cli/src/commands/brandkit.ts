@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import type { Command } from 'commander'
 import type {
+  BrandColor,
+  BrandColorRole,
   BrandImportOutcome,
   BrandKit,
   BrandKitSectionsRead,
@@ -29,7 +31,7 @@ import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, toInt, toJson, toList } from '../args.js'
+import { collect, isClear, toInt, toJson, toList } from '../args.js'
 
 /**
  * Turn repeated `--logo` / `--asset` refs into the declarative media list the API takes.
@@ -92,6 +94,35 @@ function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
     .option('--inspiration-account <ref>', `a competitor/creator profile: same forms as --brand-account. Repeatable${replaces}`, collect)
     .option('--logo <ref>', `a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary${replaces}`, collect)
     .option('--asset <ref>', `a brand asset: a url, or a generation id to copy in. Repeatable${replaces}`, collect)
+    .option(
+      '--color <hex[:role[:name]]>',
+      `a palette color, e.g. #1A2B3C:primary:Ocean, or #FFFFFF::Paper with no role. Role is primary, secondary, ` +
+        `tertiary or accent, each held by one color. Repeatable${mode === 'update' ? `${replaces}; --color none clears it` : ''}`,
+      collect,
+    )
+    .option('--title-font <family>', `the font family for titles${mode === 'update' ? '; none clears it' : ''}`)
+    .option('--body-font <family>', `the font family for body text${mode === 'update' ? '; none clears it' : ''}`)
+}
+
+/** `--color` values as palette entries: hex, then an optional role, then an optional name (which may hold ':'). */
+export function colorRefs(refs: string[] | undefined): BrandColor[] | undefined {
+  if (!refs?.length) return undefined
+  if (refs.length === 1 && isClear(refs[0])) return []
+  return refs.map((raw) => {
+    const [hex, role, ...name] = raw.split(':')
+    return compact({
+      hex: (hex ?? '').trim(),
+      role: role?.trim() ? (role.trim() as BrandColorRole) : undefined,
+      name: name.join(':').trim() || undefined,
+    })
+  })
+}
+
+/** `--title-font` / `--body-font` as a fonts write: only the fonts named, `none` as null. The server merges it. */
+export function typographyRefs(opts: Record<string, unknown>): UpdateBrandKitInput['typography'] {
+  const font = (value: unknown) => (value === undefined ? undefined : isClear(value) ? null : String(value))
+  const fonts = compact({ titleFont: font(opts.titleFont), bodyFont: font(opts.bodyFont) })
+  return Object.keys(fonts).length > 0 ? fonts : undefined
 }
 
 /** The shared identity fields, read back from the options `identityOptions` declared. */
@@ -101,6 +132,8 @@ function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
     inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
     logos: mediaRefs(opts.logo as string[] | undefined),
     assets: mediaRefs(opts.asset as string[] | undefined),
+    brandColors: colorRefs(opts.color as string[] | undefined),
+    typography: typographyRefs(opts),
   }
 }
 
@@ -288,7 +321,7 @@ export function registerBrandKit(program: Command): void {
   identityOptions(
     brandKit
       .command('update')
-      .description('Update a brand kit: section content, media and accounts (requires brandkit:write)')
+      .description('Update a brand kit: section content, colors and fonts, media and accounts (requires brandkit:write)')
       .argument('<id>', 'the brand kit id')
       .option('--name <text>')
       .option('--website-url <url>', "one of the brand's websites. Repeatable; the first is the primary site. Replaces the list", collect)
