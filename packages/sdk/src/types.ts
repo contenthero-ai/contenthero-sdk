@@ -102,6 +102,156 @@ export interface CreateKlingElementRequest {
 /** @deprecated Use `CreateKlingElementRequest`. */
 export type CreateElementRequest = CreateKlingElementRequest
 
+// ---------------------------------------------------------------------------
+// Templates (the editor's Elements: reusable graphics, shapes and animated emoji)
+// ---------------------------------------------------------------------------
+
+/** What a template draws: a graphic (code or a Lottie file), a shape, or an animated emoji. */
+export type TemplateKind = 'graphic' | 'shape' | 'emoji'
+
+/** Whose templates: ContentHero's, the caller's own, or both. */
+export type TemplateScope = 'system' | 'user' | 'all'
+
+/**
+ * A template in a list: everything but its code. ContentHero's (`scope: 'system'`) are read-only; the caller's own
+ * (`'user'`) can be changed and deleted. A placed copy is a snapshot: changing a template never changes a clip.
+ */
+export interface TemplateSummary {
+  id: string
+  scope: 'system' | 'user'
+  /** The owner of one of the caller's templates; null for ContentHero's. */
+  user_id: string | null
+  kind: TemplateKind
+  name: string
+  category: string
+  description: string | null
+  tags: string[] | null
+  /** Its props as placed, before the brand kit's values fill the props it binds. */
+  props: Record<string, unknown>
+  /** Each prop's control (`control`, `label`, `default`, and `brand`, the brand value it takes when placed). */
+  props_schema: Record<string, unknown> | null
+  duration_frames: number
+  /** How it draws: `code`, `lottie` or `emoji`; null for a shape. */
+  render_backend: 'code' | 'lottie' | 'emoji' | null
+  /** What it makes: a graphic, or a shape (with the shape's name); an emoji graphic names its emoji. */
+  skeleton: { type: 'graphic' | 'shape'; shape?: string; emoji?: string } | null
+  lottie_url: string | null
+  lottie_recolor: Array<{ from: string; role: string }> | null
+  /** Its default box: the whole frame, or a fraction of the canvas on each axis. */
+  coverage: 'full' | 'partial'
+  width_fraction: number | null
+  height_fraction: number | null
+  /** `scale` keeps its proportions in any box; `reflow` lays out again in the box it is given. */
+  resize: 'scale' | 'reflow'
+  /** Its own width over height, for `resize: 'scale'`. */
+  aspect: number | null
+  /** The coordinate space its artwork is drawn in, and the rectangle of it that is the element. */
+  artboard_width: number | null
+  artboard_height: number | null
+  content_x: number | null
+  content_y: number | null
+  content_width: number | null
+  content_height: number | null
+  thumbnail_url: string | null
+  preview_url: string | null
+  /** Moves when its code, props or controls change; a rename leaves it. Pass it back as `expectedVersion`. */
+  version: number
+  /** Its code's md5: equal codes, equal fingerprints. Null for a template with no code. */
+  code_md5: string | null
+  /** Lineage: the template it was saved from, and that template's version then. */
+  source_template_id: string | null
+  source_template_version: number | null
+  /** Who made it, and how: `person` or `agent`, through `app`, `api`, `mcp` or `cli`. */
+  created_by: string | null
+  actor: string | null
+  channel: string | null
+  archived_at: string | null
+  order_key: number | null
+  featured_rank: number | null
+  group_key: string | null
+  subgroup_key: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** One template, whole: with its code (null for a shape, a Lottie file or an emoji, which draw without one). */
+export interface Template extends TemplateSummary {
+  code: string | null
+}
+
+export interface ListTemplatesOptions {
+  /** `all` (the default), `system` (ContentHero's) or `user` (the caller's own). */
+  scope?: TemplateScope
+  kind?: TemplateKind
+  /** One category or several. */
+  category?: string | string[]
+  /** Every word, in any order, in the name or the tags. */
+  search?: string
+  /** `only` lists archived templates, to restore one; they are left out otherwise. */
+  archived?: 'only'
+  /** The `nextCursor` of the page before. */
+  cursor?: string
+  /** Up to 500; 100 by default. */
+  limit?: number
+}
+
+export interface TemplateListResult {
+  templates: TemplateSummary[]
+  /** Pass as `cursor` for the next page; null on the last. */
+  nextCursor: string | null
+}
+
+/**
+ * A template's fields as a write takes them. On a create, exactly one of `code`, `lottie`, `emoji` or `shape` says
+ * what it draws, unless it is saved from an item or copied from a template.
+ */
+export interface TemplateFields {
+  name?: string
+  category?: string
+  description?: string | null
+  tags?: string[]
+  /** A graphic's code: checked as it is written, refused when it does not compile. */
+  code?: string
+  /** A Lottie file of ours, and the colors in it that take props (each `role` is a prop name). */
+  lottie?: { url: string; recolor?: Array<{ from: string; role: string }> }
+  /** An animated emoji's name, such as `party-popper`. */
+  emoji?: string
+  /** A shape's name, such as `star`. */
+  shape?: string
+  props?: Record<string, unknown>
+  propsSchema?: Record<string, unknown> | null
+  durationFrames?: number
+  coverage?: 'full' | 'partial'
+  /** Its default box, a fraction of the canvas on each axis, for `coverage: 'partial'`. */
+  widthFraction?: number | null
+  heightFraction?: number | null
+  resize?: 'scale' | 'reflow'
+  aspect?: number | null
+  artboard?: { width: number; height: number; content: { x: number; y: number; width: number; height: number } } | null
+  thumbnailUrl?: string | null
+  previewUrl?: string | null
+  orderKey?: number
+  /** Lineage, which `fromItem` and `fromTemplateId` set for you: kept only for a template the caller can see. */
+  sourceTemplateId?: string | null
+  sourceTemplateVersion?: number | null
+}
+
+/**
+ * Save a template, from exactly one source: its fields; `fromItem`, a graphic or shape placed on a project (its code,
+ * props, controls and box, as fractions of that canvas); or `fromTemplateId`, a copy (with its lineage). Fields given
+ * beside `fromItem` or `fromTemplateId` override what it carries.
+ */
+export type CreateTemplateRequest =
+  | TemplateFields
+  | (TemplateFields & { fromItem: { projectId: string; itemId: string } })
+  | (TemplateFields & { fromTemplateId: string })
+
+/** A write's result: the template as stored, and what the checks warned about (written anyway). */
+export interface TemplateWriteResult {
+  template: Template
+  warnings: string[]
+}
+
 /**
  * A generation request. `modelId` is always required. For image/video the
  * `prompt` and typed-core fields apply; for audio (ElevenLabs) the audio fields
@@ -2411,10 +2561,12 @@ export type FavoriteAssetType =
   | 'inspiration_content'
   | 'gallery'
   | 'transition'
+  | 'caption-template'
+  | 'template'
   | 'space'
 
 /** The asset types that can be archived. */
-export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space'
+export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space' | 'template'
 
 /**
  * The target of a favorite / unfavorite call.

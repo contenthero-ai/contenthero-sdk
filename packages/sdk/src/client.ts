@@ -109,6 +109,13 @@ import type {
   PlatformSchema,
   KlingElement,
   CreateKlingElementRequest,
+  Template,
+  TemplateScope,
+  ListTemplatesOptions,
+  TemplateListResult,
+  TemplateFields,
+  CreateTemplateRequest,
+  TemplateWriteResult,
   Stage,
   Space,
   CardAsset,
@@ -1018,6 +1025,62 @@ export class ContentHero {
   /** @deprecated Use `deleteKlingElement`. */
   async deleteElement(id: string): Promise<{ deleted: boolean; id: string }> {
     return this.deleteKlingElement(id)
+  }
+
+  // -------------------------------------------------------------------------
+  // Templates (the editor's Elements: reusable graphics, shapes and animated emoji)
+  // -------------------------------------------------------------------------
+
+  /**
+   * The templates the caller can see, ContentHero's and their own, without their code, a page at a time. Place one
+   * with an `insert_template` op on `applyEditorOps`; read one whole with `getTemplate`.
+   */
+  async listTemplates(options: ListTemplatesOptions = {}): Promise<TemplateListResult> {
+    const q = new URLSearchParams()
+    if (options.scope) q.set('scope', options.scope)
+    if (options.kind) q.set('kind', options.kind)
+    for (const category of ([] as string[]).concat(options.category ?? [])) q.append('category', category)
+    if (options.search) q.set('search', options.search)
+    if (options.archived) q.set('archived', options.archived)
+    if (options.cursor) q.set('cursor', options.cursor)
+    if (options.limit != null) q.set('limit', String(options.limit))
+    const qs = q.toString()
+    return this.request<TemplateListResult>('GET', `/api/v1/templates${qs ? `?${qs}` : ''}`)
+  }
+
+  /** The categories in use among the templates the caller can see, with how many each holds. */
+  async listTemplateCategories(options: { scope?: TemplateScope } = {}): Promise<Array<{ category: string; count: number }>> {
+    const qs = options.scope ? `?scope=${encodeURIComponent(options.scope)}` : ''
+    const data = await this.request<{ categories: Array<{ category: string; count: number }> }>('GET', `/api/v1/templates/categories${qs}`)
+    return data.categories
+  }
+
+  /** One template, with its code. Someone else's is not found, the same as a missing one. */
+  async getTemplate(id: string): Promise<Template> {
+    const data = await this.request<{ template: Template }>('GET', `/api/v1/templates/${encodeURIComponent(id)}`)
+    return data.template
+  }
+
+  /**
+   * Save one of the caller's own templates, from exactly one source (`CreateTemplateRequest`). Code that does not
+   * compile, and a file addressed by its storage link, are refused.
+   */
+  async createTemplate(request: CreateTemplateRequest): Promise<TemplateWriteResult> {
+    return this.request<TemplateWriteResult>('POST', '/api/v1/templates', request)
+  }
+
+  /**
+   * Change one of the caller's own templates: only the fields given. Pass the `version` you read as
+   * `expectedVersion` to refuse (409) a write over content that changed since. Placed copies keep what they had.
+   */
+  async updateTemplate(id: string, fields: TemplateFields, options: { expectedVersion?: number } = {}): Promise<TemplateWriteResult> {
+    const body = options.expectedVersion != null ? { ...fields, expectedVersion: options.expectedVersion } : fields
+    return this.request<TemplateWriteResult>('PATCH', `/api/v1/templates/${encodeURIComponent(id)}`, body)
+  }
+
+  /** Delete one of the caller's own templates. Placed copies keep everything. To hide one instead, archive it. */
+  async deleteTemplate(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request<{ deleted: boolean; id: string }>('DELETE', `/api/v1/templates/${encodeURIComponent(id)}`)
   }
 
   // -------------------------------------------------------------------------

@@ -3916,3 +3916,59 @@ test('generate_video forwards klingElements, and the deprecated elements and ele
   assert.match(props.elements.description, /^Deprecated alias for `klingElements`/)
   assert.match(props.klingElements.items.properties.elementId.description, /^Deprecated alias for `klingElementId`/)
 })
+
+/**
+ * TEMPLATES (motion graphics 5.7): the editor's Elements, filed with the editor, on the template SDK methods. A write
+ * reports what the checks warned about, and archive and favorite take a template like any other asset.
+ */
+const TEMPLATE_TOOLS = ['list_templates', 'get_template', 'create_template', 'update_template', 'delete_template']
+
+test('the template tools are filed with the editor, and reach the template SDK methods by templateId', async () => {
+  const row = {
+    id: '22222222-2222-4222-8222-222222222222', scope: 'user', user_id: 'u1', kind: 'graphic', name: 'Lower third', category: 'lower-thirds',
+    description: null, tags: ['name'], props: { title: 'Hi' }, props_schema: { title: { control: 'text', label: 'Title' } }, duration_frames: 120,
+    render_backend: 'code', skeleton: { type: 'graphic' }, coverage: 'partial', width_fraction: 0.25, height_fraction: 0.125, resize: 'scale',
+    aspect: 2, version: 3, archived_at: null, source_template_id: null, source_template_version: null, code: 'export default () => null',
+  }
+  const calls = []
+  const mcp = await connect(
+    fakeClient({
+      listTemplates: async (opts) => (calls.push(`list ${JSON.stringify(opts)}`), { templates: [row], nextCursor: 'c2' }),
+      getTemplate: async (id) => (calls.push(`get ${id}`), row),
+      createTemplate: async (req) => (calls.push(`create ${JSON.stringify(req)}`), { template: row, warnings: ['interpolate was given keyframes out of order'] }),
+      updateTemplate: async (id, fields, opts) => (calls.push(`update ${id} ${JSON.stringify(fields)} ${JSON.stringify(opts)}`), { template: row, warnings: [] }),
+      deleteTemplate: async (id) => (calls.push(`delete ${id}`), { deleted: true, id }),
+    }),
+  )
+  const editor = TOOL_GROUPS.find((g) => g.slug === 'editor')
+  assert.deepEqual(TEMPLATE_TOOLS.filter((n) => !editor.tools.includes(n)), [])
+
+  const listed = await mcp.callTool({ name: 'list_templates', arguments: { scope: 'user', kind: 'graphic', category: ['lower-thirds'], archived: true } })
+  assert.match(listed.content[0].text, /^1 template\(s\):\n- Lower third \(id 2{8}-.*\) \| graphic \| lower-thirds \| yours \| version 3 \| 25% x 13% of the canvas/)
+  assert.match(listed.content[0].text, /More: pass cursor "c2"\./)
+  const got = await mcp.callTool({ name: 'get_template', arguments: { templateId: row.id } })
+  assert.match(got.content[0].text, /```tsx\nexport default \(\) => null\n```/)
+  const saved = await mcp.callTool({ name: 'create_template', arguments: { fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' } })
+  assert.match(saved.content[0].text, /Saved template "Lower third" .*version 3\.\nWarnings \(it was saved anyway\):\n- interpolate was given keyframes out of order/)
+  await mcp.callTool({ name: 'create_template', arguments: { fromTemplateId: row.id, name: 'Mine' } })
+  await mcp.callTool({ name: 'update_template', arguments: { templateId: row.id, expectedVersion: 3, props: { title: 'Bye' } } })
+  const deleted = await mcp.callTool({ name: 'delete_template', arguments: { templateId: row.id } })
+  assert.equal(deleted.content[0].text, `Deleted template ${row.id}. Clips placed from it keep everything.`)
+
+  assert.deepEqual(calls, [
+    `list ${JSON.stringify({ scope: 'user', kind: 'graphic', category: ['lower-thirds'], archived: 'only' })}`,
+    `get ${row.id}`,
+    `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { projectId: 'p1', itemId: 'g1' } })}`,
+    `create ${JSON.stringify({ name: 'Mine', fromTemplateId: row.id })}`,
+    `update ${row.id} {"props":{"title":"Bye"}} {"expectedVersion":3}`,
+    `delete ${row.id}`,
+  ])
+})
+
+test('archive and favorite take a template', async () => {
+  const mcp = await connect(fakeClient())
+  const tools = (await mcp.listTools()).tools
+  const assetTypes = (name) => tools.find((t) => t.name === name).inputSchema.properties.assetType.enum
+  assert.ok(assetTypes('archive').includes('template'))
+  assert.ok(assetTypes('favorite').includes('template'))
+})

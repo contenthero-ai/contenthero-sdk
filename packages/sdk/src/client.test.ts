@@ -1110,3 +1110,44 @@ test('the pre-rename element methods call their Kling twins, so there is one imp
     'deleteKlingElement ["k1"]',
   ])
 })
+
+test('templates live at /api/v1/templates: a list pages with a cursor, reads unwrap template, writes keep their warnings', async () => {
+  const TEMPLATE = { id: '22222222-2222-4222-8222-222222222222', name: 'Lower third', version: 3, code: 'export default () => null' }
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { templates: [TEMPLATE], nextCursor: 'eyJvZmZzZXQiOjF9' } },
+    { status: 200, body: { categories: [{ category: 'lower-thirds', count: 4 }] } },
+    { status: 200, body: { template: TEMPLATE } },
+    { status: 201, body: { template: TEMPLATE, warnings: ['interpolate needs two different keyframes'] } },
+    { status: 200, body: { template: TEMPLATE, warnings: [] } },
+    { status: 200, body: { deleted: true, id: TEMPLATE.id } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const page = await client.listTemplates({ scope: 'user', kind: 'graphic', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: 50 })
+  assert.deepEqual(page, { templates: [TEMPLATE], nextCursor: 'eyJvZmZzZXQiOjF9' })
+  assert.deepEqual(await client.listTemplateCategories({ scope: 'all' }), [{ category: 'lower-thirds', count: 4 }])
+  assert.deepEqual(await client.getTemplate(TEMPLATE.id), TEMPLATE)
+  const created = await client.createTemplate({ fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' })
+  assert.deepEqual(created.warnings, ['interpolate needs two different keyframes'])
+  await client.updateTemplate(TEMPLATE.id, { props: { title: 'Hi' } }, { expectedVersion: 3 })
+  assert.deepEqual(await client.deleteTemplate(TEMPLATE.id), { deleted: true, id: TEMPLATE.id })
+
+  assert.deepEqual(
+    calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
+    [
+      'GET /api/v1/templates',
+      'GET /api/v1/templates/categories',
+      `GET /api/v1/templates/${TEMPLATE.id}`,
+      'POST /api/v1/templates',
+      `PATCH /api/v1/templates/${TEMPLATE.id}`,
+      `DELETE /api/v1/templates/${TEMPLATE.id}`,
+    ],
+  )
+  const params = new URL(calls[0]!.url).searchParams
+  assert.deepEqual(
+    { scope: params.get('scope'), kind: params.get('kind'), category: params.getAll('category'), search: params.get('search'), cursor: params.get('cursor'), limit: params.get('limit') },
+    { scope: 'user', kind: 'graphic', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: '50' },
+  )
+  assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' })
+  // The version read rides the body, where the route reads it.
+  assert.deepEqual(JSON.parse(String(calls[4]?.init?.body)), { props: { title: 'Hi' }, expectedVersion: 3 })
+})

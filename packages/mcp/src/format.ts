@@ -45,6 +45,9 @@ import type {
   CostEstimate,
   CreateAvatarResult,
   KlingElement,
+  Template,
+  TemplateSummary,
+  TemplateListResult,
   Generation,
   GenerateResult,
   EditAudioResult,
@@ -1636,6 +1639,68 @@ export function klingElementResult(e: KlingElement, verb?: string): CallToolResu
       `Reference in a Kling prompt as @${e.name}; pass references.klingElements [{ klingElementId: "${e.id}" }].`,
     ]),
   )
+}
+
+// -- templates (the editor's Elements) -----------------------------------------
+
+/** A template's own size: a share of the canvas on each axis, or the whole frame. */
+function templateBox(t: TemplateSummary): string {
+  return t.coverage === 'partial' && t.width_fraction && t.height_fraction
+    ? `${Math.round(t.width_fraction * 100)}% x ${Math.round(t.height_fraction * 100)}% of the canvas`
+    : 'full frame'
+}
+
+/** One template in a line: what it is, whose, its version and its size. */
+function templateLine(t: TemplateSummary): string {
+  const whose = t.scope === 'system' ? 'ContentHero' : 'yours'
+  return `${t.name} (id ${t.id}) | ${t.kind} | ${t.category} | ${whose} | version ${t.version} | ${templateBox(t)}${t.archived_at ? ' | archived' : ''}`
+}
+
+/** A page of templates, and how to get the next. */
+export function templateListResult(page: TemplateListResult): CallToolResult {
+  if (!page.templates.length) return text('No templates match. Widen the search, or list another scope.')
+  return text(
+    lines([
+      `${page.templates.length} template(s):`,
+      ...page.templates.map((t) => `- ${templateLine(t)}`),
+      page.nextCursor ? `More: pass cursor "${page.nextCursor}".` : null,
+      'Place one with an insert_template op in update_timeline or update_canvas; get_template reads its code and controls.',
+    ]),
+  )
+}
+
+/** One template whole, or a write's confirmation with what the checks warned about. */
+export function templateResult(t: Template, verb?: string, warnings: string[] = []): CallToolResult {
+  const warned = warnings.length ? ['Warnings (it was saved anyway):', ...warnings.map((w) => `- ${w}`)] : []
+  if (verb) {
+    return text(
+      lines([
+        `${verb} template "${t.name}" (id ${t.id}), version ${t.version}.`,
+        ...warned,
+        `Place it with { op: 'insert_template', templateId: "${t.id}" } in update_timeline or update_canvas.`,
+      ]),
+    )
+  }
+  return text(
+    lines([
+      templateLine(t),
+      `${t.duration_frames} frames${t.resize === 'scale' ? ', keeps its proportions in any box' : ', lays out again in the box it is given'}`,
+      t.description ? `description: ${t.description}` : null,
+      t.tags?.length ? `tags: ${t.tags.join(', ')}` : null,
+      t.source_template_id ? `saved from template ${t.source_template_id}, version ${t.source_template_version}` : null,
+      `props: ${JSON.stringify(t.props)}`,
+      t.props_schema ? `controls: ${JSON.stringify(t.props_schema)}` : null,
+      t.skeleton?.shape ? `shape: ${t.skeleton.shape}` : null,
+      t.skeleton?.emoji ? `emoji: ${t.skeleton.emoji}` : null,
+      t.render_backend === 'lottie' && t.lottie_url ? `Lottie file: ${t.lottie_url}` : null,
+      t.code ? `code:\n\`\`\`tsx\n${t.code}\n\`\`\`` : null,
+    ]),
+  )
+}
+
+/** Confirmation that a template was deleted. */
+export function templateDeletedResult(id: string): CallToolResult {
+  return text(`Deleted template ${id}. Clips placed from it keep everything.`)
 }
 
 // -- models (discovery catalog) -----------------------------------------------

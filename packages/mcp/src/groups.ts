@@ -96,6 +96,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
       'list_projects', 'get_project', 'create_project', 'delete_project',
       'import_project', 'export_project', 'get_export',
       'update_timeline', 'update_canvas', 'get_transcript',
+      'list_templates', 'get_template', 'create_template', 'update_template', 'delete_template',
     ],
   },
   {

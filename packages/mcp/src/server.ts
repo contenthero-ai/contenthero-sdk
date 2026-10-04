@@ -139,6 +139,9 @@ import {
   platformListResult,
   platformResult,
   klingElementListResult,
+  templateListResult,
+  templateResult,
+  templateDeletedResult,
   klingElementResult,
   klingElementDeletedResult,
   errorResult,
@@ -4122,10 +4125,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Favorite',
       annotations: WRITE,
       description:
-        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (card, voice, brand_kit, project, inspiration_content, gallery, transition, space). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
+        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (card, voice, brand_kit, project, inspiration_content, gallery, transition, caption-template, template, space). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
-          .enum(['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'])
+          .enum(['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'caption-template', 'template', 'space'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
@@ -4158,10 +4161,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (card, brand_kit, brand_kit_section, project, space). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (card, brand_kit, brand_kit_section, project, space, template). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         assetType: z
-          .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space'])
+          .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'template'])
           .optional()
           .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
         id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
@@ -4548,7 +4551,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Timeline',
       annotations: WRITE,
       description:
-        "Apply a batch of ops to an EDITOR (video timeline) project. update_timeline both CREATES and EDITS. EDIT ops act on existing clips: disable_ranges, delete_ranges, merge_clips, move_clip, trim_clip, split, delete_clip, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_group, update_clip. CREATE ops add new clips/tracks: create_clip ({ op: 'create_clip', trackId, clip }) appends a clip to a track; insert_track ({ op: 'insert_track', referenceTrackId, position: 'above'|'below', trackType }) adds an empty track; insert_prebuilt_track ({ op: 'insert_prebuilt_track', index, track: { id, name, items: [item], trackType } }) inserts a whole track WITH its clips in one op (index 0 = top overlay) - the one-shot way to drop a graphic/text/shape onto a project without an existing empty track. TRANSITIONS: add_transition ({ op: 'add_transition', trackId, leftClipId, rightClipId, preset, durationFrames?, curve? }) adds a transition at the CUT between two TOUCHING adjacent clips (leftClipId's out-point meets rightClipId's in-point); preset is one of the transition presets in get_schema's animation catalog (animations.transition); durationFrames defaults to 1s; curve is a speed curve, shaped as in add_keyframe; absent is Linear; one transition per cut (re-creating on the same pair replaces it); the result carries createdTransitionId. update_transition ({ op: 'update_transition', transitionId, patch: { preset?, durationFrames?, curve? } }) and remove_transition ({ op: 'remove_transition', transitionId }) edit or remove one (transition ids are on each track.transitions[] in get_project). ANIMATIONS: add_animation ({ op: 'add_animation', clipId, edge: 'in'|'out', preset, durationFrames?, curve? }) gives a single clip an ENTRANCE (edge 'in') or EXIT (edge 'out') animation, the clip animating against emptiness on that edge; preset is one of the presets in get_schema's animation catalog (animations.in for edge 'in', animations.out for edge 'out'); durationFrames defaults to half a second, curve is a speed curve, shaped as in add_keyframe; absent is Linear; idempotent, a per-clip field keyed by clipId + edge so it creates or updates that edge's animation. remove_animation ({ op: 'remove_animation', clipId, edge: 'in'|'out' }) clears it. Choose add_animation when the motion belongs to ONE clip against emptiness; choose add_transition for a blend BETWEEN two adjacent clips. KEYFRAMES: add_keyframe, update_keyframe and remove_keyframe animate a clip's properties over time (position, scale, opacity, corner radius, color, volume and more); keyframes live on the track, so one move can span many clips and survives later cuts. Shapes and rules are in get_schema (kind 'timeline'). COMBO: apply_combo ({ op: 'apply_combo', clipId, presetKey, frame }): Apply a Combo preset to a clip at a moment. It writes ordinary keyframes on the clip's track, starting at that moment, for the properties the preset animates, and replaces keyframes of those properties inside the preset's span. presetKey is one of the Combo presets in get_schema's animation catalog (animations.combo). The keyframes it writes are then edited like any others. BACKGROUND REMOVAL: remove_background ({ op: 'remove_background', clipId }) cuts out the background of an IMAGE or VIDEO clip, replacing it with transparency, as an ASYNC job: the result carries a generatingOutputId to poll with get_generation_status, and the clip's media swaps to the transparent cutout when it completes (the original is kept, so it stays restorable). Image removal is FREE; video removal is a PREMIUM metered feature (Champion+, charged per second, 60s cap) and returns an error if the plan or credits are insufficient. Only image/video clips have a background; other clip types return an error. MASKS: to add a CapCut-style shape mask to an IMAGE or VIDEO clip, set its `masks` array via update_clip (or update_clips) - each entry is a ClipMask cutout (shape, normalized position/size, rotation, feather, invert) that keeps only the pixels inside its shape, multiple masks union, and invert:true subtracts; masks are a clip PROPERTY, not an op, so patch them like any other field (a patch REPLACES the whole array; set [] to clear), and read get_schema (kind 'timeline') for the exact ClipMask shape. CAPTIONS: add_captions ({ op: 'add_captions', style?, clipIds? }) generates word-timed captions from the project's transcript, one block per spoken clip on a dedicated caption track - whole-timeline by default, or pass clipIds to scope; `style` is a caption template key (omit for the default); clips without a ready transcript are skipped and reported in the result warnings (media is normally transcribed on ingest); re-running refreshes + restyles existing caption blocks. update_captions ({ op: 'update_captions', style?, patch?, clipIds? }) restyles EXISTING captions - `style` re-resolves a template, `patch` sets caption overlay props directly (e.g. { textColor: '#FFDD00', fontSize: 32 }); pass one or both; it never creates captions where none exist (that is add_captions). remove_captions ({ op: 'remove_captions', clipIds? }) removes captions (all, or a clipIds subset) and drops the caption track if empty. Build the `clip` from get_schema (kind 'timeline'), which returns a copy-pasteable `example` skeleton per clip type plus the `creation` op shapes; mint your own string ids and put overlays on a NON-primary media track so they do not ripple the primary. Each op is an object with an `op` name plus its fields (e.g. { op: 'delete_clip', clipIds: ['clip-id'] } or { op: 'move_clip', clipId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). CONTENT-AWARE EDITING: to cut sections you found in get_transcript, DEFAULT to disable_ranges: { op: 'disable_ranges', clipId, ranges: [{ startMs, endMs }], note? } - it takes SOURCE-media time ranges, splits the clip and marks those ranges disabled (non-destructively excluded from the render but still on the timeline, so the user can review via skip-disabled playback and toggle any back on). Prefer the SILENCE edges get_transcript reports as your cut boundaries (they already include breathing room, so cuts do not clip words or feel abrupt) rather than exact word starts. Pass all of a clip's ranges in ONE disable_ranges op. The optional `note` is shown to the USER, so keep it concise and human and use mm:ss for any times (never raw ms). delete_ranges has the same shape but HARD-deletes (ripple-closes the gap, irreversible) - use it ONLY after the user explicitly approves a permanent delete; otherwise always prefer disable_ranges. set_disabled toggles a WHOLE clip by id. RE-TIMING: a time-based clip's timeline length is DERIVED from its source media and its playback speed, so you never set its `durationInFrames` directly. To retime a clip, set the duration-affecting property in the `update_clip` (or `update_clips`) patch (today that property is `speed`) and the reducer recomputes the clip's length for you: the clip keeps covering the same span of its source, so its timeline length scales inversely with the speed change (2x speed halves its length, 0.5x doubles it). Re-timing then honors each track's positioning in the SAME op: on the magnetic primary track the following clips ripple so that no gap opens and none is left behind, while clips on other (free) tracks, and every clip while the magnetic track is off, keep their absolute positions. So a speed change, whether on one clip or a bulk `update_clips`, lands gap-free in a single call with no per-clip length math on your side. Any `durationInFrames` you pass for such a clip is ignored in favor of the derived value. update_clips ({ op: 'update_clips', clipIds?, groupId?, patch }) applies one patch to a SET of clips at once, the bulk form of update_clip; target an explicit clipIds array OR a whole group via groupId (resolves to its members; clipIds wins if both). Every listed clip takes the same patch, but a duration-affecting property re-times each clip from ITS OWN values (a `speed` change recomputes each clip's length from its own source and speed, per the RE-TIMING rule above), and the magnetic primary track ripples so the whole batch lands gap-free in one op. Use it for a bulk property change (speed, volume, opacity, and so on) instead of many update_clip ops. GROUPS: group ({ op: 'group', clipIds, name? }) links 2+ clips under one shared groupId, stamping a stable 'Group N' ordinal that never renumbers (the result carries groupId + groupOrdinal); optional name labels it. ungroup ({ op: 'ungroup', clipIds }) clears the group. update_group ({ op: 'update_group', groupId, patch: { name } }) renames a group. List groups with their ids / ordinals / names / member clips via get_project's top-level `groups`, then target a whole group with update_group or update_clips { groupId }. merge_clips ({ op: 'merge_clips', clipIds }) rejoins adjacent, same-source, contiguous clips into one (the inverse of split; use it to clean up fragments a range edit leaves behind, or to reverse a cut after re-enabling the disabled pieces). ONE-SHOT CLEANUPS (prefer these over hand-rolling ranges for the common cases): remove_silence ({ op: 'remove_silence', paceThresholdMs?, paddingStartMs?, paddingEndMs? }) detects and disables dead-air pauses across the WHOLE timeline (paceThresholdMs = min pause length to cut, default 500; paddingStartMs/paddingEndMs = breathing room, default 200) - idempotent + re-adjustable, so re-running re-cuts at the new settings; remove_filler_words ({ op: 'remove_filler_words' }) disables high-confidence disfluencies (um/uh/er) across the whole timeline; extract_audio ({ op: 'extract_audio', clipIds? }) splits each video clip's audio onto its own track (whole-timeline, or a clipIds subset). remove_silence + remove_filler_words need a ready transcript; each reports a warning + changes nothing when there is nothing to do (no transcript / no gaps / no fillers / no video). They expand to the same disable_ranges / create_clip primitives, so reach for get_transcript + disable_ranges only for CONTEXTUAL or selective cuts the macros cannot express. expectedRevision is OPTIONAL: omit it to apply to the project's current revision (last-write-wins, fine for single-editor and id-targeted ops), or pass the revision from a prior get_project/get_transcript to fail loudly on a concurrent change instead of clobbering it. You do NOT need to fetch the project just to get the revision. Each successful edit returns the new revision for chaining further edits. Requires the editor:write scope.",
+        "Apply a batch of ops to an EDITOR (video timeline) project. update_timeline both CREATES and EDITS. EDIT ops act on existing clips: disable_ranges, delete_ranges, merge_clips, move_clip, trim_clip, split, delete_clip, duplicate, set_disabled, set_hidden, set_locked, group, ungroup, update_group, update_clip. CREATE ops add new clips/tracks: create_clip ({ op: 'create_clip', trackId, clip }) appends a clip to a track; insert_track ({ op: 'insert_track', referenceTrackId, position: 'above'|'below', trackType }) adds an empty track; insert_prebuilt_track ({ op: 'insert_prebuilt_track', index, track: { id, name, items: [item], trackType } }) inserts a whole track WITH its clips in one op (index 0 = top overlay) - the one-shot way to drop a graphic/text/shape onto a project without an existing empty track. TRANSITIONS: add_transition ({ op: 'add_transition', trackId, leftClipId, rightClipId, preset, durationFrames?, curve? }) adds a transition at the CUT between two TOUCHING adjacent clips (leftClipId's out-point meets rightClipId's in-point); preset is one of the transition presets in get_schema's animation catalog (animations.transition); durationFrames defaults to 1s; curve is a speed curve, shaped as in add_keyframe; absent is Linear; one transition per cut (re-creating on the same pair replaces it); the result carries createdTransitionId. update_transition ({ op: 'update_transition', transitionId, patch: { preset?, durationFrames?, curve? } }) and remove_transition ({ op: 'remove_transition', transitionId }) edit or remove one (transition ids are on each track.transitions[] in get_project). ANIMATIONS: add_animation ({ op: 'add_animation', clipId, edge: 'in'|'out', preset, durationFrames?, curve? }) gives a single clip an ENTRANCE (edge 'in') or EXIT (edge 'out') animation, the clip animating against emptiness on that edge; preset is one of the presets in get_schema's animation catalog (animations.in for edge 'in', animations.out for edge 'out'); durationFrames defaults to half a second, curve is a speed curve, shaped as in add_keyframe; absent is Linear; idempotent, a per-clip field keyed by clipId + edge so it creates or updates that edge's animation. remove_animation ({ op: 'remove_animation', clipId, edge: 'in'|'out' }) clears it. Choose add_animation when the motion belongs to ONE clip against emptiness; choose add_transition for a blend BETWEEN two adjacent clips. KEYFRAMES: add_keyframe, update_keyframe and remove_keyframe animate a clip's properties over time (position, scale, opacity, corner radius, color, volume and more); keyframes live on the track, so one move can span many clips and survives later cuts. Shapes and rules are in get_schema (kind 'timeline'). COMBO: apply_combo ({ op: 'apply_combo', clipId, presetKey, frame }): Apply a Combo preset to a clip at a moment. It writes ordinary keyframes on the clip's track, starting at that moment, for the properties the preset animates, and replaces keyframes of those properties inside the preset's span. presetKey is one of the Combo presets in get_schema's animation catalog (animations.combo). The keyframes it writes are then edited like any others. TEMPLATES: insert_template ({ op: 'insert_template', templateId, placement?, props?, brandKitId?, brand?: false }) places a template from list_templates as the Elements panel does: the clip it makes, branded with the project's brand kit, over the main video at the playhead unless placement says otherwise (its shape is in get_schema, kind 'timeline'); the result names the clip in createdIds. BACKGROUND REMOVAL: remove_background ({ op: 'remove_background', clipId }) cuts out the background of an IMAGE or VIDEO clip, replacing it with transparency, as an ASYNC job: the result carries a generatingOutputId to poll with get_generation_status, and the clip's media swaps to the transparent cutout when it completes (the original is kept, so it stays restorable). Image removal is FREE; video removal is a PREMIUM metered feature (Champion+, charged per second, 60s cap) and returns an error if the plan or credits are insufficient. Only image/video clips have a background; other clip types return an error. MASKS: to add a CapCut-style shape mask to an IMAGE or VIDEO clip, set its `masks` array via update_clip (or update_clips) - each entry is a ClipMask cutout (shape, normalized position/size, rotation, feather, invert) that keeps only the pixels inside its shape, multiple masks union, and invert:true subtracts; masks are a clip PROPERTY, not an op, so patch them like any other field (a patch REPLACES the whole array; set [] to clear), and read get_schema (kind 'timeline') for the exact ClipMask shape. CAPTIONS: add_captions ({ op: 'add_captions', style?, clipIds? }) generates word-timed captions from the project's transcript, one block per spoken clip on a dedicated caption track - whole-timeline by default, or pass clipIds to scope; `style` is a caption template key (omit for the default); clips without a ready transcript are skipped and reported in the result warnings (media is normally transcribed on ingest); re-running refreshes + restyles existing caption blocks. update_captions ({ op: 'update_captions', style?, patch?, clipIds? }) restyles EXISTING captions - `style` re-resolves a template, `patch` sets caption overlay props directly (e.g. { textColor: '#FFDD00', fontSize: 32 }); pass one or both; it never creates captions where none exist (that is add_captions). remove_captions ({ op: 'remove_captions', clipIds? }) removes captions (all, or a clipIds subset) and drops the caption track if empty. Build the `clip` from get_schema (kind 'timeline'), which returns a copy-pasteable `example` skeleton per clip type plus the `creation` op shapes; mint your own string ids and put overlays on a NON-primary media track so they do not ripple the primary. Each op is an object with an `op` name plus its fields (e.g. { op: 'delete_clip', clipIds: ['clip-id'] } or { op: 'move_clip', clipId: 'clip-id', toFrame: 90, toTrackIndex: 0 }). CONTENT-AWARE EDITING: to cut sections you found in get_transcript, DEFAULT to disable_ranges: { op: 'disable_ranges', clipId, ranges: [{ startMs, endMs }], note? } - it takes SOURCE-media time ranges, splits the clip and marks those ranges disabled (non-destructively excluded from the render but still on the timeline, so the user can review via skip-disabled playback and toggle any back on). Prefer the SILENCE edges get_transcript reports as your cut boundaries (they already include breathing room, so cuts do not clip words or feel abrupt) rather than exact word starts. Pass all of a clip's ranges in ONE disable_ranges op. The optional `note` is shown to the USER, so keep it concise and human and use mm:ss for any times (never raw ms). delete_ranges has the same shape but HARD-deletes (ripple-closes the gap, irreversible) - use it ONLY after the user explicitly approves a permanent delete; otherwise always prefer disable_ranges. set_disabled toggles a WHOLE clip by id. RE-TIMING: a time-based clip's timeline length is DERIVED from its source media and its playback speed, so you never set its `durationInFrames` directly. To retime a clip, set the duration-affecting property in the `update_clip` (or `update_clips`) patch (today that property is `speed`) and the reducer recomputes the clip's length for you: the clip keeps covering the same span of its source, so its timeline length scales inversely with the speed change (2x speed halves its length, 0.5x doubles it). Re-timing then honors each track's positioning in the SAME op: on the magnetic primary track the following clips ripple so that no gap opens and none is left behind, while clips on other (free) tracks, and every clip while the magnetic track is off, keep their absolute positions. So a speed change, whether on one clip or a bulk `update_clips`, lands gap-free in a single call with no per-clip length math on your side. Any `durationInFrames` you pass for such a clip is ignored in favor of the derived value. update_clips ({ op: 'update_clips', clipIds?, groupId?, patch }) applies one patch to a SET of clips at once, the bulk form of update_clip; target an explicit clipIds array OR a whole group via groupId (resolves to its members; clipIds wins if both). Every listed clip takes the same patch, but a duration-affecting property re-times each clip from ITS OWN values (a `speed` change recomputes each clip's length from its own source and speed, per the RE-TIMING rule above), and the magnetic primary track ripples so the whole batch lands gap-free in one op. Use it for a bulk property change (speed, volume, opacity, and so on) instead of many update_clip ops. GROUPS: group ({ op: 'group', clipIds, name? }) links 2+ clips under one shared groupId, stamping a stable 'Group N' ordinal that never renumbers (the result carries groupId + groupOrdinal); optional name labels it. ungroup ({ op: 'ungroup', clipIds }) clears the group. update_group ({ op: 'update_group', groupId, patch: { name } }) renames a group. List groups with their ids / ordinals / names / member clips via get_project's top-level `groups`, then target a whole group with update_group or update_clips { groupId }. merge_clips ({ op: 'merge_clips', clipIds }) rejoins adjacent, same-source, contiguous clips into one (the inverse of split; use it to clean up fragments a range edit leaves behind, or to reverse a cut after re-enabling the disabled pieces). ONE-SHOT CLEANUPS (prefer these over hand-rolling ranges for the common cases): remove_silence ({ op: 'remove_silence', paceThresholdMs?, paddingStartMs?, paddingEndMs? }) detects and disables dead-air pauses across the WHOLE timeline (paceThresholdMs = min pause length to cut, default 500; paddingStartMs/paddingEndMs = breathing room, default 200) - idempotent + re-adjustable, so re-running re-cuts at the new settings; remove_filler_words ({ op: 'remove_filler_words' }) disables high-confidence disfluencies (um/uh/er) across the whole timeline; extract_audio ({ op: 'extract_audio', clipIds? }) splits each video clip's audio onto its own track (whole-timeline, or a clipIds subset). remove_silence + remove_filler_words need a ready transcript; each reports a warning + changes nothing when there is nothing to do (no transcript / no gaps / no fillers / no video). They expand to the same disable_ranges / create_clip primitives, so reach for get_transcript + disable_ranges only for CONTEXTUAL or selective cuts the macros cannot express. expectedRevision is OPTIONAL: omit it to apply to the project's current revision (last-write-wins, fine for single-editor and id-targeted ops), or pass the revision from a prior get_project/get_transcript to fail loudly on a concurrent change instead of clobbering it. You do NOT need to fetch the project just to get the revision. Each successful edit returns the new revision for chaining further edits. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The editor project id.'),
         ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The timeline ops to apply, in order.'),
@@ -4583,7 +4586,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Canvas',
       annotations: WRITE,
       description:
-        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. BACKGROUND REMOVAL: remove_background ({ op: 'remove_background', layerId }) cuts out the background of an IMAGE or VIDEO layer, replacing it with transparency, as an ASYNC job (the result carries a generatingOutputId to poll with get_generation_status; the layer's media swaps to the transparent cutout when done, the original kept). Image removal is FREE; video removal is PREMIUM + metered (Champion+, per second, 60s cap). Other layer types return an error. Each op is an object with an `op` name plus its fields. expectedRevision is OPTIONAL: omit it to apply to the project's current revision (last-write-wins, fine for a single editor), or pass the revision from a prior get_project to fail loudly on a concurrent change instead of clobbering it. You do NOT need to fetch the project just to get the revision. Each successful edit returns the new revision for chaining further edits. Requires the editor:write scope.",
+        "Apply a batch of ops to a CANVAS (slides/layers) project. Ops act on layers + slides: create_layer, update_layer, delete_layer, reorder_layer, duplicate_layers, set_layer_hidden, set_layer_locked, group_layers, ungroup_layers, set_layer_as_background, create_slide, update_slide, delete_slide, duplicate_slides, reorder_slides, set_background, and more. TEMPLATES: insert_template ({ op: 'insert_template', templateId, placement?, props?, brandKitId?, brand?: false }) places a template from list_templates as a layer, as the Elements panel does: branded with the project's brand kit, at its own size, centered on the focused slide unless placement says otherwise (its shape is in get_schema, kind 'layer'); the result names the layer in createdIds. BACKGROUND REMOVAL: remove_background ({ op: 'remove_background', layerId }) cuts out the background of an IMAGE or VIDEO layer, replacing it with transparency, as an ASYNC job (the result carries a generatingOutputId to poll with get_generation_status; the layer's media swaps to the transparent cutout when done, the original kept). Image removal is FREE; video removal is PREMIUM + metered (Champion+, per second, 60s cap). Other layer types return an error. Each op is an object with an `op` name plus its fields. expectedRevision is OPTIONAL: omit it to apply to the project's current revision (last-write-wins, fine for a single editor), or pass the revision from a prior get_project to fail loudly on a concurrent change instead of clobbering it. You do NOT need to fetch the project just to get the revision. Each successful edit returns the new revision for chaining further edits. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The canvas project id.'),
         ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The canvas ops to apply, in order.'),
@@ -4611,6 +4614,168 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       }
     },
   )
+
+  // ===========================================================================
+  // Templates (the editor's Elements: reusable graphics, shapes and animated emoji)
+  // ===========================================================================
+
+  // -- list_templates -------------------------------------------------------
+  server.registerTool(
+    'list_templates',
+    {
+      title: 'List Templates',
+      annotations: READ,
+      description:
+        "List the templates you can place: ContentHero's and the user's own (the editor's Elements panel), without their code, a page at a time. Each is a graphic, a shape or an animated emoji, with its category, version and default size. Place one with an insert_template op in update_timeline or update_canvas, branded with the project's brand kit; read one whole with get_template. Requires the editor:read scope.",
+      inputSchema: {
+        scope: z.enum(['system', 'user', 'all']).optional().describe("system is ContentHero's, user is the user's own; all (the default) is both."),
+        kind: z.enum(['graphic', 'shape', 'emoji']).optional().describe('Only templates that draw this.'),
+        category: z.array(z.string()).optional().describe('Only templates in these categories.'),
+        search: z.string().optional().describe('Every word, in any order, in the name or the tags.'),
+        archived: z.boolean().optional().describe('true lists only archived templates, to restore one with archive.'),
+        cursor: z.string().optional().describe("The previous page's cursor."),
+        limit: z.number().int().min(1).max(500).optional().describe('Up to 500; 100 by default.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return templateListResult(
+          await client.listTemplates({
+            scope: args.scope,
+            kind: args.kind,
+            category: args.category,
+            search: args.search,
+            archived: args.archived ? 'only' : undefined,
+            cursor: args.cursor,
+            limit: args.limit,
+          }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_template ---------------------------------------------------------
+  server.registerTool(
+    'get_template',
+    {
+      title: 'Get Template',
+      annotations: READ,
+      description:
+        "Read one template whole: its code, props, controls (each prop's control, and the brand value it takes when placed), default size and lineage. Someone else's template is not found. Requires the editor:read scope.",
+      inputSchema: { templateId: z.string().describe('The template id, from list_templates.') },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return templateResult(await client.getTemplate(args.templateId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_template ------------------------------------------------------
+  server.registerTool(
+    'create_template',
+    {
+      title: 'Create Template',
+      annotations: WRITE,
+      description:
+        "Save a template of the user's own, only when the user asks for one, from exactly one source: fromItem (a graphic or shape placed on a project: its code, props, controls and box, as fractions of that canvas), fromTemplateId (a copy of a template, keeping its lineage), or the fields alone (exactly one of code, lottie, emoji or shape says what it draws). Fields given beside a source override what it carries. Code is checked as it is written: code that does not compile is refused, with each finding's line and column. It is saved as made by you, and appears under My templates in the Elements panel. Requires the editor:write scope.",
+      inputSchema: {
+        fromItem: z.object({ projectId: z.string(), itemId: z.string() }).optional().describe('A placed graphic or shape to save: the project id and the clip or layer id.'),
+        fromTemplateId: z.string().optional().describe('A template to copy, from list_templates.'),
+        ...templateFieldsInput,
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { fromItem, fromTemplateId, ...fields } = args
+        const source = fromItem ? { ...fields, fromItem } : fromTemplateId ? { ...fields, fromTemplateId } : fields
+        const written = await client.createTemplate(source)
+        return templateResult(written.template, 'Saved', written.warnings)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_template ------------------------------------------------------
+  server.registerTool(
+    'update_template',
+    {
+      title: 'Update Template',
+      annotations: WRITE,
+      description:
+        "Change one of the user's own templates: only the fields given. ContentHero's templates are read-only; copy one with create_template fromTemplateId. Pass the version you read as expectedVersion to refuse a write over a change made since. Clips already placed from it keep what they had. Requires the editor:write scope.",
+      inputSchema: {
+        templateId: z.string().describe('The template id.'),
+        expectedVersion: z.number().int().optional().describe('The version you read; the write is refused if the template changed since.'),
+        ...templateFieldsInput,
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { templateId, expectedVersion, ...fields } = args
+        const written = await client.updateTemplate(templateId, fields, { expectedVersion })
+        return templateResult(written.template, 'Updated', written.warnings)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- delete_template ------------------------------------------------------
+  server.registerTool(
+    'delete_template',
+    {
+      title: 'Delete Template',
+      annotations: WRITE,
+      description:
+        "Delete one of the user's own templates. Clips placed from it keep everything. To hide one and keep it, archive it instead (archive, assetType template). Requires the editor:write scope.",
+      inputSchema: { templateId: z.string().describe('The template id.') },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.deleteTemplate(args.templateId)
+        return templateDeletedResult(args.templateId)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+}
+
+/**
+ * A template's fields, as create_template and update_template take them: the API's names and limits (the app's
+ * `lib/api/templates.ts` refuses anything else, with the field at fault).
+ */
+const templateFieldsInput = {
+  name: z.string().min(1).max(200).optional().describe('Its name in the Elements panel.'),
+  category: z.string().min(1).max(60).optional().describe('Its category: one list_templates shows, or a new one.'),
+  description: z.string().max(2000).nullable().optional().describe('What it is for.'),
+  tags: z.array(z.string().min(1).max(60)).max(30).optional().describe('Words it is found by.'),
+  code: z.string().optional().describe("A graphic's code: a React component, as get_schema (kind 'graphic') teaches."),
+  lottie: z
+    .object({ url: z.string(), recolor: z.array(z.object({ from: z.string(), role: z.string() })).optional() })
+    .optional()
+    .describe('A Lottie file of ours, and the colors in it that props recolor (each role names a prop).'),
+  emoji: z.string().optional().describe("An animated emoji's name, such as party-popper."),
+  shape: z.string().optional().describe("A shape's name, such as star."),
+  props: z.record(z.string(), z.unknown()).optional().describe('Its props as placed.'),
+  propsSchema: z.record(z.string(), z.unknown()).nullable().optional().describe("Each prop's control, as get_template shows them; brand names the brand value a prop takes when placed."),
+  durationFrames: z.number().int().positive().optional().describe('How long it lasts when placed, in frames.'),
+  coverage: z.enum(['full', 'partial']).optional().describe('full: the whole frame; partial: a box of widthFraction by heightFraction.'),
+  widthFraction: z.number().gt(0).lte(1).nullable().optional().describe("Its default width, a fraction of the canvas's."),
+  heightFraction: z.number().gt(0).lte(1).nullable().optional().describe("Its default height, a fraction of the canvas's."),
+  resize: z.enum(['scale', 'reflow']).optional().describe('scale keeps its proportions in any box; reflow lays out again in the box it is given.'),
+  aspect: z.number().positive().nullable().optional().describe('Its own width over height, for resize scale.'),
 }
 
 /**
