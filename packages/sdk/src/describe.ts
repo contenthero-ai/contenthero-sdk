@@ -105,6 +105,21 @@ function graphicDiagnosticLines(d: GraphicDiagnostic): string[] {
 }
 
 /**
+ * What the graphics warned about in a render or an export, in the words an op result uses for a finding. A warning
+ * stopped nothing: the graphic drew, though perhaps not as its author meant. Null when there are none.
+ */
+export function describeGraphicWarnings(warnings: readonly GraphicDiagnostic[] | null | undefined): string | null {
+  if (!warnings?.length) return null
+  return ['Graphic warnings:', ...warnings.flatMap(graphicDiagnosticLines)].join('\n')
+}
+
+/** A result's text, then what the graphics warned about, when anything did. */
+export function withGraphicWarnings(prose: string, warnings: readonly GraphicDiagnostic[] | null | undefined): string {
+  const warned = describeGraphicWarnings(warnings)
+  return warned ? `${prose}\n${warned}` : prose
+}
+
+/**
  * An applyEditorOps batch, for the MCP's tool result and the CLI's output alike: what applied, the new revision, what
  * was created, jobs to poll, each failure with its reason, warnings, and every graphic compiler finding with its line
  * (a refused graphic's error names only the first, and a warning on code that applied appears nowhere else).

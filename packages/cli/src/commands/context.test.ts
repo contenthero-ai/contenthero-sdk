@@ -14,8 +14,8 @@ import { contextSummary } from './context.js'
  * saved project), and a render that produced no image says why.
  *
  * Break-verified: restoring `if (!c || !result.participant)` turns the first three red (each has no live tab);
- * dropping the failure line turns the second and third red; dropping the `render && failure` branch from `--save`
- * turns the fourth red (it blamed a missing snapshot instead).
+ * dropping the failure line turns the second and third red; dropping the warnings line turns the fourth red; dropping
+ * the `render && failure` branch from `--save` turns the fifth red (it blamed a missing snapshot instead).
  */
 
 const noTab = (rendered: Record<string, unknown>): LiveContextResult => ({ context: { rendered }, participant: null, participants: [] })
@@ -56,6 +56,19 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
 after(() => server.close())
+
+test("a render's graphic warnings are printed with where they are", () => {
+  const out = contextSummary(
+    noTab({
+      mode: 'image',
+      frame: 12,
+      dataUrl: 'data:image/webp;base64,AQID',
+      warnings: [{ itemId: 'g1', severity: 'warning', code: 'interpolate-repaired', message: 'interpolate was given keyframes out of order (30, 0)' }],
+    }),
+    nothingSaved,
+  )
+  assert.match(out, /Graphic warnings:\n  - graphic g1: warning \(interpolate-repaired\): interpolate was given keyframes out of order \(30, 0\)/)
+})
 
 test('--save with a failed render reports the render, not a missing snapshot', async () => {
   body = noTab({ mode: 'image', error: { code: 'render_failed', message: 'Lambda timed out' } })

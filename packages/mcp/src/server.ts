@@ -63,6 +63,7 @@ import {
 
   type Generation,
   CONTENT_SORTS,
+  withGraphicWarnings,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 
@@ -4304,8 +4305,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             toFrame: args.toFrame,
           })
           return text(
-            `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
-              `Poll get_preview with renderId="${job.renderId}" and bucketName="${job.bucketName}" until status is "done", then fetch the returned url.`,
+            withGraphicWarnings(
+              `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
+                `Poll get_preview with renderId="${job.renderId}" and bucketName="${job.bucketName}" until status is "done", then fetch the returned url.`,
+              job.warnings,
+            ),
           )
         }
         const result = await client.getContext({
@@ -4349,9 +4353,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const s = await client.getPreview({ renderId: args.renderId, bucketName: args.bucketName })
         if (s.status === 'done') {
-          return text(`Preview ready. url: ${s.url}${typeof s.estimatedCostUsd === 'number' ? ` (est. cost $${s.estimatedCostUsd.toFixed(4)})` : ''}`)
+          return text(
+            withGraphicWarnings(
+              `Preview ready. url: ${s.url}${typeof s.estimatedCostUsd === 'number' ? ` (est. cost $${s.estimatedCostUsd.toFixed(4)})` : ''}`,
+              s.warnings,
+            ),
+          )
         }
-        if (s.status === 'failed') return text(`Preview render failed: ${s.error ?? 'unknown error'}.`, true)
+        if (s.status === 'failed') {
+          // Every distinct error, so a chunk that failed for its own reason is not hidden behind the first.
+          const errors = s.errors?.length ? s.errors : [s.error ?? 'unknown error']
+          return text(errors.length === 1 ? `Preview render failed: ${errors[0]}` : `Preview render failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`, true)
+        }
         return text(`Preview still rendering${typeof s.progress === 'number' ? ` (${Math.round(s.progress * 100)}%)` : ''}. Poll again in a few seconds.`)
       } catch (err) {
         return errorResult(err)

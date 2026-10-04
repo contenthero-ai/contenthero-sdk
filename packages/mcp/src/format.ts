@@ -94,8 +94,9 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   GraphicGuide,
+  GraphicDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeGraphicWarnings, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withGraphicWarnings } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2531,6 +2532,8 @@ export function liveContextResult(
   }
   const failure = describeRenderFailure(rendered)
   if (failure) lines.push(failure)
+  const warned = describeGraphicWarnings(isPlainRecord(rendered) && Array.isArray(rendered.warnings) ? (rendered.warnings as GraphicDiagnostic[]) : null)
+  if (warned) lines.push(warned)
 
   const content: CallToolResult['content'] = [
     { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(contextForJson, null, 2)}` },
@@ -2615,7 +2618,7 @@ export function completedExportResult(
   job: ExportJob,
   format: string,
 ): CallToolResult {
-  const prose = `Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`
+  const prose = withGraphicWarnings(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`, job.warnings)
   const medium = EXPORT_MEDIUM[format]
   if (job.status !== 'completed' || !job.outputUrl || !medium) return exportJobResult(job)
   {
@@ -2645,14 +2648,17 @@ export function completedExportResult(
 /** `appUrl` and `shortId` are optional here: a timed-out wait knows only the export's id and status. */
 export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
   if (job.status === 'completed') {
-    return text(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`)
+    return text(withGraphicWarnings(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`, job.warnings))
   }
   if (job.status === 'failed') {
-    return text(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, true)
+    return text(withGraphicWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
   }
   const pct = typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''
   return text(
-    `Export ${job.exportId} is ${job.status}${pct}. Still rendering. Poll get_export with this exportId for the download URL.`,
+    withGraphicWarnings(
+      `Export ${job.exportId} is ${job.status}${pct}. Still rendering. Poll get_export with this exportId for the download URL.`,
+      job.warnings,
+    ),
   )
 }
 

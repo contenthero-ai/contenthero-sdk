@@ -676,3 +676,24 @@ test('a batch with no graphic findings prints no graphic block', () => {
   assert.doesNotMatch(textOf(r), /Graphic code/)
 })
 
+
+/**
+ * ⭐ A GRAPHIC'S WARNINGS REACH THE AGENT ON EVERY EXPORT RESULT (1.17). A warning stops nothing, so a field the
+ * printer skipped would be invisible: the export would read as clean while a graphic drew not as its author meant.
+ * Printed in the words an op result uses for a finding, with where in the code it is. Break-verified: dropping the
+ * warnings from the poll's prose turns this red.
+ */
+test("an export result says what the graphics warned about, in the op result's words", () => {
+  const warnings = [
+    { itemId: 'g1', severity: 'warning' as const, code: 'nondeterministic', message: 'setTimeout runs on the clock', line: 3, column: 22, snippet: 'setTimeout(() => {}, 10)' },
+    { itemId: 'g2', severity: 'warning' as const, code: 'interpolate-repaired', message: 'interpolate was given keyframes out of order (30, 0)' },
+  ]
+  for (const status of ['completed', 'rendering', 'failed']) {
+    const res = exportJobResult({ exportId: 'exp-1', status, outputUrl: 'https://x/e.mp4', errorMessage: 'stopped', warnings })
+    const text = (res.content[0] as { text: string }).text
+    assert.match(text, /Graphic warnings:\n  - graphic g1, line 3, column 22: warning \(nondeterministic\): setTimeout runs on the clock\n      3 \| setTimeout/)
+    assert.match(text, /  - graphic g2: warning \(interpolate-repaired\): interpolate was given keyframes out of order \(30, 0\)/)
+  }
+  const quiet = exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.mp4' })
+  assert.doesNotMatch((quiet.content[0] as { text: string }).text, /Graphic warnings/)
+})

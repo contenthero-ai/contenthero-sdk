@@ -2733,6 +2733,8 @@ export interface PreviewJob {
   fromFrame: number
   toFrame: number
   durationSeconds: number
+  /** What the compiler warns about in the graphics this range draws. Absent when nothing. */
+  warnings?: GraphicDiagnostic[]
 }
 
 /** The poll result for a preview render. */
@@ -2744,7 +2746,12 @@ export interface PreviewStatus {
   url?: string
   /** Estimated Lambda cost for this render (telemetry). */
   estimatedCostUsd?: number
+  /** The first error, when it failed. */
   error?: string
+  /** Every distinct error, when it failed; a graphic's names the graphic. */
+  errors?: string[]
+  /** What the graphics warned about while the preview rendered (when done, and only when some did). */
+  warnings?: GraphicDiagnostic[]
 }
 
 /** A resolved selected editor timeline clip, threaded so you see the selection without a `getProject` hop. */
@@ -2860,6 +2867,11 @@ export interface ExportJob {
   errorMessage?: string | null
   /** 0..1 render progress. */
   progress?: number
+  /**
+   * What the graphics warned about: the compiler's findings before the render, and what the render itself found. A
+   * warning stops nothing; the graphic drew, though perhaps not as its author meant. Absent when nothing did.
+   */
+  warnings?: GraphicDiagnostic[]
 }
 
 /** One format in the export catalog. */
