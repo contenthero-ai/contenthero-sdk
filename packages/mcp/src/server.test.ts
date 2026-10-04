@@ -467,7 +467,7 @@ test('single-resource tools name their id parameter after the resource', async (
 })
 
 test('no tool advertises an array without an item schema', async () => {
-  // ⚠️ THE BUG THIS EXISTS FOR. `z.array(z.unknown())` serialises to {"type":"array","items":{}}, which tells
+  // ⚠️ THE BUG THIS EXISTS FOR. `z.array(z.unknown())` serializes to {"type":"array","items":{}}, which tells
   // a client NOTHING about what may go inside. The server accepted every shape when called directly, and
   // Claude Desktop rejected all of them before they left, because a validator cannot check a value against
   // an empty schema and a model cannot pattern an argument on one either.
@@ -3170,7 +3170,7 @@ test('⛔ every variation of a batch that fits gets its own block, not just the 
  *
  * A host rejects a tool result over 1 MB outright ("Tool result is too large"), which fails the CALL: the
  * generation is charged and unreachable. The cap was written PER ITEM, so four images at 600 KB each passed
- * individually (822 KB encoded, under budget) and totalled 3.3 MB. `get_media` then repeated it one level
+ * individually (822 KB encoded, under budget) and totaled 3.3 MB. `get_media` then repeated it one level
  * up, fetching ten images in parallel with no bound at all.
  *
  * ⭐ Today's real assets are ~3.6 MB apiece and fail the per-item check anyway, so the batch case was safe

@@ -1541,7 +1541,7 @@ function Widget() {
     /**
      * ⛔ NOTHING AT ALL once a result has arrived that was not a generation. A cost estimate is a legitimate
      * answer from this tool, and the honest rendering of "this response has no media in it" is no card,
-     * not an empty one apologising for itself.
+     * not an empty one apologizing for itself.
      */
     if (answered) return null
     /**
@@ -2049,7 +2049,7 @@ function Widget() {
             /**
              * ⛔ NO `title` HERE ANY MORE. The native tooltip is the host OS's, appears after about a
              * second, cannot be themed, and is the same mechanism that made the icon buttons look
-             * unlabelled. The clamp plus the pointer cursor already say the text is expandable, and the
+             * unlabeled. The clamp plus the pointer cursor already say the text is expandable, and the
              * one tooltip treatment in this widget is scoped to buttons that genuinely have no label.
              */
           >

@@ -1135,7 +1135,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   }) as typeof server.registerTool
 
   /**
-   * ⚠️ THESE SHAPES ARE DECLARED, NOT LEFT AS `z.unknown()`. An array of unknown serialises to
+   * ⚠️ THESE SHAPES ARE DECLARED, NOT LEFT AS `z.unknown()`. An array of unknown serializes to
    * `{"type":"array","items":{}}`, which tells a client NOTHING about what may go inside it. The server
    * accepted every shape when called directly, and Claude Desktop rejected all of them before they left,
    * because a validator cannot check a value against an empty schema and a model cannot pattern an argument

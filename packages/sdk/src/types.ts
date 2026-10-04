@@ -2472,7 +2472,7 @@ export interface EditorOpResult {
 
 /** Result of `applyEditorOps`: the new revision + per-op results. */
 export interface ApplyEditorOpsResult {
-  // No `surface`: it equalled the project's `kind` once the vocabularies converged, and returning the same
+  // No `surface`: it equaled the project's `kind` once the vocabularies converged, and returning the same
   // value under two names is what this change removed.
   revision: number
   results: EditorOpResult[]

@@ -14,7 +14,7 @@
     "check:spelling": "check-american-spelling"
   },
   "devDependencies": {
-    "@contenthero-ai/american-spelling": "0.1.2",
+    "@contenthero-ai/american-spelling": "0.1.3",
     "typescript": "^5.4.0"
   },
   "engines": {
