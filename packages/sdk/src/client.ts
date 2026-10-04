@@ -86,6 +86,7 @@ import type {
   ExportJob,
   ExportFormatCatalog,
   LinkFormats,
+  GraphicGuide,
   LayerTypeCatalog,
   TimelineTypeCatalog,
   TypeCatalogOptions,
@@ -1675,6 +1676,15 @@ export class ContentHero {
   /** Poll an export job by id. Requires the `editor:read` scope. */
   async getExport(exportId: string): Promise<ExportJob> {
     return this.request<ExportJob>('GET', `/api/v1/exports/${encodeURIComponent(exportId)}`)
+  }
+
+  /**
+   * The authoring guide for graphic code: what the sandbox has, the composition's units, the brand prop names, the
+   * size limit, the workflow and examples, built by the app from the sandbox's own manifest. Read it before writing
+   * a graphic. Requires the `editor:read` scope.
+   */
+  async getGraphicGuide(): Promise<GraphicGuide> {
+    return this.request<GraphicGuide>('GET', '/api/v1/editor/graphic-guide')
   }
 
   /** The link contract: the grammar, nouns and sections of app addresses, and the origin. Any valid key reads it. */

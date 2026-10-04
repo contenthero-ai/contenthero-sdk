@@ -385,6 +385,7 @@ function fakeClient(overrides = {}) {
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', type: 'canvas', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getLayerTypes: async () => ({ projectType: 'canvas', surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
+    getGraphicGuide: async () => ({ version: 'abc12345', markdown: '# Writing a graphic\n\nA graphic is a React component.\n', compositionLongestEdge: 960, maxCodeBytes: 524288, modules: [], noImportNeeded: [], notAvailable: [], clockCalls: [], brandProps: [], examples: [] }),
     getTimelineTypes: async () => ({ projectType: 'editor', surface: 'editor', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
     exportProjectAndWait: async (_projectId, input) => (input?.format && input.format !== 'mp4'
       ? { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.zip', progress: 1 }
@@ -2830,6 +2831,19 @@ test("get_schema kind 'layer' lists canvas layer types + props", async () => {
   const body = (res.content[0]).text
   assert.match(body, /Canvas layer types/)
   assert.match(body, /text/)
+})
+
+/**
+ * get_schema kind 'graphic' prints the guide the app rendered, verbatim, so the MCP never holds a second rendering of
+ * it that could drift. Break-verified: dropping the case leaves the kind unhandled and the call returns nothing.
+ */
+test("get_schema kind 'graphic' prints the app's graphic guide as one document, with its version", async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'graphic' } })
+  const body = (res.content[0]).text
+  assert.match(body, /^# Writing a graphic\n\nA graphic is a React component\./)
+  assert.match(body, /\(Guide version abc12345\.\)$/)
+  assert.ok(!res.isError)
 })
 
 test("get_schema kind 'timeline' lists clip + track types", async () => {

@@ -175,6 +175,7 @@ export type {
   ExportFormatSpec,
   ExportFormatCatalog,
   LinkFormats,
+  GraphicGuide,
   LinkParam,
   LinkNoun,
   LinkSection,

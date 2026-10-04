@@ -2885,6 +2885,33 @@ export interface LinkSection {
   params?: Record<string, LinkParam>
 }
 
+/**
+ * The authoring guide for graphic code, from `getGraphicGuide`: what the sandbox has, the composition's units, the brand
+ * prop names, the size limit, the workflow and examples. The app builds it from the sandbox's own manifest, so it
+ * cannot teach what the sandbox lacks. `markdown` is the whole guide as one document; the other fields are the same
+ * facts, structured.
+ */
+export interface GraphicGuide {
+  /** Changes whenever anything in the guide does, so two readings can be told apart. */
+  version: string
+  markdown: string
+  /** The composition's longest edge, in the units a graphic's box is measured in. */
+  compositionLongestEdge: number
+  /** The largest graphic code accepted, in UTF-8 bytes. */
+  maxCodeBytes: number
+  /** What each importable module provides: its names, or `any` for a package whose every export is open. */
+  modules: Array<{ module: string; names: string[] | 'any' }>
+  /** Names a graphic can use without importing them, with the module each comes from (null for the sandbox's own). */
+  noImportNeeded: Array<{ name: string; module: string | null }>
+  /** Globals and APIs a graphic cannot use, with why. */
+  notAvailable: Array<{ name: string; module: string | null; reason: string }>
+  /** Calls the compiler warns about, with what to use instead. */
+  clockCalls: Array<{ call: string; instead: string }>
+  /** Brand prop names, and the brand value each takes. */
+  brandProps: Array<{ prop: string; takes: string }>
+  examples: Array<{ name: string; title: string; description: string; code: string }>
+}
+
 /** The link contract, from `getLinkFormats`: how to build any address in the app from a noun and an id. */
 export interface LinkFormats {
   /** The app's origin, for `{origin}`. */

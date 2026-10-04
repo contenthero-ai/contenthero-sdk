@@ -93,6 +93,7 @@ import type {
   ExportJob,
   ExportFormatCatalog,
   LinkFormats,
+  GraphicGuide,
   BrandImportOutcome,} from '@contenthero/sdk'
 import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
 
@@ -2614,6 +2615,14 @@ export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
  * The link contract as text: the grammar, then one line per noun and section with what it opens, its tabs, and what a
  * tab's item names. Text, not JSON, because an agent reads it to build links and the prose is a third of the size.
  */
+/**
+ * The graphic authoring guide, as the document the app renders (`markdown`): the app builds it from the sandbox's
+ * manifest and renders it once, so this prints it rather than rendering a second copy that could drift.
+ */
+export function graphicGuideResult(g: GraphicGuide): CallToolResult {
+  return text(`${g.markdown.trimEnd()}\n\n(Guide version ${g.version}.)`)
+}
+
 export function linkFormatsResult(f: LinkFormats): CallToolResult {
   const items = (t?: Record<string, { id: string; values?: string[] }>) =>
     t && Object.keys(t).length

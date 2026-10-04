@@ -623,6 +623,15 @@ test('getTimelineTypes GETs the timeline catalog', async () => {
   assert.equal(cat.surface, 'editor')
 })
 
+test('getGraphicGuide GETs the graphic authoring guide', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { version: 'abc12345', markdown: '# Writing a graphic\n' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const guide = await client.getGraphicGuide()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/graphic-guide')
+  assert.equal(calls[0]?.init?.method ?? 'GET', 'GET')
+  assert.equal(guide.version, 'abc12345')
+})
+
 // The JSON Schema is opt-in on the server (most of the catalog's size), so the SDK asks for it only when told to.
 test('a type catalog asks for the JSON Schema only when told to', async () => {
   const body = { surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [], layerTypes: [] }
