@@ -48,6 +48,24 @@ export function describeLimit(err: LimitError): string {
 }
 
 /**
+ * Why a get_context render produced no image, or some frames of a range, in words: the API's `rendered.error` and
+ * `rendered.missingFrames`. Null when the render reported no error. An error the summary does not state reads as a
+ * render that simply came back empty, which is what agents saw during the 2026-10-01 export outage.
+ */
+export function describeRenderFailure(rendered: Record<string, unknown> | null | undefined): string | null {
+  if (!rendered) return null
+  const error = rendered.error
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return null
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  const why = `${typeof code === 'string' ? code : 'render_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`
+  const missing = Array.isArray(rendered.missingFrames) ? (rendered.missingFrames as unknown[]) : []
+  if (missing.length > 0) {
+    return `${missing.length} ${missing.length === 1 ? 'frame' : 'frames'} could not be rendered (frames ${missing.join(', ')}). ${why}`
+  }
+  return `The render produced no image. ${why}`
+}
+
+/**
  * EXPOSURE GUARD for EditorOpResult. A surface prints only what this function writes, so a field it skips is invisible
  * to the agent or the person reading it, while every build and test stays green. `satisfies` makes each skipped field
  * a decision tsc checks. `diagnostics` would otherwise have arrived exactly that way.

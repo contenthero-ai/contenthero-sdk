@@ -4309,7 +4309,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null
-        return liveContextResult(result, snapshot)
+        // The same per-result allowance get_media spends: the screen capture and the render share it.
+        return liveContextResult(result, snapshot, MAX_INLINE_BASE64_CHARS)
       } catch (err) {
         return errorResult(err)
       }

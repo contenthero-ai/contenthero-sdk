@@ -2806,6 +2806,71 @@ test('get_context returns one image block per frame across a range', async () =>
 })
 
 /**
+ * ⭐ A RENDER REACHES THE AGENT WITH OR WITHOUT A LIVE TAB, AND A FAILED ONE SAYS WHY.
+ *
+ * The API returns a render with `participant: null` when no one is viewing (render works from the saved project).
+ * The formatter answered "No live context" whenever the participant was null, so that render was thrown away, and
+ * a render that failed carried its reason only inside JSON nobody summarized. Break-verified: restoring
+ * `if (!context || !participant)` turns the first, second and fourth red (each has no live tab); dropping
+ * the failure sentence (`describeRenderFailure`) turns the second and third red; attaching every frame regardless of the budget turns the
+ * fourth red.
+ */
+const noTab = (rendered) =>
+  fakeClient({ getContext: async () => ({ context: { rendered }, participant: null, participants: [] }) })
+
+test('get_context shows a render with no live tab', async () => {
+  const mcp = await connect(noTab({ mode: 'image', surface: 'editor', frame: 12, dataUrl: 'data:image/webp;base64,AQIDBA==' }))
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, frame: 12 } })
+  const image = res.content.find((c) => c.type === 'image')
+  assert.ok(image, 'the render must come back even though no one is viewing the project')
+  assert.equal(image.data, 'AQIDBA==')
+  assert.match(res.content[0].text, /render is from the saved project/)
+  assert.doesNotMatch(res.content[0].text, /No live context/)
+})
+
+test('get_context states why a render produced no image, with no live tab', async () => {
+  const mcp = await connect(noTab({ mode: 'image', error: { code: 'render_unavailable', message: 'Rendering is unavailable right now.' } }))
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true } })
+  assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
+  assert.match(res.content[0].text, /The render produced no image\. render_unavailable: Rendering is unavailable right now\./)
+})
+
+test('get_context names the frames of a range that did not render', async () => {
+  const rendered = {
+    mode: 'image',
+    fromFrame: 0,
+    toFrame: 60,
+    frames: [{ frame: 0, dataUrl: 'data:image/webp;base64,AAAA' }, { frame: 60, dataUrl: 'data:image/webp;base64,CCCC' }],
+    missingFrames: [30],
+    error: { code: 'render_failed', message: 'Lambda timed out' },
+  }
+  const mcp = await connect(
+    fakeClient({
+      getContext: async () => ({
+        context: { surface: 'editor', rendered },
+        participant: { userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' },
+        participants: [{ userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' }],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, count: 3, fromFrame: 0, toFrame: 60 } })
+  assert.equal(res.content.filter((c) => c.type === 'image').length, 2)
+  assert.match(res.content[0].text, /1 frame could not be rendered \(frames 30\)\. render_failed: Lambda timed out/)
+})
+
+test('get_context frames spend the one result budget and name the frames that did not fit', async () => {
+  // 24 frames of 100,000 base64 characters each is 2.4 MB against a 1 MB ceiling for the whole result.
+  const frames = Array.from({ length: 24 }, (_, i) => ({ frame: i * 10, dataUrl: `data:image/webp;base64,${'A'.repeat(100_000)}` }))
+  const mcp = await connect(noTab({ mode: 'image', fromFrame: 0, toFrame: 230, frames }))
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, count: 24 } })
+  const images = res.content.filter((c) => c.type === 'image')
+  const bytes = images.reduce((n, c) => n + c.data.length, 0)
+  assert.ok(bytes <= 900_000, `inline images must stay inside the result allowance (got ${bytes})`)
+  assert.equal(images.length, 9)
+  assert.match(res.content[0].text, /15 rendered images were not attached \(frames 90, 100, .*230\): over this result's size limit/)
+})
+
+/**
  * ⭐ THE PREVIEW IS NOW A RUNG ON `get_context`, NOT ITS OWN TOOL. It used to be `create_preview`, split
  * from the render ladder on HOW the result arrives (a job rather than inline images) rather than on what
  * the caller is asking for. Both tools ended their descriptions telling the agent when to use the other,

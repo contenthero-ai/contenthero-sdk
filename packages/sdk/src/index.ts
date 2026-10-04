@@ -211,4 +211,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeEditorOps, describeLimit, describeReserved } from './describe.js'
+export { chargeSentence, describeCharge, describeEditorOps, describeLimit, describeRenderFailure, describeReserved } from './describe.js'

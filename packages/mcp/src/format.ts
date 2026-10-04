@@ -95,7 +95,7 @@ import type {
   LinkFormats,
   GraphicGuide,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1297,6 +1297,31 @@ export interface InlinedImageSlot {
   reason?: string
 }
 
+/**
+ * Images that arrive ALREADY ENCODED (data urls), admitted against what is left of the result's inline allowance.
+ *
+ * In order, and contiguous: once one does not fit, the rest are counted, never a scattered subset, so "the first N
+ * attached" is always a true reading. The one rule for in-hand bytes: get_media keyframes and get_context renders.
+ * A fetched image goes through `inlineImagesWithinBudget` in server.ts instead, which spends the same allowance.
+ */
+export function admitWithinBudget<T extends { data: string }>(
+  images: readonly T[],
+  budget: number,
+): { admitted: T[]; dropped: number; remaining: number } {
+  let remaining = budget
+  const admitted: T[] = []
+  let dropped = 0
+  for (const image of images) {
+    if (dropped > 0 || image.data.length > remaining) {
+      dropped++
+      continue
+    }
+    remaining -= image.data.length
+    admitted.push(image)
+  }
+  return { admitted, dropped, remaining }
+}
+
 export function mediaBatchResult(
   result: MediaBatchResult,
   images: InlinedImageSlot[],
@@ -1309,23 +1334,17 @@ export function mediaBatchResult(
 ): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
-  let remaining = keyframeBudget
-  let keyframesDropped = 0
-  const admitted = items.map((it) => {
-    const out: Array<{ data: string; mimeType: string }> = []
-    for (const kf of it.keyframes ?? []) {
+  const keyframes = items.flatMap((it, item) =>
+    (it.keyframes ?? []).flatMap((kf) => {
       const parsed = parseDataUrl(kf.dataUrl)
-      if (!parsed) continue
-      // In order, and contiguous: once one does not fit, the rest are reported, never a scattered subset.
-      if (keyframesDropped > 0 || parsed.data.length > remaining) {
-        keyframesDropped++
-        continue
-      }
-      remaining -= parsed.data.length
-      out.push(parsed)
-    }
-    return out
-  })
+      return parsed ? [{ ...parsed, item }] : []
+    }),
+  )
+  const spent = admitWithinBudget(keyframes, keyframeBudget)
+  const keyframesDropped = spent.dropped
+  const admitted = items.map((_, item) =>
+    spent.admitted.filter((kf) => kf.item === item).map(({ data, mimeType }) => ({ data, mimeType })),
+  )
   const keyframeCount = admitted.reduce((n, a) => n + a.length, 0)
   const shownImages = images.filter((s) => s?.image).length + keyframeCount
   /**
@@ -2427,10 +2446,22 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
  */
 export function liveContextResult(
   result: LiveContextResult,
-  snapshot?: { data: string; mimeType: string } | null,
+  snapshot: { data: string; mimeType: string } | null | undefined,
+  /**
+   * The result's inline allowance (`MAX_INLINE_BASE64_CHARS` in server.ts). A range is up to 24 frames, about 2 MB
+   * of base64 at the default size, against a 1 MB ceiling for the WHOLE result, so a long range failed the call at
+   * the host. The screen capture and the frames now spend this, in that order, and what does not fit is named.
+   */
+  budget: number,
 ): CallToolResult {
   const { context, participant, participants } = result
-  if (!context || !participant) {
+  const rendered = context && isPlainRecord(context.rendered) ? context.rendered : null
+  /**
+   * ⭐ A RENDER IS SHOWN WITH OR WITHOUT A LIVE TAB. Render works from the saved project, and the API returns it
+   * with `participant: null` when no one is viewing. This returned "No live context" whenever the participant was
+   * null, so a render requested with a projectId and no open tab could never reach the agent, image or error.
+   */
+  if (!context || (!participant && !rendered)) {
     return text(
       'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
         'The user may not have the editor/studio/content open right now.',
@@ -2439,8 +2470,7 @@ export function liveContextResult(
   // Pull the inline render out as image block(s). A still carries `rendered.dataUrl` (one image); a filmstrip /
   // clip carries `rendered.frames[].dataUrl` (many). Keep the light `rendered` metadata in the JSON but drop the
   // bulky dataUrl(s) so the text summary stays readable.
-  const rendered = (context.rendered ?? null) as Record<string, unknown> | null
-  const renderImages: { data: string; mimeType: string }[] = []
+  const renderImages: Array<{ data: string; mimeType: string; frame?: unknown }> = []
   let contextForJson: unknown = context
   if (rendered) {
     const still = parseDataUrl(rendered.dataUrl)
@@ -2449,7 +2479,7 @@ export function liveContextResult(
     if (frames) {
       for (const f of frames) {
         const img = parseDataUrl(f.dataUrl)
-        if (img) renderImages.push(img)
+        if (img) renderImages.push({ ...img, frame: f.frame })
       }
     }
     if (renderImages.length > 0) {
@@ -2471,23 +2501,42 @@ export function liveContextResult(
     }
   }
 
-  const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
-  const renderNote =
-    renderImages.length === 1
-      ? 'A render of your work is attached below.\n'
-      : renderImages.length > 1
-        ? `${renderImages.length} rendered frames are attached below, in order.\n`
-        : ''
-  const summary =
-    `Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.\n` +
-    (snapshot ? 'An image of what the user is looking at (their screen) is attached below.\n' : '') +
-    renderNote +
-    `\n` +
-    JSON.stringify(contextForJson, null, 2)
-  const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
-  if (snapshot) content.push({ type: 'image', data: snapshot.data, mimeType: snapshot.mimeType })
-  for (const img of renderImages) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  // The screen capture first, because it is what `capture` asked for; then the render, in order.
+  const screen = admitWithinBudget(snapshot ? [snapshot] : [], budget)
+  const shown = admitWithinBudget(renderImages, screen.remaining)
+
+  const lines: string[] = []
+  if (participant) {
+    const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
+    lines.push(`Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.`)
+  } else {
+    lines.push('No one is viewing this in the open app right now; the render is from the saved project.')
+  }
+  if (screen.admitted.length > 0) lines.push('An image of what the user is looking at (their screen) is attached below.')
+  if (screen.dropped > 0) lines.push("The screen capture was not attached: it is over this result's size limit.")
+  if (shown.admitted.length === 1) lines.push('A render of your work is attached below.')
+  if (shown.admitted.length > 1) lines.push(`${shown.admitted.length} rendered frames are attached below, in order.`)
+  if (shown.dropped > 0) {
+    const notShown = renderImages.slice(shown.admitted.length).map((img) => img.frame).filter((f) => f !== undefined)
+    lines.push(
+      `${shown.dropped} rendered ${shown.dropped === 1 ? 'image was' : 'images were'} not attached` +
+        (notShown.length > 0 ? ` (frames ${notShown.join(', ')})` : '') +
+        ": over this result's size limit. Ask for fewer frames, a narrower range, or a smaller width.",
+    )
+  }
+  const failure = describeRenderFailure(rendered)
+  if (failure) lines.push(failure)
+
+  const content: CallToolResult['content'] = [
+    { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(contextForJson, null, 2)}` },
+  ]
+  for (const img of screen.admitted) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  for (const img of shown.admitted) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
   return { content }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** Parse a `data:<mime>;base64,<data>` URL into an image block's parts. Returns null on any non-data-URL. */

@@ -14,9 +14,11 @@
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
+import type { LiveContextResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
+import { describeRenderFailure } from '@contenthero/sdk'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: unknown): Buffer | null {
@@ -30,6 +32,21 @@ function bufferFromDataUrl(dataUrl: unknown): Buffer | null {
 function numberedPath(base: string, i: number): string {
   const dot = base.lastIndexOf('.')
   return dot > 0 ? `${base.slice(0, dot)}-${i}${base.slice(dot)}` : `${base}-${i}`
+}
+
+/** The human summary of a context read: who is viewing, why a render has no image, and what was saved. */
+export function contextSummary(result: LiveContextResult, saved: { count: number; path: string }): string {
+  const c = result.context
+  const rendered = (c?.rendered ?? null) as Record<string, unknown> | null
+  // A render comes back with no live tab (it works from the saved project), so only a context with neither is empty.
+  if (!c || (!result.participant && !rendered)) return 'No live context: no one is currently viewing this in the app.'
+  const head = result.participant
+    ? `Live context on the ${String(c.surface)} surface (updated ${result.participant.updatedAt}).\n` +
+      `${result.participants.length} live participant(s).`
+    : 'No one is viewing this in the app right now; the render is from the saved project.'
+  const failure = describeRenderFailure(rendered)
+  const savedLine = saved.count > 0 ? `\n${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}` : ''
+  return head + (failure ? `\n${failure}` : '') + savedLine
 }
 
 export function registerContext(program: Command): void {
@@ -71,10 +88,11 @@ export function registerContext(program: Command): void {
         width: opts.width as number | undefined,
       })
 
+      const c = result.context as Record<string, unknown> | null
+      const rendered = (c?.rendered ?? null) as Record<string, unknown> | null
+      const failure = describeRenderFailure(rendered)
       let savedCount = 0
       if (opts.save) {
-        const c = result.context as Record<string, unknown> | null
-        const rendered = (c?.rendered ?? null) as Record<string, unknown> | null
         const frames = rendered && Array.isArray(rendered.frames) ? (rendered.frames as Array<Record<string, unknown>>) : null
         const single = rendered ? bufferFromDataUrl(rendered.dataUrl) : null
         if (frames && frames.length > 0) {
@@ -85,6 +103,9 @@ export function registerContext(program: Command): void {
         } else if (single) {
           writeFileSync(opts.save as string, single)
           savedCount = 1
+        } else if (render && failure) {
+          // The render was asked for and said why it has no image: that is the answer, not a missing snapshot.
+          throw new CliError(failure, EXIT.GENERAL)
         } else {
           const url = typeof c?.snapshotUrl === 'string' ? c.snapshotUrl : null
           if (!url) throw new CliError('No image available for the current context (try --render or --capture).', EXIT.USAGE)
@@ -95,16 +116,7 @@ export function registerContext(program: Command): void {
         }
       }
 
-      emit(result, ctx, () => {
-        if (!result.context || !result.participant) return 'No live context: no one is currently viewing this in the app.'
-        const c = result.context as Record<string, unknown>
-        const saved = savedCount > 0 ? `\n${savedCount} image(s) saved to ${String(opts.save)}${savedCount > 1 ? ' (-1, -2, ...)' : ''}` : ''
-        return (
-          `Live context on the ${String(c.surface)} surface (updated ${result.participant.updatedAt}).\n` +
-          `${result.participants.length} live participant(s).` +
-          saved
-        )
-      })
+      emit(result, ctx, () => contextSummary(result, { count: savedCount, path: String(opts.save) }))
     })
 
   program
