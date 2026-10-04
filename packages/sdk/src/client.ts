@@ -1804,16 +1804,18 @@ export class ContentHero {
 
     const text = await response.text()
     let data: unknown = undefined
+    let nonJson = false
     if (text) {
       try {
         data = JSON.parse(text)
       } catch {
         data = text
+        nonJson = true
       }
     }
 
     if (!response.ok) {
-      throw errorFromResponse(response.status, data)
+      throw errorFromResponse(response.status, data, { requestId: response.headers.get('x-vercel-id') ?? undefined, nonJson })
     }
     return data as T
   }

@@ -106,6 +106,60 @@ test('503 maps to ServiceUnavailableError, never to AuthenticationError', async 
   assert.equal((err as ServiceUnavailableError).status, 503)
 })
 
+/** One raw response, as the platform sends it when no route handler answered: a page, with Vercel's request id. */
+function rawFetch(status: number, text: string, headers: Record<string, string>): FetchLike {
+  return async () => new Response(text, { status, headers })
+}
+
+const VERCEL_ID = 'iad1::iad1::k7xmp-1759600000000-0f3a9c2b1d4e'
+const ERROR_PAGE = '<!DOCTYPE html><html><head><title>500: Internal Server Error</title></head><body><h1>500</h1></body></html>'
+
+/**
+ * A crashed route answers with Next's HTML error page, and that page used to become the error message whole. The
+ * message names the status and the request id instead, the page stays on `body`, and the status still picks the type.
+ * Break-verified with the two tests below: not flagging an unparsable body turns this and the third red (the page is
+ * the message again), dropping the header read turns all three red, and not keeping `requestId` on the error turns
+ * this and the second red.
+ */
+test('a non-JSON error body becomes its status and request id, never the page itself', async () => {
+  const ch = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(500, ERROR_PAGE, { 'Content-Type': 'text/html', 'x-vercel-id': VERCEL_ID }) })
+  const err = await ch.getAccount().then(() => null, (e: unknown) => e)
+  assert.ok(err instanceof ContentHeroError)
+  assert.equal(err.message, `HTTP 500 (non-JSON response), request id ${VERCEL_ID}`)
+  assert.equal(err.requestId, VERCEL_ID)
+  assert.equal(err.status, 500)
+  assert.equal(err.body, ERROR_PAGE)
+
+  const busy = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(503, 'Service Unavailable', { 'Content-Type': 'text/plain', 'x-vercel-id': VERCEL_ID }) })
+  const unavailable = await busy.getAccount().then(() => null, (e: unknown) => e)
+  assert.ok(unavailable instanceof ServiceUnavailableError)
+  assert.equal(unavailable.message, `HTTP 503 (non-JSON response), request id ${VERCEL_ID}`)
+})
+
+test('a JSON error keeps the server message and still carries the request id', async () => {
+  const ch = new ContentHero({
+    apiKey: 'ch_live_test',
+    fetch: rawFetch(400, JSON.stringify({ error: 'unknown model' }), { 'Content-Type': 'application/json', 'x-vercel-id': VERCEL_ID }),
+  })
+  const err = await ch.generate({ modelId: 'nope' }).then(() => null, (e: unknown) => e)
+  assert.ok(err instanceof ValidationError)
+  assert.equal(err.message, 'unknown model')
+  assert.equal(err.requestId, VERCEL_ID)
+})
+
+test('without a request id the message says only the status', async () => {
+  const ch = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(502, '<html>Bad Gateway</html>', { 'Content-Type': 'text/html' }) })
+  const err = await ch.getAccount().then(() => null, (e: unknown) => e)
+  assert.ok(err instanceof ContentHeroError)
+  assert.equal(err.message, 'HTTP 502 (non-JSON response)')
+  assert.equal(err.requestId, undefined)
+
+  const empty = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(500, '', { 'x-vercel-id': VERCEL_ID }) })
+  const blank = await empty.getAccount().then(() => null, (e: unknown) => e)
+  assert.ok(blank instanceof ContentHeroError)
+  assert.equal(blank.message, `Request failed with status 500, request id ${VERCEL_ID}`)
+})
+
 test('getAccount reads your own account', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { balance: 1234, tier: 'legend', autoTopupEnabled: true } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

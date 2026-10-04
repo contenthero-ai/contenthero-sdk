@@ -10,6 +10,8 @@ export interface ContentHeroErrorOptions {
   status?: number
   /** The parsed response body (object or string), when there was one. */
   body?: unknown
+  /** The platform's id for the request (the `x-vercel-id` response header), when the response carried one. */
+  requestId?: string
 }
 
 /** Base class for every error thrown by the SDK. */
@@ -18,12 +20,18 @@ export class ContentHeroError extends Error {
   readonly status?: number
   /** The parsed response body, when available. */
   readonly body?: unknown
+  /**
+   * The platform's id for the failed request (the `x-vercel-id` response header), when the response carried one.
+   * Quote it when reporting a failure: it finds the request in the server's logs.
+   */
+  readonly requestId?: string
 
   constructor(message: string, options?: ContentHeroErrorOptions) {
     super(message)
     this.name = 'ContentHeroError'
     this.status = options?.status
     this.body = options?.body
+    this.requestId = options?.requestId
     // Preserve the prototype chain when compiled down to ES targets.
     Object.setPrototypeOf(this, new.target.prototype)
   }
@@ -318,14 +326,31 @@ export function pendingOutputId(err: unknown): string | undefined {
   return undefined
 }
 
-/** Map an HTTP status + parsed body onto the right typed error. */
-export function errorFromResponse(status: number, body: unknown): ContentHeroError {
+/** What a response said about itself beyond its status and body. */
+export interface ResponseMeta {
+  /** The `x-vercel-id` response header. */
+  requestId?: string
+  /** The body did not parse as JSON: the HTML error page a crashed route serves, or a proxy's plain text. */
+  nonJson?: boolean
+}
+
+/**
+ * Map an HTTP status + parsed body onto the right typed error.
+ *
+ * The message is the server's own when the body carries one. A body that is not JSON (the HTML page a crashed route
+ * serves, a proxy's plain text) is never the message, since a page of markup says nothing a caller can act on. The
+ * message names the status, says the response was not JSON, and gives the request id that finds the request in the
+ * server's logs; the page itself stays on `body`. A response with no message of its own carries the request id the
+ * same way.
+ */
+export function errorFromResponse(status: number, body: unknown, meta: ResponseMeta = {}): ContentHeroError {
   const record = (body && typeof body === 'object' ? (body as Record<string, unknown>) : undefined)
+  const served = (record && typeof record.error === 'string' && record.error) || (!meta.nonJson && typeof body === 'string' && body)
   const message =
-    (record && typeof record.error === 'string' && record.error) ||
-    (typeof body === 'string' && body) ||
-    `Request failed with status ${status}`
-  const options: ContentHeroErrorOptions = { status, body }
+    served ||
+    `${meta.nonJson ? `HTTP ${status} (non-JSON response)` : `Request failed with status ${status}`}` +
+      (meta.requestId ? `, request id ${meta.requestId}` : '')
+  const options: ContentHeroErrorOptions = { status, body, requestId: meta.requestId }
 
   switch (status) {
     case 400:
