@@ -1090,10 +1090,13 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
           : ''
     const nameStr = m.fileName ? ` | ${m.fileName}` : ''
     const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
+    // The asset id is what get_project reports as a clip's sourceId: printed so an agent can match a clip to the
+    // library item it was cut from. A field the text does not print is invisible to the agent that fetched it.
+    const assetStr = m.assetId ? ` | asset ${m.assetId}` : ''
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = m.url ? ` | ${m.url}` : ''
-    return `- [${m.type}] ${m.model ?? ''} (${idOf(m)})${varTag}${favTag}${kindTag}${nameStr}${durStr} | ${m.status}${promptStr}${urlStr}`
+    return `- [${m.type}] ${m.model ?? ''} (${idOf(m)})${varTag}${favTag}${kindTag}${nameStr}${durStr}${assetStr} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
 }

@@ -3113,6 +3113,23 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
 })
 
 /**
+ * The asset id is what get_project reports as a clip's `sourceId`; printed, so a clip can be matched to the library
+ * item it was cut from. Break-verified: dropping `assetStr` from the row turns this red.
+ */
+test('list_media prints each item\'s asset id', async () => {
+  const item = {
+    id: 'up-uuid-1', type: 'video', model: null, prompt: null, status: 'completed', createdAt: 't', variant: 0,
+    url: 'https://cdn/editor-media-1.mp4', generationSize: 1, isFavorited: false, kind: 'upload', boardType: null,
+    source: 'uploads', fileName: null, durationSeconds: null, assetId: '15bf8171-0000-4000-8000-000000000000',
+  }
+  const mcp = await connect(fakeClient({ listMedia: async () => [item, { ...item, id: 'up-uuid-2', assetId: null }] }))
+  const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'uploads' } })
+  const [first, second] = res.content[0].text.split('\n').slice(1)
+  assert.match(first, /\| asset 15bf8171-0000-4000-8000-000000000000 \|/)
+  assert.doesNotMatch(second, /asset/)
+})
+
+/**
  * 🚨🚨 AN UNDECLARED PARAMETER IS REFUSED, ON EVERY TOOL.
  *
  * Zod object schemas STRIP unknown keys by default, so before `registerTools` wrapped registration in

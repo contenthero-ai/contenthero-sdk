@@ -1152,6 +1152,12 @@ export interface MediaSummary {
   fileName: string | null
   /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
   durationSeconds: number | null
+  /**
+   * The asset this item's file belongs to: the same id `getProject` reports as a clip's `sourceId`, so a clip can be
+   * matched to the library item it was cut from, and `getMedia` / `getMediaBatch` accept it as a `mediaId`. Null when
+   * the file is not one of our registered objects; absent from a server that predates it.
+   */
+  assetId?: string | null
 }
 
 /** Full studio output detail as returned by `getMedia`. */
