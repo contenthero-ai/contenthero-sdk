@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, EditorOpResult, GraphicDiagnostic } from './types.js'
+import type { ApplyEditorOpsResult, Charge, EditorOpResult, GraphicDiagnostic, ProjectReadScope } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -63,6 +63,21 @@ export function describeRenderFailure(rendered: Record<string, unknown> | null |
     return `${missing.length} ${missing.length === 1 ? 'frame' : 'frames'} could not be rendered (frames ${missing.join(', ')}). ${why}`
   }
   return `The render produced no image. ${why}`
+}
+
+/**
+ * What a scoped project read contains, in one sentence: its timeline window and track, or its slide
+ * (`ProjectDetail.scope`). A full read of one beat looks exactly like a full read of a short timeline, and writing it
+ * back as the whole would drop everything outside the window, so a scoped read says so in words.
+ */
+export function describeScope(scope: ProjectReadScope): string {
+  const parts: string[] = []
+  if (scope.fromFrame !== undefined || scope.toFrame !== undefined) {
+    parts.push(`frames ${scope.fromFrame ?? 'start'} to ${scope.toFrame ?? 'end'}`)
+  }
+  if (scope.trackId) parts.push(`track ${scope.trackId}`)
+  if (scope.slideId) parts.push(`slide ${scope.slideId}`)
+  return `Scoped read (${parts.join(', ')}): the state is that part of the project, not all of it.`
 }
 
 /**

@@ -1,13 +1,23 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeRenderFailure } from './describe.js'
+import { describeRenderFailure, describeScope } from './describe.js'
 
 /**
- * The words the MCP and the CLI share for a render's failure. One copy, so the two surfaces cannot drift into saying
- * different things about the same response.
+ * The words the MCP and the CLI share for a read's scope and a render's failure. One copy each, so the two surfaces
+ * cannot drift into saying different things about the same response.
  *
- * Break-verified: ignoring a range's missing frames turns the second red.
+ * Break-verified: dropping the track from `describeScope` turns the first red; ignoring a range's missing frames turns
+ * the third red.
  */
+
+test('a scoped read names its window and track, or its slide', () => {
+  assert.equal(
+    describeScope({ fromFrame: 600, toFrame: 629, trackId: 'main' }),
+    'Scoped read (frames 600 to 629, track main): the state is that part of the project, not all of it.',
+  )
+  assert.equal(describeScope({ toFrame: 90 }), 'Scoped read (frames start to 90): the state is that part of the project, not all of it.')
+  assert.equal(describeScope({ slideId: 's2' }), 'Scoped read (slide s2): the state is that part of the project, not all of it.')
+})
 
 test('a render with no error has nothing to say', () => {
   assert.equal(describeRenderFailure({ mode: 'image', dataUrl: 'data:image/webp;base64,AA' }), null)

@@ -95,7 +95,7 @@ import type {
   LinkFormats,
   GraphicGuide,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2393,6 +2393,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   compositionSpace: 'rendered',
   groups: 'rendered',
   state: 'rendered',
+  scope: 'rendered',
   brandKitId: 'rendered',
   appUrl: 'rendered',
   shortId: 'omitted: the appUrl carries it, and every tool accepts either id',
@@ -2417,6 +2418,9 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
   return text(
     `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
+      // A windowed read is part of the document. Said in words, because a full read of one beat looks exactly like a
+      // full read of a short timeline, and writing it back as the whole would drop everything outside the window.
+      (p.scope ? `${describeScope(p.scope)}\n` : '') +
       // The output resolution above is NOT the coordinate space layer geometry uses. Stating both, adjacent
       // and labeled, is the point: an agent that read only "2168x1152" sized every layer 2.26x too large
       // and got no error for it, because an oversized box is valid input.

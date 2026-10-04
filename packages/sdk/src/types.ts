@@ -2597,6 +2597,12 @@ export interface ProjectDetail extends ProjectSummary {
   favoritedAt: string | null
   archivedAt: string | null
   /**
+   * The scope the read applied, present only when `state` is PART of the document: a timeline's frame window and
+   * track (`fromFrame`/`toFrame`/`trackId`, for the summary and `detail: 'full'` alike), or the one canvas slide it
+   * found (`slideId`). Never write a scoped `state` back as if it were the whole composition.
+   */
+  scope?: ProjectReadScope
+  /**
    * The coordinate space LAYER GEOMETRY is expressed in. This is NOT `width`/`height`.
    *
    * `width`/`height` are the project's OUTPUT resolution (what a render produces). Layer boxes and
@@ -2608,6 +2614,14 @@ export interface ProjectDetail extends ProjectSummary {
    * Use it for any absolute geometry, and pass it as layerWidth/layerHeight for a FULL-FRAME layer.
    */
   compositionSpace?: { width: number; height: number }
+}
+
+/** What a `getProject` read was narrowed to (see `ProjectDetail.scope`). */
+export interface ProjectReadScope {
+  fromFrame?: number
+  toFrame?: number
+  trackId?: string
+  slideId?: string
 }
 
 /** One live participant in `getContext`: who is present and on what surface/scope. */

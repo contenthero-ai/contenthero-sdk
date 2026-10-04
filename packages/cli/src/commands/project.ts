@@ -22,7 +22,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
-import { describeEditorOps, type EditorOp, type ImportProjectSource } from '@contenthero/sdk'
+import { describeEditorOps, describeScope, type EditorOp, type ImportProjectSource } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -97,6 +97,8 @@ export function registerProject(program: Command): void {
       })
       emit(p, ctx, () =>
         `Project ${p.id} "${p.title}" (${p.type}), revision ${p.revision}` +
+        // A windowed read is part of the document; the same sentence the MCP's get_project gives.
+        (p.scope ? `\n${describeScope(p.scope)}` : '') +
         // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
         // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
         // printed no dimensions at all, so there was nowhere to learn it short of reading app source.

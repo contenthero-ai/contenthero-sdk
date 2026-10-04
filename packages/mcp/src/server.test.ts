@@ -2737,6 +2737,18 @@ test('get_project reads the full detail + revision', async () => {
   const body = (res.content[0]).text
   assert.match(body, /revision 4/)
   assert.match(body, /My Edit/)
+  assert.doesNotMatch(body, /Scoped read/)
+})
+
+/**
+ * A windowed read is part of the document, and the result says so: a full read of one beat otherwise looks exactly like
+ * a full read of a short timeline. Break-verified: dropping the scope line from `projectDetailResult` turns this red.
+ */
+test('get_project states the scope a windowed read applied', async () => {
+  const base = await fakeClient().getProject('p1', {})
+  const mcp = await connect(fakeClient({ getProject: async () => ({ ...base, scope: { fromFrame: 600, toFrame: 629, trackId: 'main' } }) }))
+  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', detail: 'full', fromFrame: 600, toFrame: 629, trackId: 'main' } })
+  assert.match(res.content[0].text, /Scoped read \(frames 600 to 629, track main\): the state is that part of the project, not all of it\./)
 })
 
 test('get_context returns the context text + a focused-slide image block', async () => {
