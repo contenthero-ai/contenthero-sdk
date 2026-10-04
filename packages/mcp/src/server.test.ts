@@ -3929,6 +3929,7 @@ test('the template tools are filed with the editor, and reach the template SDK m
     description: null, tags: ['name'], props: { title: 'Hi' }, props_schema: { title: { control: 'text', label: 'Title' } }, duration_frames: 120,
     render_backend: 'code', skeleton: { type: 'graphic' }, coverage: 'partial', width_fraction: 0.25, height_fraction: 0.125, resize: 'scale',
     aspect: 2, version: 3, archived_at: null, source_template_id: null, source_template_version: null, code: 'export default () => null',
+    thumbnail_url: 'https://media.contenthero.ai/templates/2222/v3.png',
   }
   const calls = []
   const mcp = await connect(
@@ -3948,6 +3949,8 @@ test('the template tools are filed with the editor, and reach the template SDK m
   assert.match(listed.content[0].text, /More: pass cursor "c2"\./)
   const got = await mcp.callTool({ name: 'get_template', arguments: { templateId: row.id } })
   assert.match(got.content[0].text, /```tsx\nexport default \(\) => null\n```/)
+  // Its stored preview, for looking at it before placing it.
+  assert.match(got.content[0].text, /\npreview: https:\/\/media\.contenthero\.ai\/templates\/2222\/v3\.png\n/)
   const saved = await mcp.callTool({ name: 'create_template', arguments: { fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' } })
   assert.match(saved.content[0].text, /Saved template "Lower third" .*version 3\.\nWarnings \(it was saved anyway\):\n- interpolate was given keyframes out of order/)
   await mcp.callTool({ name: 'create_template', arguments: { fromTemplateId: row.id, name: 'Mine' } })

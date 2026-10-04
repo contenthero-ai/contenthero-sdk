@@ -1693,6 +1693,7 @@ export function templateResult(t: Template, verb?: string, warnings: string[] = 
       t.skeleton?.shape ? `shape: ${t.skeleton.shape}` : null,
       t.skeleton?.emoji ? `emoji: ${t.skeleton.emoji}` : null,
       t.render_backend === 'lottie' && t.lottie_url ? `Lottie file: ${t.lottie_url}` : null,
+      t.thumbnail_url ? `preview: ${t.thumbnail_url}` : null,
       t.code ? `code:\n\`\`\`tsx\n${t.code}\n\`\`\`` : null,
     ]),
   )
