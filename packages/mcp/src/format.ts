@@ -44,7 +44,7 @@ import type {
   ConnectedAccount,
   CostEstimate,
   CreateAvatarResult,
-  Element,
+  KlingElement,
   Generation,
   GenerateResult,
   EditAudioResult,
@@ -1580,36 +1580,36 @@ export function accountResult(b: Account): CallToolResult {
   )
 }
 
-// -- reference elements (named reference library) -----------------------------
+// -- Kling elements (Kling 3.0's reusable references) --------------------------
 
-/** List of the account's saved reference elements. */
-export function elementListResult(items: Element[]): CallToolResult {
+/** List of the account's saved Kling elements. */
+export function klingElementListResult(items: KlingElement[]): CallToolResult {
   if (!items.length) {
-    return text('No reference elements. Create one with create_element, then reference it in a Kling generation by elementId.')
+    return text('No Kling elements. Create one with create_kling_element, then reference it in a Kling generation by klingElementId.')
   }
   const rows = items.map((e) => {
     const media = e.input_video_url ? '1 video' : `${e.input_urls.length} image(s)`
     return `- ${e.name} (${idOf(e)}) | ${e.category} | ${media}${e.description ? ` | ${e.description.slice(0, 60)}` : ''}`
   })
-  return text([`${items.length} element(s):`, ...rows].join('\n'))
+  return text([`${items.length} Kling element(s):`, ...rows].join('\n'))
 }
 
-/** Confirmation that an element was deleted. */
-export function elementDeletedResult(id: string): CallToolResult {
-  return text(`Deleted element ${id}.`)
+/** Confirmation that a Kling element was deleted. */
+export function klingElementDeletedResult(id: string): CallToolResult {
+  return text(`Deleted Kling element ${id}.`)
 }
 
-/** One saved reference element. */
-export function elementResult(e: Element, verb?: string): CallToolResult {
+/** One saved Kling element. */
+export function klingElementResult(e: KlingElement, verb?: string): CallToolResult {
   if (verb) {
-    return text(`${verb} element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via references.elements [{ elementId: "${e.id}" }] and @${e.name} in the prompt.`)
+    return text(`${verb} Kling element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via references.klingElements [{ klingElementId: "${e.id}" }] and @${e.name} in the prompt.`)
   }
   return text(
     lines([
       `${e.name} (${idOf(e)}) | ${e.category}`,
       e.description ? `description: ${e.description}` : null,
       e.input_video_url ? `video: ${e.input_video_url}` : `images (${e.input_urls.length}): ${e.input_urls.join(', ')}`,
-      `Reference in a Kling prompt as @${e.name}; pass references.elements [{ elementId: "${e.id}" }].`,
+      `Reference in a Kling prompt as @${e.name}; pass references.klingElements [{ klingElementId: "${e.id}" }].`,
     ]),
   )
 }

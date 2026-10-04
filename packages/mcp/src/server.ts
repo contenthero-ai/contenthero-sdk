@@ -137,9 +137,9 @@ import {
   modelResult,
   platformListResult,
   platformResult,
-  elementListResult,
-  elementResult,
-  elementDeletedResult,
+  klingElementListResult,
+  klingElementResult,
+  klingElementDeletedResult,
   errorResult,
   generationBatchResult,
   outlierListResult,
@@ -301,6 +301,19 @@ const PLACEMENT_INPUT_FIELDS = {
   placement: PLACEMENT_SCHEMA.optional().describe('Where the asset lands, interpreted against the project\'s type. VIDEO TIMELINE: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range (omitted places it at the playhead when known, else appends). CANVAS DESIGN: a layer on a slide (slideId / slideIndex, default the focused slide; fit contain|cover|none; a nine-point anchor; and design-pixel x/y/width/height).'),
   playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative timeline placement.'),
 } as const
+
+/**
+ * One Kling element in generate_video, shared by `klingElements` and its deprecated alias `elements`. Both names, and
+ * `elementId` inside an item, ride to the server unchanged: its one reader resolves them (the new name wins), so the
+ * precedence rule is not restated here.
+ */
+const KLING_ELEMENT_INPUT = z.object({
+  klingElementId: z.string().optional().describe('Reference a saved Kling element by id (from list_kling_elements / create_kling_element). Resolves to its name + images.'),
+  elementId: z.string().optional().describe('Deprecated alias for `klingElementId`, accepted for one release window.'),
+  name: z.string().optional().describe('Inline Kling element: reference it in the prompt as @name.'),
+  description: z.string().optional().describe('Inline Kling element: what it represents.'),
+  images: z.array(z.string()).optional().describe('Inline Kling element: image URLs or previous output ids.'),
+})
 
 /**
  * Fetch a get_context snapshot signed URL and base64-encode it, so get_context can return an IMAGE content
@@ -1434,17 +1447,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('Reference audio (e.g. Seedance references mode, audio-driven video): each a URL or a previous output id. Only used by models that accept audio references.'),
-        elements: z
-          .array(
-            z.object({
-              elementId: z.string().optional().describe('Reference a saved element by id (from list_elements / create_element). Resolves to its name + images.'),
-              name: z.string().optional().describe('Inline element: reference it in the prompt as @name.'),
-              description: z.string().optional().describe('Inline element: what it represents.'),
-              images: z.array(z.string()).optional().describe('Inline element: image URLs or previous output ids.'),
-            }),
-          )
+        klingElements: z
+          .array(KLING_ELEMENT_INPUT)
           .optional()
-          .describe('Named reference elements (Kling 3.0): each is a saved element ({ elementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Requires a startFrame. See get_model promptReferences (named_tag scheme).'),
+          .describe('Kling elements (Kling 3.0): each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Requires a startFrame. See get_model promptReferences (named_tag scheme).'),
+        elements: z
+          .array(KLING_ELEMENT_INPUT)
+          .optional()
+          .describe('Deprecated alias for `klingElements`, accepted for one release window.'),
         multiShot: z
           .boolean()
           .optional()
@@ -1482,6 +1492,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             images: args.referenceImages,
             videos: args.referenceVideos,
             audio: args.referenceAudio,
+            klingElements: args.klingElements,
             elements: args.elements,
           }),
           projectId: args.projectId,
@@ -3009,56 +3020,63 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
 
 
-  // -- list_elements --------------------------------------------------------
+  /**
+   * ⚠️ KLING ELEMENTS, NEVER BARE "ELEMENTS" (agreed 2026-10-04). Until then these five were `list_elements` and its
+   * family, filed in the editor group, so an agent read them as the editor's Elements panel (graphic templates), an
+   * unrelated thing. The old tool names were removed in the same release rather than aliased: agents read the tool
+   * list on every connection, as with `get_schema`. Only names code calls (REST, SDK, CLI, generate_video's inputs)
+   * keep their old spelling for one window.
+   */
+  // -- list_kling_elements --------------------------------------------------
   server.registerTool(
-    'list_elements',
+    'list_kling_elements',
     {
-      title: 'List Elements',
+      title: 'List Kling Elements',
       annotations: READ,
       description:
-        "List the account's saved reference elements: reusable named groups of images (a character, prop, location) addressable in a Kling prompt as @name. Reference one in a generation by elementId.",
+        "List the account's saved Kling elements: reusable named groups of images (a character, prop, location) addressable in a Kling prompt as @name. Reference one in a generation by klingElementId.",
       inputSchema: {},
     },
     async (_args, extra) => {
       try {
         const client = await getClient(extra)
-        return elementListResult(await client.listElements())
+        return klingElementListResult(await client.listKlingElements())
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- get_element ----------------------------------------------------------
+  // -- get_kling_element ----------------------------------------------------
   server.registerTool(
-    'get_element',
+    'get_kling_element',
     {
-      title: 'Get Element',
+      title: 'Get Kling Element',
       annotations: READ,
-      description: "Get one saved reference element by id: its name, category, description, and images.",
-      inputSchema: { elementId: z.string().describe('The element id.') },
+      description: "Get one saved Kling element by id: its name, category, description, and images.",
+      inputSchema: { klingElementId: z.string().describe('The Kling element id.') },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return elementResult(await client.getElement(args.elementId))
+        return klingElementResult(await client.getKlingElement(args.klingElementId))
       } catch (err) {
         return errorResult(err)
       }
     },
   )
 
-  // -- create_element -------------------------------------------------------
+  // -- create_kling_element -------------------------------------------------
   server.registerTool(
-    'create_element',
+    'create_kling_element',
     {
-      title: 'Create Element',
+      title: 'Create Kling Element',
       annotations: WRITE,
       description:
-        "Create a reusable reference element from 2-4 images (or 1 video) of one entity (a character, prop, location). Images may be URLs or output-id tokens, so you can generate the angle shots first and assemble an element from them. Reference it later in a Kling 3.0 generation via references.elements [{ elementId }] and @name in the prompt.",
+        "Create a reusable Kling element from 2-4 images (or 1 video) of one entity (a character, prop, location). Images may be URLs or output-id tokens, so you can generate the angle shots first and assemble a Kling element from them. Reference it later in a Kling 3.0 generation via references.klingElements [{ klingElementId }] and @name in the prompt.",
       inputSchema: {
         name: z.string().describe('Referenced in the prompt as @name.'),
-        description: z.string().describe('What the element represents (required).'),
+        description: z.string().describe('What the Kling element represents (required).'),
         category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("Kind of entity (default 'auto')."),
         images: z.array(z.string()).optional().describe('2-4 image URLs or output-id tokens.'),
         video: z.string().optional().describe('A single video URL or output-id token (alternative to images).'),
@@ -3067,8 +3085,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return elementResult(
-          await client.createElement({
+        return klingElementResult(
+          await client.createKlingElement({
             name: args.name,
             description: args.description,
             category: args.category,
@@ -3083,25 +3101,25 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- update_element -------------------------------------------------------
+  // -- update_kling_element -------------------------------------------------
   server.registerTool(
-    'update_element',
+    'update_kling_element',
     {
-      title: 'Update Element',
+      title: 'Update Kling Element',
       annotations: WRITE,
-      description: "Update a saved element's name, description, or category.",
+      description: "Update a saved Kling element's name, description, or category.",
       inputSchema: {
-        elementId: z.string().describe('The element id.'),
-        name: z.string().optional().describe('Rename the element.'),
-        description: z.string().optional().describe('What this element is, in words. This is what makes it findable later.'),
-        category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("What kind of element this is. 'auto' lets the server classify it from the image."),
+        klingElementId: z.string().describe('The Kling element id.'),
+        name: z.string().optional().describe('Rename the Kling element.'),
+        description: z.string().optional().describe('What this Kling element is, in words. This is what makes it findable later.'),
+        category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("What kind of Kling element this is. 'auto' lets the server classify it from the image."),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return elementResult(
-          await client.updateElement(args.elementId, { name: args.name, description: args.description, category: args.category }),
+        return klingElementResult(
+          await client.updateKlingElement(args.klingElementId, { name: args.name, description: args.description, category: args.category }),
           'Updated',
         )
       } catch (err) {
@@ -3110,20 +3128,20 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- delete_element -------------------------------------------------------
+  // -- delete_kling_element -------------------------------------------------
   server.registerTool(
-    'delete_element',
+    'delete_kling_element',
     {
-      title: 'Delete Element',
+      title: 'Delete Kling Element',
       annotations: WRITE,
-      description: 'Delete a saved reference element.',
-      inputSchema: { elementId: z.string().describe('The element id.') },
+      description: 'Delete a saved Kling element.',
+      inputSchema: { klingElementId: z.string().describe('The Kling element id.') },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        await client.deleteElement(args.elementId)
-        return elementDeletedResult(args.elementId)
+        await client.deleteKlingElement(args.klingElementId)
+        return klingElementDeletedResult(args.klingElementId)
       } catch (err) {
         return errorResult(err)
       }

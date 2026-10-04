@@ -15,7 +15,7 @@
  * the browser even though the server was ready for one.
  */
 
-import type { Command } from 'commander'
+import { Option, type Command } from 'commander'
 import type { GenerateRequest, GenerateBoardRequest, BoardType } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
@@ -123,7 +123,9 @@ export function registerGenerate(program: Command): void {
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
       .option('--ref-video <urlOrId>', 'reference video (URL or output id); repeatable', collect)
       .option('--ref-audio <urlOrId>', 'reference audio (URL or output id); repeatable', collect)
-      .option('--element <id>', 'saved reference element id (Kling 3.0, @name in prompt); repeatable', collect)
+      .option('--kling-element <id>', 'saved Kling element id (Kling 3.0, @name in prompt); repeatable', collect)
+      // `--element`, the flag's name before 2026-10-04, still accepted and hidden from help. `--kling-element` wins.
+      .addOption(new Option('--element <id>', 'deprecated alias for --kling-element').argParser(collect).hideHelp())
       .option('--multi-shot', 'enable multi-shot mode (e.g. WAN 2.6)')
       .option('--shots <json>', 'Kling 3.0 multi-shot: JSON array of { prompt, duration } objects', toJson),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
@@ -153,7 +155,9 @@ export function registerGenerate(program: Command): void {
         images: opts.ref as string[] | undefined,
         videos: opts.refVideo as string[] | undefined,
         audio: opts.refAudio as string[] | undefined,
-        elements: (opts.element as string[] | undefined)?.map((elementId) => ({ elementId })),
+        klingElements: ((opts.klingElement ?? opts.element) as string[] | undefined)?.map((klingElementId) => ({
+          klingElementId,
+        })),
       }),
       ...placementFields(opts),
     })

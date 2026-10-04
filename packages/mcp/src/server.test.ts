@@ -7,7 +7,7 @@ import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/s
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { GENERATION_WIDGET_URI } from './widget-uri.js'
 import { PACKAGE_VERSION } from './widget/generation.js'
-import { assertGroupsCoverTools, groupedToolNames } from './groups.js'
+import { assertGroupsCoverTools, groupedToolNames, TOOL_GROUPS } from './groups.js'
 
 /** A discovery-catalog entry, in the /api/v1/models projection shape. */
 function cap(modelId, contentType, kind, outputType) {
@@ -3696,4 +3696,82 @@ test('a connecting agent is told where the user\'s files live, so a blocked down
   const instructions = mcp.getInstructions()
   assert.ok(instructions, 'the server sends no instructions')
   assert.ok(instructions.includes(MEDIA_HOST), `the instructions do not name ${MEDIA_HOST}`)
+})
+
+/**
+ * KLING ELEMENTS, NEVER BARE "ELEMENTS" (agreed 2026-10-04). The five tools were `list_elements` and its family,
+ * filed in the editor group, where an agent read them as the editor's Elements panel. They cut over in one release
+ * (agents read the tool list on every connection, as with `get_schema`); only generate_video's inputs keep the old
+ * spelling for a window, because code sends those by name.
+ */
+const KLING_ELEMENT_TOOLS = ['list_kling_elements', 'get_kling_element', 'create_kling_element', 'update_kling_element', 'delete_kling_element']
+
+test('Kling element tools are named for Kling, filed with the characters, and the old names are gone', async () => {
+  const mcp = await connect(fakeClient())
+  const names = (await mcp.listTools()).tools.map((t) => t.name)
+  assert.deepEqual(KLING_ELEMENT_TOOLS.filter((n) => !names.includes(n)), [], 'Kling element tools missing')
+  const retired = ['list_elements', 'get_element', 'create_element', 'update_element', 'delete_element']
+  assert.deepEqual(retired.filter((n) => names.includes(n)), [], 'pre-rename tool names still advertised')
+  const characters = TOOL_GROUPS.find((g) => g.slug === 'characters')
+  assert.deepEqual(KLING_ELEMENT_TOOLS.filter((n) => !characters.tools.includes(n)), [])
+})
+
+test('the Kling element tools reach the Kling element SDK methods, by klingElementId', async () => {
+  const row = {
+    id: '11111111-1111-4111-8111-111111111111', shortId: 'Kling001', appUrl: 'https://app/kling-element/Kling001',
+    name: 'hero', category: 'character', description: 'the subject',
+    input_urls: ['https://cdn/a.png', 'https://cdn/b.png'], input_video_url: null, preview_url: 'https://cdn/a.png', created_at: 't',
+  }
+  const calls = []
+  const mcp = await connect(
+    fakeClient({
+      listKlingElements: async () => (calls.push('list'), [row]),
+      getKlingElement: async (id) => (calls.push(`get ${id}`), row),
+      createKlingElement: async (req) => (calls.push(`create ${JSON.stringify(req)}`), row),
+      updateKlingElement: async (id, patch) => (calls.push(`update ${id} ${JSON.stringify(patch)}`), row),
+      deleteKlingElement: async (id) => (calls.push(`delete ${id}`), { deleted: true, id }),
+    }),
+  )
+  const listed = await mcp.callTool({ name: 'list_kling_elements', arguments: {} })
+  assert.match(listed.content[0].text, /^1 Kling element\(s\):/)
+  const got = await mcp.callTool({ name: 'get_kling_element', arguments: { klingElementId: 'Kling001' } })
+  assert.match(got.content[0].text, /klingElements \[\{ klingElementId: "11111111-1111-4111-8111-111111111111" \}\]/)
+  await mcp.callTool({ name: 'create_kling_element', arguments: { name: 'hero', description: 'the subject', images: row.input_urls } })
+  await mcp.callTool({ name: 'update_kling_element', arguments: { klingElementId: 'Kling001', name: 'villain' } })
+  const deleted = await mcp.callTool({ name: 'delete_kling_element', arguments: { klingElementId: 'Kling001' } })
+  assert.equal(deleted.content[0].text, 'Deleted Kling element Kling001.')
+  assert.deepEqual(calls, [
+    'list',
+    'get Kling001',
+    `create ${JSON.stringify({ name: 'hero', description: 'the subject', images: row.input_urls })}`,
+    'update Kling001 {"name":"villain"}',
+    'delete Kling001',
+  ])
+})
+
+test('generate_video forwards klingElements, and the deprecated elements and elementId, for the server to resolve', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generate: async (req) => {
+        captured = req
+        return { outputId: 'g', status: 'processing' }
+      },
+    }),
+  )
+  const base = { modelId: 'veo-3.1-fast', prompt: '@hero walks in', startFrame: 'https://cdn/start.png' }
+
+  await mcp.callTool({ name: 'generate_video', arguments: { ...base, klingElements: [{ klingElementId: 'Kling001' }] } })
+  assert.deepEqual(captured.references?.klingElements, [{ klingElementId: 'Kling001' }])
+  assert.equal(captured.references?.elements, undefined)
+
+  // Older callers, and tool lists cached before the rename, still send these; the server's one reader resolves them.
+  await mcp.callTool({ name: 'generate_video', arguments: { ...base, elements: [{ elementId: 'Kling001' }] } })
+  assert.deepEqual(captured.references?.elements, [{ elementId: 'Kling001' }])
+  assert.equal(captured.references?.klingElements, undefined)
+
+  const { tools } = await mcp.listTools()
+  const props = tools.find((t) => t.name === 'generate_video').inputSchema.properties
+  assert.match(props.elements.description, /^Deprecated alias for `klingElements`/)
+  assert.match(props.klingElements.items.properties.elementId.description, /^Deprecated alias for `klingElementId`/)
 })

@@ -31,7 +31,7 @@ import { buildProgram } from '../../cli/src/program.js'
  * Lives in the MCP package because that is where tools are added; it imports the CLI's program from source.
  */
 
-type Leaf = { path: string; flags: Set<string> }
+type Leaf = { path: string; flags: Set<string>; hidden: boolean }
 
 /** MCP tool -> the CLI command(s) that together express it. */
 const TOOL_TO_CLI: Record<string, string[]> = {
@@ -73,11 +73,11 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   list_models: ['model list'],
   get_model: ['model get'],
   get_schema: ['schema'],
-  list_elements: ['element list'],
-  get_element: ['element get'],
-  create_element: ['element create'],
-  update_element: ['element update'],
-  delete_element: ['element delete'],
+  list_kling_elements: ['kling-element list'],
+  get_kling_element: ['kling-element get'],
+  create_kling_element: ['kling-element create'],
+  update_kling_element: ['kling-element update'],
+  delete_kling_element: ['kling-element delete'],
   get_generation_status: ['generation status'],
   list_cards: ['card list'],
   get_card: ['card get'],
@@ -125,6 +125,21 @@ const TOOL_TO_CLI: Record<string, string[]> = {
 /** Tools with no CLI counterpart, BY DESIGN. */
 const MCP_ONLY: Record<string, string> = {
   show_media: 'renders an inline widget in the chat host; a terminal has no equivalent display surface',
+}
+
+/**
+ * HIDDEN CLI commands kept for one release window under a previous name, each with the command it stands in for.
+ * They are the canonical subcommands registered a second time onto the old parent, so the checks below hold that
+ * each one still exists, stays out of help, and takes exactly the canonical command's flags. Closing the window is
+ * deleting the alias mount and these lines.
+ */
+const DEPRECATED_COMMANDS: Record<string, string> = {
+  // `element` became `kling-element` on 2026-10-04 (the word also named the editor's Elements panel).
+  'element list': 'kling-element list',
+  'element get': 'kling-element get',
+  'element create': 'kling-element create',
+  'element update': 'kling-element update',
+  'element delete': 'kling-element delete',
 }
 
 /** CLI commands with no MCP counterpart, BY DESIGN. */
@@ -190,7 +205,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   get_media: { items: '<id>' },
   create_media_upload: { fileName: '--name' },
   import_media: { fileName: '--name' },
-  create_element: { images: '--image' },
+  create_kling_element: { images: '--image' },
   get_generation_status: { outputIds: '<id>', wait: '--no-wait' },
   delete_stage: { targetStageId: '--target' },
   update_card: { cardIds: '--also', scheduledAt: '--schedule' },
@@ -261,17 +276,19 @@ async function mcpTools(): Promise<Map<string, string[]>> {
 
 function cliLeaves(): Map<string, Leaf> {
   const out = new Map<string, Leaf>()
-  const walk = (cmd: Command, path: string[]) => {
+  // A leaf is hidden when it, or any command above it, is left out of its parent's help.
+  const walk = (cmd: Command, path: string[], hidden: boolean) => {
     if (path.length && cmd.commands.length === 0) {
       const flags = new Set<string>([
         ...cmd.options.map((o) => o.long).filter((l): l is string => Boolean(l)),
         ...cmd.registeredArguments.map((arg) => `<${kebab(arg.name())}>`),
       ])
-      out.set(path.join(' '), { path: path.join(' '), flags })
+      out.set(path.join(' '), { path: path.join(' '), flags, hidden })
     }
-    for (const c of cmd.commands) walk(c, [...path, c.name()])
+    const visible = new Set(cmd.createHelp().visibleCommands(cmd))
+    for (const c of cmd.commands) walk(c, [...path, c.name()], hidden || !visible.has(c))
   }
-  walk(buildProgram(), [])
+  walk(buildProgram(), [], false)
   return out
 }
 
@@ -296,9 +313,29 @@ test('every MCP tool maps to CLI commands or is MCP-only by design, and every CL
   const missingCommands = [...targeted].filter((c) => !leaves.has(c))
   assert.deepEqual(missingCommands, [], 'TOOL_TO_CLI names CLI commands that do not exist')
 
-  const orphanCommands = [...leaves.keys()].filter((c) => !targeted.has(c) && !CLI_ONLY[c])
+  const orphanCommands = [...leaves.keys()].filter((c) => !targeted.has(c) && !CLI_ONLY[c] && !DEPRECATED_COMMANDS[c])
   assert.deepEqual(orphanCommands, [], 'CLI commands with no MCP tool (map a tool to them, or CLI_ONLY with a reason)')
   assert.deepEqual(Object.keys(CLI_ONLY).filter((c) => !leaves.has(c)), [], 'CLI_ONLY names commands that no longer exist')
+})
+
+test('every deprecated CLI command is hidden, and stands in exactly for a command a tool maps to', () => {
+  const leaves = cliLeaves()
+  const targeted = new Set(Object.values(TOOL_TO_CLI).flat())
+  const problems: string[] = []
+  for (const [alias, canonical] of Object.entries(DEPRECATED_COMMANDS)) {
+    const old = leaves.get(alias)
+    const current = leaves.get(canonical)
+    if (!old) problems.push(`${alias}: no such command (the window closed? delete the entry)`)
+    if (!current || !targeted.has(canonical)) problems.push(`${alias}: ${canonical} is not a command any tool maps to`)
+    if (!old || !current) continue
+    if (!old.hidden) problems.push(`${alias}: shown in help, but it is a deprecated alias`)
+    if (current.hidden) problems.push(`${canonical}: hidden, but it is the canonical command`)
+    const flagsOf = (leaf: Leaf) => [...leaf.flags].sort().join(' ')
+    if (flagsOf(old) !== flagsOf(current)) {
+      problems.push(`${alias} takes [${flagsOf(old)}] but ${canonical} takes [${flagsOf(current)}]`)
+    }
+  }
+  assert.deepEqual(problems, [])
 })
 
 test('every input of a mapped MCP tool is expressible in the CLI, or is a recorded known gap', async () => {

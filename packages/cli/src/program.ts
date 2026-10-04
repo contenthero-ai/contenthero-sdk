@@ -16,7 +16,7 @@ import { registerConfig } from './commands/config.js'
 import { registerAccount } from './commands/account.js'
 import { registerModel } from './commands/model.js'
 import { registerTag } from './commands/tag.js'
-import { registerElement } from './commands/element.js'
+import { registerKlingElement } from './commands/kling-element.js'
 import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
 import { registerAudio } from './commands/audio.js'
@@ -69,7 +69,7 @@ export function buildProgram(): Command {
   registerConfig(program)
   registerAccount(program)
   registerModel(program)
-  registerElement(program)
+  registerKlingElement(program)
   registerGenerate(program)
   registerUpscale(program)
   registerAudio(program)

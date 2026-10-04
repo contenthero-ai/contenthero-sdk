@@ -106,8 +106,8 @@ import type {
   ModelInfo,
   PlatformSummary,
   PlatformSchema,
-  Element,
-  CreateElementRequest,
+  KlingElement,
+  CreateKlingElementRequest,
   Stage,
   Space,
   CardAsset,
@@ -952,40 +952,71 @@ export class ContentHero {
   }
 
   // -------------------------------------------------------------------------
-  // Reference elements (named reference library, Kling 3.0)
+  // Kling elements (Kling 3.0's reusable references)
   // -------------------------------------------------------------------------
 
-  /** List the account's saved reference elements (newest first). */
-  async listElements(): Promise<Element[]> {
-    const data = await this.request<{ elements: Element[] }>('GET', '/api/v1/elements')
-    return data.elements
+  /** List the account's saved Kling elements (newest first). */
+  async listKlingElements(): Promise<KlingElement[]> {
+    const data = await this.request<{ klingElements: KlingElement[] }>('GET', '/api/v1/kling-elements')
+    return data.klingElements
   }
 
-  /** Get one saved reference element by id. */
-  async getElement(id: string): Promise<Element> {
-    return this.request<Element>('GET', `/api/v1/elements/${encodeURIComponent(id)}`)
+  /** Get one saved Kling element by id. */
+  async getKlingElement(id: string): Promise<KlingElement> {
+    return this.request<KlingElement>('GET', `/api/v1/kling-elements/${encodeURIComponent(id)}`)
   }
 
   /**
-   * Create a reusable reference element from 2-4 images (or 1 video). Inputs may
+   * Create a reusable Kling element from 2-4 images (or 1 video). Inputs may
    * be URLs or output-id tokens (generate the angle shots first, then assemble).
-   * Reference it later in a Kling generation via references.elements [{ elementId }].
+   * Reference it later in a Kling generation via references.klingElements [{ klingElementId }].
    */
-  async createElement(request: CreateElementRequest): Promise<Element> {
-    return this.request<Element>('POST', '/api/v1/elements', request)
+  async createKlingElement(request: CreateKlingElementRequest): Promise<KlingElement> {
+    return this.request<KlingElement>('POST', '/api/v1/kling-elements', request)
   }
 
-  /** Update a saved element's name / description / category. */
+  /** Update a saved Kling element's name / description / category. */
+  async updateKlingElement(
+    id: string,
+    patch: { name?: string; description?: string; category?: string },
+  ): Promise<KlingElement> {
+    return this.request<KlingElement>('PATCH', `/api/v1/kling-elements/${encodeURIComponent(id)}`, patch)
+  }
+
+  /** Delete a saved Kling element. */
+  async deleteKlingElement(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request<{ deleted: boolean; id: string }>('DELETE', `/api/v1/kling-elements/${encodeURIComponent(id)}`)
+  }
+
+  // The names before 2026-10-04, kept for one release window. Each calls its Kling twin, so there is one
+  // implementation; remove them when the window closes.
+
+  /** @deprecated Use `listKlingElements`. */
+  async listElements(): Promise<KlingElement[]> {
+    return this.listKlingElements()
+  }
+
+  /** @deprecated Use `getKlingElement`. */
+  async getElement(id: string): Promise<KlingElement> {
+    return this.getKlingElement(id)
+  }
+
+  /** @deprecated Use `createKlingElement`. */
+  async createElement(request: CreateKlingElementRequest): Promise<KlingElement> {
+    return this.createKlingElement(request)
+  }
+
+  /** @deprecated Use `updateKlingElement`. */
   async updateElement(
     id: string,
     patch: { name?: string; description?: string; category?: string },
-  ): Promise<Element> {
-    return this.request<Element>('PATCH', `/api/v1/elements/${encodeURIComponent(id)}`, patch)
+  ): Promise<KlingElement> {
+    return this.updateKlingElement(id, patch)
   }
 
-  /** Delete a saved element. */
+  /** @deprecated Use `deleteKlingElement`. */
   async deleteElement(id: string): Promise<{ deleted: boolean; id: string }> {
-    return this.request<{ deleted: boolean; id: string }>('DELETE', `/api/v1/elements/${encodeURIComponent(id)}`)
+    return this.deleteKlingElement(id)
   }
 
   // -------------------------------------------------------------------------

@@ -972,3 +972,68 @@ test('listProjects sends one type field, and type wins over its aliases', async 
   assert.equal(params.get('surface'), null)
   assert.equal(params.get('kind'), null)
 })
+
+const KLING_ELEMENT = {
+  id: '11111111-1111-4111-8111-111111111111',
+  shortId: 'Kling001',
+  appUrl: 'https://app.contenthero.ai/kling-element/Kling001',
+  name: 'hero',
+  category: 'character',
+  description: 'the subject',
+  input_urls: ['https://media.contenthero.ai/a.jpg', 'https://media.contenthero.ai/b.jpg'],
+  input_video_url: null,
+  preview_url: 'https://media.contenthero.ai/a.jpg',
+  created_at: 't',
+}
+
+test('Kling elements live at /api/v1/kling-elements, and the list reads klingElements', async () => {
+  // The server also sends the list under `elements` for SDKs that predate the rename; only `klingElements` is read.
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { klingElements: [KLING_ELEMENT], elements: [] } },
+    { status: 200, body: KLING_ELEMENT },
+    { status: 201, body: KLING_ELEMENT },
+    { status: 200, body: KLING_ELEMENT },
+    { status: 200, body: { deleted: true, id: KLING_ELEMENT.id } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  assert.deepEqual(await client.listKlingElements(), [KLING_ELEMENT])
+  assert.deepEqual(await client.getKlingElement('Kling 001'), KLING_ELEMENT)
+  await client.createKlingElement({ name: 'hero', description: 'the subject', images: KLING_ELEMENT.input_urls })
+  await client.updateKlingElement('Kling001', { name: 'villain' })
+  assert.deepEqual(await client.deleteKlingElement('Kling001'), { deleted: true, id: KLING_ELEMENT.id })
+  assert.deepEqual(
+    calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
+    [
+      'GET /api/v1/kling-elements',
+      'GET /api/v1/kling-elements/Kling%20001',
+      'POST /api/v1/kling-elements',
+      'PATCH /api/v1/kling-elements/Kling001',
+      'DELETE /api/v1/kling-elements/Kling001',
+    ],
+  )
+  assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { name: 'villain' })
+})
+
+test('the pre-rename element methods call their Kling twins, so there is one implementation', async () => {
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 500, body: {} }]).fetch })
+  const seen: string[] = []
+  const twin = client as unknown as Record<string, unknown>
+  for (const name of ['listKlingElements', 'getKlingElement', 'createKlingElement', 'updateKlingElement', 'deleteKlingElement']) {
+    twin[name] = async (...args: unknown[]) => {
+      seen.push(`${name} ${JSON.stringify(args)}`)
+      return name
+    }
+  }
+  assert.equal(await client.listElements(), 'listKlingElements')
+  assert.equal(await client.getElement('k1'), 'getKlingElement')
+  assert.equal(await client.createElement({ name: 'n', description: 'd', video: 'v' }), 'createKlingElement')
+  assert.equal(await client.updateElement('k1', { category: 'prop' }), 'updateKlingElement')
+  assert.equal(await client.deleteElement('k1'), 'deleteKlingElement')
+  assert.deepEqual(seen, [
+    'listKlingElements []',
+    'getKlingElement ["k1"]',
+    'createKlingElement [{"name":"n","description":"d","video":"v"}]',
+    'updateKlingElement ["k1",{"category":"prop"}]',
+    'deleteKlingElement ["k1"]',
+  ])
+})

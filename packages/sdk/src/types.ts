@@ -30,31 +30,42 @@ export interface References {
   /** Last frame for video models that accept one (URL or output id). */
   endFrame?: string
   /**
-   * Named reference elements (Kling 3.0), each addressable in the prompt as
-   * @name. Requires a startFrame alongside them. See get_model's promptReferences
-   * for which models support elements.
+   * Kling elements (Kling 3.0), each addressable in the prompt as @name. Requires
+   * a startFrame alongside them. See get_model's promptReferences for which models
+   * support them.
    */
-  elements?: ReferenceElement[]
+  klingElements?: ReferenceKlingElement[]
+  /** @deprecated Alias for `klingElements`, accepted for one release window. `klingElements` wins if both are set. */
+  elements?: ReferenceKlingElement[]
 }
 
 /**
- * A named group of reference images, addressable in the prompt as @name (Kling
- * 3.0). Provide EITHER a saved element by `elementId`, OR define one inline with
- * `name` + `images`.
+ * A Kling element in a generation: a named group of reference images, addressable
+ * in the prompt as @name (Kling 3.0). Provide EITHER a saved Kling element by
+ * `klingElementId`, OR define one inline with `name` + `images`.
  */
-export interface ReferenceElement {
-  /** Reference a saved element-library entry by id (resolves to its name + images). */
+export interface ReferenceKlingElement {
+  /** Reference a saved Kling element by id (resolves to its name + images). */
+  klingElementId?: string
+  /** @deprecated Alias for `klingElementId`, accepted for one release window. `klingElementId` wins if both are set. */
   elementId?: string
   /** Inline: referenced in the prompt as @name. */
   name?: string
-  /** Inline: what the element represents (passed to the provider for conditioning). */
+  /** Inline: what the Kling element represents (passed to the provider for conditioning). */
   description?: string
-  /** Inline: supporting image URLs or output-id tokens for this element. */
+  /** Inline: supporting image URLs or output-id tokens for this Kling element. */
   images?: string[]
 }
 
-/** A saved reference element in the account's library (the persistent form). */
-export interface Element {
+/** @deprecated Use `ReferenceKlingElement`. */
+export type ReferenceElement = ReferenceKlingElement
+
+/**
+ * A saved Kling element in the account's library (the persistent form): Kling 3.0's reusable reference for a
+ * character, location or prop. Named `KlingElement` since 2026-10-04, because "element" alone also names the
+ * editor's Elements panel; `Element` stays as an alias so no import breaks.
+ */
+export interface KlingElement {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
@@ -64,7 +75,7 @@ export interface Element {
   /** 'auto' | 'character' | 'location' | 'prop'. */
   category: string
   description: string | null
-  /** The element's supporting image URLs. */
+  /** The Kling element's supporting image URLs. */
   input_urls: string[]
   /** A single supporting video URL (alternative to images), if any. */
   input_video_url: string | null
@@ -73,8 +84,11 @@ export interface Element {
   created_at: string
 }
 
-/** Create an element from 2-4 images (or 1 video). Inputs may be URLs or output-id tokens. */
-export interface CreateElementRequest {
+/** @deprecated Use `KlingElement`. */
+export type Element = KlingElement
+
+/** Create a Kling element from 2-4 images (or 1 video). Inputs may be URLs or output-id tokens. */
+export interface CreateKlingElementRequest {
   name: string
   description: string
   /** 'auto' | 'character' | 'location' | 'prop' (default 'auto'). */
@@ -84,6 +98,9 @@ export interface CreateElementRequest {
   /** A single video URL or output-id token (alternative to images). */
   video?: string
 }
+
+/** @deprecated Use `CreateKlingElementRequest`. */
+export type CreateElementRequest = CreateKlingElementRequest
 
 /**
  * A generation request. `modelId` is always required. For image/video the

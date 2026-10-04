@@ -51,11 +51,15 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
   },
   {
     slug: 'characters',
-    title: 'Avatars and voices',
-    blurb: 'The identity layer: avatars with their looks, and the voices they speak with.',
+    title: 'Avatars, voices and Kling elements',
+    blurb:
+      'The identity layer: avatars with their looks, the voices they speak with, and the Kling elements that keep a character, location or prop consistent across Kling generations.',
+    // Kling elements moved here from the editor group on 2026-10-04: they are reference identity for generation, like
+    // an avatar, and nothing to do with the editor's Elements panel (graphic templates).
     tools: [
       'list_avatars', 'get_avatar', 'create_avatar', 'update_avatar', 'delete_avatar',
       'list_voices', 'get_voice',
+      'list_kling_elements', 'get_kling_element', 'create_kling_element', 'update_kling_element', 'delete_kling_element',
     ],
   },
   {
@@ -92,7 +96,6 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
       'list_projects', 'get_project', 'create_project', 'delete_project',
       'import_project', 'export_project', 'get_export',
       'update_timeline', 'update_canvas', 'get_transcript',
-      'list_elements', 'get_element', 'create_element', 'update_element', 'delete_element',
     ],
   },
   {
