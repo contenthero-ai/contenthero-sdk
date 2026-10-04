@@ -1538,7 +1538,6 @@ export class ContentHero {
   async getProject(
     projectId: string,
     options: {
-      includeRenderUrl?: boolean
       detail?: 'summary' | 'full'
       fromFrame?: number
       toFrame?: number
@@ -1547,7 +1546,6 @@ export class ContentHero {
     } = {},
   ): Promise<ProjectDetail> {
     const params = new URLSearchParams()
-    if (options.includeRenderUrl) params.set('includeRenderUrl', 'true')
     if (options.detail === 'full') params.set('detail', 'full')
     if (typeof options.fromFrame === 'number') params.set('fromFrame', String(options.fromFrame))
     if (typeof options.toFrame === 'number') params.set('toFrame', String(options.toFrame))

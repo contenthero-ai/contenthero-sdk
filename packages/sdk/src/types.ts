@@ -2471,8 +2471,11 @@ export interface ApplyEditorOpsInput {
   expectedRevision?: number
   /** A short human intent for the edit (attribution + observability). */
   userIntent?: string
-  /** When true, the result includes a fingerprint-validated preview still URL of the post-edit state. */
-  includeRenderUrl?: boolean
+  /*
+    ⛔ `includeRenderUrl` WAS RETIRED ON 2026-10-04, with `renderUrl` on the result and on ProjectDetail.
+    It made an edit (and a read) render and SAVE a cover, and the url it returned was the stored address, which an
+    API key cannot download. See the result with `getContext({ projectId, render: true })`.
+  */
 }
 
 /**
@@ -2519,8 +2522,6 @@ export interface ApplyEditorOpsResult {
   // value under two names is what this change removed.
   revision: number
   results: EditorOpResult[]
-  /** Present only when `includeRenderUrl` was set: a preview still URL of the resulting composition. */
-  renderUrl?: string | null
 }
 
 /**
@@ -2589,9 +2590,6 @@ export interface ProjectDetail extends ProjectSummary {
   shareId: string | null
   favoritedAt: string | null
   archivedAt: string | null
-  /** A fingerprint-validated preview still URL. Present only when getProject is called with
-   *  `includeRenderUrl` (opt-in, since it may render). */
-  renderUrl?: string | null
   /**
    * The coordinate space LAYER GEOMETRY is expressed in. This is NOT `width`/`height`.
    *

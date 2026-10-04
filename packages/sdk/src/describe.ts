@@ -91,9 +91,8 @@ function graphicDiagnosticLines(d: GraphicDiagnostic): string[] {
 
 /**
  * An applyEditorOps batch, for the MCP's tool result and the CLI's output alike: what applied, the new revision, what
- * was created, jobs to poll, the preview, each failure with its reason, warnings, and every graphic compiler finding
- * with its line (a refused graphic's error names only the first, and a warning on code that applied appears nowhere
- * else).
+ * was created, jobs to poll, each failure with its reason, warnings, and every graphic compiler finding with its line
+ * (a refused graphic's error names only the first, and a warning on code that applied appears nowhere else).
  */
 export function describeEditorOps(r: ApplyEditorOpsResult): string {
   const okCount = r.results.filter((x) => x.ok).length
@@ -106,7 +105,6 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   if (generating.length) {
     lines.push(`Dispatched ${generating.length} async job(s); get_generation_status on: ${generating.join(', ')}.`)
   }
-  if (r.renderUrl) lines.push(`Preview: ${r.renderUrl}`)
   if (failures.length) {
     lines.push('Failed ops:')
     for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)

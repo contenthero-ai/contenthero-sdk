@@ -379,7 +379,7 @@ function fakeClient(overrides = {}) {
     listProjects: async () => [
       { id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
     ],
-    getProject: async (projectId, options) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null, ...(options?.includeRenderUrl ? { renderUrl: 'https://x/preview.png' } : {}) }),
+    getProject: async (projectId, options) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
     createProject: async (input) => ({ id: 'new1', type: input.type ?? 'editor', kind: input.type ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: input.type ?? 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
@@ -2969,10 +2969,19 @@ test('get_schema does not offer the retired solid layer type', async () => {
   assert.match(description, /shape/)
 })
 
-test('get_project with includeRenderUrl surfaces the preview URL', async () => {
+/**
+ * ⛔ `includeRenderUrl` IS RETIRED (2026-10-04): it made a read and an edit render and SAVE a cover, and the url it
+ * returned was the stored address an agent could not download. get_context's render is the one way to see a project.
+ * Break-verified: restoring the parameter on any of the three tools turns this red.
+ */
+test('get_project and the edit tools offer no render option', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', includeRenderUrl: true } })
-  assert.match((res.content[0]).text, /Preview: https:\/\/x\/preview\.png/)
+  const { tools } = await mcp.listTools()
+  for (const name of ['get_project', 'update_timeline', 'update_canvas']) {
+    const properties = Object.keys(tools.find((t) => t.name === name)?.inputSchema.properties ?? {})
+    assert.ok(properties.length > 0, `${name} is registered`)
+    assert.ok(!properties.includes('includeRenderUrl'), `${name} still offers includeRenderUrl`)
+  }
 })
 
 test('create_project returns the new id + revision', async () => {

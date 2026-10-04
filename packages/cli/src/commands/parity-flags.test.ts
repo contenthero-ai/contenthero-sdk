@@ -93,14 +93,20 @@ test('project create --brand-kit associates the kit', async () => {
   assert.equal(r.body?.brandKitId, 'bk1')
 })
 
-test('project get --include-render-url asks for a preview still', async () => {
-  const r = await run('project', 'get', 'p1', '--include-render-url')
-  assert.equal(r.query.get('includeRenderUrl'), 'true')
-})
-
-test('project apply --include-render-url asks for a preview still of the result', async () => {
-  const r = await run('project', 'apply', 'p1', '--ops', '[{"op":"delete_clip","clipId":"c1"}]', '--include-render-url')
-  assert.equal(r.body?.includeRenderUrl, true)
+// `--include-render-url` is retired (a read or an edit must not render and save a cover; `context --render` shows a
+// project). Break-verified: restoring the flag on either command turns this red.
+test('project get and project apply no longer take --include-render-url', async () => {
+  for (const args of [
+    ['project', 'get', 'p1', '--include-render-url'],
+    ['project', 'apply', 'p1', '--ops', '[{"op":"delete_clip","clipId":"c1"}]', '--include-render-url'],
+  ]) {
+    seen.length = 0
+    const failure = await buildProgram()
+      .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', ...args], { from: 'user' })
+      .then(() => null, (err: { code?: string }) => err)
+    assert.equal(failure?.code, 'commander.unknownOption', `${args.slice(0, 2).join(' ')} still accepts the flag`)
+    assert.equal(seen.length, 0, 'nothing is sent for a refused command')
+  }
 })
 
 // get_context's region and get_media's keyframe width reach the wire (motion graphics foundation, item 1.2).

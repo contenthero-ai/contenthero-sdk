@@ -4225,14 +4225,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         toFrame: z.number().int().min(0).optional().describe('Timeline only: end of the frame window (see fromFrame).'),
         trackId: z.string().optional().describe('Timeline only: scope the read to a single track by id.'),
         slideId: z.string().optional().describe('Canvas only: scope the read to a single slide by id. Applies to detail:\'full\' as well. An id matching no slide returns every slide rather than nothing.'),
-        includeRenderUrl: z.boolean().optional().describe('Also return a preview still URL of the current composition (renders one only if it changed).'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         return projectDetailResult(await client.getProject(args.projectId, {
-          includeRenderUrl: args.includeRenderUrl,
           detail: args.detail,
           fromFrame: args.fromFrame,
           toFrame: args.toFrame,
@@ -4547,7 +4545,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .int()
           .optional()
           .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.'),
-        includeRenderUrl: z.boolean().optional().describe('Also return a preview still URL of the resulting composition.'),
       },
     },
     async (args, extra) => {
@@ -4559,7 +4556,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             ops: args.ops as EditorOp[],
             userIntent: args.userIntent,
             expectedRevision: args.expectedRevision,
-            includeRenderUrl: args.includeRenderUrl,
           }),
         )
       } catch (err) {
@@ -4584,7 +4580,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .int()
           .optional()
           .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.'),
-        includeRenderUrl: z.boolean().optional().describe('Also return a preview still URL of the resulting composition.'),
       },
     },
     async (args, extra) => {
@@ -4596,7 +4591,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             ops: args.ops as EditorOp[],
             userIntent: args.userIntent,
             expectedRevision: args.expectedRevision,
-            includeRenderUrl: args.includeRenderUrl,
           }),
         )
       } catch (err) {

@@ -2390,7 +2390,6 @@ const PROJECT_DETAIL_EXPOSURE = {
   compositionSpace: 'rendered',
   groups: 'rendered',
   state: 'rendered',
-  renderUrl: 'rendered (opt-in)',
   brandKitId: 'rendered',
   appUrl: 'rendered',
   shortId: 'omitted: the appUrl carries it, and every tool accepts either id',
@@ -2423,7 +2422,6 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
           `(center-relative px), NOT the ${p.width}x${p.height} output resolution. ` +
           `Use ${p.compositionSpace.width}x${p.compositionSpace.height} as layerWidth/layerHeight for a full-frame layer.\n`
         : '') +
-      (p.renderUrl ? `Preview: ${p.renderUrl}\n` : '') +
       // An agent asked to keep a design on-brand otherwise has no way to know WHICH kit this project is
       // linked to: it can list kits, but not resolve the association.
       (p.brandKitId ? `Brand kit: ${p.brandKitId} (read it with get_brand_kit).\n` : '') +
