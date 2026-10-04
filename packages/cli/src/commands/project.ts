@@ -22,7 +22,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
-import type { EditorOp, ImportProjectSource } from '@contenthero/sdk'
+import { describeEditorOps, type EditorOp, type ImportProjectSource } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -295,12 +295,7 @@ export function registerProject(program: Command): void {
         expectedRevision: opts.expectedRevision as number | undefined,
         includeRenderUrl: opts.includeRenderUrl ? true : undefined,
       })
-      emit(result, ctx, () => {
-        const ok = result.results.filter((r) => r.ok).length
-        return (
-          `Applied ${ok}/${result.results.length} op(s). New revision: ${result.revision}.` +
-          (result.renderUrl ? `\nPreview still: ${result.renderUrl}` : '')
-        )
-      })
+      emit(result, ctx, () => describeEditorOps(result))
+      if (result.results.some((r) => !r.ok)) process.exitCode = EXIT.GENERAL
     })
 }

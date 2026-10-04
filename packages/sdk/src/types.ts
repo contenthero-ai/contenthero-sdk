@@ -2456,6 +2456,27 @@ export interface ApplyEditorOpsInput {
   includeRenderUrl?: boolean
 }
 
+/**
+ * A finding from the graphic compiler about one graphic's code. The app compiles a graphic's code whenever an op writes
+ * it: an error refuses the op, and a warning lets it apply while naming what may go wrong. Code an op only carries (an
+ * undo puts it back) applies either way, with its findings, so an undo never fails over code the project already held.
+ */
+export interface GraphicDiagnostic {
+  /** The graphic: a clip on a timeline, a layer on a canvas. */
+  itemId: string
+  severity: 'error' | 'warning'
+  /** The kind of finding, for a caller that branches on it. The app can add kinds; `message` always explains. */
+  code: string
+  /** The finding, written for the code's author. */
+  message: string
+  /** 1-based. Absent for a finding about the code as a whole. */
+  line?: number
+  /** 1-based. */
+  column?: number
+  /** The author's line, trimmed. */
+  snippet?: string
+}
+
 /** The per-op outcome (type-agnostic; created ids normalized across project types). */
 export interface EditorOpResult {
   op: string
@@ -2468,6 +2489,9 @@ export interface EditorOpResult {
   /** For an async effect op (remove_background): the studio_outputs id of the dispatched job, so the caller can
    *  wait_for_generation on it. Present only on a successfully-dispatched async op. */
   generatingOutputId?: string
+  /** The graphic compiler's findings for graphic code this op wrote or carried. An error among them is why `ok` is
+   *  false; warnings ride on an op that applied. */
+  diagnostics?: GraphicDiagnostic[]
 }
 
 /** Result of `applyEditorOps`: the new revision + per-op results. */

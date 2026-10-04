@@ -153,6 +153,7 @@ export type {
   EditorOp,
   ApplyEditorOpsInput,
   EditorOpResult,
+  GraphicDiagnostic,
   ApplyEditorOpsResult,
   ProjectType,
   ProjectKind,
@@ -206,4 +207,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeLimit, describeReserved } from './describe.js'
+export { chargeSentence, describeCharge, describeEditorOps, describeLimit, describeReserved } from './describe.js'

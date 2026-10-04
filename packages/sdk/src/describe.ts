@@ -1,4 +1,4 @@
-import type { Charge } from './types.js'
+import type { ApplyEditorOpsResult, Charge, EditorOpResult, GraphicDiagnostic } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -45,4 +45,60 @@ export function describeReserved(held: number): string {
 export function describeLimit(err: LimitError): string {
   const ways = err.actions.map((a) => `- ${a.label}: ${a.url}`)
   return [err.message, ...(ways.length ? ['Ways to continue:', ...ways] : [])].join('\n')
+}
+
+/**
+ * EXPOSURE GUARD for EditorOpResult. A surface prints only what this function writes, so a field it skips is invisible
+ * to the agent or the person reading it, while every build and test stays green. `satisfies` makes each skipped field
+ * a decision tsc checks. `diagnostics` would otherwise have arrived exactly that way.
+ */
+const EDITOR_OP_RESULT_EXPOSURE = {
+  op: 'rendered (on a failure)',
+  ok: 'rendered (the applied count, and the failure list)',
+  error: 'rendered',
+  warnings: 'rendered',
+  createdIds: 'rendered',
+  generatingOutputId: 'rendered',
+  diagnostics: 'rendered',
+  opId: 'omitted: the SDK mints it per call, and nothing the reader does next takes it',
+} satisfies Record<keyof EditorOpResult, string>
+void EDITOR_OP_RESULT_EXPOSURE
+
+/** One graphic compiler finding, printed the way a compiler prints one: where, what, then the author's line. */
+function graphicDiagnosticLines(d: GraphicDiagnostic): string[] {
+  const where = d.line != null ? `, line ${d.line}${d.column != null ? `, column ${d.column}` : ''}` : ''
+  const head = `  - graphic ${d.itemId}${where}: ${d.severity} (${d.code}): ${d.message}`
+  return d.snippet && d.line != null ? [head, `      ${d.line} | ${d.snippet}`] : [head]
+}
+
+/**
+ * An applyEditorOps batch, for the MCP's tool result and the CLI's output alike: what applied, the new revision, what
+ * was created, jobs to poll, the preview, each failure with its reason, warnings, and every graphic compiler finding
+ * with its line (a refused graphic's error names only the first, and a warning on code that applied appears nowhere
+ * else).
+ */
+export function describeEditorOps(r: ApplyEditorOpsResult): string {
+  const okCount = r.results.filter((x) => x.ok).length
+  const failures = r.results.filter((x) => !x.ok)
+  const created = r.results.flatMap((x) => x.createdIds ?? [])
+  const lines = [`Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`]
+  if (created.length) lines.push(`Created: ${created.join(', ')}.`)
+  // Async effect ops (remove_background) dispatch a job and return its outputId; name it so the reader can poll.
+  const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)
+  if (generating.length) {
+    lines.push(`Dispatched ${generating.length} async job(s); get_generation_status on: ${generating.join(', ')}.`)
+  }
+  if (r.renderUrl) lines.push(`Preview: ${r.renderUrl}`)
+  if (failures.length) {
+    lines.push('Failed ops:')
+    for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)
+  }
+  const warnings = r.results.flatMap((x) => x.warnings ?? [])
+  if (warnings.length) lines.push(`Warnings: ${warnings.join('; ')}.`)
+  const diagnostics = r.results.flatMap((x) => x.diagnostics ?? [])
+  if (diagnostics.length) {
+    lines.push('Graphic code:')
+    for (const d of diagnostics) lines.push(...graphicDiagnosticLines(d))
+  }
+  return lines.join('\n')
 }

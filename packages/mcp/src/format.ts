@@ -94,7 +94,7 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2333,31 +2333,12 @@ export function errorResult(err: unknown): CallToolResult {
 
 // -- editor / canvas ops ------------------------------------------------------
 
-/** The outcome of an applyEditorOps batch: the new revision + a per-op summary. */
+/**
+ * The outcome of an applyEditorOps batch, in the SDK's wording (the CLI prints the same). A partial failure is an error
+ * result, so the agent self-corrects.
+ */
 export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
-  const okCount = r.results.filter((x) => x.ok).length
-  const failures = r.results.filter((x) => !x.ok)
-  const created = r.results.flatMap((x) => x.createdIds ?? [])
-  const lines = [
-    // The surface no longer names the ops: it says `editor` or `canvas`, and "editor op(s)" reads worse than
-    // saying nothing, since the caller already knows which tool they invoked.
-    `Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`,
-  ]
-  if (created.length) lines.push(`Created: ${created.join(', ')}.`)
-  // Async effect ops (remove_background) dispatch a job and return its outputId; surface it so the agent can poll.
-  const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)
-  if (generating.length) {
-    lines.push(`Dispatched ${generating.length} async job(s); get_generation_status on: ${generating.join(', ')}.`)
-  }
-  if (r.renderUrl) lines.push(`Preview: ${r.renderUrl}`)
-  if (failures.length) {
-    lines.push('Failed ops:')
-    for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)
-  }
-  const warnings = r.results.flatMap((x) => x.warnings ?? [])
-  if (warnings.length) lines.push(`Warnings: ${warnings.join('; ')}.`)
-  // A partial failure is surfaced as an error result so the caller (agent) can self-correct.
-  return text(lines.join('\n'), failures.length > 0)
+  return text(describeEditorOps(r), r.results.some((x) => !x.ok))
 }
 
 /**
