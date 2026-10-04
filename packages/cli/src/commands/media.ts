@@ -312,6 +312,7 @@ export function registerMedia(program: Command): void {
     .option('--from <sec>', 'start of the source-time window (seconds)', (v) => parseFloat(v))
     .option('--to <sec>', 'end of the source-time window (seconds)', (v) => parseFloat(v))
     .option('--frames <n>', 'how many keyframes (default 8)', (v) => parseInt(v, 10))
+    .option('--frame-width <px>', 'each keyframe\'s width in pixels (default 640; 160 to 1280)', (v) => parseInt(v, 10))
     .option('--save <dir>', 'write the keyframes to <dir>')
     .action(async (idOrUrl: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -321,6 +322,7 @@ export function registerMedia(program: Command): void {
         fromSec: opts.from as number | undefined,
         toSec: opts.to as number | undefined,
         frames: (opts.frames as number | undefined) ?? 8,
+        frameWidth: opts.frameWidth as number | undefined,
       } as MediaBatchItem
       const result = await client.getMediaBatch([item])
       const first = result.items[0]

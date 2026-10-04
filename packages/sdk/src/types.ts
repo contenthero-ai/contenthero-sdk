@@ -1179,6 +1179,8 @@ export interface MediaClipWindow {
   toSec?: number
   /** How many keyframes (proportional default; service-capped). */
   frames?: number
+  /** Each keyframe's width in pixels (default 640; the service keeps it within 160 to 1280). */
+  frameWidth?: number
 }
 
 /** One requested item for `getMediaBatch`: a raw URL, or an output id (+ variation); videos accept a window. */
@@ -2678,9 +2680,23 @@ export interface GetContextInput {
    * mode='image': render at an explicit DISPLAY width in pixels, so you can judge legibility at the size the output
    * will actually be seen (a classroom tile, a thumbnail, a feed card) rather than at full resolution, where
    * small type always looks fine. Height is derived from the composition's aspect ratio and is deliberately
-   * not a parameter. Clamped to a sane range; the size actually produced comes back on `rendered`.
+   * not a parameter. Up to the project's native width and the plan's export ceiling; the size actually produced
+   * (and `pixelsPerCompositionUnit`) comes back on `rendered`.
    */
   width?: number
+  /**
+   * mode='image': crop to this rectangle, in composition units (the space `ProjectDetail.compositionSpace` describes),
+   * to see detail at full resolution while the image stays small. Without a `width` it renders at native scale.
+   */
+  region?: CompositionRegion
+}
+
+/** A rectangle in composition units: the space layer geometry is expressed in (`ProjectDetail.compositionSpace`). */
+export interface CompositionRegion {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 /** Input to `createPreview`: currently a short COMPOSED video of an editor range (ephemeral, job-based). */

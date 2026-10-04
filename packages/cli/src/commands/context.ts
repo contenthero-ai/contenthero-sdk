@@ -2,7 +2,7 @@
  * `contenthero context` - read the LIVE context of what the user is currently viewing in the open app.
  *
  *   context [--project <id>] [--capture] [--render] [--frame <n>] [--slide <id>] [--slide-index <n>]
- *           [--width <n>] [--save <path>]
+ *           [--width <n>] [--region <x,y,w,h>] [--save <path>]
  *
  * Returns the most-recent-active session's surface + focus + selection, plus the live participant set.
  * Structured by default. `--capture` pings the live tab for a fresh viewport screenshot (the user's SCREEN).
@@ -14,7 +14,7 @@
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
-import type { LiveContextResult } from '@contenthero/sdk'
+import type { CompositionRegion, LiveContextResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -26,6 +26,16 @@ function bufferFromDataUrl(dataUrl: unknown): Buffer | null {
   const m = /^data:[^;]+;base64,(.+)$/s.exec(dataUrl)
   const b64 = m?.[1]
   return b64 ? Buffer.from(b64, 'base64') : null
+}
+
+/** `x,y,w,h` in composition units, the same four numbers the API's `region` takes. */
+function parseRegion(value: string): CompositionRegion {
+  const parts = value.split(',').map((v) => Number(v.trim()))
+  const [x, y, width, height] = parts
+  if (parts.length !== 4 || !parts.every(Number.isFinite) || x === undefined || y === undefined || width === undefined || height === undefined) {
+    throw new CliError('--region takes four numbers: x,y,width,height (composition units).', EXIT.USAGE)
+  }
+  return { x, y, width, height }
 }
 
 /** Insert `-N` before a path's extension, so multi-frame renders save as file-1.jpg, file-2.jpg, ... */
@@ -67,12 +77,13 @@ export function registerContext(program: Command): void {
     .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
     .option('--count <n>', 'how many frames across the range (omit for one at the focus point)', (v) => parseInt(v, 10))
     .option('--width <n>', 'still: render at this DISPLAY width in px, to judge legibility at real size (height follows the aspect ratio)', (v) => parseInt(v, 10))
+    .option('--region <x,y,w,h>', 'crop the render to this rectangle in composition units, to inspect detail at full resolution', parseRegion)
     .option('--save <path>', 'write the produced image(s) to this file (several frames append -1, -2, ...)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const render =
         Boolean(opts.render) || opts.frame != null || opts.slide != null || opts.slideIndex != null ||
-        opts.fromFrame != null || opts.toFrame != null || opts.width != null
+        opts.fromFrame != null || opts.toFrame != null || opts.width != null || opts.region != null
       // --save needs an image; imply --capture only when the user did not ask for a render.
       const capture = Boolean(opts.capture) || (Boolean(opts.save) && !render)
       const result = await client.getContext({
@@ -86,6 +97,7 @@ export function registerContext(program: Command): void {
         toFrame: opts.toFrame as number | undefined,
         count: opts.count as number | undefined,
         width: opts.width as number | undefined,
+        region: opts.region as CompositionRegion | undefined,
       })
 
       const c = result.context as Record<string, unknown> | null

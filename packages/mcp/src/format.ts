@@ -2521,7 +2521,7 @@ export function liveContextResult(
     lines.push(
       `${shown.dropped} rendered ${shown.dropped === 1 ? 'image was' : 'images were'} not attached` +
         (notShown.length > 0 ? ` (frames ${notShown.join(', ')})` : '') +
-        ": over this result's size limit. Ask for fewer frames, a narrower range, or a smaller width.",
+        ": over this result's size limit. Ask for fewer frames, a narrower range, a smaller width, or a region.",
     )
   }
   const failure = describeRenderFailure(rendered)

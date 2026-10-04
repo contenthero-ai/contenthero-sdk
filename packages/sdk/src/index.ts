@@ -166,6 +166,7 @@ export type {
   LiveContextParticipant,
   LiveContextResult,
   GetContextInput,
+  CompositionRegion,
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectSource,

@@ -2858,6 +2858,30 @@ test('get_context names the frames of a range that did not render', async () => 
   assert.match(res.content[0].text, /1 frame could not be rendered \(frames 30\)\. render_failed: Lambda timed out/)
 })
 
+/**
+ * Full resolution is reachable: the width limit was 1440 while the server rendered at 960, and a region crops at native
+ * scale. Break-verified: restoring `.max(1440)` turns the first red; dropping `region: args.region` turns it red too;
+ * dropping `frameWidth` from the get_media item schema turns the second red (zod strips the unknown key).
+ */
+test('get_context accepts a native-width render and forwards a region', async () => {
+  let seen
+  const mcp = await connect(fakeClient({ getContext: async (input) => ((seen = input), { context: null, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({
+    name: 'get_context',
+    arguments: { projectId: 'p1', render: true, width: 3840, region: { x: 480, y: 270, width: 240, height: 135 } },
+  })
+  assert.ok(!res.isError, `the call was refused: ${JSON.stringify(res.content)}`)
+  assert.equal(seen.width, 3840)
+  assert.deepEqual(seen.region, { x: 480, y: 270, width: 240, height: 135 })
+})
+
+test('get_media forwards a keyframe width', async () => {
+  let seen
+  const mcp = await connect(fakeClient({ getMediaBatch: async (items) => ((seen = items), { items: [] }) }))
+  await mcp.callTool({ name: 'get_media', arguments: { items: [{ url: 'https://media.contenthero.ai/a/original.mp4', frames: 2, frameWidth: 1280 }] } })
+  assert.equal(seen[0].frameWidth, 1280)
+})
+
 test('get_context frames spend the one result budget and name the frames that did not fit', async () => {
   // 24 frames of 100,000 base64 characters each is 2.4 MB against a 1 MB ceiling for the whole result.
   const frames = Array.from({ length: 24 }, (_, i) => ({ frame: i * 10, dataUrl: `data:image/webp;base64,${'A'.repeat(100_000)}` }))

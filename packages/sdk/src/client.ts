@@ -1584,6 +1584,10 @@ export class ContentHero {
     if (typeof input.toFrame === 'number') params.set('toFrame', String(input.toFrame))
     if (typeof input.count === 'number') params.set('count', String(input.count))
     if (typeof input.width === 'number') params.set('width', String(input.width))
+    if (input.region) {
+      const { x, y, width, height } = input.region
+      params.set('region', `${x},${y},${width},${height}`)
+    }
     // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the
     // RFC-3986 query encoding; emit %20 so the URL is canonical (both decode to a space server-side).
     const query = params.toString().replace(/\+/g, '%20')

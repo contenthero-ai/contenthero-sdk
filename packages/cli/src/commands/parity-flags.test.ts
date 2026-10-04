@@ -102,3 +102,22 @@ test('project apply --include-render-url asks for a preview still of the result'
   const r = await run('project', 'apply', 'p1', '--ops', '[{"op":"delete_clip","clipId":"c1"}]', '--include-render-url')
   assert.equal(r.body?.includeRenderUrl, true)
 })
+
+// get_context's region and get_media's keyframe width reach the wire (motion graphics foundation, item 1.2).
+// Break-verified: dropping `region:` from the context call, or `frameWidth:` from the watch item, turns its case red.
+test('context --region asks for a crop in composition units', async () => {
+  const r = await run('context', '--project', 'p1', '--region', '480,270,240,135')
+  assert.equal(r.query.get('render'), 'true')
+  assert.equal(r.query.get('region'), '480,270,240,135')
+})
+
+test('media watch --frame-width asks for wider keyframes', async () => {
+  // The stub answers with no `items`, so the command fails AFTER sending; the request it sent is what this checks.
+  seen.length = 0
+  await buildProgram()
+    .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'media', 'watch', 'https://media.contenthero.ai/a/original.mp4', '--frame-width', '1280'], { from: 'user' })
+    .catch(() => {})
+  assert.equal(seen.length, 1)
+  const items = seen[0]?.body?.items as Array<Record<string, unknown>>
+  assert.equal(items[0]?.frameWidth, 1280)
+})

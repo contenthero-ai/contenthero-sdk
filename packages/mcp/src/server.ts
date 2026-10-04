@@ -2714,6 +2714,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                 fromSec: z.number().min(0).optional().describe('Video keyframes: start of the source-time window (seconds). Omit for the whole clip.'),
                 toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
                 frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
+                frameWidth: z.number().int().min(160).max(1280).optional().describe('Video keyframes: each frame\'s width in pixels (default 640).'),
               }),
               z.object({
                 mediaId: z.string().describe('A studio output id: its short id, full id or first 8 characters.'),
@@ -2726,6 +2727,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                 fromSec: z.number().min(0).optional().describe('Video keyframes: start of the source-time window (seconds). Omit for the whole clip.'),
                 toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
                 frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
+                frameWidth: z.number().int().min(160).max(1280).optional().describe('Video keyframes: each frame\'s width in pixels (default 640).'),
               }),
             ]),
           )
@@ -4261,7 +4263,21 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames or a video. Omit to start at the beginning.'),
         toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
         count: z.number().int().min(1).optional().describe("mode='image': how many frames to return across the range. Omit for one frame at the focus point, or a proportional default when a range is given."),
-        width: z.number().int().min(48).max(1440).optional().describe("mode='image': render at an explicit DISPLAY width in pixels, to judge legibility at the size the output will actually be seen (a course tile, a thumbnail, a feed card) rather than at full resolution, where small type always looks fine. Height follows the composition aspect ratio and is not settable. Clamped; the size produced is reported back on rendered."),
+        /*
+          ⭐ 3840, THE WIDEST NATIVE FRAME (4K landscape). This was 1440, while the server rendered at 960 and
+          enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
+          per project and per plan (native width, the plan's export ceiling), so the schema only bounds the absurd.
+        */
+        width: z.number().int().min(48).max(3840).optional().describe("mode='image': render at an explicit DISPLAY width in pixels, to judge legibility at the size the output will actually be seen (a course tile, a thumbnail, a feed card) rather than at full resolution, where small type always looks fine. Height follows the composition aspect ratio and is not settable. Clamped; the size produced is reported back on rendered."),
+        region: z
+          .object({
+            x: z.number().min(0),
+            y: z.number().min(0),
+            width: z.number().positive(),
+            height: z.number().positive(),
+          })
+          .optional()
+          .describe("mode='image': crop the render to this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution while the image stays small. Without width it renders at native scale; rendered reports pixelsPerCompositionUnit."),
       },
     },
     async (args, extra) => {
@@ -4306,6 +4322,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           toFrame: args.toFrame,
           count: args.count,
           width: args.width,
+          region: args.region,
         })
         const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null
