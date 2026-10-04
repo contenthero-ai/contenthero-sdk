@@ -15,6 +15,7 @@ import {
   GenerationInterruptedError,
   pendingOutputId,
   ConflictError,
+  ServiceUnavailableError,
 } from './errors.js'
 import type { FetchLike } from './client.js'
 import type { ListProjectsInput } from './types.js'
@@ -91,6 +92,18 @@ test('401 maps to AuthenticationError, 400 to ValidationError', async () => {
 
   const bad = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 400, body: { error: 'unknown model' } }]).fetch })
   await assert.rejects(() => bad.generate({ modelId: 'nope' }), (e: unknown) => e instanceof ValidationError)
+})
+
+test('503 maps to ServiceUnavailableError, never to AuthenticationError', async () => {
+  // A lookup that could not run is not a bad key: the API answers 503, and a caller must retry, not replace the key.
+  const ch = new ContentHero({
+    apiKey: 'ch_live_test',
+    fetch: stubFetch([{ status: 503, body: { error: 'Authentication is temporarily unavailable. Try again in a few seconds.' } }]).fetch,
+  })
+  const err = await ch.getAccount().then(() => null, (e: unknown) => e)
+  assert.ok(err instanceof ServiceUnavailableError)
+  assert.ok(!(err instanceof AuthenticationError))
+  assert.equal((err as ServiceUnavailableError).status, 503)
 })
 
 test('getAccount reads your own account', async () => {

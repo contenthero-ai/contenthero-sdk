@@ -94,7 +94,7 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, chargeSentence, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeLimit, describeReserved, importedMediaFrom } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2318,6 +2318,12 @@ export function errorResult(err: unknown): CallToolResult {
   if (err instanceof RateLimitError) {
     const wait = err.retryAfter != null ? ` Retry in ${err.retryAfter}s.` : ''
     return text(`Rate limit exceeded.${wait || ' Wait a moment before retrying.'}`, true)
+  }
+  // Temporary, and nothing about the call or the key was wrong: say so, so the agent retries instead of reporting a
+  // bad key (what a 401 during the 2026-10-04 database outage made agents do).
+  if (err instanceof ServiceUnavailableError) {
+    const wait = err.retryAfter != null ? ` Retry in ${err.retryAfter}s.` : ' Retry the same call in a few seconds.'
+    return text(`${err.message}${wait}`, true)
   }
   if (err instanceof ContentHeroError || err instanceof Error) {
     return text(err.message, true)

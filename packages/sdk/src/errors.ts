@@ -231,6 +231,25 @@ export class RateLimitError extends ContentHeroError {
 }
 
 /**
+ * 503: the service could not do its part right now, most often because it could not CHECK the caller's identity
+ * (its database or auth server was unavailable). Nothing about the request or the key was judged wrong, so the
+ * correct response is to retry the same call shortly, never to replace the key. `retryAfter` is the suggested
+ * wait in seconds when the API reports it.
+ */
+export class ServiceUnavailableError extends ContentHeroError {
+  readonly retryAfter?: number
+
+  constructor(
+    message = 'The service is temporarily unavailable',
+    options?: ContentHeroErrorOptions & { retryAfter?: number },
+  ) {
+    super(message, options)
+    this.name = 'ServiceUnavailableError'
+    this.retryAfter = options?.retryAfter
+  }
+}
+
+/**
  * Thrown by `generateAndWait` when the generation reaches a terminal `failed`
  * state. `outputId` lets the caller re-fetch the record for the error detail.
  */
@@ -326,6 +345,11 @@ export function errorFromResponse(status: number, body: unknown): ContentHeroErr
       })
     case 429:
       return new RateLimitError(message, {
+        ...options,
+        retryAfter: typeof record?.retryAfter === 'number' ? record.retryAfter : undefined,
+      })
+    case 503:
+      return new ServiceUnavailableError(message, {
         ...options,
         retryAfter: typeof record?.retryAfter === 'number' ? record.retryAfter : undefined,
       })

@@ -199,6 +199,7 @@ export {
   StorageFullError,
   PlanLimitError,
   RateLimitError,
+  ServiceUnavailableError,
   GenerationFailedError,
   GenerationTimeoutError,
   GenerationInterruptedError,

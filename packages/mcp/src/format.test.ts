@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { ServiceUnavailableError } from '@contenthero/sdk'
 import {
   generationStatusResult,
   generationBatchResult,
@@ -14,6 +15,7 @@ import {
   exportJobResult,
   idOf,
   tagListResult,
+  errorResult,
 } from './format.js'
 
 /**
@@ -620,4 +622,14 @@ test('each generated output names its own link, index-aligned', () => {
   const t = (res.content[0] as { text: string }).text
   assert.match(t, /1\. https:\/\/m\/a\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/o1-1\)/)
   assert.match(t, /2\. https:\/\/m\/b\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/o1-2\)/)
+})
+
+test('a 503 tells the agent to retry the same call, never that the key is bad', () => {
+  // During the 2026-10-04 database outage every key lookup answered 401, and agents reported a bad key.
+  const result = errorResult(new ServiceUnavailableError('Authentication is temporarily unavailable. Try again in a few seconds.'))
+  const said = (result.content[0] as { text: string }).text
+  assert.equal(result.isError, true)
+  assert.match(said, /temporarily unavailable/)
+  assert.match(said, /Retry the same call/)
+  assert.doesNotMatch(said, /invalid|revoked|expired/i)
 })
