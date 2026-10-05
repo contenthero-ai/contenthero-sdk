@@ -2653,7 +2653,7 @@ export interface GraphicDiagnostic {
   line?: number
   /** 1-based. */
   column?: number
-  /** The author's line, trimmed. */
+  /** The author's line as written, indentation kept so `column` points into it. */
   snippet?: string
 }
 
@@ -3017,6 +3017,8 @@ export interface ExportJob {
   /** The final file URL, present when status is 'completed'. */
   outputUrl?: string | null
   errorMessage?: string | null
+  /** The item that stopped a failed export, when one did: `errorMessage` names it for a person, without its id. */
+  itemId?: string
   /** 0..1 render progress. */
   progress?: number
   /**

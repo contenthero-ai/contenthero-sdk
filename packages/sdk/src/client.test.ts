@@ -125,7 +125,7 @@ test('a non-JSON error body becomes its status and request id, never the page it
   const ch = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(500, ERROR_PAGE, { 'Content-Type': 'text/html', 'x-vercel-id': VERCEL_ID }) })
   const err = await ch.getAccount().then(() => null, (e: unknown) => e)
   assert.ok(err instanceof ContentHeroError)
-  assert.equal(err.message, `HTTP 500 (non-JSON response), request id ${VERCEL_ID}`)
+  assert.equal(err.message, `ContentHero returned HTTP 500 with no readable error. Request id ${VERCEL_ID}.`)
   assert.equal(err.requestId, VERCEL_ID)
   assert.equal(err.status, 500)
   assert.equal(err.body, ERROR_PAGE)
@@ -133,7 +133,7 @@ test('a non-JSON error body becomes its status and request id, never the page it
   const busy = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(503, 'Service Unavailable', { 'Content-Type': 'text/plain', 'x-vercel-id': VERCEL_ID }) })
   const unavailable = await busy.getAccount().then(() => null, (e: unknown) => e)
   assert.ok(unavailable instanceof ServiceUnavailableError)
-  assert.equal(unavailable.message, `HTTP 503 (non-JSON response), request id ${VERCEL_ID}`)
+  assert.equal(unavailable.message, `ContentHero returned HTTP 503 with no readable error. Request id ${VERCEL_ID}.`)
 })
 
 test('a JSON error keeps the server message and still carries the request id', async () => {
@@ -151,13 +151,13 @@ test('without a request id the message says only the status', async () => {
   const ch = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(502, '<html>Bad Gateway</html>', { 'Content-Type': 'text/html' }) })
   const err = await ch.getAccount().then(() => null, (e: unknown) => e)
   assert.ok(err instanceof ContentHeroError)
-  assert.equal(err.message, 'HTTP 502 (non-JSON response)')
+  assert.equal(err.message, 'ContentHero returned HTTP 502 with no readable error.')
   assert.equal(err.requestId, undefined)
 
   const empty = new ContentHero({ apiKey: 'ch_live_test', fetch: rawFetch(500, '', { 'x-vercel-id': VERCEL_ID }) })
   const blank = await empty.getAccount().then(() => null, (e: unknown) => e)
   assert.ok(blank instanceof ContentHeroError)
-  assert.equal(blank.message, `Request failed with status 500, request id ${VERCEL_ID}`)
+  assert.equal(blank.message, `ContentHero returned HTTP 500 with no readable error. Request id ${VERCEL_ID}.`)
 })
 
 test('getAccount reads your own account', async () => {

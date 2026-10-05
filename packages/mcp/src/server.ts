@@ -4281,7 +4281,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
           per project and per plan (native width, the plan's export ceiling), so the schema only bounds the absurd.
         */
-        width: z.number().int().min(48).max(3840).optional().describe("mode='image': render at an explicit DISPLAY width in pixels, to judge legibility at the size the output will actually be seen (a course tile, a thumbnail, a feed card) rather than at full resolution, where small type always looks fine. Height follows the composition aspect ratio and is not settable. Clamped; the size produced is reported back on rendered."),
+        width: z.number().int().min(48).max(3840).optional().describe("mode='image': the width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in rendered."),
         region: z
           .object({
             x: z.number().min(0),
@@ -4290,7 +4290,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             height: z.number().positive(),
           })
           .optional()
-          .describe("mode='image': crop the render to this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution while the image stays small. Without width it renders at native scale; rendered reports pixelsPerCompositionUnit."),
+          .describe("mode='image': render only this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without width, it renders at native scale; rendered reports pixelsPerCompositionUnit."),
       },
     },
     async (args, extra) => {

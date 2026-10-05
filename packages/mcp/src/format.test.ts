@@ -658,8 +658,29 @@ test('a refused graphic prints every finding with its line, and the author\'s li
   assert.equal(r.isError, true)
   const out = textOf(r)
   assert.match(out, /- graphic g1, line 2, column 23: error \(not-exported\): "Freeze" is not available from "remotion"\./)
-  assert.match(out, /\n {6}2 \| export default \(\) => <Freeze frame=\{0\}>x<\/Freeze>/)
+  assert.match(out, /\n {6}2 \| export default \(\) => <Freeze frame=\{0\}>x<\/Freeze>\n {8}\| {23}\^\n/)
   assert.match(out, /- graphic g1, line 3, column 5: warning \(nondeterministic\)/)
+})
+
+/**
+ * The caret sits under the column (approved message 27). The line is printed without its indentation and the caret moves
+ * with it; a tab before the column is kept so it lines up; a column past what was sent gets no caret. Break-verified:
+ * not subtracting the indentation turns the first case red, padding tabs with spaces the second, and dropping the
+ * bound the third.
+ */
+test('a finding\'s caret sits under its column, on an indented line too', () => {
+  const lines = (snippet: string, column: number) =>
+    textOf(editorOpsResult({
+      revision: 1,
+      results: [{ op: 'update_layer', opId: 'x', ok: false, error: 'invalid', diagnostics: [{ itemId: 'g', severity: 'error', code: 'c', message: 'm', line: 4, column, snippet }] }],
+    })).split('\n')
+  const indented = lines('    const x = Math.random()', 15)
+  assert.equal(indented.at(-2), '      4 | const x = Math.random()')
+  assert.equal(indented.at(-1), '        |           ^')
+  const tabbed = lines('\tfoo(\tbar)', 7)
+  assert.equal(tabbed.at(-1), '        |     \t^')
+  const past = lines('x', 9)
+  assert.equal(past.at(-1), '      4 | x')
 })
 
 test('a warning on code that applied is printed, and the result is not an error', () => {

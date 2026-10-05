@@ -338,18 +338,16 @@ export interface ResponseMeta {
  * Map an HTTP status + parsed body onto the right typed error.
  *
  * The message is the server's own when the body carries one. A body that is not JSON (the HTML page a crashed route
- * serves, a proxy's plain text) is never the message, since a page of markup says nothing a caller can act on. The
- * message names the status, says the response was not JSON, and gives the request id that finds the request in the
- * server's logs; the page itself stays on `body`. A response with no message of its own carries the request id the
- * same way.
+ * serves, a proxy's plain text) is never the message, since a page of markup says nothing a caller can act on. That
+ * response, and one with no message of its own, says so in one sentence (approved message 15, 2026-10-05): the status,
+ * and the request id that finds the request in the server's logs. The page itself stays on `body`.
  */
 export function errorFromResponse(status: number, body: unknown, meta: ResponseMeta = {}): ContentHeroError {
   const record = (body && typeof body === 'object' ? (body as Record<string, unknown>) : undefined)
   const served = (record && typeof record.error === 'string' && record.error) || (!meta.nonJson && typeof body === 'string' && body)
   const message =
     served ||
-    `${meta.nonJson ? `HTTP ${status} (non-JSON response)` : `Request failed with status ${status}`}` +
-      (meta.requestId ? `, request id ${meta.requestId}` : '')
+    `ContentHero returned HTTP ${status} with no readable error.${meta.requestId ? ` Request id ${meta.requestId}.` : ''}`
   const options: ContentHeroErrorOptions = { status, body, requestId: meta.requestId }
 
   switch (status) {

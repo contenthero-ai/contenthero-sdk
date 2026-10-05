@@ -97,11 +97,22 @@ const EDITOR_OP_RESULT_EXPOSURE = {
 } satisfies Record<keyof EditorOpResult, string>
 void EDITOR_OP_RESULT_EXPOSURE
 
-/** One graphic compiler finding, printed the way a compiler prints one: where, what, then the author's line. */
+/**
+ * One graphic compiler finding, printed the way a compiler prints one: where, what, then the author's line with a caret
+ * under the column (approved message 27, 2026-10-05). The line is printed without its indentation, and the caret moves
+ * with it; a column past the end of what was sent gets no caret.
+ */
 function graphicDiagnosticLines(d: GraphicDiagnostic): string[] {
   const where = d.line != null ? `, line ${d.line}${d.column != null ? `, column ${d.column}` : ''}` : ''
   const head = `  - graphic ${d.itemId}${where}: ${d.severity} (${d.code}): ${d.message}`
-  return d.snippet && d.line != null ? [head, `      ${d.line} | ${d.snippet}`] : [head]
+  if (!d.snippet || d.line == null) return [head]
+  const code = d.snippet.trimStart()
+  const gutter = `      ${d.line} | `
+  const at = d.column != null ? d.column - 1 - (d.snippet.length - code.length) : -1
+  if (at < 0 || at > code.length) return [head, `${gutter}${code}`]
+  // Under each character before the column, a space, or a tab where the line has one, so the caret lines up.
+  const pad = code.slice(0, at).replace(/[^\t]/g, ' ')
+  return [head, `${gutter}${code}`, `${' '.repeat(gutter.length - 2)}| ${pad}^`]
 }
 
 /**
