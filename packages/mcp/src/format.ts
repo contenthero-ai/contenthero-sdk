@@ -97,6 +97,8 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   GraphicGuide,
+  EffectList,
+  EffectDetail,
   GraphicDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
 import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeGraphicWarnings, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withGraphicWarnings } from '@contenthero/sdk'
@@ -2747,6 +2749,49 @@ export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
  */
 export function graphicGuideResult(g: GraphicGuide): CallToolResult {
   return text(`${g.markdown.trimEnd()}\n\n(Guide version ${g.version}.)`)
+}
+
+/** The effect catalog: every effect by group, where it can go, and the elements a graphic gives effects to. */
+export function effectListResult(list: EffectList): CallToolResult {
+  const groups = new Map<string, string[]>()
+  for (const e of list.effects) {
+    const where = e.onClips ? 'graphics and clips' : `graphics only; on a clip, ${e.gradedBy} does this`
+    groups.set(e.group, [...(groups.get(e.group) ?? []), `- ${e.name} (${e.importPath}): ${e.description}. ${where}.`])
+  }
+  const lines = [...groups].flatMap(([group, rows]) => [`${group}:`, ...rows, ''])
+  return text(
+    [
+      `${list.effects.length} effects. In a graphic, they go on ${list.graphicHosts.join(', ')}; on a video or image clip, in its effects.`,
+      '',
+      ...lines,
+      "Read one with get_schema kind 'effect' and its name for its parameters.",
+    ].join('\n'),
+  )
+}
+
+/** One effect in full: its parameters with ranges and defaults, its working defaults, and what keyframes on a clip. */
+export function effectResult(e: EffectDetail): CallToolResult {
+  const params = Object.entries(e.params).map(([name, p]) => {
+    const range = p.min !== undefined || p.max !== undefined ? ` ${p.min ?? ''}..${p.max ?? ''}` : ''
+    const fallback = p.default !== undefined ? `, default ${JSON.stringify(p.default)}` : ''
+    return `- ${name}: ${p.type}${range}${fallback}${p.description ? ` (${p.description})` : ''}`
+  })
+  return text(
+    [
+      `${e.name} (${e.group}): ${e.description}.`,
+      `Import: ${e.importPath}. On clips: ${e.onClips ? 'yes' : `no, ${e.gradedBy} does this`}.`,
+      '',
+      'Parameters:',
+      ...params,
+      '',
+      `Working defaults: ${JSON.stringify(e.defaults)}`,
+      e.onClips ? `Keyframeable on a clip (effects.<id>.<param>): ${e.keyframeable.join(', ') || 'none'}` : '',
+      e.documentation ? `Docs: ${e.documentation}` : '',
+    ]
+      .filter((line, i, all) => line !== '' || (all[i - 1] ?? '') !== '')
+      .join('\n')
+      .trimEnd(),
+  )
 }
 
 export function linkFormatsResult(f: LinkFormats): CallToolResult {

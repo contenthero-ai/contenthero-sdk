@@ -11,8 +11,9 @@
  *   schema export                                export formats per project type
  *   schema link                                  the link contract: how to build any app address from a noun + id
  *   schema graphic                               the authoring guide for a graphic's code, as one document
+ *   schema effect [--name n]                     every effect a graphic or a clip can use, or one effect in full
  *
- * timeline, layer, export and graphic require editor:read.
+ * timeline, layer, export, graphic and effect require editor:read.
  */
 
 import type { Command, Option } from 'commander'
@@ -85,19 +86,20 @@ function collectLeaves(cmd: Command, prefix: string[]): CommandSchema[] {
   return out
 }
 
-const KINDS = ['commands', 'platform', 'timeline', 'layer', 'export', 'link', 'graphic'] as const
+const KINDS = ['commands', 'platform', 'timeline', 'layer', 'export', 'link', 'graphic', 'effect'] as const
 type Kind = (typeof KINDS)[number]
 
 export function registerSchema(program: Command): void {
   program
     .command('schema')
-    .description('Read a vocabulary another command accepts: commands, platform, timeline, layer, export, link or graphic')
+    .description('Read a vocabulary another command accepts: commands, platform, timeline, layer, export, link, graphic or effect')
     .argument('<kind>', `which vocabulary: ${KINDS.join(', ')}`)
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
     .option('--platform <platform>', 'kind platform only: the platform to read; omit to list every platform')
     .option('--format <format>', 'kind platform with --platform only: narrow to one format (e.g. reel, short, story)')
     .option('--json-schema', "kinds timeline and layer only: also return each type's full JSON Schema (large)")
-    .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string; jsonSchema?: boolean }, command: Command) => {
+    .option('--name <name>', 'kind effect only: the effect to read in full. Omit to list the effects.')
+    .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string; jsonSchema?: boolean; name?: string }, command: Command) => {
       if (!(KINDS as readonly string[]).includes(kind)) {
         throw new CliError(`Unknown kind "${kind}". Use one of: ${KINDS.join(', ')}.`, EXIT.USAGE)
       }
@@ -108,6 +110,7 @@ export function registerSchema(program: Command): void {
         throw new CliError(`kind ${k} takes no --platform or --format; those belong to kind platform.`, EXIT.USAGE)
       }
       if (opts.format && !opts.platform) throw new CliError('--format narrows one platform: pass --platform with it.', EXIT.USAGE)
+      if (opts.name !== undefined && k !== 'effect') throw new CliError(`kind ${k} takes no --name; it belongs to kind effect.`, EXIT.USAGE)
       if (opts.jsonSchema && k !== 'timeline' && k !== 'layer') {
         throw new CliError(`kind ${k} takes no --json-schema; it belongs to kinds timeline and layer.`, EXIT.USAGE)
       }
@@ -210,6 +213,34 @@ export function registerSchema(program: Command): void {
         // The document the app renders, printed as is (the MCP prints the same one); --json gives the structured fields.
         const guide = await client.getGraphicGuide()
         emit(guide, ctx, () => guide.markdown.trimEnd())
+        return
+      }
+      if (k === 'effect') {
+        if (opts.name) {
+          const e = await client.getEffect(opts.name)
+          emit(e, ctx, () =>
+            keyValues([
+              ['Effect', `${e.name} (${e.group})`],
+              ['What it does', e.description],
+              ['Import', e.importPath],
+              ['On clips', e.onClips ? 'yes' : `no, ${e.gradedBy} does this`],
+              ...Object.entries(e.params).map(
+                ([name, p]) =>
+                  [`Param ${name}`, `${p.type}${p.min !== undefined || p.max !== undefined ? ` ${p.min ?? ''}..${p.max ?? ''}` : ''}${p.default !== undefined ? `, default ${JSON.stringify(p.default)}` : ''}`] as [string, string],
+              ),
+              ['Working defaults', JSON.stringify(e.defaults)],
+              ['Keyframeable on a clip', e.keyframeable.join(', ') || 'none'],
+            ]),
+          )
+          return
+        }
+        const list = await client.listEffects()
+        emit(list, ctx, () =>
+          table(
+            ['EFFECT', 'GROUP', 'IMPORT', 'ON CLIPS'],
+            list.effects.map((e) => [e.name, e.group, e.importPath, e.onClips ? 'yes' : `no (${e.gradedBy})`]),
+          ),
+        )
         return
       }
       if (k === 'link') {

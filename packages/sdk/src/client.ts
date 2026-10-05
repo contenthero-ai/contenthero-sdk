@@ -87,6 +87,8 @@ import type {
   ExportFormatCatalog,
   LinkFormats,
   GraphicGuide,
+  EffectList,
+  EffectDetail,
   LayerTypeCatalog,
   TimelineTypeCatalog,
   TypeCatalogOptions,
@@ -1750,6 +1752,22 @@ export class ContentHero {
    */
   async getGraphicGuide(): Promise<GraphicGuide> {
     return this.request<GraphicGuide>('GET', '/api/v1/editor/graphic-guide')
+  }
+
+  /**
+   * Every effect a graphic or a video or image clip can use, by group: what it does, where a graphic imports it, and
+   * whether a clip can carry it. Requires the `editor:read` scope.
+   */
+  async listEffects(): Promise<EffectList> {
+    return this.request<EffectList>('GET', '/api/v1/editor/effects')
+  }
+
+  /**
+   * One effect in full: its parameters with their ranges and defaults, and which of them keyframe on a clip. Requires the
+   * `editor:read` scope.
+   */
+  async getEffect(name: string): Promise<EffectDetail> {
+    return this.request<EffectDetail>('GET', `/api/v1/editor/effects?name=${encodeURIComponent(name)}`)
   }
 
   /** The link contract: the grammar, nouns and sections of app addresses, and the origin. Any valid key reads it. */

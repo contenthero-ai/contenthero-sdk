@@ -2947,6 +2947,41 @@ test("get_schema kind 'graphic' prints the app's graphic guide as one document, 
   assert.ok(!res.isError)
 })
 
+/**
+ * get_schema kind 'effect' (motion graphics 7.25, 7.37): the effect catalog by group, saying where each can go, and one
+ * effect in full by its name; a name on any other kind is refused rather than ignored.
+ */
+test("get_schema kind 'effect' lists the effects, reads one by name, and refuses a name on any other kind", async () => {
+  const asked = []
+  const mcp = await connect(
+    fakeClient({
+      listEffects: async () => (asked.push('list'), {
+        effects: [
+          { name: 'glow', group: 'Blur & Shadow', description: 'Soft halo effect', importPath: '@remotion/effects/glow', onClips: true },
+          { name: 'blur', group: 'Blur & Shadow', description: 'Gaussian blur effect', importPath: '@remotion/effects/blur', onClips: false, gradedBy: 'Blur' },
+        ],
+        graphicHosts: ['Solid', 'Img'],
+      }),
+      getEffect: async (name) => (asked.push(`get ${name}`), {
+        name, group: 'Blur & Shadow', description: 'Soft halo effect', importPath: '@remotion/effects/glow', onClips: true,
+        backend: 'webgl2', documentation: 'https://www.remotion.dev/docs/effects/glow',
+        params: { radius: { type: 'number', min: 0, max: 200, default: 20, description: 'Radius' } },
+        defaults: {}, keyframeable: ['radius'],
+      }),
+    }),
+  )
+  const list = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'effect' } })).content[0].text
+  assert.match(list, /^2 effects\. In a graphic, they go on Solid, Img; on a video or image clip, in its effects\./)
+  assert.match(list, /- blur \(@remotion\/effects\/blur\): Gaussian blur effect\. graphics only; on a clip, Blur does this\./)
+  const one = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'effect', name: 'glow' } })).content[0].text
+  assert.match(one, /- radius: number 0\.\.200, default 20 \(Radius\)/)
+  assert.match(one, /Keyframeable on a clip \(effects\.<id>\.<param>\): radius/)
+  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline', name: 'glow' } })
+  assert.ok(refused.isError)
+  assert.match(refused.content[0].text, /kind 'timeline' takes no name; it belongs to kind 'effect'\./)
+  assert.deepEqual(asked, ['list', 'get glow'])
+})
+
 test("get_schema kind 'timeline' lists clip + track types", async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline' } })

@@ -696,6 +696,19 @@ test('getGraphicGuide GETs the graphic authoring guide', async () => {
   assert.equal(guide.version, 'abc12345')
 })
 
+test('listEffects and getEffect read the effect catalog, one effect by its name', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { effects: [{ name: 'glow', group: 'Blur & Shadow', description: 'd', importPath: '@remotion/effects/glow', onClips: true }], graphicHosts: ['Solid'] } },
+    { status: 200, body: { name: 'light leak', params: {} } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const list = await client.listEffects()
+  await client.getEffect('light leak')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/effects')
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/editor/effects?name=light%20leak')
+  assert.equal(list.effects[0]?.name, 'glow')
+})
+
 // The JSON Schema is opt-in on the server (most of the catalog's size), so the SDK asks for it only when told to.
 test('a type catalog asks for the JSON Schema only when told to', async () => {
   const body = { surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [], layerTypes: [] }

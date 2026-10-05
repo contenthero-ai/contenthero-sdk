@@ -3110,6 +3110,50 @@ export interface GraphicGuide {
   examples: Array<{ name: string; title: string; description: string; code: string }>
 }
 
+/** One effect, as `listEffects` lists it (motion graphics 7.25, 7.37). */
+export interface EffectSummary {
+  /** The effect's function name, as a graphic imports it and a clip stores it. */
+  name: string
+  /** Its group: Color, Blur & Shadow, Reveal, Transform, Distort, Stylize, Generate. */
+  group: string
+  description: string
+  /** Where a graphic imports it from. */
+  importPath: string
+  /** Whether a video or image clip can carry it. */
+  onClips: boolean
+  /** When a clip cannot: the grading control that already does its job. */
+  gradedBy?: string
+}
+
+/** Every effect of `@remotion/effects` the app has, from `listEffects`. */
+export interface EffectList {
+  effects: EffectSummary[]
+  /** The elements a graphic's code gives `effects` to. */
+  graphicHosts: string[]
+}
+
+/** One parameter of an effect, as the effect's own schema states it. */
+export interface EffectParamSchema {
+  type: string
+  default?: unknown
+  min?: number
+  max?: number
+  step?: number
+  description?: string
+  [field: string]: unknown
+}
+
+/** One effect in full, from `getEffect`. */
+export interface EffectDetail extends EffectSummary {
+  backend: string
+  documentation: string | null
+  params: Record<string, EffectParamSchema>
+  /** Parameters that draw something sensible as they are; some effects draw nothing, or refuse, without them. */
+  defaults: Record<string, unknown>
+  /** On a clip, the parameters that keyframe, at `effects.<id>.<param>`. */
+  keyframeable: string[]
+}
+
 /** The link contract, from `getLinkFormats`: how to build any address in the app from a noun and an id. */
 export interface LinkFormats {
   /** The app's origin, for `{origin}`. */
