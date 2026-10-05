@@ -1414,7 +1414,9 @@ test('list_media lists one row per variation with its slot, favorite, and url', 
   // Two outputs of one generation render as two rows, each named by its own media id, the favorited one tagged.
   assert.match(res.content[0].text, /media Out12345-1/)
   assert.match(res.content[0].text, /media Out12345-2/)
-  assert.match(res.content[0].text, /1 of 2 outputs/)
+  // Each row says it has a sibling without claiming a number: output 2's row is not "1 of 2".
+  assert.match(res.content[0].text, /one of 2 outputs/)
+  assert.doesNotMatch(res.content[0].text, /\b1 of 2\b/)
   assert.match(res.content[0].text, /\[favorite\]/)
   assert.match(res.content[0].text, /cdn\/2\.png/)
 })

@@ -52,7 +52,6 @@ import type {
   GenerationOutput,
   GenerateResult,
   EditAudioResult,
-  MediaItem,
   MediaSummary,
   SearchMediaResult,
   Folder,
@@ -1078,7 +1077,7 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
   if (!items.length) return text('No media found.')
   const rows = items.map((m) => {
     // A studio generation lists as one row per output, each named by its own media id; say when it has siblings.
-    const varTag = m.generationSize > 1 ? ` | 1 of ${m.generationSize} outputs` : ''
+    const varTag = m.generationSize > 1 ? ` | one of ${m.generationSize} outputs` : ''
     const favTag = m.isFavorited ? ' [favorite]' : ''
     const promptStr = m.prompt ? ` | ${m.prompt.slice(0, 80)}${m.prompt.length > 80 ? '...' : ''}` : ''
     const kindTag =
@@ -1143,32 +1142,6 @@ export function folderContentsResult(folder: { name: string } | null, items: Fol
     return `- [${i.type}] ${i.name} (${idOf(i)})${i.subtype ? ` | ${i.subtype}` : ''}`
   })
   return text([header, ...rows].join('\n'))
-}
-
-/** One studio output's detail, with its variations. */
-export function mediaResult(m: MediaItem): CallToolResult {
-  const specs = [
-    m.aspectRatio ? `aspect ${m.aspectRatio}` : null,
-    m.resolution ? `res ${m.resolution}` : null,
-    m.duration ? `${m.duration}s` : null,
-  ]
-    .filter(Boolean)
-    .join(', ')
-  return text(
-    lines([
-      `${m.type} from ${m.model ?? 'unknown'} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})`,
-      m.kind && m.kind !== 'creation' ? `kind: ${m.kind}${m.boardType ? ` (${m.boardType})` : ''}` : null,
-      m.prompt ? `prompt: ${m.prompt}` : null,
-      m.script ? `script: ${m.script}` : null,
-      specs || null,
-      `status: ${m.status}`,
-      chargeLine(m.charge),
-      `outputs (${m.generationSize}):`,
-      ...m.variations.map(
-        (v) => `  ${v.mediaId}: ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}${v.isArchived ? ' [archived]' : ''}`,
-      ),
-    ]),
-  )
 }
 
 /** One resolved batch item's metadata line (no image; that is added separately). */
