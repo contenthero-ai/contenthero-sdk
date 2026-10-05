@@ -3043,7 +3043,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Kling Elements',
       annotations: READ,
       description:
-        "List the account's saved Kling elements: reusable named groups of images (a character, prop, location) addressable in a Kling prompt as @name. Reference one in a generation by klingElementId.",
+        "List the account's saved Kling elements. A Kling element is Kling 3.0's saved reference for one character, location or prop: 2-4 images (or one video) of it under a name, so the subject stays consistent across Kling video generations. Use one in generate_video's klingElements by klingElementId, and as @name in the prompt.",
       inputSchema: {},
     },
     async (_args, extra) => {
@@ -3082,7 +3082,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Kling Element',
       annotations: WRITE,
       description:
-        "Create a reusable Kling element from 2-4 images (or 1 video) of one entity (a character, prop, location). Images may be URLs or output-id tokens, so you can generate the angle shots first and assemble a Kling element from them. Reference it later in a Kling 3.0 generation via references.klingElements [{ klingElementId }] and @name in the prompt.",
+        "Create a Kling element: a saved reference for one character, location or prop that keeps it consistent across Kling 3.0 video generations. Give it 2-4 images (or one video) of that one subject; images may be URLs or output-id tokens, so you can generate the angle shots first and assemble the Kling element from them. Use it later in generate_video's klingElements [{ klingElementId }] and as @name in the prompt.",
       inputSchema: {
         name: z.string().describe('Referenced in the prompt as @name.'),
         description: z.string().describe('What the Kling element represents (required).'),
@@ -3143,7 +3143,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     {
       title: 'Delete Kling Element',
       annotations: WRITE,
-      description: 'Delete a saved Kling element.',
+      description: 'Permanently delete a saved Kling element. Videos already generated with it are unaffected.',
       inputSchema: { klingElementId: z.string().describe('The Kling element id.') },
     },
     async (args, extra) => {

@@ -91,7 +91,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
   {
     slug: 'editor',
     title: 'Editor and canvas',
-    blurb: 'Projects, their timelines and canvases, the elements on them, and exports.',
+    blurb: 'Projects, their timelines and canvases, the templates you place on them, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'delete_project',
       'import_project', 'export_project', 'get_export',

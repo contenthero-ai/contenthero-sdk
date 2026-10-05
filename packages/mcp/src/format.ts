@@ -1629,14 +1629,14 @@ export function klingElementDeletedResult(id: string): CallToolResult {
 /** One saved Kling element. */
 export function klingElementResult(e: KlingElement, verb?: string): CallToolResult {
   if (verb) {
-    return text(`${verb} Kling element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via references.klingElements [{ klingElementId: "${e.id}" }] and @${e.name} in the prompt.`)
+    return text(`${verb} Kling element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via generate_video's klingElements [{ klingElementId: "${e.id}" }] and @${e.name} in the prompt.`)
   }
   return text(
     lines([
       `${e.name} (${idOf(e)}) | ${e.category}`,
       e.description ? `description: ${e.description}` : null,
       e.input_video_url ? `video: ${e.input_video_url}` : `images (${e.input_urls.length}): ${e.input_urls.join(', ')}`,
-      `Reference in a Kling prompt as @${e.name}; pass references.klingElements [{ klingElementId: "${e.id}" }].`,
+      `Reference in a Kling prompt as @${e.name}; pass generate_video's klingElements [{ klingElementId: "${e.id}" }].`,
     ]),
   )
 }
