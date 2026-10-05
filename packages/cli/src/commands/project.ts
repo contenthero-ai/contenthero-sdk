@@ -166,6 +166,7 @@ export function registerProject(program: Command): void {
     .option('--orientation <ratio>', "e.g. 16:9, 9:16, 1:1 (default: 16:9)")
     .option('--width <n>', 'pixel width (default: from orientation)', toInt)
     .option('--height <n>', 'pixel height (default: from orientation)', toInt)
+    .option('--fps <n>', 'frames per second for an editor project: 24, 25, 30, 50 or 60 (default: 30)', toInt)
     .option('--brand-kit <id>', 'associate this brand kit with the project')
     .option('--card <id>', 'link the new project to this card in the same call (also needs planner:write)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
@@ -176,6 +177,7 @@ export function registerProject(program: Command): void {
         orientation: opts.orientation as string | undefined,
         width: opts.width as number | undefined,
         height: opts.height as number | undefined,
+        fps: opts.fps as 24 | 25 | 30 | 50 | 60 | undefined,
         brandKitId: opts.brandKit as string | undefined,
         cardId: opts.card as string | undefined,
       })

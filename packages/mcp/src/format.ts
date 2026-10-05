@@ -2460,6 +2460,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   height: 'rendered',
   revision: 'rendered',
   compositionSpace: 'rendered',
+  fps: 'rendered',
   groups: 'rendered',
   state: 'rendered',
   scope: 'rendered',
@@ -2498,6 +2499,8 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
           `(center-relative px), NOT the ${p.width}x${p.height} output resolution. ` +
           `Use ${p.compositionSpace.width}x${p.compositionSpace.height} as layerWidth/layerHeight for a full-frame layer.\n`
         : '') +
+      // The rate every frame number in the timeline counts at (7.39; approved text 8).
+      (p.fps ? `Frame rate: ${p.fps} fps. Every frame number in its timeline counts at this rate.\n` : '') +
       // An agent asked to keep a design on-brand otherwise has no way to know WHICH kit this project is
       // linked to: it can list kits, but not resolve the association.
       (p.brandKitId ? `Brand kit: ${p.brandKitId} (read it with get_brand_kit).\n` : '') +

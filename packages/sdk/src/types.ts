@@ -2766,6 +2766,8 @@ export interface ProjectDetail extends ProjectSummary {
    * Use it for any absolute geometry, and pass it as layerWidth/layerHeight for a FULL-FRAME layer.
    */
   compositionSpace?: { width: number; height: number }
+  /** The project's frame rate. Every frame number in its timeline counts at this rate. Editor projects only. */
+  fps?: number
 }
 
 /** What a `getProject` read was narrowed to (see `ProjectDetail.scope`). */
@@ -2964,6 +2966,8 @@ export interface CreateProjectInput {
   orientation?: string
   width?: number
   height?: number
+  /** Frames per second for an editor project: 24, 25, 30, 50 or 60. Defaults to 30. */
+  fps?: 24 | 25 | 30 | 50 | 60
   brandKitId?: string
   /**
    * The card this project is for: the new project is linked to it in the same call, so the card opens the edit from
