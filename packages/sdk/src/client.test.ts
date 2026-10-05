@@ -287,8 +287,8 @@ test('getMediaBatch POSTs the items to /api/v1/media/batch', async () => {
       status: 200,
       body: {
         items: [
-          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', imageUrl: 'https://cdn/1.png', type: 'image', model: 'nb2', prompt: null, mediaId: 'o1', variation: 1, otherVariations: [2] },
-          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', imageUrl: 'https://cdn/x.png', type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] },
+          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', imageUrl: 'https://cdn/1.png', type: 'image', model: 'nb2', prompt: null, mediaId: 'abcd1234-1', otherMediaIds: ['abcd1234-2'] },
+          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', imageUrl: 'https://cdn/x.png', type: 'image', model: null, prompt: null, mediaId: null, otherMediaIds: [] },
         ],
       },
     },
@@ -297,8 +297,8 @@ test('getMediaBatch POSTs the items to /api/v1/media/batch', async () => {
   const items = [{ mediaId: 'abcd1234' }, { url: 'https://cdn/x.png' }]
   const res = await c.getMediaBatch(items)
   assert.equal(res.items.length, 2)
-  assert.equal(res.items[0].variation, 1)
-  assert.deepEqual(res.items[0].otherVariations, [2])
+  assert.equal(res.items[0].mediaId, 'abcd1234-1')
+  assert.deepEqual(res.items[0].otherMediaIds, ['abcd1234-2'])
   assert.equal(batch.calls[0]?.url, 'https://example.test/api/v1/media/batch')
   assert.equal(batch.calls[0]?.init?.method, 'POST')
   assert.deepEqual(JSON.parse(String(batch.calls[0]?.init?.body)), { items })
@@ -307,19 +307,19 @@ test('getMediaBatch POSTs the items to /api/v1/media/batch', async () => {
 test('generateAndWait polls until completed', async () => {
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'gen1', status: 'processing' } },
-    { status: 200, body: { outputId: 'gen1', status: 'processing', contentType: 'image', modelId: 'nano-banana-2', outputUrls: [], error: null, createdAt: 't', completedAt: null } },
-    { status: 200, body: { outputId: 'gen1', status: 'completed', contentType: 'image', modelId: 'nano-banana-2', outputUrls: ['https://cdn/x.png'], error: null, createdAt: 't', completedAt: 't2' } },
+    { status: 200, body: { outputId: 'gen1', status: 'processing', contentType: 'image', modelId: 'nano-banana-2', outputs: [], error: null, createdAt: 't', completedAt: null } },
+    { status: 200, body: { outputId: 'gen1', status: 'completed', contentType: 'image', modelId: 'nano-banana-2', outputs: [{ mediaId: 'Gen00001', status: 'succeeded', url: 'https://cdn/x.png', appUrl: 'https://app/media/Gen00001' }], error: null, createdAt: 't', completedAt: 't2' } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   const gen = await client.generateAndWait({ modelId: 'nano-banana-2', prompt: 'a cat' }, { pollIntervalMs: 1 })
   assert.equal(gen.status, 'completed')
-  assert.deepEqual(gen.outputUrls, ['https://cdn/x.png'])
+  assert.deepEqual(gen.outputs.map((o) => o.url), ['https://cdn/x.png'])
 })
 
 test('generateAndWait throws GenerationFailedError on a failed terminal state', async () => {
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'gen2', status: 'processing' } },
-    { status: 200, body: { outputId: 'gen2', status: 'failed', contentType: 'video', modelId: 'veo-3', outputUrls: [], error: 'provider error', createdAt: 't', completedAt: 't2' } },
+    { status: 200, body: { outputId: 'gen2', status: 'failed', contentType: 'video', modelId: 'veo-3', outputs: [], error: 'provider error', createdAt: 't', completedAt: 't2' } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   await assert.rejects(
@@ -331,7 +331,7 @@ test('generateAndWait throws GenerationFailedError on a failed terminal state', 
 test('generateAndWait throws GenerationTimeoutError past the deadline', async () => {
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'gen3', status: 'processing' } },
-    { status: 200, body: { outputId: 'gen3', status: 'processing', contentType: 'video', modelId: 'veo-3', outputUrls: [], error: null, createdAt: 't', completedAt: null } },
+    { status: 200, body: { outputId: 'gen3', status: 'processing', contentType: 'video', modelId: 'veo-3', outputs: [], error: null, createdAt: 't', completedAt: null } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   await assert.rejects(
@@ -343,8 +343,8 @@ test('generateAndWait throws GenerationTimeoutError past the deadline', async ()
 test('importMedia waits for the import job and returns the new item', async () => {
   const { fetch, calls } = stubFetch([
     { status: 202, body: { outputId: 'imp1', status: 'processing', shortId: 'Imp00001', appUrl: 'https://app/media/Imp00001', url: null, alreadyExisted: false } },
-    { status: 200, body: { outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'processing', contentType: 'image', modelId: 'import', outputUrls: [], error: null, createdAt: 't', completedAt: null } },
-    { status: 200, body: { outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'completed', contentType: 'video', modelId: 'import', outputUrls: ['https://cdn/a.mp4'], error: null, createdAt: 't', completedAt: 't2' } },
+    { status: 200, body: { outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'processing', contentType: 'image', modelId: 'import', outputs: [], error: null, createdAt: 't', completedAt: null } },
+    { status: 200, body: { outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'completed', contentType: 'video', modelId: 'import', outputs: [{ mediaId: 'Imp00001', status: 'succeeded', url: 'https://cdn/a.mp4', appUrl: 'https://app/media/Imp00001' }], error: null, createdAt: 't', completedAt: 't2' } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   const m = await client.importMedia({ url: 'https://example.com/a.mp4' }, { pollIntervalMs: 1 })
@@ -357,7 +357,7 @@ test('importMedia: an import whose bytes were already there settles abandoned an
   const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'imp2', status: 'processing', shortId: 'Imp00002', appUrl: 'https://app/media/Imp00002', url: null, alreadyExisted: false } },
-    { status: 200, body: { outputId: 'imp2', appUrl: 'https://app/media/Imp00002', status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputUrls: [], error: null, alreadyExisted: dup, createdAt: 't', completedAt: null } },
+    { status: 200, body: { outputId: 'imp2', appUrl: 'https://app/media/Imp00002', status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputs: [], error: null, alreadyExisted: dup, createdAt: 't', completedAt: null } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   const m = await client.importMedia({ url: 'https://example.com/old.png' }, { pollIntervalMs: 1 })
@@ -369,12 +369,12 @@ test('importMedia: an import whose bytes were already there settles abandoned an
 
 test('importMedia: a refused url fails, and an unfinished one times out carrying its outputId', async () => {
   const started = { status: 202, body: { outputId: 'imp3', status: 'processing', shortId: 'Imp00003', appUrl: 'a', url: null, alreadyExisted: false } }
-  const failed = stubFetch([started, { status: 200, body: { outputId: 'imp3', status: 'failed', contentType: 'image', modelId: 'import', outputUrls: [], error: 'Import failed: not a public address', createdAt: 't', completedAt: 't2' } }])
+  const failed = stubFetch([started, { status: 200, body: { outputId: 'imp3', status: 'failed', contentType: 'image', modelId: 'import', outputs: [], error: 'Import failed: not a public address', createdAt: 't', completedAt: 't2' } }])
   await assert.rejects(
     () => new ContentHero({ apiKey: 'ch_live_test', fetch: failed.fetch }).importMedia({ url: 'https://x' }, { pollIntervalMs: 1 }),
     (err: unknown) => err instanceof GenerationFailedError && /public address/.test(err.message),
   )
-  const slow = stubFetch([started, { status: 200, body: { outputId: 'imp3', status: 'processing', contentType: 'image', modelId: 'import', outputUrls: [], error: null, createdAt: 't', completedAt: null } }])
+  const slow = stubFetch([started, { status: 200, body: { outputId: 'imp3', status: 'processing', contentType: 'image', modelId: 'import', outputs: [], error: null, createdAt: 't', completedAt: null } }])
   await assert.rejects(
     () => new ContentHero({ apiKey: 'ch_live_test', fetch: slow.fetch }).importMedia({ url: 'https://x' }, { pollIntervalMs: 1, timeoutMs: 0 }),
     (err: unknown) => err instanceof GenerationTimeoutError && err.outputId === 'imp3',
@@ -397,11 +397,11 @@ test('favorite posts to /api/v1/favorite with the asset target', async () => {
   assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { assetType: 'brand_kit', id: 'bk1' })
 })
 
-test('favorite targets a studio variation slot via variationIndex', async () => {
+test('favorite names one output by its media reference', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { favorited: true } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.favorite({ id: 'output-uuid', variationIndex: 2 })
-  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { id: 'output-uuid', variationIndex: 2 })
+  await client.favorite({ mediaId: 'Abc12345-2' })
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { mediaId: 'Abc12345-2' })
 })
 
 test('favorite and archive carry their direction in the body, not the route', async () => {

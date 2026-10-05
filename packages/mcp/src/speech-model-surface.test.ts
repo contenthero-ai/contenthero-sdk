@@ -2,6 +2,15 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { audioResult, modelResult } from './format.js'
 
+/** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
+function outs(urls: readonly string[], id = 'Gen12345') {
+  return urls.map((url, i) => {
+    const mediaId = urls.length > 1 ? `${id}-${i + 1}` : id
+    return { mediaId, status: 'succeeded', url, appUrl: `https://app.contenthero.ai/media/${mediaId}` }
+  })
+}
+
+
 /**
  * Two speech-model surfaces, both found 2026-09-30 while moving text to speech to Eleven v4.
  *
@@ -18,7 +27,7 @@ test('an audio card carries the model the server named', () => {
     outputId: 'a1',
     appUrl: 'https://app.contenthero.ai/media/a1',
     status: 'completed',
-    outputUrls: ['https://a/1.mp3'],
+    outputs: outs(['https://a/1.mp3']),
     modelId: 'elevenlabs-tts',
     modelDisplayName: 'Text to Speech',
     modelBrandColor: '#1A1A2E',
@@ -32,7 +41,7 @@ test('an audio card carries the model the server named', () => {
 })
 
 test('an audio card from a server that names no model renders no chip rather than the id', () => {
-  const s = structured(audioResult({ outputId: 'a1', appUrl: 'x', status: 'completed', outputUrls: ['https://a/1.mp3'] }))
+  const s = structured(audioResult({ outputId: 'a1', appUrl: 'x', status: 'completed', outputs: outs(['https://a/1.mp3']) }))
   assert.equal(s.modelName, null)
 })
 

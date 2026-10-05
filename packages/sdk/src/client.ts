@@ -252,10 +252,12 @@ export class ContentHero {
   }
 
   /** Fetch the current state of a generation by its id. */
-  async getGeneration(outputId: string): Promise<Generation> {
+  async getGeneration(outputId: string, init: { signal?: AbortSignal } = {}): Promise<Generation> {
     return this.request<Generation>(
       'GET',
       `/api/v1/studio/generate/${encodeURIComponent(outputId)}`,
+      undefined,
+      init,
     )
   }
 
@@ -342,27 +344,88 @@ export class ContentHero {
     outputId: string,
     options: WaitOptions = {},
   ): Promise<Generation> {
+    return this.#pollWithin(
+      (signal) => this.getGeneration(outputId, { signal }),
+      (generation) => {
+        options.onPoll?.(generation)
+        // Terminal only when SETTLED: a placement-bearing generation is not "done" for a caller until its swap /
+        // cutout side-effect has landed (see Generation.settled). `settled !== false` keeps older servers (which
+        // omit the field) working as before, and a no-placement output is settled the moment it completes.
+        if (generation.status === 'completed' && generation.settled !== false) return true
+        // Terminal without being a failure: set aside with no output of its own (see GenerationStatus).
+        if (generation.status === 'abandoned') return true
+        if (generation.status === 'failed') {
+          throw new GenerationFailedError(generation.outputId, generation.error ?? 'Generation failed', { generation })
+        }
+        return false
+      },
+      options,
+      (last) => new GenerationTimeoutError(outputId, undefined, last),
+    )
+  }
+
+  /**
+   * Wait for several generations under one deadline. Each comes back settled, failed, or as last read when the
+   * deadline came, so one slow or failed generation never hides the others: read each `status`. A transient read
+   * error on one id falls back to a single snapshot within the same deadline, and throws only when that fails too.
+   */
+  async waitForGenerations(outputIds: string[], options: WaitOptions = {}): Promise<Generation[]> {
+    const deadline = Date.now() + (options.timeoutMs ?? 600_000)
+    return Promise.all(
+      outputIds.map(async (id) => {
+        try {
+          return await this.waitForGeneration(id, { ...options, timeoutMs: Math.max(0, deadline - Date.now()) })
+        } catch (err) {
+          if (err instanceof GenerationTimeoutError && err.lastStatus) return err.lastStatus
+          if (err instanceof GenerationFailedError && err.generation) return err.generation
+          const timer = deadlineSignal(deadline, options.signal)
+          try {
+            return await this.getGeneration(id, { signal: timer.signal })
+          } catch {
+            throw err
+          } finally {
+            timer.release()
+          }
+        }
+      }),
+    )
+  }
+
+  /**
+   * Read until `settled` says the item is done, within ONE deadline nothing runs past: a read still in flight at the
+   * deadline is cut, and the last pause is shortened to fit. The one poll loop behind every wait in this client.
+   *
+   * It used to check the deadline only after each read and then pause a full interval, with no limit on the read
+   * itself, so a 50 second wait could run for a minute or more and an MCP call built on it ran past its host's 60
+   * second ceiling (7.49). `timedOut` builds the error from the last value read, so the caller can show progress
+   * without reading again.
+   */
+  async #pollWithin<T>(
+    read: (signal: AbortSignal) => Promise<T>,
+    settled: (value: T) => boolean,
+    options: WaitOptions,
+    timedOut: (last: T | undefined) => Error,
+  ): Promise<T> {
     const { pollIntervalMs = 3000, timeoutMs = 600_000, signal } = options
     const deadline = Date.now() + timeoutMs
-
+    let last: T | undefined
     while (true) {
-      const generation = await this.getGeneration(outputId)
-      // Terminal only when SETTLED: a placement-bearing generation is not "done" for a caller until its swap /
-      // cutout side-effect has landed (see Generation.settled). `settled !== false` keeps older servers (which
-      // omit the field) working as before, and a no-placement output is settled the moment it completes.
-      if (generation.status === 'completed' && generation.settled !== false) return generation
-      // Terminal without being a failure: set aside with no output of its own (see GenerationStatus).
-      if (generation.status === 'abandoned') return generation
-      if (generation.status === 'failed') {
-        throw new GenerationFailedError(
-          generation.outputId,
-          generation.error ?? 'Generation failed',
-        )
+      if (Date.now() >= deadline) throw timedOut(last)
+      const timer = deadlineSignal(deadline, signal)
+      let value: T
+      try {
+        value = await read(timer.signal)
+      } catch (err) {
+        if (timer.expired()) throw timedOut(last)
+        throw err
+      } finally {
+        timer.release()
       }
-      if (Date.now() >= deadline) {
-        throw new GenerationTimeoutError(outputId)
-      }
-      await sleep(pollIntervalMs, signal)
+      last = value
+      if (settled(value)) return value
+      const left = deadline - Date.now()
+      if (left <= 0) throw timedOut(last)
+      await sleep(Math.min(pollIntervalMs, left), signal)
     }
   }
 
@@ -1741,8 +1804,8 @@ export class ContentHero {
   }
 
   /** Poll an export job by id. Requires the `editor:read` scope. */
-  async getExport(exportId: string): Promise<ExportJob> {
-    return this.request<ExportJob>('GET', `/api/v1/exports/${encodeURIComponent(exportId)}`)
+  async getExport(exportId: string, init: { signal?: AbortSignal } = {}): Promise<ExportJob> {
+    return this.request<ExportJob>('GET', `/api/v1/exports/${encodeURIComponent(exportId)}`, undefined, init)
   }
 
   /**
@@ -1798,17 +1861,18 @@ export class ContentHero {
     return this.waitForExport(job.exportId, options)
   }
 
-  /** Poll an export job to a terminal state. */
+  /** Poll an export job to a terminal state, within the same deadline rule as `waitForGeneration`. */
   async waitForExport(exportId: string, options: WaitOptions = {}): Promise<ExportJob> {
-    const { pollIntervalMs = 3000, timeoutMs = 600_000, signal } = options
-    const deadline = Date.now() + timeoutMs
-    while (true) {
-      const job = await this.getExport(exportId)
-      if (job.status === 'completed') return job
-      if (job.status === 'failed') throw new GenerationFailedError(exportId, job.errorMessage ?? 'Export failed')
-      if (Date.now() >= deadline) throw new GenerationTimeoutError(exportId)
-      await sleep(pollIntervalMs, signal)
-    }
+    return this.#pollWithin(
+      (signal) => this.getExport(exportId, { signal }),
+      (job) => {
+        if (job.status === 'completed') return true
+        if (job.status === 'failed') throw new GenerationFailedError(exportId, job.errorMessage ?? 'Export failed')
+        return false
+      },
+      options,
+      () => new GenerationTimeoutError(exportId),
+    )
   }
 
   /**
@@ -1861,8 +1925,8 @@ export class ContentHero {
     return this.request<TranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
   }
 
-  /** Issue an authenticated request and map non-2xx responses to typed errors. */
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /** Issue an authenticated request and map non-2xx responses to typed errors. `signal` cuts it (a wait's deadline). */
+  private async request<T>(method: string, path: string, body?: unknown, init: { signal?: AbortSignal } = {}): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
       Accept: 'application/json',
@@ -1881,6 +1945,7 @@ export class ContentHero {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      ...(init.signal ? { signal: init.signal } : {}),
     })
 
     const text = await response.text()
@@ -1907,6 +1972,30 @@ function readEnv(name: string): string | undefined {
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
     ?.env
   return env?.[name]
+}
+
+/**
+ * A signal that aborts at `deadline` or when `outer` does, whichever is first. `expired` says the deadline was the
+ * cause; `release` clears the timer. Written out rather than `AbortSignal.any`, which Node 20.0 to 20.2 lack.
+ */
+function deadlineSignal(deadline: number, outer?: AbortSignal): { signal: AbortSignal; expired: () => boolean; release: () => void } {
+  const controller = new AbortController()
+  let expired = false
+  const timer = setTimeout(() => {
+    expired = true
+    controller.abort()
+  }, Math.max(0, deadline - Date.now()))
+  const onOuter = () => controller.abort()
+  if (outer?.aborted) controller.abort()
+  else outer?.addEventListener('abort', onOuter, { once: true })
+  return {
+    signal: controller.signal,
+    expired: () => expired,
+    release: () => {
+      clearTimeout(timer)
+      outer?.removeEventListener('abort', onOuter)
+    },
+  }
 }
 
 /** Promise-based delay that rejects if the provided signal aborts. */
@@ -1947,7 +2036,7 @@ export function importedMediaFrom(gen: Generation, shortId: string | null): Impo
   }
   return {
     outputId: gen.outputId,
-    url: gen.outputUrls[0] ?? '',
+    url: gen.outputs[0]?.url ?? '',
     appUrl: gen.appUrl,
     shortId,
     alreadyExisted: false,

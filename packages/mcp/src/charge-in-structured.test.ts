@@ -10,6 +10,15 @@ import {
   withCharge,
 } from './format.js'
 
+/** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
+function outs(urls: readonly string[], id = 'Gen12345') {
+  return urls.map((url, i) => {
+    const mediaId = urls.length > 1 ? `${id}-${i + 1}` : id
+    return { mediaId, status: 'succeeded', url, appUrl: `https://app.contenthero.ai/media/${mediaId}` }
+  })
+}
+
+
 /**
  * A paid result carries its charge in its structured data, not only in its text (2026-09-30).
  *
@@ -27,7 +36,7 @@ function structured(r: { structuredContent?: Record<string, unknown> }) {
 }
 
 test('a finished generation, polled or returned, carries its charge', () => {
-  const gen = { outputId: 'o1', status: 'completed', contentType: 'image', modelId: 'nano-banana-2', outputUrls: ['https://a/1.jpg'], charge: charged }
+  const gen = { outputId: 'o1', status: 'completed', contentType: 'image', modelId: 'nano-banana-2', outputs: outs(['https://a/1.jpg']), charge: charged }
   for (const r of [completedResult(gen as never), generationStatusResult(gen as never)]) {
     assert.deepEqual(structured(r).charge, charged)
     assert.equal(structured(r).cost, 'Cost: 6 credits charged. Balance after: 86,427 credits.')
@@ -35,12 +44,12 @@ test('a finished generation, polled or returned, carries its charge', () => {
 })
 
 test('a running generation carries what is held for it', () => {
-  const gen = { outputId: 'o1', status: 'processing', contentType: 'image', modelId: 'nano-banana-2', outputUrls: ['https://a/1.jpg'], charge: pending }
+  const gen = { outputId: 'o1', status: 'processing', contentType: 'image', modelId: 'nano-banana-2', outputs: outs(['https://a/1.jpg']), charge: pending }
   assert.deepEqual(structured(generationStatusResult(gen as never)).charge, pending)
 })
 
 test('audio, scenes and Break It Down carry their charge', () => {
-  assert.deepEqual(structured(audioResult({ outputId: 'a1', outputUrls: ['https://a/1.mp3'], charge: charged } as never)).charge, charged)
+  assert.deepEqual(structured(audioResult({ outputId: 'a1', outputs: outs(['https://a/1.mp3']), charge: charged } as never)).charge, charged)
   assert.deepEqual(
     structured(contentScenesResult({ contentId: 'c1', scenes: { status: 'running' }, charge: pending } as never)).charge,
     pending,

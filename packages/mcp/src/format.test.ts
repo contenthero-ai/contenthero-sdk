@@ -19,6 +19,15 @@ import {
   editorOpsResult,
 } from './format.js'
 
+/** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
+function outs(urls: readonly string[], id = 'Gen12345') {
+  return urls.map((url, i) => {
+    const mediaId = urls.length > 1 ? `${id}-${i + 1}` : id
+    return { mediaId, status: 'succeeded', url, appUrl: `https://app.contenthero.ai/media/${mediaId}` }
+  })
+}
+
+
 /**
  * A running generation must report the slots that have already landed.
  *
@@ -34,7 +43,7 @@ function gen(overrides = {}) {
     status: 'processing',
     contentType: 'image',
     modelId: 'gpt-image-2',
-    outputUrls: [],
+    outputs: outs([]),
     error: null,
     createdAt: '2026-08-29T00:00:00Z',
     completedAt: null,
@@ -45,7 +54,7 @@ function gen(overrides = {}) {
 const body = (r) => r.content.map((c) => c.text).join('\n')
 
 test('a running generation reports the urls it already has', () => {
-  const out = body(generationStatusResult(gen({ outputUrls: ['https://a/1.png'] })))
+  const out = body(generationStatusResult(gen({ outputs: outs(['https://a/1.png']) })))
   assert.match(out, /https:\/\/a\/1\.png/)
   assert.match(out, /1 image ready/)
   assert.match(out, /still processing/)
@@ -54,7 +63,7 @@ test('a running generation reports the urls it already has', () => {
 test('a partial result is never mistaken for a finished one', () => {
   // The whole point of the change is that a caller can act early. It must NOT be able to conclude
   // the set is complete, or it would silently drop the slots still running.
-  const out = body(generationStatusResult(gen({ outputUrls: ['https://a/1.png'] })))
+  const out = body(generationStatusResult(gen({ outputs: outs(['https://a/1.png']) })))
   assert.doesNotMatch(out, /^Done\./m)
   assert.match(out, /NOT the full set/)
   assert.match(out, /poll_after_seconds/)
@@ -69,7 +78,7 @@ test('a running generation with no urls yet is unchanged', () => {
 
 test('a completed generation still uses the Done header', () => {
   const out = body(
-    generationStatusResult(gen({ status: 'completed', outputUrls: ['https://a/1.png', 'https://a/2.png'] })),
+    generationStatusResult(gen({ status: 'completed', outputs: outs(['https://a/1.png', 'https://a/2.png']) })),
   )
   assert.match(out, /^Done\. 2 images/)
   assert.doesNotMatch(out, /Partial/)
@@ -84,14 +93,14 @@ test('a failed generation is unaffected and stays an error', () => {
 test('the batch form also surfaces partial urls', () => {
   const out = body(
     generationBatchResult([
-      gen({ outputId: 'a', outputUrls: ['https://a/1.png'] }),
+      gen({ outputId: 'a', outputs: outs(['https://a/1.png']) }),
       gen({ outputId: 'b' }),
-      gen({ outputId: 'c', status: 'completed', outputUrls: ['https://c/1.png'] }),
+      gen({ outputId: 'c', status: 'completed', outputs: outs(['https://c/1.png']) }),
     ]),
   )
-  assert.match(out, /- a: processing, 1 ready so far \| https:\/\/a\/1\.png/)
+  assert.match(out, /- a: processing, 1 ready so far \| Gen12345 https:\/\/a\/1\.png/)
   assert.match(out, /- b: processing \[poll_after_seconds/)
-  assert.match(out, /- c: completed \| https:\/\/c\/1\.png/)
+  assert.match(out, /- c: completed \| Gen12345 https:\/\/c\/1\.png/)
 })
 
 /**
@@ -123,7 +132,7 @@ test('a still-rendering job hands back a callable get_generation_status', () => 
 test('in-place enhancement hands back every outputId in one callable form', () => {
   const out = body(
     enhanceClipsResult({
-      outputs: [
+      jobs: [
         { outputId: 'j1', clipIds: ['c1', 'c2'], windows: 2 },
         { outputId: 'j2', clipIds: ['c3'], windows: 1 },
       ],
@@ -173,7 +182,7 @@ test('🚨 EVERY variation in a batch comes back, not just the first', () => {
   */
   const urls = ['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`)
   const res = completedResult(
-    { ...baseGen, contentType: 'image', outputUrls: urls } as never,
+    { ...baseGen, contentType: 'image', outputs: outs(urls) } as never,
     urls.map((uri, i) => ({ kind: 'link' as const, uri, mimeType: 'image/png', name: `o1-${i + 1}.png` })),
   )
   const links = res.content.filter((c) => c.type === 'resource_link')
@@ -201,7 +210,7 @@ test('⭐ an image comes back as a BLOCK AND a link; video links only', () => {
     MCP has no video block and base64 video in a transcript is not a trade worth making.
   */
   const imageRes = completedResult(
-    { ...baseGen, contentType: 'image', outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'] } as never,
+    { ...baseGen, contentType: 'image', outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']) } as never,
     [
       { kind: 'bytes', type: 'image', data: 'AAAA', mimeType: 'image/webp' },
       { kind: 'link', uri: 'https://media.contenthero.ai/u/a.png?t=tok', mimeType: 'image/png', name: 'o1.png' },
@@ -211,7 +220,7 @@ test('⭐ an image comes back as a BLOCK AND a link; video links only', () => {
   assert.ok(imageRes.content.some((c) => c.type === 'resource_link'), 'and keep its full-resolution link')
 
   const videoRes = completedResult(
-    { ...baseGen, contentType: 'video', outputUrls: ['https://media.contenthero.ai/u/a.mp4?t=tok'] } as never,
+    { ...baseGen, contentType: 'video', outputs: outs(['https://media.contenthero.ai/u/a.mp4?t=tok']) } as never,
     [{ kind: 'link', uri: 'https://media.contenthero.ai/u/a.mp4?t=tok', mimeType: 'video/mp4', name: 'o1.mp4' }],
   )
   assert.ok(!videoRes.content.some((c) => c.type === 'image'), 'video must not embed bytes')
@@ -225,7 +234,7 @@ test('⛔ video attaches as a resource_link, because MCP has no video block', ()
     parameters cannot invalidate it.
   */
   const res = completedResult(
-    { ...baseGen, contentType: 'video', outputUrls: ['https://media.contenthero.ai/u/v.mp4?t=tok'] } as never,
+    { ...baseGen, contentType: 'video', outputs: outs(['https://media.contenthero.ai/u/v.mp4?t=tok']) } as never,
     [{ kind: 'link', uri: 'https://media.contenthero.ai/u/v.mp4?t=tok', mimeType: 'video/mp4', name: 'o1.mp4' }],
   )
   const link = res.content.find((c) => c.type === 'resource_link')
@@ -241,7 +250,7 @@ test('no attachment still returns the text result, so a fetch failure never fail
     it. This is the shape the caller got before attachments existed, and it has to remain valid.
   */
   const res = completedResult(
-    { ...baseGen, contentType: 'image', outputUrls: ['https://media.contenthero.ai/u/a.jpg'] } as never,
+    { ...baseGen, contentType: 'image', outputs: outs(['https://media.contenthero.ai/u/a.jpg']) } as never,
   )
   assert.equal(res.content.length, 1)
   assert.equal(res.content[0].type, 'text')
@@ -254,7 +263,7 @@ test('placement notes survive alongside the attachment', () => {
     {
       ...baseGen,
       contentType: 'image',
-      outputUrls: ['https://media.contenthero.ai/u/a.jpg'],
+      outputs: outs(['https://media.contenthero.ai/u/a.jpg']),
       placement: { projectType: 'canvas', surface: 'canvas', layerId: 'L1', slideId: 'S1' },
     } as never,
     [{ kind: 'bytes', type: 'image', data: 'QUJD', mimeType: 'image/jpeg' }],
@@ -285,7 +294,7 @@ test('🚨 an unresolved model name renders NOTHING, never the raw id', () => {
     ...baseGen,
     modelId: 'gpt-image-2',
     contentType: 'image',
-    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
   } as never)
   assert.equal(data.modelName, null, 'no display name means no chip')
   assert.notEqual(data.modelName, 'gpt-image-2', 'the id must never stand in for the label')
@@ -298,7 +307,7 @@ test('the chip carries what the registry resolved, not what the widget could gue
     ...baseGen,
     modelId: 'gpt-image-2',
     contentType: 'image',
-    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
     modelDisplayName: 'GPT Image 2',
     modelBrandColor: '#10A37F',
     modelIconKey: 'openai',
@@ -327,7 +336,7 @@ test('the TEXT header still names the id when nothing resolved, because a model 
     ...baseGen,
     modelId: 'gpt-image-2',
     contentType: 'image',
-    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
   } as never)
   assert.match(res.content[0].text, /from gpt-image-2/)
 })
@@ -337,7 +346,7 @@ test('a resolved name reaches the text header too', () => {
     ...baseGen,
     modelId: 'gpt-image-2',
     contentType: 'image',
-    outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+    outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
     modelDisplayName: 'GPT Image 2',
   } as never)
   assert.match(res.content[0].text, /from GPT Image 2/)
@@ -417,26 +426,29 @@ test('video is polled less often than image, because it takes longer', () => {
 
 
 /**
- * ⭐ THE OPEN BUTTON'S URL IS THE SERVER'S.
+ * ⭐ THE OPEN BUTTON'S URL IS THE SERVER'S, AND IT RIDES ON ITS OUTPUT.
  *
  * The app owns its URLs and returns one per output. This module used to compose them itself, and its format
- * drifted from the app's. A tile takes the link at its own index, so output 3 opens output 3.
+ * drifted from the app's; then they were paired by index, and a failed output shifted every later link (7.44).
+ * Each tile now opens the link its own output carries, so output 3 opens output 3 even after output 2 failed.
  */
-test('each tile opens the server link at its own index', () => {
-  const id = 'cfe3bafb-ddc5-4e51-bae6-68ec61112a23'
-  const appUrls = [1, 2, 3, 4].map((n) => `https://app.contenthero.ai/media/${id}-${n}`)
+test('each tile opens the link its own output carries, past a failed one', () => {
+  const outputs = outs(['https://a/1.png', 'https://a/2.png', 'https://a/3.png'], 'Gen12345')
+  const failed = { mediaId: 'Gen12345-2', status: 'failed', url: null, appUrl: 'https://app.contenthero.ai/media/Gen12345-2' }
   const data = generationWidgetData({
-    outputId: id,
-    appUrl: appUrls[0]!,
-    appUrls,
+    outputId: 'cfe3bafb-ddc5-4e51-bae6-68ec61112a23',
+    appUrl: 'https://app.contenthero.ai/media/Gen12345',
     status: 'completed',
     contentType: 'image',
     modelId: 'm',
-    outputUrls: ['https://a/1.png', 'https://a/2.png', 'https://a/3.png', 'https://a/4.png'],
+    outputs: [outputs[0]!, failed, { ...outputs[2]!, mediaId: 'Gen12345-3', appUrl: 'https://app.contenthero.ai/media/Gen12345-3' }],
   } as Generation)
   assert.deepEqual(
-    data.items.map((it) => it.openUrl),
-    appUrls,
+    data.items.map((it) => [it.reference, it.openUrl]),
+    [
+      ['Gen12345-1', 'https://app.contenthero.ai/media/Gen12345-1'],
+      ['Gen12345-3', 'https://app.contenthero.ai/media/Gen12345-3'],
+    ],
   )
 })
 
@@ -446,7 +458,7 @@ test('with no server link, a tile offers no Open rather than a guessed one', () 
     status: 'completed',
     contentType: 'image',
     modelId: 'm',
-    outputUrls: ['https://a/1.png'],
+    outputs: [{ mediaId: 'Gen12345', status: 'succeeded', url: 'https://a/1.png' }],
   } as unknown as Generation)
   assert.equal(data.items[0]!.openUrl, null)
 })
@@ -498,7 +510,7 @@ test('a generation emits items that all share its medium and shape', () => {
       outputId: 'o1',
       contentType: 'image',
       displayAspect: '9:16',
-      outputUrls: ['https://media.contenthero.ai/a.png', 'https://media.contenthero.ai/b.png'],
+      outputs: outs(['https://media.contenthero.ai/a.png', 'https://media.contenthero.ai/b.png']),
       appUrls: ['https://app.contenthero.ai/media/o1-1', 'https://app.contenthero.ai/media/o1-2'],
     } as never,
   )
@@ -519,7 +531,7 @@ test('a generation emits items that all share its medium and shape', () => {
  */
 test('audio items carry a null shape, not a guessed one', () => {
   const r = audioResult(
-    { outputId: 'aud', outputUrls: ['https://media.contenthero.ai/a.mp3'] } as never,
+    { outputId: 'aud', outputs: outs(['https://media.contenthero.ai/a.mp3']) } as never,
     'https://app.contenthero.ai',
   )
   const sc = r.structuredContent as { items: Array<{ contentType: string; displayAspect: unknown }> }
@@ -613,16 +625,17 @@ test('an item is named by its id and then its appUrl', () => {
   assert.match((out.content[0] as { text: string }).text, /- long-form \(id t1, appUrl https:\/\/app\.contenthero\.ai\/tags\/t1\)/)
 })
 
-test('each generated output names its own link, index-aligned', () => {
+test('each generated output is listed by its media id, with its own file and link', () => {
   const res = completedResult({
     ...baseGen,
     contentType: 'image',
-    outputUrls: ['https://m/a.png', 'https://m/b.png'],
-    appUrls: ['https://app.contenthero.ai/media/o1-1', 'https://app.contenthero.ai/media/o1-2'],
+    outputs: [...outs(['https://m/a.png', 'https://m/b.png']), { mediaId: 'Gen12345-3', status: 'failed', url: null, appUrl: 'x' }],
   } as never)
   const t = (res.content[0] as { text: string }).text
-  assert.match(t, /1\. https:\/\/m\/a\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/o1-1\)/)
-  assert.match(t, /2\. https:\/\/m\/b\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/o1-2\)/)
+  assert.match(t, /Gen12345-1: https:\/\/m\/a\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/Gen12345-1\)/)
+  assert.match(t, /Gen12345-2: https:\/\/m\/b\.png \(appUrl https:\/\/app\.contenthero\.ai\/media\/Gen12345-2\)/)
+  // One that produced nothing is listed by its status, so no reader infers the numbering.
+  assert.match(t, /Gen12345-3: failed/)
 })
 
 test('a 503 tells the agent to retry the same call, never that the key is bad', () => {

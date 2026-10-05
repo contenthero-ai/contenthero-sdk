@@ -223,12 +223,17 @@ test('generationHuman lists urls that have already landed while still processing
     status: 'processing',
     contentType: 'image',
     modelId: 'gpt-image-2',
-    outputUrls: ['https://cdn/a.png'],
+    outputs: [
+      { mediaId: 'Abc12345-1', status: 'succeeded', url: 'https://cdn/a.png', appUrl: 'https://app/media/Abc12345-1' },
+      { mediaId: 'Abc12345-2', status: 'pending', url: null, appUrl: 'https://app/media/Abc12345-2' },
+    ],
     error: null,
     createdAt: 'now',
     completedAt: null,
   })
-  assert.match(out, /a\.png/)
+  assert.match(out, /Abc12345-1:\s+https:\/\/cdn\/a\.png/)
+  // An output still running is named with its status, so the set is never mistaken for complete.
+  assert.match(out, /Abc12345-2:\s+pending/)
   assert.match(out, /processing/)
   // The poll hint must survive: a partial render is not a finished one.
   assert.match(out, /contenthero generation status abc/)

@@ -1,3 +1,4 @@
+import type { Generation } from './types.js'
 /**
  * Typed error hierarchy for the ContentHero SDK.
  *
@@ -263,11 +264,14 @@ export class ServiceUnavailableError extends ContentHeroError {
  */
 export class GenerationFailedError extends ContentHeroError {
   readonly outputId: string
+  /** The failed generation as the wait last read it, when a wait threw this. */
+  readonly generation?: Generation
 
-  constructor(outputId: string, message = 'Generation failed', options?: ContentHeroErrorOptions) {
+  constructor(outputId: string, message = 'Generation failed', options?: ContentHeroErrorOptions & { generation?: Generation }) {
     super(message, options)
     this.name = 'GenerationFailedError'
     this.outputId = outputId
+    this.generation = options?.generation
   }
 }
 
@@ -278,11 +282,17 @@ export class GenerationFailedError extends ContentHeroError {
  */
 export class GenerationTimeoutError extends ContentHeroError {
   readonly outputId: string
+  /**
+   * The generation as last read before the deadline: what has landed so far, so a caller can show progress and
+   * hand back without reading it again. Absent when no read finished in time (or for an export).
+   */
+  readonly lastStatus?: Generation
 
-  constructor(outputId: string, message = 'Timed out waiting for generation to finish') {
+  constructor(outputId: string, message = 'Timed out waiting for generation to finish', lastStatus?: Generation) {
     super(message)
     this.name = 'GenerationTimeoutError'
     this.outputId = outputId
+    this.lastStatus = lastStatus
   }
 }
 

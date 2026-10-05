@@ -4,11 +4,11 @@
  *   folder get <id>                               a folder's contents (id or derived key)
  *   folder create <name> [--smart --parent]       create a manual (or smart) folder
  *   folder delete <id>                            delete a folder (and its subtree)
- *   folder add <folderId> <table> <recordId> [--variant]      file an item
- *   folder remove <folderId> <table> <recordId> [--variant]   unfile an item
+ *   folder update <folderId> --add <ref> --remove <ref>         file or unfile items (a media id, project:<id>, card:<id>)
  */
 
 import type { Command } from 'commander'
+import type { FolderItemRef } from '@contenthero/sdk'
 import type { Folder, DerivedFolder, FolderItem } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, table, displayId } from '../output.js'
@@ -52,7 +52,7 @@ export function registerFolder(program: Command): void {
           ['KIND', 'REF', 'DETAIL'],
           rows.map((i) =>
             i.type === 'media'
-              ? [i.kind ?? 'media', `${i.sourceTable}/${i.sourceRecordId} v${i.variant}`, clip(i.summary)]
+              ? [i.kind ?? 'media', i.mediaId ?? '', clip(i.summary)]
               : [i.type, displayId(i), clip(i.name)],
           ),
         ),
@@ -95,8 +95,8 @@ export function registerFolder(program: Command): void {
     .option('--parent <id>', 'move under this folder id, or "none" for the top level')
     .option('--text <text>', "a smart folder's new semantic query text (the same query `folder create --smart --text` sets)")
     .option('--also <id>', 'apply to this folder too; repeatable. Name and query still need exactly one', collect)
-    .option('--add <ref>', 'file an item: sourceTable:sourceRecordId[:variant]. Repeatable', collect)
-    .option('--remove <ref>', 'unfile an item: sourceTable:sourceRecordId[:variant]. Repeatable', collect)
+    .option('--add <ref>', 'file an item: a media id (a1B2c3D4-2), project:<id> or card:<id>. Repeatable', collect)
+    .option('--remove <ref>', 'unfile an item: a media id, project:<id> or card:<id>. Repeatable', collect)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const patch = {
@@ -123,18 +123,19 @@ export function registerFolder(program: Command): void {
 const NONE = ['none', 'null', 'root', 'clear']
 
 /**
- * `sourceTable:sourceRecordId[:variant]`, which is the universal identity `search_media` returns.
+ * An item named the way it is named everywhere else: a media id (`a1B2c3D4`, or `a1B2c3D4-2` for one output of
+ * several, as `media list`, `media search` and `folder get` print it), or `project:<id>` / `card:<id>`.
  *
- * A compact form because these are repeatable and bulk is the point: three positional arguments per item
- * would mean one invocation per item, which is exactly what the two tools this replaced forced.
+ * A compact form because these are repeatable and bulk is the point. It took `sourceTable:sourceRecordId[:variant]`,
+ * a stored key with a 0-based slot that no read printed, until 7.44.
  */
-function parseRefs(refs: string[] | undefined) {
+function parseRefs(refs: string[] | undefined): FolderItemRef[] | undefined {
   if (!refs?.length) return undefined
   return refs.map((raw) => {
-    const [sourceTable, sourceRecordId, variant] = raw.split(':')
-    if (!sourceTable || !sourceRecordId) {
-      throw new CliError(`Invalid item ref "${raw}". Expected sourceTable:sourceRecordId[:variant].`, EXIT.USAGE)
-    }
-    return { sourceTable, sourceRecordId, ...(variant ? { variant: Number(variant) } : {}) }
+    const ref = raw.trim()
+    if (!ref) throw new CliError('Empty item ref. Expected a media id, project:<id> or card:<id>.', EXIT.USAGE)
+    if (ref.startsWith('project:')) return { projectId: ref.slice('project:'.length) }
+    if (ref.startsWith('card:')) return { cardId: ref.slice('card:'.length) }
+    return { mediaId: ref }
   })
 }

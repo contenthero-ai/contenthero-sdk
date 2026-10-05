@@ -404,21 +404,49 @@ export interface Charge {
 }
 
 /**
+ * One output of a generation, in slot order, named by its media reference.
+ *
+ * Replaces the index-aligned `outputUrls`, `appUrls`, `previewUrls`, `visionUrls` and `partialUrls`. `output_urls`
+ * closes up around a failed output, so an index meant "output" in one array and "nth landed file" in another, and
+ * output 4 of a generation with a failed output was linked and named `-3`. Each output now carries its own name,
+ * file and links, so nothing is paired by index and no caller numbers anything.
+ */
+export interface GenerationOutput {
+  /** This output's media reference (`a1B2c3D4-2`, or `a1B2c3D4` when its generation has one output): pass it anywhere one output is wanted. */
+  mediaId: string
+  /** Its own outcome: `succeeded`, `failed` or `pending` (the generation's status when none is recorded per output). */
+  status: string
+  /** Its file once it lands; null while pending and for a failed output. A running generation fills these in one at a time. */
+  url: string | null
+  /** This output in the app. */
+  appUrl: string
+  /**
+   * The small `preview.webp` of `url`, or null where none exists. Read this, not the master, when showing a model:
+   * a master is routinely 1.7 to 2.6 MB and cannot be inlined in a 1 MB tool result.
+   *
+   * ⛔ NEVER DERIVE THIS FROM `url` BY REWRITING THE PATH. These are capability URLs whose token names ONE object;
+   * a rewritten path is refused with 403. The server mints this against a derivative it confirmed exists.
+   * Present on a status read (`getGeneration`).
+   */
+  previewUrl?: string | null
+  /** The 512px derivative of `url`, for inlining bytes; prefer it over `previewUrl` when attaching. Null where none. */
+  visionUrl?: string | null
+}
+
+/**
  * Result of submitting a generation. Image/video return `status: 'processing'`
  * (poll with `getGeneration`, or use `generateAndWait`). Audio is synchronous
- * and returns `status: 'completed'` with `outputUrls` already populated.
+ * and returns `status: 'completed'` with `outputs` already populated.
  */
 export interface GenerateResult {
   outputId: string
   /** This generation in the app (its first output, or its pending state while it runs). */
   appUrl: string
-  /** One link per landed output, index-aligned with `outputUrls`. Present once outputs exist. */
-  appUrls?: string[]
   status: 'processing' | 'completed'
   /** What it cost: held while it runs, charged per output when it finishes. */
   charge?: Charge
-  /** Present when the result is already complete (audio). */
-  outputUrls?: string[]
+  /** Present when the result is already complete (audio, or a replayed id): its outputs in slot order. */
+  outputs?: GenerationOutput[]
   /** Present when the result is already complete (audio): the model that produced it. */
   modelId?: string
   /**
@@ -564,14 +592,14 @@ export interface EnhanceClipsJob {
 /**
  * The result of `editAudio`, which serves two shapes.
  *
- * FILE mode returns the `GenerateResult` fields. IN-PLACE mode returns `outputs`, one per source, and echoes
+ * FILE mode returns the `GenerateResult` fields. IN-PLACE mode returns `jobs`, one per source, and echoes
  * the first on `outputId` so a single-source project can be awaited without unpacking the list. `status` is
  * `'noop'` when the selection contained no audible audio, which is deliberately distinguishable from a failure.
  */
 export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
   status: 'processing' | 'completed' | 'noop'
-  /** In-place mode only: one job per source. */
-  outputs?: EnhanceClipsJob[]
+  /** In-place mode only: one job per source. (`outputs` names a generation's own outputs, as in file mode.) */
+  jobs?: EnhanceClipsJob[]
   /** In-place mode only: the project the pieces are applied to. */
   projectId?: string
   /** In-place mode only: selected clips skipped because they are silenced. */
@@ -585,47 +613,20 @@ export interface Generation {
   outputId: string
   /** This generation in the app (its first output, or its pending state while it runs). */
   appUrl: string
-  /** One link per landed output, index-aligned with `outputUrls`: the same `<id>-<n>` token the output is named by. */
-  appUrls?: string[]
   status: GenerationStatus
   contentType: 'image' | 'video' | 'audio'
   modelId: string
-  /** Output asset URLs. Empty until the generation completes. */
-  outputUrls: string[]
   /**
-   * The small `preview.webp` derivative of each entry in `outputUrls`, INDEX-ALIGNED, `null` where none exists.
-   *
-   * ⭐⭐⭐ **ANYTHING READING BYTES TO SHOW A MODEL SHOULD READ THIS FIRST.** A master is routinely 1.7 to
-   * 2.6 MB, and base64 inflates it by a third against a 1 MB ceiling on an entire MCP tool result, so a master
-   * cannot be inlined at all. Reading it is how an agent ends up with no vision of what it just generated.
-   *
-   * ⛔ **NEVER DERIVE THIS FROM `outputUrls` BY REWRITING THE PATH.** These are capability URLs whose token
-   * names ONE object; a rewritten path is refused with 403. The server mints this against a derivative it has
-   * confirmed exists, which is the only way a caller gets an address it may actually read.
-   *
-   * ⚠️ Absent on an older server. Treat a missing array as "no previews", never as an error.
+   * Its outputs in slot order, each with its name, its file once it lands, its links and its previews. A running
+   * generation fills these in one at a time; `status` remains the only terminal signal.
    */
-  previewUrls?: (string | null)[]
+  outputs: GenerationOutput[]
   /**
-   * The 512px derivative of each entry in `outputUrls`, INDEX-ALIGNED, for inlining bytes.
-   *
-   * ⭐ Prefer this over `previewUrls` when attaching: a preview is sized for a screen and four of them do
-   * not fit one tool result.
+   * Set when the output arrived short of the request: a VEO 1080p or 4K upgrade that was not ready within its time,
+   * so the 720p video was kept. `charge` is already figured on what was delivered; `reason` says why, to tell the
+   * person.
    */
-  visionUrls?: (string | null)[]
-  /**
-   * The urls of the variations that have ALREADY LANDED, index-aligned by slot, while status is
-   * 'processing'. Absent once the row completes, when `outputUrls` is the answer.
-   *
-   * ⭐⭐ THIS IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME. `outputUrls` is written once, inside the
-   * completion transition, because it is the slot-ordered projection and is only correct when every slot
-   * has settled. So a consumer polling it sees nothing and then everything. The spine registers each
-   * object as it is stored, which is a partial fact that is already true, and this reports it.
-   *
-   * ⚠️ IT SAYS WHAT EXISTS, NEVER THAT THE JOB IS DONE. A full-looking partial still races the side
-   * effects that run after the last slot; `status` remains the only terminal signal.
-   */
-  partialUrls?: (string | null)[]
+  deliveredShort?: { reason: string }
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
   /** What it cost: held while it runs, charged per output that landed. Absent on an older server. */
@@ -695,10 +696,16 @@ export interface AccountUpdate {
 export interface WaitOptions {
   /** Milliseconds between status polls. Default 3000. */
   pollIntervalMs?: number
-  /** Give up after this many milliseconds. Default 600000 (10 minutes). */
+  /**
+   * Give up after this many milliseconds. Default 600000 (10 minutes). The wait never runs past it: a status read
+   * still in flight at the deadline is cut, and the last pause is shortened to fit, so a caller with its own time
+   * limit (an MCP host's 60 seconds) can rely on it. The timeout error carries the last status read.
+   */
   timeoutMs?: number
   /** Abort the wait (does not cancel the server-side job). */
   signal?: AbortSignal
+  /** Called with every status read, so a caller can show progress: a generation's outputs land one at a time. */
+  onPoll?: (generation: Generation) => void
 }
 
 /** Request to transcribe an audio URL to text. */
@@ -1251,10 +1258,10 @@ export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
  */
 export type MediaSource = 'creations' | 'uploads' | 'stock' | 'files' | 'all'
 
-/** One variation (slot) of a studio output. */
+/** One variation (output) of a studio generation. */
 export interface MediaVariation {
-  /** 1-based variation number (matches the UI and a share link's ?v=N). */
-  variation: number
+  /** This output's media reference (`a1B2c3D4-2`): pass it anywhere one output is wanted. */
+  mediaId: string
   url: string | null
   status: string
   isFavorited: boolean
@@ -1274,8 +1281,8 @@ export interface MediaVariation {
 
 /**
  * One atomic library asset as returned by `listMedia`. The grain is a VARIATION (an individual media file),
- * not a whole generation: a studio generation with N variations lists as N items sharing one `id` but with
- * distinct `variant`. The universal identity is (id, variant).
+ * not a whole generation: a studio generation with N variations lists as N items sharing one `id`, each with
+ * its own `mediaId`.
  */
 export interface MediaSummary {
   id: string
@@ -1289,10 +1296,10 @@ export interface MediaSummary {
   status: string
   createdAt: string | null
   /**
-   * 0-based canonical slot of this variation (matches a share link's ?v=N as variant+1, and getMedia's
-   * `<id>-<N>` token as N = variant+1). Single-asset sources (uploads, stock) are always 0.
+   * THE reference to this item, and the one to pass back anywhere: the short id, plus `-<n>` for output n of a
+   * generation with several (`a1B2c3D4-2`). Nothing takes or prints a 0-based slot.
    */
-  variant: number
+  mediaId: string
   /** This variation's resolved URL (null only in a detail view whose slots have no media yet). */
   url: string | null
   /** Total variations in the parent generation this variation belongs to (1 for uploads/stock). */
@@ -1325,9 +1332,8 @@ export interface MediaItem extends MediaSummary {
   duration: number | null
   /** What it cost, for a studio output; null for anything that was not charged as a generation (an upload). */
   charge: Charge | null
+  /** The generation's outputs, or only the one a `-<n>` reference named; each carries its own `mediaId`. */
   variations: MediaVariation[]
-  /** Set when the requested token addressed a single variation; else null. */
-  selectedVariation: number | null
   /** Output-level representative still (video poster / optimized image preview), or null. */
   thumbnailUrl: string | null
 }
@@ -1346,8 +1352,19 @@ export interface MediaClipWindow {
   frameWidth?: number
 }
 
-/** One requested item for `getMediaBatch`: a raw URL, or an output id (+ variation); videos accept a window. */
-export type MediaBatchItem = ({ url: string } | { mediaId: string; variation?: number }) & MediaClipWindow
+/**
+ * ZOOM: a rectangle in the file's own pixels to cut from the original and return at the detail it has, never
+ * enlarged. Clamped to the file, so "the right half" needs no exact size. On a video it applies to every keyframe.
+ */
+export interface MediaRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** One requested item for `getMediaBatch`: a raw URL, or a media reference; videos accept a window; either a region. */
+export type MediaBatchItem = ({ url: string } | { mediaId: string }) & MediaClipWindow & { region?: MediaRegion }
 
 /**
  * One resolved item from `getMediaBatch`, uniform across the url and mediaId
@@ -1418,12 +1435,14 @@ export interface ResolvedMediaBatchItem {
   type: MediaType | null
   model: string | null
   prompt: string | null
-  /** The output id when resolved from a mediaId; null for a raw url. */
+  /**
+   * The reference of exactly what this item shows: the output's full `<id>-<n>` when its generation has several,
+   * so sending it back names the same output. A bare id for a generation resolves to its primary output, named
+   * here in full. Null for a url that is not one of the account's items.
+   */
   mediaId: string | null
-  /** The 1-based variation this url represents (mediaId path), else null. */
-  variation: number | null
-  /** Sibling variation numbers not returned here (mediaId-without-variation path). */
-  otherVariations: number[]
+  /** The references of the generation's other outputs, when a bare id resolved to its primary. */
+  otherMediaIds: string[]
   /**
    * VIDEO keyframes (present only when the item requested a window on a video): low-res frames across the
    * source-time window, each an inline `data:image/jpeg;base64,...`. The MCP turns each into an image block.
@@ -1451,6 +1470,14 @@ export interface ResolvedMediaBatchItem {
    * price the job and no read returned one.
    */
   durationSeconds?: number
+  /**
+   * The asked-for `region`, cut from the original. For an image `dataUrl` is the crop (`data:image/webp;base64`);
+   * for a video each keyframe already is, and this says how they map back. `pixelsPerSourcePixel` is 1 at full
+   * detail, less when the region was too large to return whole: a source point x lies at (x - region.x) * it.
+   */
+  crop?: { dataUrl?: string; width: number; height: number; region: MediaRegion; pixelsPerSourcePixel: number }
+  /** Why the region could not be cut, when the item itself resolved. */
+  cropError?: string
   error?: string
 }
 
@@ -1490,12 +1517,10 @@ export interface SearchMediaScene {
 
 /** One asset (a single variation) returned by semantic library search. */
 export interface SearchMediaResult {
-  /** The asset's record id (source_record_id). With `variant`, uniquely identifies the atomic asset. */
-  id: string
-  /** The variation index within the record (studio generation output index; 0 for single-asset sources). */
-  variant: number
-  /** The asset's origin table (studio_outputs, editor_uploads, stock_assets, brand_kits). */
-  sourceTable: string
+  /** The asset's media reference: pass it to getMedia, favorite, a folder, anywhere one item is wanted. Null when it could not be named. */
+  mediaId: string | null
+  /** This asset in the app, when it could be named. */
+  appUrl?: string
   kind: MediaKind | null
   /** A resolved, usable URL for the asset (a cached edit proxy for stock). */
   url: string | null
@@ -1556,7 +1581,7 @@ export interface DerivedFolder {
 
 /** One item inside a folder: media (variation-atomic) or an entity (project/post, manual folders only). */
 export type FolderItem =
-  | { type: 'media'; kind: MediaKind | null; sourceTable: string; sourceRecordId: string; variant: number; url: string | null; summary: string | null; isFavorited: boolean; relevance?: number }
+  | { type: 'media'; kind: MediaKind | null; mediaId: string | null; appUrl?: string; url: string | null; summary: string | null; isFavorited: boolean; relevance?: number }
   | { type: 'project' | 'card'; id: string; name: string; subtype: string | null }
 
 export interface CreateFolderInput {
@@ -1589,12 +1614,11 @@ export interface UpdateFolderInput {
   folderIds?: string[]
 }
 
-/** A pointer into a manual folder, by the universal variation-atomic identity. */
-export interface FolderItemRef {
-  sourceTable: string
-  sourceRecordId: string
-  variant?: number
-}
+/**
+ * An item to file into (or out of) a manual folder, named the way it is named everywhere else: a media item by its
+ * `mediaId` (`a1B2c3D4-2` for one output of several), a project or a card by its id.
+ */
+export type FolderItemRef = { mediaId: string } | { projectId: string } | { cardId: string }
 
 /** Fields to start a presigned media upload (phase 1 of uploadMedia). */
 export interface CreateMediaUploadInput {
@@ -2576,32 +2600,21 @@ export type FavoriteAssetType =
 export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space' | 'template'
 
 /**
- * The target of a favorite / unfavorite call.
- *
- * Provide `assetType` + `id` for a top-level asset, OR `id` + `variationIndex`
- * (1-based) to target a single studio output variation slot, in which case the
- * id is a studio output id and `assetType` is ignored.
+ * The target of a favorite / unfavorite call: a media item by its `mediaId` (one output, `a1B2c3D4-2`, an upload,
+ * stock), or any other item by its `assetType` and `id`. A bare id for a generation with several outputs is refused
+ * with the outputs listed, because it names none of them.
  */
-export interface FavoriteInput {
-  assetType?: FavoriteAssetType
-  id: string
-  /** 1-based variation slot; when set, `id` is a studio output id. */
-  variationIndex?: number  /** Defaults to true. Pass false to clear the favorite. */
+export type FavoriteInput = ({ mediaId: string } | { assetType: FavoriteAssetType; id: string }) & {
+  /** Defaults to true. Pass false to clear the favorite. */
   favorited?: boolean
 }
 
 /**
- * The target of an archive / unarchive call.
- *
- * Provide `assetType` + `id` for a top-level asset, OR `id` + `variationIndex`
- * (1-based) to target a single studio output variation slot, in which case the
- * id is a studio output id and `assetType` is ignored.
+ * The target of an archive / unarchive call: a generated output by its `mediaId` (`a1B2c3D4-2`), or any other item
+ * by its `assetType` and `id`.
  */
-export interface ArchiveInput {
-  assetType?: ArchiveAssetType
-  id: string
-  /** 1-based variation slot; when set, `id` is a studio output id. */
-  variationIndex?: number  /** Defaults to true. Pass false to restore. */
+export type ArchiveInput = ({ mediaId: string } | { assetType: ArchiveAssetType; id: string }) & {
+  /** Defaults to true. Pass false to restore. */
   archived?: boolean
 }
 

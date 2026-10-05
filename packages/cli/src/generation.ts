@@ -62,7 +62,8 @@ function resultHuman(r: GenerateResult): string {
   ]
   if (r.idempotentReplay) pairs.push(['Idempotent replay', 'yes'])
   pairs.push(...costRows(r.charge))
-  for (const [i, url] of (r.outputUrls ?? []).entries()) pairs.push([`URL ${i + 1}`, url])
+  // Each output by its media id, the name to pass back; nothing is numbered by position (7.44).
+  for (const o of r.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
   if (r.status === 'processing') {
     pairs.push(['Next', `contenthero generation status ${r.outputId}`])
   }
@@ -82,7 +83,8 @@ function generationHuman(g: Generation): string {
     pairs.push(['Already in your account', g.alreadyExisted.outputId ?? g.alreadyExisted.objectName])
     pairs.push(['URL', g.alreadyExisted.url])
   }
-  for (const [i, url] of g.outputUrls.entries()) pairs.push([`URL ${i + 1}`, url])
+  for (const o of g.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
+  if (g.deliveredShort) pairs.push(['Delivered short', `${g.deliveredShort.reason} The charge is for what was delivered.`])
   pairs.push(...costRows(g.charge))
   if (g.status === 'processing' || g.status === 'pending') {
     pairs.push(['Next', `contenthero generation status ${g.outputId}`])
@@ -178,7 +180,7 @@ export async function renderEnhanceClips(
   result: EditAudioResult,
   opts: { wait: boolean; timeoutSec: number },
 ): Promise<void> {
-  const jobs = result.outputs ?? []
+  const jobs = result.jobs ?? []
   if (jobs.length === 0 || !opts.wait) {
     emit(result, ctx, enhanceClipsHuman)
     return
@@ -191,7 +193,7 @@ export async function renderEnhanceClips(
 
 /** Human rendering for an in-place enhancement submission. */
 function enhanceClipsHuman(result: EditAudioResult): string {
-  const jobs = result.outputs ?? []
+  const jobs = result.jobs ?? []
   if (jobs.length === 0) return result.note ?? 'Nothing to enhance: no audible clips in that selection.'
   const lines = jobs.map(
     (j, i) =>

@@ -49,6 +49,7 @@ import type {
   TemplateSummary,
   TemplateListResult,
   Generation,
+  GenerationOutput,
   GenerateResult,
   EditAudioResult,
   MediaItem,
@@ -365,12 +366,24 @@ export function mediaWidgetData(input: MediaWidgetInput) {
   }
 }
 
+/** The outputs that have a file, in slot order: what a card or a list can show. */
+function landedOutputs(gen: { outputs?: GenerationOutput[] }): Array<GenerationOutput & { url: string }> {
+  return (gen.outputs ?? []).filter((o): o is GenerationOutput & { url: string } => typeof o.url === 'string' && o.url.length > 0)
+}
+
+/** One line per output: its media id and file (and link), or its status when it produced nothing. */
+function outputLines(gen: { outputs?: GenerationOutput[] }): string[] {
+  return (gen.outputs ?? []).map((o) => (o.url ? `${o.mediaId}: ${o.url}${linkAfter(o.appUrl)}` : `${o.mediaId}: ${o.status}`))
+}
+
 /** A generation's widget payload. A thin adapter over {@link mediaWidgetData}, not a second builder. */
 export function generationWidgetData(
   gen: Generation,
   posterUrls: readonly (string | null)[] = [],
 ) {
-  const urls = gen.outputUrls ?? []
+  // Each LANDED output, named by its own media reference and carrying its own links (7.44). Nothing is paired by
+  // index, so a failed output can no longer shift the name or link of the outputs after it.
+  const landed = landedOutputs(gen)
   return mediaWidgetData({
     outputId: gen.outputId,
     contentType: gen.contentType,
@@ -385,24 +398,19 @@ export function generationWidgetData(
      */
     displayAspect: gen.displayAspect,
     prompt: gen.prompt,
-    items: urls.map((url, i) => ({
-      url,
+    items: landed.map((o, i) => ({
+      url: o.url,
       posterUrl: posterUrls[i] ?? null,
-      name: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+      name: o.mediaId,
       contentType: gen.contentType,
       displayAspect: gen.displayAspect ?? null,
-      /**
-       * ⭐ THE SERVER'S LINK, INDEX-ALIGNED with `outputUrls`. The app owns its own URLs; this module composed
-       * them once and they drifted into a second format. Absent from an older server, which hides Open.
-       */
-      openUrl: gen.appUrls?.[i],
-      // Every generation output is referenceable by id, which is what makes Animate and Edit meaningful.
-      reference: `${gen.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
-      /**
-       * INDEX-ALIGNED with `outputUrls`, so the derivative for THIS output is at THIS index. Undefined on an
-       * older server, which simply means the tile paints the master exactly as it did before.
-       */
-      previewUrl: gen.previewUrls?.[i] ?? null,
+      // ⭐ THE SERVER'S LINK for this output. The app owns its own URLs; this module composed them once and they
+      // drifted into a second format.
+      openUrl: o.appUrl,
+      // Every generation output is referenceable by its media id, which is what makes Animate and Edit meaningful.
+      reference: o.mediaId,
+      // This output's own preview, minted by the server; null where none exists, and the tile paints the master.
+      previewUrl: o.previewUrl ?? null,
       // A generation is, by definition, something that was generated.
       source: 'creations' as const,
       modelId: gen.modelId,
@@ -415,8 +423,8 @@ export function completedResult(
   attachments: GeneratedAttachment[] = [],
   posterUrls: readonly (string | null)[] = [],
 ): CallToolResult {
-  const urls = gen.outputUrls ?? []
-  const noun = urls.length === 1 ? gen.contentType : `${gen.contentType}s`
+  const landed = landedOutputs(gen)
+  const noun = landed.length === 1 ? gen.contentType : `${gen.contentType}s`
   /**
    * ⭐⭐ **ONE TEXT LIST, AND NO `resource_link` BLOCKS. THREE REPRESENTATIONS OF ONE URL WAS TWO TOO MANY.**
    *
@@ -437,8 +445,11 @@ export function completedResult(
    * whom `gpt-image-2` is a true and directly useful token. The widget's chip has a human reader, for whom
    * the same string is an unexplained failure wearing a label's clothes, so there it renders as nothing.
    */
-  const header = `Done. ${urls.length} ${noun} from ${gen.modelDisplayName ?? gen.modelId} (outputId ${gen.outputId}):`
-  const lines = [header, ...urls.map((u, i) => `${i + 1}. ${u}${linkAfter(gen.appUrls?.[i])}`)]
+  const header = `Done. ${landed.length} ${noun} from ${gen.modelDisplayName ?? gen.modelId} (outputId ${gen.outputId}):`
+  // Each output by its media id, the name to pass back, so no reader numbers anything; one that produced nothing is
+  // listed by its status, so the others keep their own numbers.
+  const lines = [header, ...outputLines(gen)]
+  if (gen.deliveredShort) lines.push(`${gen.deliveredShort.reason} The charge is for what was delivered.`)
   const p = gen.placement
   if (p) {
     if (p.projectType === 'canvas') {
@@ -601,12 +612,12 @@ export function pendingResult(
  * null rather than unknown.
  */
 export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
-  const urls = result.outputUrls ?? []
+  const landed = landedOutputs(result)
   const header = `Done. Audio generated (outputId ${result.outputId}):`
-  const prose = [header, ...urls.map((u, i) => `${i + 1}. ${u}${linkAfter(result.appUrls?.[i])}`), chargeLine(result.charge)]
+  const prose = [header, ...outputLines(result), chargeLine(result.charge)]
     .filter((l): l is string => !!l)
     .join('\n')
-  if (!urls.length) return text(prose)
+  if (!landed.length) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],
     structuredContent: {
@@ -619,13 +630,14 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
         modelDisplayName: result.modelDisplayName,
         modelBrandColor: result.modelBrandColor,
         modelIconKey: result.modelIconKey,
-        items: urls.map((url, i) => ({
-          url,
-          name: `${result.outputId}${urls.length > 1 ? `-${i + 1}` : ''}`,
+        items: landed.map((o) => ({
+          url: o.url,
+          name: o.mediaId,
           contentType: 'audio' as const,
           // Audio has no shape, so there is nothing for a tile to take.
           displayAspect: null,
-          openUrl: result.appUrls?.[i],
+          openUrl: o.appUrl,
+          reference: o.mediaId,
         })),
       }),
     },
@@ -641,7 +653,7 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
  * tool here, the caller does NOT place the result, so without saying so an agent would reasonably try to.
  */
 export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
-  const jobs = result.outputs ?? []
+  const jobs = result.jobs ?? []
   if (jobs.length === 0) {
     return text(result.note ?? 'Nothing to enhance: no audible clips in that selection.')
   }
@@ -729,23 +741,14 @@ export function generationStatusResult(
     return text(`Generation ${gen.outputId} was set aside and produced nothing of its own. It will not change.`)
   }
   const secs = pollAfterSecondsFor(gen.contentType)
-  const ready = gen.outputUrls ?? []
   const poll = `Call get_generation_status again in ~${secs}s [poll_after_seconds: ${secs}]`
   /**
-   * ⭐⭐⭐ **THE SLOTS THAT HAVE LANDED, WHICH IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME.**
+   * ⭐⭐⭐ **THE OUTPUTS THAT HAVE LANDED, WHICH IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME.**
    *
-   * `outputUrls` is written once, inside the completion transition, because it is the slot-ORDERED
-   * projection and is only correct when every slot has settled. So polling it sees nothing and then
-   * everything, and a four-variation card showed four skeletons and then four pictures while the studio
-   * beside it resolved each one as its own image existed.
-   *
-   * `partialUrls` is the spine's answer to a different question: which objects EXIST right now. It is
-   * index-aligned by slot with `null` for one not yet written, so a tile keeps its position even though
-   * slots land in whatever order their vendor calls return.
-   *
-   * ⚠️ FALLS BACK TO `outputUrls`, so an older server behaves exactly as before: all or nothing.
+   * Each output carries its file as soon as it is stored, so a running generation answers with the part it has
+   * and a tile resolves alone, while the studio beside it does the same.
    */
-  const landed = (gen.partialUrls ?? ready).filter((u): u is string => !!u)
+  const landed = landedOutputs(gen)
   /**
    * ⛔ THE EMPTY CHECK MOVED BELOW `landed`, AND THAT IS THE WHOLE POINT. It used to test `outputUrls`,
    * which is EMPTY for the entire life of a running job, so this function returned prose on every poll
@@ -757,7 +760,7 @@ export function generationStatusResult(
   const noun = landed.length === 1 ? gen.contentType : `${gen.contentType}s`
   const prose = [
     `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
-    ...landed.map((u, i) => `${i + 1}. ${u}`),
+    ...landed.map((o) => `${o.mediaId}: ${o.url}`),
     `NOT the full set. ${poll} for the rest.`,
   ].join('\n')
   /**
@@ -777,15 +780,13 @@ export function generationStatusResult(
   return {
     content: [{ type: 'text', text: prose }],
     structuredContent: {
-      // ⚠️ Built from the LANDED slots, not from `outputUrls`: the two differ precisely while the job is
-      // still running, which is the only time this branch is reached.
-      ...generationWidgetData({ ...gen, outputUrls: landed }),
+      // Built from the LANDED outputs, which is all a running job has.
+      ...generationWidgetData(gen),
       ...chargeData(gen.charge),
       status: 'processing',
       /**
-       * ⚠️ NO `expected` HERE, DELIBERATELY. A `Generation` does not carry how many were ASKED for, only
-       * how many exist so far, so anything this put here would be `ready.length` wearing the name of a
-       * total. The widget was told the real number by `pendingResult` when the job started and keeps it
+       * ⚠️ NO `expected` HERE, DELIBERATELY. The widget was told how many were asked for when the job started,
+       * and anything put here would be a count of what has landed wearing the name of a total. The widget was told the real number by `pendingResult` when the job started and keeps it
        * across polls, which is the one place that actually knows.
        */
       pollAfterSeconds: secs,
@@ -805,8 +806,8 @@ export function generationBatchResult(
     return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
   const rows = gens.map((gen) => {
     if (gen.status === 'completed') {
-      const urls = gen.outputUrls ?? []
-      return `- ${gen.outputId}: completed | ${urls.join(', ') || '(no urls)'}`
+      const landed = landedOutputs(gen)
+      return `- ${gen.outputId}: completed | ${landed.map((o) => `${o.mediaId} ${o.url}`).join(', ') || '(no urls)'}`
     }
     if (gen.status === 'failed') {
       return `- ${gen.outputId}: failed | ${gen.error ?? 'unknown error'}`
@@ -815,9 +816,9 @@ export function generationBatchResult(
     // Same rule as the single form: surface the slots that already landed rather than making the
     // caller block on the slowest one. The count says the set is incomplete, so a row can never be
     // mistaken for a finished generation.
-    const ready = gen.outputUrls ?? []
+    const ready = landedOutputs(gen)
     if (ready.length > 0) {
-      return `- ${gen.outputId}: ${gen.status}, ${ready.length} ready so far | ${ready.join(', ')} [poll_after_seconds: ${secs}]`
+      return `- ${gen.outputId}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${o.mediaId} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
     }
     return `- ${gen.outputId}: ${gen.status} [poll_after_seconds: ${secs}]`
   })
@@ -1063,19 +1064,12 @@ export function brandKnowledgeItemResult(item: BrandKnowledgeItem, verb = 'Added
   return withCharge(text(`${verb} knowledge item: "${item.title ?? '(untitled)'}" [${item.sourceType ?? 'unknown'}] (${idOf(item)}).`), charge)
 }
 
-/**
- * Confirmation of a universal favorite / unfavorite / archive / unarchive action.
- * `target` describes what was acted on: a studio variation slot when
- * variationIndex is set, otherwise a top-level asset by type + id.
- */
+/** The confirmation of a favorite or archive: the media item by its media id, anything else by type and id. */
 export function statusActionResult(
   action: 'Favorited' | 'Unfavorited' | 'Archived' | 'Unarchived',
-  target: { assetType?: string; id: string; variationIndex?: number },
+  target: { mediaId?: string; assetType?: string; id?: string },
 ): CallToolResult {
-  const what =
-    target.variationIndex != null
-      ? `variation ${target.variationIndex} of output ${target.id}`
-      : `${target.assetType ?? 'asset'} ${target.id}`
+  const what = target.mediaId ? `media ${target.mediaId}` : `${target.assetType ?? 'asset'} ${target.id}`
   return text(`${action} ${what}.`)
 }
 
@@ -1083,9 +1077,8 @@ export function statusActionResult(
 export function mediaListResult(items: MediaSummary[]): CallToolResult {
   if (!items.length) return text('No media found.')
   const rows = items.map((m) => {
-    // A studio generation lists as one row per variation; show which slot when it has siblings. The
-    // addressable token for this variation is `<id>-<variant+1>`.
-    const varTag = m.generationSize > 1 ? ` | v${m.variant + 1}/${m.generationSize}` : ''
+    // A studio generation lists as one row per output, each named by its own media id; say when it has siblings.
+    const varTag = m.generationSize > 1 ? ` | 1 of ${m.generationSize} outputs` : ''
     const favTag = m.isFavorited ? ' [favorite]' : ''
     const promptStr = m.prompt ? ` | ${m.prompt.slice(0, 80)}${m.prompt.length > 80 ? '...' : ''}` : ''
     const kindTag =
@@ -1102,7 +1095,7 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = m.url ? ` | ${m.url}` : ''
-    return `- [${m.type}] ${m.model ?? ''} (${idOf(m)})${varTag}${favTag}${kindTag}${nameStr}${durStr}${assetStr} | ${m.status}${promptStr}${urlStr}`
+    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${nameStr}${durStr}${assetStr} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
 }
@@ -1118,7 +1111,7 @@ export function mediaSearchResult(results: SearchMediaResult[]): CallToolResult 
       ? ` | scenes: ${r.scenes.map((s) => `${(s.startMs / 1000).toFixed(1)}-${(s.endMs / 1000).toFixed(1)}s`).join(', ')}`
       : ''
     const urlStr = r.url ? ` | ${r.url}` : ''
-    return `- ${kindTag} (${idOf(r)})${rel}${summaryStr}${scenesStr}${urlStr}`
+    return `- ${kindTag} (${idOf({ id: r.mediaId, appUrl: r.appUrl }, 'media')})${rel}${summaryStr}${scenesStr}${urlStr}`
   })
   return text([`${results.length} match(es) (most relevant first):`, ...rows].join('\n'))
 }
@@ -1145,7 +1138,7 @@ export function folderContentsResult(folder: { name: string } | null, items: Fol
       const rel = i.relevance != null ? ` | ${Math.round(i.relevance * 100)}%` : ''
       const fav = i.isFavorited ? ' [favorite]' : ''
       const summ = i.summary ? ` | ${i.summary.slice(0, 80)}${i.summary.length > 80 ? '...' : ''}` : ''
-      return `- [${i.kind ?? 'media'}] (${i.sourceTable} ${i.sourceRecordId} v${i.variant})${rel}${fav}${summ}${i.url ? ` | ${i.url}` : ''}`
+      return `- [${i.kind ?? 'media'}] (${idOf({ id: i.mediaId, appUrl: i.appUrl }, 'media')})${rel}${fav}${summ}${i.url ? ` | ${i.url}` : ''}`
     }
     return `- [${i.type}] ${i.name} (${idOf(i)})${i.subtype ? ` | ${i.subtype}` : ''}`
   })
@@ -1163,16 +1156,16 @@ export function mediaResult(m: MediaItem): CallToolResult {
     .join(', ')
   return text(
     lines([
-      `${m.type} from ${m.model ?? 'unknown'} (${idOf(m)})${m.selectedVariation ? `, variation ${m.selectedVariation}` : ''}`,
+      `${m.type} from ${m.model ?? 'unknown'} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})`,
       m.kind && m.kind !== 'creation' ? `kind: ${m.kind}${m.boardType ? ` (${m.boardType})` : ''}` : null,
       m.prompt ? `prompt: ${m.prompt}` : null,
       m.script ? `script: ${m.script}` : null,
       specs || null,
       `status: ${m.status}`,
       chargeLine(m.charge),
-      `variations (${m.generationSize}):`,
+      `outputs (${m.generationSize}):`,
       ...m.variations.map(
-        (v) => `  ${v.variation}. ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}${v.isArchived ? ' [archived]' : ''}`,
+        (v) => `  ${v.mediaId}: ${v.url ?? `(no url, ${v.status})`}${v.isFavorited ? ' [favorite]' : ''}${v.isArchived ? ' [archived]' : ''}`,
       ),
     ]),
   )
@@ -1185,11 +1178,8 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
     const ref = it.mediaId ?? ('url' in it.input ? it.input.url : JSON.stringify(it.input))
     return `${label} ERROR (${ref}): ${it.error ?? 'could not resolve'}`
   }
-  const idPart = it.mediaId
-    ? `${it.type ?? 'media'} ${it.mediaId}${it.variation != null ? ` v${it.variation}` : ''}`
-    : `${it.type ?? 'media'} (url)`
-  const others =
-    it.otherVariations.length > 0 ? ` | other variations: ${it.otherVariations.join(', ')}` : ''
+  const idPart = it.mediaId ? `${it.type ?? 'media'} ${it.mediaId}` : `${it.type ?? 'media'} (url)`
+  const others = it.otherMediaIds.length > 0 ? ` | other outputs: ${it.otherMediaIds.join(', ')}` : ''
   const model = it.model ? ` from ${it.model}` : ''
   const prompt = it.prompt ? `\n    prompt: ${it.prompt}` : ''
   // Explain the absence of an image so the model does not assume it failed.
@@ -1218,7 +1208,13 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   // dimensions, so it carried no measured facts at all, and `edit_audio` requires a durationSeconds to price
   // the job. The only way to call it correctly was to download the file and probe it.
   const dur = it.durationSeconds != null ? `\n    duration: ${it.durationSeconds.toFixed(2)}s` : ''
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${prompt}${note}`
+  // THE ZOOM (7.50): what was cut, and how its pixels map back to the file, so a point can be placed on the source.
+  const zoom = it.crop
+    ? `\n    zoom: ${it.crop.region.width}x${it.crop.region.height} at (${it.crop.region.x}, ${it.crop.region.y}) in the file's pixels, shown at ${it.crop.width}x${it.crop.height} (${it.crop.pixelsPerSourcePixel} px per file px)`
+    : it.cropError
+      ? `\n    zoom not shown: ${it.cropError}`
+      : ''
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${prompt}${note}`
 }
 
 /**
@@ -1257,12 +1253,11 @@ function mediaBatchItems(result: MediaBatchResult): MediaWidgetItem[] {
       url: it.url,
       // A video's still, so a tile shows something before anyone presses play.
       posterUrl: it.type === 'video' ? it.imageUrl : null,
-      /** The reference the API takes: `<id>` or `<id>-<n>`, one-based, matching what a person reads. */
-      name: it.mediaId ? `${it.mediaId}${it.variation && it.variation > 1 ? `-${it.variation}` : ''}` : it.url,
+      // The reference the API takes, formatted by the server (`a1B2c3D4`, or `a1B2c3D4-2` for one output of
+      // several). It used to be built here, and output 1 of several came out with no suffix (7.44).
+      name: it.mediaId ?? it.url,
       // ⚠️ Only a mediaId is referenceable. A raw url resolved here is not a library item the API can name.
-      reference: it.mediaId
-        ? `${it.mediaId}${it.variation && it.variation > 1 ? `-${it.variation}` : ''}`
-        : undefined,
+      reference: it.mediaId ?? undefined,
       contentType: it.type,
       // MEASURED, from the storage spine. Null when nothing measured it, which the tile handles.
       displayAspect: g ? aspectLabel(g.width, g.height) : null,
@@ -1448,9 +1443,7 @@ function displayItemLine(it: ResolvedMediaBatchItem, i: number): string {
     const ref = it.mediaId ?? ('url' in it.input ? it.input.url : JSON.stringify(it.input))
     return `${label} ERROR (${ref}): ${it.error ?? 'could not resolve'}`
   }
-  const name = it.mediaId
-    ? `${it.mediaId}${it.variation != null && it.variation > 1 ? `-${it.variation}` : ''}`
-    : (it.url ?? 'url')
+  const name = it.mediaId ?? it.url ?? 'url'
   return `${label} ${it.type ?? 'media'} ${name}`
 }
 

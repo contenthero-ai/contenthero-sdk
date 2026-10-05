@@ -9,7 +9,7 @@
  */
 
 import type { Command } from 'commander'
-import { GenerationTimeoutError, type Generation } from '@contenthero/sdk'
+import type { Generation } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { generationHuman, DEFAULT_TIMEOUT_SEC } from '../generation.js'
@@ -35,17 +35,10 @@ export function registerGeneration(program: Command): void {
       const blocking = opts.wait !== false
       const timeoutSec = opts.timeout ?? DEFAULT_TIMEOUT_SEC
 
-      const results: Generation[] = await Promise.all(
-        ids.map(async (id) => {
-          if (!blocking) return client.getGeneration(id)
-          try {
-            return await client.waitForGeneration(id, { timeoutMs: timeoutSec * 1000 })
-          } catch (err) {
-            if (err instanceof GenerationTimeoutError) return client.getGeneration(id)
-            throw err
-          }
-        }),
-      )
+      // The SDK's one rule for several: each settled, failed, or as last read at the deadline, with no second read.
+      const results: Generation[] = blocking
+        ? await client.waitForGenerations(ids, { timeoutMs: timeoutSec * 1000 })
+        : await Promise.all(ids.map((id) => client.getGeneration(id)))
 
       emit(results, ctx, (rows: Generation[]) => rows.map(generationHuman).join('\n\n'))
 

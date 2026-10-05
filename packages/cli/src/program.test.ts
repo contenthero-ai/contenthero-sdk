@@ -131,14 +131,15 @@ test('avatar create requires the traits the prompt writer needs, and offers --co
   assert.ok(create.options.some((o) => o.long === '--cost'), 'create must offer --cost')
 })
 
-test('universal status verbs are registered, each taking --variation and --off', () => {
+test('universal status verbs are registered, each taking --off and naming media by id alone', () => {
   const program = buildProgram()
   for (const name of ['favorite', 'archive']) {
     const cmd = program.commands.find((c) => c.name() === name)
     assert.ok(cmd, `missing top-level command: ${name}`)
+    // The output is named in the media id itself (a1B2c3D4-2), so no number travels beside it (7.44).
     assert.ok(
-      cmd!.options.some((o) => o.long === '--variation'),
-      `${name} should accept --variation`,
+      !cmd!.options.some((o) => o.long === '--variation'),
+      `${name} must not take --variation`,
     )
     // --off is what replaced the inverse commands: the direction is an argument, not a name.
     assert.ok(cmd!.options.some((o) => o.long === '--off'), `${name} should accept --off`)

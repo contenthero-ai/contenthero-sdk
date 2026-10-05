@@ -190,13 +190,46 @@ const POST_PLATFORMS = [
 ] as const
 
 /**
- * How long the smart-wait tools (generate_image / generate_video / upscale /
- * generate_lip_sync) wait inline before handing back the outputId to poll.
- * Kept under the MCP SDK's default 60s client request timeout, so a slow render
- * returns the clean "still rendering, call get_generation_status" handoff rather
- * than tripping the client's timeout.
+ * How long a waiting tool (get_generation_status, generate_board, export_project) waits before handing back what
+ * it has, and the deadline its whole call keeps, inline bytes included.
+ *
+ * ⚠️ BOTH UNDER THE HOST'S 60 SECOND REQUEST CEILING, WITH ROOM. Claude Desktop cancels a call at 60s and does not
+ * reset that for progress notifications. The wait was 50s, then the status tool read the generation AGAIN and
+ * downloaded its images (8s per fetch), and the SDK's wait itself could run a full poll interval past its deadline,
+ * so a slow render ran past 60s and the person saw an error for a job that was fine (7.49). The SDK's wait now
+ * ends on its deadline and hands back the last status, and every inline fetch is cut at the call's deadline,
+ * degrading to a link the widget renders anyway.
  */
-const SMART_WAIT_MS = 50_000
+const WAIT_MS = 40_000
+const CALL_DEADLINE_MS = 45_000
+
+/** get_media's zoom: a rectangle in the file's own pixels (7.50). */
+const REGION_SCHEMA = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  })
+  .describe("Zoom: the part to cut out, in the file's own pixels (an item's geometry gives its size). Cut from the original and returned at its own detail, never enlarged; clamped to the file.")
+
+/**
+ * The one item a favorite or archive names: a media item by its `mediaId`, anything else by `assetType` + `id`. The
+ * server decides which is valid and says so; this only passes on what was given, so the two cannot disagree.
+ */
+function namedTarget<A extends string, E extends Record<string, unknown>>(
+  args: { mediaId?: string; assetType?: A; id?: string },
+  extra: E,
+): ({ mediaId: string } | { assetType: A; id: string }) & E {
+  if (args.mediaId) return { mediaId: args.mediaId, ...extra }
+  return { assetType: args.assetType as A, id: args.id ?? '', ...extra }
+}
+
+/** The bytes of a `data:` url, as an image block takes them. */
+function inlineFromDataUrl(dataUrl: string): { data: string; mimeType: string } | null {
+  const [, mimeType, data] = /^data:([^;,]+);base64,(.*)$/.exec(dataUrl) ?? []
+  return mimeType && data ? { mimeType, data } : null
+}
 
 /**
  * What a still-running generation can already say about the shape of its own result, read from the tool's
@@ -434,7 +467,11 @@ const LINK_MIME: Record<string, string> = {
  * ⏭️ The split packages (`@modelcontextprotocol/server@2`) carry the field. Migrating to them is what
  * unlocks this, and it is its own piece of work rather than a prerequisite for rendering.
  */
-export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachment[]> {
+export async function attachmentsFor(
+  gen: Generation,
+  /** When the whole call must be done: a fetch is cut there and the outputs after it degrade to links. */
+  deadline?: number,
+): Promise<GeneratedAttachment[]> {
   /**
    * ⛔⛔⛔ **ONE BUDGET FOR THE WHOLE RESULT, BECAUSE THE HOST'S CEILING IS PER RESULT.**
    *
@@ -448,13 +485,15 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
    * renders it from a URL regardless, so nothing is lost but the fallback for hosts that cannot mount apps.
    */
   let budget = MAX_INLINE_BASE64_CHARS
-  const urls = (gen.outputUrls ?? []).filter((u) => typeof u === 'string' && u.length > 0)
   const mimeType = LINK_MIME[gen.contentType]
   if (!mimeType) return []
 
   const ext = mimeType.split('/')[1]
   const out: GeneratedAttachment[] = []
-  for (const [i, uri] of urls.entries()) {
+  // Each output carries its own file and derivatives, so nothing here is paired by index (7.44).
+  for (const output of gen.outputs ?? []) {
+    const uri = output.url
+    if (!uri) continue
     /**
      * ⭐ AUDIO HAS A FIRST-CLASS BLOCK TOO, and it plays inline exactly as an image draws. It is fetched the
      * same best-effort way: a miss degrades this one output to a link rather than failing a generation the
@@ -465,7 +504,7 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
      * degrades to a link, which the widget renders anyway.
      */
     if (gen.contentType === 'audio') {
-      const bytes = await fetchAudioBytes(uri, budget)
+      const bytes = await fetchAudioBytes(uri, budget, deadline)
       if (bytes) {
         budget -= bytes.data.length
         out.push({ kind: 'bytes', type: 'audio', data: bytes.data, mimeType: bytes.mimeType })
@@ -475,18 +514,14 @@ export async function attachmentsFor(gen: Generation): Promise<GeneratedAttachme
       /**
        * ⭐ THE PREVIEW IS TRIED FIRST, AND THE SERVER DECIDED ITS ADDRESS.
        *
-       * `previewUrls` is index-aligned with `outputUrls`, so the derivative for THIS output is at THIS index.
-       * Without it the master is the only candidate, and a master has been too large to inline since image
-       * models started returning multi-megabyte PNGs: every `generate_image` returned a link and the model
-       * could not see what it had just made.
+       * Each output carries its own derivatives. Without them the master is the only candidate, and a master has
+       * been too large to inline since image models started returning multi-megabyte PNGs: every
+       * `generate_image` returned a link and the model could not see what it had just made.
        *
-       * ⚠️ Optional on the type, so an older server simply yields `undefined` and the master path is taken
-       * exactly as before. Best-effort throughout: a miss degrades this one output to a link instead of
-       * failing a generation the person already paid for.
+       * Best-effort throughout: a miss degrades this one output to a link instead of failing a generation the
+       * person already paid for.
        */
-      const previewUri = gen.previewUrls?.[i] ?? null
-      const visionUri = gen.visionUrls?.[i] ?? null
-      const hit = await fetchDisplayImage(uri, previewUri, budget, visionUri)
+      const hit = await fetchDisplayImage(uri, output.previewUrl ?? null, budget, output.visionUrl ?? null, deadline)
       if (hit.ok) {
         budget -= hit.image.data.length
         out.push({ kind: 'bytes', type: 'image', data: hit.image.data, mimeType: hit.image.mimeType })
@@ -578,16 +613,23 @@ function isAllowedImageHost(url: string): boolean {
  */
 const MAX_INLINE_BASE64_CHARS = 900_000
 
+/** One fetch's time: 8 seconds, or whatever is left before the call's deadline when that is sooner. */
+function fetchTimeoutMs(deadline?: number): number {
+  return deadline === undefined ? 8000 : Math.min(8000, deadline - Date.now())
+}
+
 /**
  * The audio equivalent of `fetchImageBytes`, sharing its host allowlist, its size cap and its timeout.
  *
  * ⚠️ SEPARATE RATHER THAN A `kind` PARAMETER because the content-type CHECK is the difference, and a single
  * function taking "which prefix do I accept" is the shape that eventually accepts the wrong one.
  */
-async function fetchAudioBytes(url: string, budget: number): Promise<{ data: string; mimeType: string } | null> {
+async function fetchAudioBytes(url: string, budget: number, deadline?: number): Promise<{ data: string; mimeType: string } | null> {
   if (!isAllowedImageHost(url)) return null
+  const ms = fetchTimeoutMs(deadline)
+  if (ms <= 0) return null
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(ms) })
     if (!res.ok) return null
     const mimeType = res.headers.get('content-type') || 'audio/mpeg'
     if (!mimeType.startsWith('audio/')) return null
@@ -667,8 +709,10 @@ function budgetReason(encodedLength: number): ImageSkipReason {
   return encodedLength > MAX_INLINE_BASE64_CHARS ? 'over-budget' : 'budget-spent'
 }
 
-async function fetchImage(url: string, budget: number): Promise<ImageFetch> {
+async function fetchImage(url: string, budget: number, deadline?: number): Promise<ImageFetch> {
   if (!isAllowedImageHost(url)) return { ok: false, reason: 'host-not-allowed' }
+  const ms = fetchTimeoutMs(deadline)
+  if (ms <= 0) return { ok: false, reason: 'fetch-failed', detail: 'out of time' }
   let res: Response
   try {
     /**
@@ -681,7 +725,7 @@ async function fetchImage(url: string, budget: number): Promise<ImageFetch> {
      * ⭐ Failing is CHEAP here and the fallback is good: no block, keep the link. Waiting is what is
      * expensive, so the budget is deliberately short.
      */
-    res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    res = await fetch(url, { signal: AbortSignal.timeout(ms) })
   } catch (err) {
     return { ok: false, reason: 'fetch-failed', detail: err instanceof Error ? err.name : undefined }
   }
@@ -736,20 +780,22 @@ async function fetchDisplayImage(
    * than a swap: anything older simply behaves exactly as it did before this existed.
    */
   vision?: string | null,
+  /** When the whole call must be done; every fetch is cut there. */
+  deadline?: number,
 ): Promise<ImageFetch> {
   let previewMiss: ImageFetch | null = null
   if (vision && vision !== master) {
-    const hit = await fetchImage(vision, budget)
+    const hit = await fetchImage(vision, budget, deadline)
     if (hit.ok) return hit
     previewMiss = hit
   }
   if (preview && preview !== master) {
-    const hit = await fetchImage(preview, budget)
+    const hit = await fetchImage(preview, budget, deadline)
     if (hit.ok) return hit
     previewMiss = hit
   }
   if (!master) return previewMiss ?? { ok: false, reason: 'fetch-failed' }
-  const hit = await fetchImage(master, budget)
+  const hit = await fetchImage(master, budget, deadline)
   if (hit.ok) return hit
   return previewMiss ?? hit
 }
@@ -786,16 +832,30 @@ async function inlineImagesWithinBudget(
     url: string | null | undefined
     previewUrl?: string | null
     visionUrl?: string | null
+    /** Bytes already in hand (a zoomed crop), spent from the same budget without a fetch. */
+    inline?: { data: string; mimeType: string } | null
   }[],
+  /** When the whole call must be done; every fetch is cut there. */
+  deadline?: number,
 ): Promise<InlinedImage[]> {
   let budget = MAX_INLINE_BASE64_CHARS
   const out: InlinedImage[] = []
   for (const item of items) {
+    if (item.inline) {
+      if (item.inline.data.length <= budget) {
+        budget -= item.inline.data.length
+        out.push({ image: item.inline })
+      } else {
+        const reason: ImageSkipReason = item.inline.data.length > MAX_INLINE_BASE64_CHARS ? 'over-budget' : 'budget-spent'
+        out.push({ image: null, skipped: skipLabel(reason), reason })
+      }
+      continue
+    }
     if (!item.url && !item.previewUrl) {
       out.push({ image: null })
       continue
     }
-    const hit = await fetchDisplayImage(item.url, item.previewUrl, budget, item.visionUrl)
+    const hit = await fetchDisplayImage(item.url, item.previewUrl, budget, item.visionUrl, deadline)
     if (hit.ok) {
       budget -= hit.image.data.length
       out.push({ image: hit.image })
@@ -1288,7 +1348,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Reference Board',
       annotations: WRITE,
       description:
-        'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~50s; boards render slowly (minutes), so it usually returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~40s; boards render slowly (minutes), so it usually returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         boardType: z.enum(BOARD_TYPES).describe(BOARD_TYPE_GUIDANCE),
         prompt: z
@@ -1332,8 +1392,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           avatarId: args.avatarId,
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
-        const gen = await client.generateBoardAndWait(request, { timeoutMs: SMART_WAIT_MS })
-        return completedResult(gen, await attachmentsFor(gen))
+        const deadline = Date.now() + CALL_DEADLINE_MS
+        const gen = await client.generateBoardAndWait(request, { timeoutMs: WAIT_MS })
+        return completedResult(gen, await attachmentsFor(gen, deadline))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
@@ -1354,7 +1415,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Video',
       annotations: WRITE,
       description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Some models choose an input mode by which references you pass (a startFrame with an optional endFrame, or references alone); get_model describes each model\'s modes. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Returns at once with an outputId; get_generation_status waits for the render. Some models choose an input mode by which references you pass (a startFrame with an optional endFrame, or references alone); get_model describes each model\'s modes. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z
           .string()
@@ -1583,7 +1644,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const result = await client.editAudio(request)
         // IN-PLACE mode returns one job per SOURCE, so the agent is handed every outputId rather than just the
         // first: polling only `outputId` would report the whole edit as done when one recording had finished.
-        if (result.outputs) return enhanceClipsResult(result)
+        if (result.jobs) return enhanceClipsResult(result)
         // Enhancement is async (status 'processing'); isolation returns URLs inline.
         if (result.status === 'processing') return withCharge(pendingResult(result.outputId), result.charge)
         return audioResult(result)
@@ -1678,7 +1739,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Lip Sync',
       annotations: WRITE,
       description:
-        'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Waits up to ~50s; if still rendering it returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_generation_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         modelId: z
           .string()
@@ -2435,6 +2496,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         favorited: z.boolean().optional().describe('Creations only. Only outputs that have a favorited variation.'),
         archived: z.boolean().optional().describe('Creations only. Only outputs that have an archived variation.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
+        offset: z.number().int().min(0).optional().describe('How many to skip, for the next page (default 0).'),
       },
     },
     async (args, extra) => {
@@ -2449,6 +2511,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             favorited: args.favorited,
             archived: args.archived,
             limit: args.limit,
+            offset: args.offset,
           }),
         )
       } catch (err) {
@@ -2557,11 +2620,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
    * One item's universal identity. NO folderId: the folder is named by the tool's own folderId /
    * folderIds now, which is what lets one call file many items into many folders.
    */
-  const itemRefBodySchema = z.object({
-    sourceTable: z.string().describe("The item's source table (e.g. as returned by list_media / get_media)."),
-    sourceRecordId: z.string().describe("The item's source record id."),
-    variant: z.number().int().optional().describe('The variation index (default 0 for single-asset items).'),
-  })
+  const itemRefBodySchema = z.union([
+    z.object({ mediaId: z.string().describe('A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).') }),
+    z.object({ projectId: z.string().describe("A project's id.") }),
+    z.object({ cardId: z.string().describe("A card's id.") }),
+  ])
 
   server.registerTool(
     'update_folder',
@@ -2569,7 +2632,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Folder',
       annotations: WRITE,
       description:
-        "Update the account's own folders: rename one, MOVE folders under a different parent (or to the top level with a null parent), change a smart folder's saved query, and FILE or UNFILE items. addItems/removeItems are DELTAS of { sourceTable, sourceRecordId, variant? }, not a list to replace, because an item can sit in several folders at once and a replace would silently unfile it from the others. Filing never moves or copies anything: it adds a pointer, and only manual folders accept items (a smart folder computes its own membership). Pass folderIds to patch several folders at once, which crossed with addItems files the same items into all of them; renaming and re-querying still need exactly one folder. NOTE the asymmetry: nesting a FOLDER via parentId is a MOVE (a folder has one parent), while filing an ITEM is a pointer that leaves its other folders alone.",
+        "Update the account's own folders: rename one, MOVE folders under a different parent (or to the top level with a null parent), change a smart folder's saved query, and FILE or UNFILE items. addItems/removeItems are DELTAS of { mediaId } (media, as list_media, search_media and get_folder print it), { projectId } or { cardId }, not a list to replace, because an item can sit in several folders at once and a replace would silently unfile it from the others. Filing never moves or copies anything: it adds a pointer, and only manual folders accept items (a smart folder computes its own membership). Pass folderIds to patch several folders at once, which crossed with addItems files the same items into all of them; renaming and re-querying still need exactly one folder. NOTE the asymmetry: nesting a FOLDER via parentId is a MOVE (a folder has one parent), while filing an ITEM is a pointer that leaves its other folders alone.",
       inputSchema: {
         folderId: z.string().describe('The folder id to update.'),
         folderIds: z
@@ -2653,7 +2716,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        */
       annotations: READ,
       description:
-        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or an { mediaId, variation? } (a studio output id: its short id, full id or first 8 characters; omit variation to get the primary one). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. An mediaId without a variation returns ONLY the primary variation and lists the others; request a specific variation to see it. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from get_context, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or a { mediaId } (the media id list_media, search_media and get_folder print: a1B2c3D4, or a1B2c3D4-2 for one output of a generation with several). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. For a VIDEO, set frames (and optionally fromSec/toSec) on the item to get low-res KEYFRAMES across that source-time window, so you can watch the raw footage (judge B-roll relevance, take quality) without editing it; audio still returns metadata + the url. A bare id for a generation returns ONLY its primary output, named by its full media id, and lists the others\' media ids; pass one of those to see it. To ZOOM, set region { x, y, width, height } on an item, in the file\'s own pixels: that part is cut from the original and returned at its own detail, never enlarged, so you can check small text or an edge; on a video it applies to every keyframe. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
@@ -2664,19 +2727,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                 toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
                 frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
                 frameWidth: z.number().int().min(160).max(1280).optional().describe('Video keyframes: each frame\'s width in pixels (default 640).'),
+                region: REGION_SCHEMA.optional(),
               }),
               z.object({
-                mediaId: z.string().describe('A studio output id: its short id, full id or first 8 characters.'),
-                variation: z
-                  .number()
-                  .int()
-                  .positive()
-                  .optional()
-                  .describe('1-based variation to view; omit for the primary variation only.'),
+                mediaId: z.string().describe('A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).'),
                 fromSec: z.number().min(0).optional().describe('Video keyframes: start of the source-time window (seconds). Omit for the whole clip.'),
                 toSec: z.number().min(0).optional().describe('Video keyframes: end of the source-time window (seconds).'),
                 frames: z.number().int().min(1).optional().describe('Video keyframes: how many to return across the window. Set this (or fromSec/toSec) to watch the raw footage.'),
                 frameWidth: z.number().int().min(160).max(1280).optional().describe('Video keyframes: each frame\'s width in pixels (default 640).'),
+                region: REGION_SCHEMA.optional(),
               }),
             ]),
           )
@@ -2699,12 +2758,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // parallel with no bound. One shared budget, spent in order.
         // ⭐ `previewUrl` is preferred inside, and it is the difference between the agent seeing these and
         // not: an image master is routinely 1.7 to 2.6 MB, which no budget under a 1 MB ceiling can admit.
+        // A zoomed image is already in hand: its crop is the picture, spent from the same budget.
         const images = await inlineImagesWithinBudget(
           result.items.map((it) =>
-            it.ok
-              ? { url: it.imageUrl, previewUrl: it.previewUrl, visionUrl: it.visionUrl }
-              : { url: null },
+            !it.ok
+              ? { url: null }
+              : it.crop?.dataUrl
+                ? { url: null, inline: inlineFromDataUrl(it.crop.dataUrl) }
+                : { url: it.imageUrl, previewUrl: it.previewUrl, visionUrl: it.visionUrl },
           ),
+          Date.now() + CALL_DEADLINE_MS,
         )
         const spent = images.reduce((n, slot) => n + (slot.image?.data.length ?? 0), 0)
         return mediaBatchResult(result, images, MAX_INLINE_BASE64_CHARS - spent)
@@ -2733,7 +2796,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Showing media'),
       annotations: READ,
       description:
-        'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or an { mediaId, variation? }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. Do not re-show media another tool already displayed: anything that creates or imports media renders its own card, and showing it again only duplicates it. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
+        'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or a { mediaId }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. Do not re-show media another tool already displayed: anything that creates or imports media renders its own card, and showing it again only duplicates it. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
       inputSchema: {
         items: z
           .array(
@@ -2742,13 +2805,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
                 url: z.string().url().describe('A media URL on one of our storage hosts.'),
               }),
               z.object({
-                mediaId: z.string().min(1).describe('A studio output id: its short id, full id or first 8 characters.'),
-                variation: z
-                  .number()
-                  .int()
-                  .positive()
-                  .optional()
-                  .describe('1-based variation to show; omit for the primary variation only.'),
+                mediaId: z.string().min(1).describe('A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).'),
               }),
             ]),
           )
@@ -3158,7 +3215,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Generation Status',
       annotations: READ,
       description:
-        "Check one or more in-progress generations (outputIds from generate_image / generate_video / upscale / generate_lip_sync / generate_board) and get their final URLs. BY DEFAULT THIS BLOCKS until they finish, up to ~50s per call, because that is almost always what you want after starting a render; if one is still running it comes back with the current status and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. Accepts 1-8 outputIds in one call.",
+        "Check one or more in-progress generations (outputIds from generate_image / generate_video / upscale / generate_lip_sync / generate_board) and get their final URLs. BY DEFAULT THIS BLOCKS until they finish, up to ~40s per call, because that is almost always what you want after starting a render; if one is still running it comes back with the current status and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. Accepts 1-8 outputIds in one call.",
       inputSchema: {
         outputIds: z
           .array(z.string())
@@ -3168,36 +3225,24 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         wait: z
           .boolean()
           .optional()
-          .describe('Block until terminal (up to ~50s), the default. false = an instant snapshot.'),
+          .describe('Block until terminal (up to ~40s), the default. false = an instant snapshot.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const blocking = args.wait !== false
-        const gens = await Promise.all(
-          args.outputIds.map(async (id) => {
-            if (!blocking) return client.getGeneration(id)
-            try {
-              return await client.waitForGeneration(id, { timeoutMs: SMART_WAIT_MS })
-            } catch (err) {
-              // Timeout is expected for a slow render. A transient poll error is not, but
-              // it must not fail the whole BATCH either: fall back to a status snapshot so
-              // the other ids still report, and only surface the error if even that fails.
-              if (err instanceof GenerationTimeoutError) return client.getGeneration(id)
-              try {
-                return await client.getGeneration(id)
-              } catch {
-                throw err
-              }
-            }
-          }),
-        )
+        const deadline = Date.now() + CALL_DEADLINE_MS
+        // Each comes back settled, failed, or as last read when the wait ended, with no second read for any of
+        // them; a transient error on one falls back to a snapshot without failing the batch (the SDK's rule).
+        const gens =
+          args.wait !== false
+            ? await client.waitForGenerations(args.outputIds, { timeoutMs: WAIT_MS })
+            : await Promise.all(args.outputIds.map((id) => client.getGeneration(id)))
         // ⭐ Only the single-generation case is attached: a batch of ten would embed ten sets of bytes into
         // one result. Polling ONE generation is the case a person is watching, and the one worth rendering.
         const attachments =
           gens.length === 1 && gens[0]
-            ? { [gens[0].outputId]: await attachmentsFor(gens[0]) }
+            ? { [gens[0].outputId]: await attachmentsFor(gens[0], deadline) }
             : {}
         return generationBatchResult(gens, attachments)
       } catch (err) {
@@ -4104,19 +4149,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Favorite',
       annotations: WRITE,
       description:
-        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For a top-level asset, pass assetType + id (card, voice, brand_kit, project, inspiration_content, gallery, transition, caption-template, template, space). To favorite a single studio media variation (one image/video/audio slot from list_media / get_media), pass the output id + variationIndex (1-based) and omit assetType. Requires the favorites:write scope. Idempotent in both directions.",
+        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For media (one output of a generation, an upload, stock), pass its mediaId as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several). For anything else, pass assetType + id (card, voice, brand_kit, project, inspiration_content, gallery, transition, caption-template, template, space). Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
+        mediaId: z.string().optional().describe('A media id, for media. A bare id for a generation with several outputs is refused with their media ids listed.'),
         assetType: z
           .enum(['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'caption-template', 'template', 'space'])
           .optional()
-          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
-        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
-        variationIndex: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+          .describe('The kind of asset, for anything that is not media. Pass with id.'),
+        id: z.string().optional().describe("The asset's id, with assetType."),
         favorited: z.boolean().optional().describe('Default true. Pass false to UNfavorite.'),
       },
     },
@@ -4124,7 +4164,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const favorited = args.favorited ?? true
-        await client.favorite({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex, favorited })
+        await client.favorite(namedTarget(args, { favorited }))
         return statusActionResult(favorited ? 'Favorited' : 'Unfavorited', args)
       } catch (err) {
         return errorResult(err)
@@ -4140,19 +4180,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For a top-level asset, pass assetType + id (card, brand_kit, brand_kit_section, project, space, template). To archive a single studio media variation, pass the output id + variationIndex (1-based) and omit assetType. Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For one output of a generation, pass its mediaId (a1B2c3D4-2 for one output of several). For anything else, pass assetType + id (card, brand_kit, brand_kit_section, project, space, template). Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
+        mediaId: z.string().optional().describe('A generated output\'s media id. A bare id for a generation with several outputs is refused with their media ids listed.'),
         assetType: z
           .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'template'])
           .optional()
-          .describe('The kind of asset. Required unless targeting a media variation via variationIndex.'),
-        id: z.string().describe('The asset id (or studio output id when using variationIndex).'),
-        variationIndex: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('1-based studio media variation slot. When set, id is a studio output id and assetType is ignored.'),
+          .describe('The kind of asset, for anything that is not media. Pass with id.'),
+        id: z.string().optional().describe("The asset's id, with assetType."),
         archived: z.boolean().optional().describe('Default true. Pass false to RESTORE (unarchive).'),
       },
     },
@@ -4160,7 +4195,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const archived = args.archived ?? true
-        await client.archive({ assetType: args.assetType, id: args.id, variationIndex: args.variationIndex, archived })
+        await client.archive(namedTarget(args, { archived }))
         return statusActionResult(archived ? 'Archived' : 'Unarchived', args)
       } catch (err) {
         return errorResult(err)
@@ -4468,7 +4503,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const { projectId, ...input } = args
-        const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: SMART_WAIT_MS })
+        const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: WAIT_MS })
         // ⚠️ The FORMAT is what makes an export renderable, and only this handler knows it: `get_export`
         // polls by exportId alone, so a poll legitimately reports rather than displays.
         return completedExportResult(job, input.format ?? 'mp4')

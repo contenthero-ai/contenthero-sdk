@@ -5,10 +5,20 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
+import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
 import { GENERATION_WIDGET_URI, WIDGET_RESOURCE_META } from './widget-resource.js'
 import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
 import { assertGroupsCoverTools, groupedToolNames, TOOL_GROUPS } from './groups.js'
+
+/** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
+function outs(urls: readonly string[], id = 'Gen12345') {
+  return urls.map((url, i) => {
+    const mediaId = urls.length > 1 ? `${id}-${i + 1}` : id
+    return { mediaId, status: 'succeeded', url, appUrl: `https://app.contenthero.ai/media/${mediaId}` }
+  })
+}
+
 
 /** A discovery-catalog entry, in the /api/v1/models projection shape. */
 function cap(modelId, contentType, kind, outputType) {
@@ -105,8 +115,8 @@ function fakeClient(overrides = {}) {
       useCase: null,
     }),
     listMedia: async () => [
-      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', variant: 0, url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
-      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', variant: 1, url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
     ],
     getMedia: async (id) => ({
       id: 'out-uuid-1',
@@ -115,7 +125,7 @@ function fakeClient(overrides = {}) {
       prompt: 'a cat',
       status: 'completed',
       createdAt: 't',
-      variant: id.includes('-2') ? 1 : 0,
+      mediaId: id.includes('-2') ? 'Out12345-2' : 'Out12345',
       url: id.includes('-2') ? 'https://cdn/2.png' : 'https://cdn/1.png',
       generationSize: 2,
       isFavorited: id.includes('-2'),
@@ -130,29 +140,28 @@ function fakeClient(overrides = {}) {
       duration: null,
       creditsUsed: 9,
       variations: [
-        { variation: 1, url: 'https://cdn/1.png', status: 'completed', isFavorited: false, isArchived: false },
-        { variation: 2, url: 'https://cdn/2.png', status: 'completed', isFavorited: true, isArchived: false },
+        { mediaId: 'Out12345-1', url: 'https://cdn/1.png', status: 'completed', isFavorited: false, isArchived: false },
+        { mediaId: 'Out12345-2', url: 'https://cdn/2.png', status: 'completed', isFavorited: true, isArchived: false },
       ],
-      selectedVariation: id.includes('-2') ? 2 : null,
       thumbnailUrl: null,
     }),
     getMediaBatch: async (items) => ({
       items: items.map((it) => {
         if ('url' in it) {
-          return { ok: true, input: it, url: it.url, imageUrl: it.url, type: 'image', model: null, prompt: null, mediaId: null, variation: null, otherVariations: [] }
+          return { ok: true, input: it, url: it.url, imageUrl: it.url, type: 'image', model: null, prompt: null, mediaId: null, otherMediaIds: [] }
         }
-        const variation = it.variation ?? 2
+        // A bare id resolves to the primary (output 2 here), named in full; a `-<n>` names its own output.
+        const n = /-(\d)$/.exec(it.mediaId)?.[1] ?? '2'
         return {
           ok: true,
           input: it,
-          url: `https://cdn/${variation}.png`,
-          imageUrl: `https://cdn/${variation}.png`,
+          url: `https://cdn/${n}.png`,
+          imageUrl: `https://cdn/${n}.png`,
           type: 'image',
           model: 'nano-banana-2',
           prompt: 'a cat',
-          mediaId: 'out-uuid-1',
-          variation,
-          otherVariations: variation === 2 ? [1] : [2],
+          mediaId: `Out12345-${n}`,
+          otherMediaIds: n === '2' ? ['Out12345-1'] : ['Out12345-2'],
         }
       }),
     }),
@@ -184,14 +193,14 @@ function fakeClient(overrides = {}) {
      * sync submit and return a pollable pending result rather than waiting. They read only `outputId`
      * from this, so the completed audio shape serves both without a second fake.
      */
-    generate: async () => ({ outputId: 'gen1', status: 'completed', outputUrls: ['https://cdn/a.mp3'] }),
+    generate: async () => ({ outputId: 'gen1', status: 'completed', outputs: outs(['https://cdn/a.mp3']) }),
     /** Still the path for `generate_audio` and anything else that genuinely waits for its result. */
     generateAndWait: async () => ({
       outputId: 'gen1',
       status: 'completed',
       contentType: 'image',
       modelId: 'nano-banana-2',
-      outputUrls: ['https://cdn/x.png'],
+      outputs: outs(['https://cdn/x.png']),
       error: null,
       createdAt: 't',
       completedAt: 't2',
@@ -201,7 +210,7 @@ function fakeClient(overrides = {}) {
       status: 'completed',
       contentType: 'video',
       modelId: 'veo-3.1-fast',
-      outputUrls: ['https://cdn/v.mp4'],
+      outputs: outs(['https://cdn/v.mp4']),
       error: null,
       createdAt: 't',
       completedAt: 't2',
@@ -211,17 +220,31 @@ function fakeClient(overrides = {}) {
       status: 'completed',
       contentType: 'video',
       modelId: 'veo-3.1-fast',
-      outputUrls: ['https://cdn/v.mp4'],
+      outputs: outs(['https://cdn/v.mp4']),
       error: null,
       createdAt: 't',
       completedAt: 't2',
     }),
+    // The SDK's rule, over whichever waitForGeneration this fake carries: each id settled, failed, or as last read.
+    async waitForGenerations(ids, opts) {
+      return Promise.all(
+        ids.map(async (id) => {
+          try {
+            return await this.waitForGeneration(id, opts)
+          } catch (err) {
+            if (err?.lastStatus) return err.lastStatus
+            if (err?.generation) return err.generation
+            return this.getGeneration(id)
+          }
+        }),
+      )
+    },
     generateBoardAndWait: async () => ({
       outputId: 'board1',
       status: 'completed',
       contentType: 'image',
       modelId: 'gpt-image-2',
-      outputUrls: ['https://cdn/board.png'],
+      outputs: outs(['https://cdn/board.png']),
       error: null,
       createdAt: 't',
       completedAt: 't2',
@@ -770,7 +793,7 @@ test('a retired tier mode never reaches the wire', async () => {
         captured = req
         return {
           outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
-          outputUrls: ['https://cdn/x.png'], error: null, createdAt: 't', completedAt: 't2',
+          outputs: outs(['https://cdn/x.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
     }),
@@ -818,7 +841,7 @@ test('generate_image forwards avatarId, so a generation can file itself as a loo
         captured = req
         return {
           outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
-          outputUrls: ['https://cdn/look.png'], error: null, createdAt: 't', completedAt: 't2',
+          outputs: outs(['https://cdn/look.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
     }),
@@ -838,7 +861,7 @@ test('generate_board forwards avatarId', async () => {
         captured = req
         return {
           outputId: 'b', status: 'completed', contentType: 'image', modelId: 'board',
-          outputUrls: ['https://cdn/board.png'], error: null, createdAt: 't', completedAt: 't2',
+          outputs: outs(['https://cdn/board.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
     }),
@@ -858,7 +881,7 @@ test('generate_video forwards wan multiShot and reference audio', async () => {
         captured = req
         return {
           outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast',
-          outputUrls: ['https://cdn/v.mp4'], error: null, createdAt: 't', completedAt: 't2',
+          outputs: outs(['https://cdn/v.mp4']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
     }),
@@ -970,7 +993,7 @@ test('import_media waits within the call, and hands back the outputId as pending
 
 test('get_generation_status: an abandoned import says where the bytes already are, and never asks to poll again', async () => {
   const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
-  const abandoned = (id, extra = {}) => ({ outputId: id, status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputUrls: [], error: null, ...extra })
+  const abandoned = (id, extra = {}) => ({ outputId: id, status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputs: outs([]), error: null, ...extra })
   const mcp = await connect(fakeClient({ waitForGeneration: async (id) => abandoned(id, id === 'imp1' ? { alreadyExisted: dup } : {}) }))
   const dupRes = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['imp1'] } })
   assert.match(dupRes.content[0].text, /Already in your library/)
@@ -985,7 +1008,7 @@ test('get_generation_status takes wait:false for an instant snapshot', async () 
     fakeClient({
       waitForGeneration: async (id) => {
         waited = true
-        return { outputId: id, status: 'completed', contentType: 'video', outputUrls: ['https://cdn/v.mp4'], error: null }
+        return { outputId: id, status: 'completed', contentType: 'video', outputs: outs(['https://cdn/v.mp4']), error: null }
       },
     }),
   )
@@ -1115,7 +1138,7 @@ test('generate_lip_sync (script mode) builds a portrait + script request and ret
           status: 'completed',
           contentType: 'video',
           modelId: 'infinitalk',
-          outputUrls: ['https://cdn/talk.mp4'],
+          outputs: outs(['https://cdn/talk.mp4']),
           error: null,
           createdAt: 't',
           completedAt: 't2',
@@ -1158,7 +1181,7 @@ test('generate_lip_sync (audio mode) routes audioUrl into references.audio', asy
           status: 'completed',
           contentType: 'video',
           modelId: 'infinitalk',
-          outputUrls: ['https://cdn/talk2.mp4'],
+          outputs: outs(['https://cdn/talk2.mp4']),
           error: null,
           createdAt: 't',
           completedAt: 't2',
@@ -1387,11 +1410,11 @@ test('list_media lists one row per variation with its slot, favorite, and url', 
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_media', arguments: {} })
   assert.ok(!res.isError)
-  assert.match(res.content[0].text, /out-uuid-1/)
   assert.match(res.content[0].text, /image/)
-  // Two variations of one generation now render as two rows (v1/2 and v2/2), the favorited one tagged.
-  assert.match(res.content[0].text, /v1\/2/)
-  assert.match(res.content[0].text, /v2\/2/)
+  // Two outputs of one generation render as two rows, each named by its own media id, the favorited one tagged.
+  assert.match(res.content[0].text, /media Out12345-1/)
+  assert.match(res.content[0].text, /media Out12345-2/)
+  assert.match(res.content[0].text, /1 of 2 outputs/)
   assert.match(res.content[0].text, /\[favorite\]/)
   assert.match(res.content[0].text, /cdn\/2\.png/)
 })
@@ -1412,9 +1435,8 @@ test('get_media resolves a batch and reports each item with its variation + url'
               type: 'image',
               model: 'nano-banana-2',
               prompt: 'a cat',
-              mediaId: 'out-uuid-1',
-              variation: 2,
-              otherVariations: [1],
+              mediaId: 'Out12345-2',
+              otherMediaIds: ['Out12345-1'],
             },
           ],
         }
@@ -1423,13 +1445,13 @@ test('get_media resolves a batch and reports each item with its variation + url'
   )
   const res = await mcp.callTool({
     name: 'get_media',
-    arguments: { items: [{ mediaId: 'abcd1234', variation: 2 }] },
+    arguments: { items: [{ mediaId: 'Out12345-2' }] },
   })
   assert.ok(!res.isError)
-  assert.deepEqual(capturedItems, [{ mediaId: 'abcd1234', variation: 2 }])
-  assert.match(res.content[0].text, /v2/)
+  assert.deepEqual(capturedItems, [{ mediaId: 'Out12345-2' }])
+  assert.match(res.content[0].text, /image Out12345-2/)
   assert.match(urlsIn(res), /https:\/\/cdn\/2\.png/)
-  assert.match(res.content[0].text, /other variations: 1/)
+  assert.match(res.content[0].text, /other outputs: Out12345-1/)
 })
 
 test('get_media returns an image block per video keyframe when a window is requested', async () => {
@@ -1449,8 +1471,7 @@ test('get_media returns an image block per video keyframe when a window is reque
               model: null,
               prompt: null,
               mediaId: 'vid-1',
-              variation: 1,
-              otherVariations: [],
+              otherMediaIds: [],
               keyframes: [
                 { atSec: 0, dataUrl: 'data:image/jpeg;base64,AAAA' },
                 { atSec: 5, dataUrl: 'data:image/jpeg;base64,BBBB' },
@@ -1478,7 +1499,7 @@ test('get_media keyframes spend the one result budget: in order, and the ones th
         items: [
           {
             ok: true, input: items[0], url: 'https://cdn/clip.mp4', imageUrl: null, type: 'video', model: null, prompt: null,
-            mediaId: 'vid-1', variation: 1, otherVariations: [], keyframes: [frame('A'), frame('B'), frame('C')],
+            mediaId: 'vid-1', otherMediaIds: [], keyframes: [frame('A'), frame('B'), frame('C')],
           },
         ],
       }),
@@ -1960,7 +1981,7 @@ test('archive marks a card via the universal tool', async () => {
     }),
   )
   const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'card', id: 'p1' } })
-  assert.deepEqual(captured, { assetType: 'card', id: 'p1', variationIndex: undefined, archived: true })
+  assert.deepEqual(captured, { assetType: 'card', id: 'p1', archived: true })
   assert.match(res.content[0].text, /Archived card p1/)
 })
 
@@ -1974,11 +1995,11 @@ test('favorite marks a top-level asset and reports it', async () => {
     }),
   )
   const res = await mcp.callTool({ name: 'favorite', arguments: { assetType: 'brand_kit', id: 'bk1' } })
-  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined, favorited: true })
+  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', favorited: true })
   assert.match(res.content[0].text, /Favorited brand_kit bk1/)
 })
 
-test('favorite routes a studio variation via variationIndex (no assetType)', async () => {
+test('favorite names one output by its media id (no assetType)', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -1987,9 +2008,9 @@ test('favorite routes a studio variation via variationIndex (no assetType)', asy
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'favorite', arguments: { id: 'out-uuid', variationIndex: 2 } })
-  assert.deepEqual(captured, { assetType: undefined, id: 'out-uuid', variationIndex: 2, favorited: true })
-  assert.match(res.content[0].text, /Favorited variation 2 of output out-uuid/)
+  const res = await mcp.callTool({ name: 'favorite', arguments: { mediaId: 'Out12345-2' } })
+  assert.deepEqual(captured, { mediaId: 'Out12345-2', favorited: true })
+  assert.match(res.content[0].text, /Favorited media Out12345-2/)
 })
 
 test('favorite and archive clear with a boolean instead of an inverse tool', async () => {
@@ -2007,11 +2028,11 @@ test('favorite and archive clear with a boolean instead of an inverse tool', asy
   // The two inverse tools were their positive twins with one value flipped, so a caller had to know which
   // NAME set which value. Now it is an argument.
   const r1 = await mcp.callTool({ name: 'favorite', arguments: { assetType: 'voice', id: 'v1', favorited: false } })
-  assert.deepEqual(fav, { assetType: 'voice', id: 'v1', variationIndex: undefined, favorited: false })
+  assert.deepEqual(fav, { assetType: 'voice', id: 'v1', favorited: false })
   assert.match(r1.content[0].text, /Unfavorited voice v1/)
 
   const r2 = await mcp.callTool({ name: 'archive', arguments: { assetType: 'project', id: 'pr1', archived: false } })
-  assert.deepEqual(arch, { assetType: 'project', id: 'pr1', variationIndex: undefined, archived: false })
+  assert.deepEqual(arch, { assetType: 'project', id: 'pr1', archived: false })
   assert.match(r2.content[0].text, /Unarchived project pr1/)
 })
 
@@ -2513,7 +2534,7 @@ test('archive confirms a brand kit via the universal tool', async () => {
     }),
   )
   const res = await mcp.callTool({ name: 'archive', arguments: { assetType: 'brand_kit', id: 'bk1' } })
-  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', variationIndex: undefined, archived: true })
+  assert.deepEqual(captured, { assetType: 'brand_kit', id: 'bk1', archived: true })
   assert.match(res.content[0].text, /Archived brand_kit bk1/)
 })
 
@@ -2628,7 +2649,7 @@ test('archive a brand_kit_section by section id via the universal tool', async (
     name: 'archive',
     arguments: { assetType: 'brand_kit_section', id: 'sec9' },
   })
-  assert.deepEqual(captured, { assetType: 'brand_kit_section', id: 'sec9', variationIndex: undefined, archived: true })
+  assert.deepEqual(captured, { assetType: 'brand_kit_section', id: 'sec9', archived: true })
   assert.match(res.content[0].text, /Archived brand_kit_section sec9/)
 })
 
@@ -3138,7 +3159,7 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
           prompt: null,
           status: 'completed',
           createdAt: 't',
-          variant: 0,
+          mediaId: 'Upl12345',
           url: 'https://cdn/editor-media-1.mp4',
           generationSize: 1,
           isFavorited: false,
@@ -3164,7 +3185,7 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
  */
 test('list_media prints each item\'s asset id', async () => {
   const item = {
-    id: 'up-uuid-1', type: 'video', model: null, prompt: null, status: 'completed', createdAt: 't', variant: 0,
+    id: 'up-uuid-1', type: 'video', model: null, prompt: null, status: 'completed', createdAt: 't', mediaId: 'Upl12345',
     url: 'https://cdn/editor-media-1.mp4', generationSize: 1, isFavorited: false, kind: 'upload', boardType: null,
     source: 'uploads', fileName: null, durationSeconds: null, assetId: '15bf8171-0000-4000-8000-000000000000',
   }
@@ -3281,7 +3302,7 @@ test('an image yields an inline BLOCK; video yields text alone', async () => {
   try {
     const image = await attachmentsFor({
       outputId: 'o1', modelId: 'nb2', status: 'completed', contentType: 'image',
-      outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+      outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
     } as never)
     assert.equal(image.filter((a) => a.kind === 'bytes').length, 1, 'an image MUST produce a block')
     // ⛔ NO `resource_link`. It was a third representation of a url the text list and the widget's
@@ -3290,7 +3311,7 @@ test('an image yields an inline BLOCK; video yields text alone', async () => {
 
     const video = await attachmentsFor({
       outputId: 'o2', modelId: 'v', status: 'completed', contentType: 'video',
-      outputUrls: ['https://media.contenthero.ai/u/a.mp4?t=tok'],
+      outputs: outs(['https://media.contenthero.ai/u/a.mp4?t=tok']),
     } as never)
     assert.equal(video.filter((a) => a.kind === 'bytes').length, 0, 'video has no MCP block to fill')
     assert.equal(video.filter((a) => a.kind === 'link').length, 0, 'the widget and the text list carry it')
@@ -3311,7 +3332,7 @@ test('⛔ an oversized image degrades to text rather than eating the context', a
   try {
     const out = await attachmentsFor({
       outputId: 'o3', modelId: 'nb2', status: 'completed', contentType: 'image',
-      outputUrls: ['https://media.contenthero.ai/u/big.jpg?t=tok'],
+      outputs: outs(['https://media.contenthero.ai/u/big.jpg?t=tok']),
     } as never)
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 0, 'over the cap, no block')
     // The url still reaches the caller: `completedResult` lists every one in its text block, and the widget
@@ -3331,7 +3352,7 @@ test('⛔ every variation of a batch that fits gets its own block, not just the 
   try {
     const out = await attachmentsFor({
       outputId: 'o4', modelId: 'nb2', status: 'completed', contentType: 'image',
-      outputUrls: ['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`),
+      outputs: outs(['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`)),
     } as never)
     // 1 byte each, so all four fit inside one budget and all four must appear.
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 4)
@@ -3363,7 +3384,7 @@ test('a batch never exceeds the inline budget, however many outputs it has', asy
   try {
     const out = await attachmentsFor({
       outputId: 'batch', modelId: 'nb2', status: 'completed', contentType: 'image',
-      outputUrls: ['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`),
+      outputs: outs(['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`)),
     } as never)
 
     const inlined = out.filter((a) => a.kind === 'bytes') as Array<{ data: string }>
@@ -3392,7 +3413,7 @@ test('one output that fits is still inlined, so the common case keeps its fallba
   try {
     const out = await attachmentsFor({
       outputId: 'single', modelId: 'nb2', status: 'completed', contentType: 'image',
-      outputUrls: ['https://media.contenthero.ai/u/a.png?t=tok'],
+      outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
     } as never)
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 1, 'a single fitting image MUST still inline')
   } finally {
@@ -3849,15 +3870,15 @@ const SPENDING_CALLS = {
 }
 
 test('every tool that spends reports its cost the same way', async () => {
-  const done = { outputId: 'o1', appUrl: 'https://app/o1', status: 'completed', contentType: 'image', modelId: 'm', outputUrls: ['https://cdn/o1.png'], error: null, createdAt: 't', completedAt: 't', charge: CHARGE }
+  const done = { outputId: 'o1', appUrl: 'https://app/o1', status: 'completed', contentType: 'image', modelId: 'm', outputs: outs(['https://cdn/o1.png']), error: null, createdAt: 't', completedAt: 't', charge: CHARGE }
   const mcp = await connect(
     fakeClient({
       generate: async (req) =>
         req.modelId === 'elevenlabs-tts'
-          ? { outputId: 'a1', appUrl: 'https://app/a1', status: 'completed', outputUrls: ['https://cdn/a1.mp3'], charge: CHARGE }
+          ? { outputId: 'a1', appUrl: 'https://app/a1', status: 'completed', outputs: outs(['https://cdn/a1.mp3']), charge: CHARGE }
           : { outputId: 'o1', appUrl: 'https://app/o1', status: 'processing', charge: CHARGE },
       generateBoardAndWait: async () => done,
-      editAudio: async () => ({ outputId: 'e1', appUrl: 'https://app/e1', status: 'completed', outputUrls: ['https://cdn/e1.mp3'], charge: CHARGE }),
+      editAudio: async () => ({ outputId: 'e1', appUrl: 'https://app/e1', status: 'completed', outputs: outs(['https://cdn/e1.mp3']), charge: CHARGE }),
       transcribe: async () => ({ outputId: 'tr1', transcript: 'hi', language: 'en', wordCount: 1, durationSeconds: 1, charge: CHARGE }),
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
       analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
@@ -4083,4 +4104,84 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
   assert.ok(done._meta, 'the batch mounts a card')
   const items = (done.structuredContent as { items: Array<{ reference: string }> }).items
   assert.deepEqual(items.map((i) => i.reference), ['one', 'two'], 'one card, one tile per finalized file')
+})
+
+/**
+ * 7.42, 7.44, 7.45, 7.49, 7.50 at the MCP boundary (2026-10-06).
+ *
+ * Break-verified: waiting with the old 50s and no deadline turns the first red; dropping `offset` turns the second
+ * red; showing the full still instead of the crop turns the third red; dropping the shortfall line turns the fourth
+ * red; fetching past the deadline turns the fifth red.
+ */
+test('get_generation_status waits 40s for every id at once, inside the host ceiling', async () => {
+  let asked
+  const mcp = await connect(
+    fakeClient({
+      waitForGenerations: async (ids, opts) => {
+        asked = { ids, timeoutMs: opts.timeoutMs }
+        return ids.map((id) => ({ outputId: id, status: 'processing', contentType: 'image', modelId: 'm', outputs: [], error: null, createdAt: 't', completedAt: null }))
+      },
+    }),
+  )
+  await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['g1', 'g2'] } })
+  assert.deepEqual(asked, { ids: ['g1', 'g2'], timeoutMs: 40_000 })
+})
+
+test('list_media pages with offset', async () => {
+  let opts
+  const mcp = await connect(fakeClient({ listMedia: async (o) => ((opts = o), []) }))
+  await mcp.callTool({ name: 'list_media', arguments: { limit: 20, offset: 40 } })
+  assert.equal(opts.offset, 40)
+})
+
+test('get_media with a region shows the cut, not the whole picture, and says how it maps back', async () => {
+  const cut = 'data:image/webp;base64,' + 'Q'.repeat(64)
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      getMediaBatch: async (items) => {
+        captured = items
+        return {
+          items: [{
+            ok: true, input: items[0], url: 'https://cdn/full.png', imageUrl: 'https://cdn/full.png', previewUrl: null, visionUrl: null,
+            type: 'image', model: null, prompt: null, mediaId: 'Out12345-2', otherMediaIds: [],
+            crop: { dataUrl: cut, width: 400, height: 300, region: { x: 100, y: 50, width: 400, height: 300 }, pixelsPerSourcePixel: 1 },
+          }],
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'Out12345-2', region: { x: 100, y: 50, width: 400, height: 300 } }] } })
+  assert.deepEqual(captured, [{ mediaId: 'Out12345-2', region: { x: 100, y: 50, width: 400, height: 300 } }])
+  const images = res.content.filter((c) => c.type === 'image')
+  assert.deepEqual(images.map((i) => i.data), ['Q'.repeat(64)])
+  assert.match(res.content[0].text, /zoom: 400x300 at \(100, 50\) in the file's pixels, shown at 400x300 \(1 px per file px\)/)
+})
+
+test('a VEO output kept at 720p says so, and that the charge follows it', async () => {
+  const res = completedResult({
+    outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast', error: null, createdAt: 't', completedAt: 't',
+    outputs: outs(['https://cdn/v.mp4']),
+    deliveredShort: { reason: 'The 1080p version was not ready within 5 minutes, so the 720p video was kept.' },
+  })
+  assert.match(res.content[0].text, /The 1080p version was not ready within 5 minutes, so the 720p video was kept\. The charge is for what was delivered\./)
+})
+
+test('inline bytes stop at the call deadline instead of fetching past it', async () => {
+  const realFetch = globalThis.fetch
+  let fetched = 0
+  globalThis.fetch = (async () => {
+    fetched++
+    return new Response(Buffer.from('x'), { status: 200, headers: { 'content-type': 'image/webp', 'content-length': '1' } })
+  }) as typeof fetch
+  try {
+    const out = await attachmentsFor(
+      { outputId: 'o', modelId: 'm', status: 'completed', contentType: 'image', outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']) } as never,
+      Date.now() - 1,
+    )
+    assert.equal(out.length, 0)
+    assert.equal(fetched, 0)
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })

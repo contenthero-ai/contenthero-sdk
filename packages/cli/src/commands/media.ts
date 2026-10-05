@@ -1,11 +1,12 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
- *   media list [--type --kind --status --limit]   recent outputs, newest first
- *   media search <query> [--kinds --limit]         semantic search of the editable library
- *   media get <id>                                 one output, with its variations
+ *   media list [--type --kind --status --limit --offset]   recent outputs, newest first
+ *   media search <query> [--kinds --limit]                  semantic search of the editable library
+ *   media get <id>                                          one item, with its outputs
+ *   media zoom <idOrUrl> <x,y,width,height>                 a region, cut from the original at its own detail
  *
- * Spans creations, reference boards, and looks; filter with --kind. An id may be
- * its short id, the full output id or its first 8 chars, any with a "-N" variation suffix.
+ * Spans creations, reference boards, and looks; filter with --kind. Every item is named by its media id: the short
+ * id, plus "-N" for output N of a generation with several, exactly as these commands print it.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
@@ -146,6 +147,7 @@ export function registerMedia(program: Command): void {
     .option('--favorite', 'creations only: only outputs with a favorited variation')
     .option('--archived', 'creations only: only outputs with an archived variation')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
+    .option('--offset <n>', 'how many to skip, for the next page (default 0)', toInt)
     .action(async (opts: Record<string, unknown>, command: Command) => {
       if (opts.source && !LIST_SOURCES.includes(opts.source as MediaSource)) {
         throw new CliError(
@@ -174,14 +176,15 @@ export function registerMedia(program: Command): void {
         favorited: opts.favorite ? true : undefined,
         archived: opts.archived ? true : undefined,
         limit: opts.limit as number | undefined,
+        offset: opts.offset as number | undefined,
       })
-      // One row per variation (the atomic grain): VAR shows which slot when a generation has siblings.
+      // One row per output (the atomic grain), each named by its own media id.
       emit(items, ctx, (rows: MediaSummary[]) =>
         table(
-          ['ID', 'VAR', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
+          ['ID', 'FAV', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
           rows.map((m) => [
-            displayId(m),
-            m.generationSize > 1 ? `${m.variant + 1}/${m.generationSize}${m.isFavorited ? '★' : ''}` : (m.isFavorited ? '★' : ''),
+            m.mediaId,
+            m.isFavorited ? '★' : '',
             m.type,
             m.kind ?? '',
             m.fileName ?? m.model ?? '',
@@ -216,7 +219,7 @@ export function registerMedia(program: Command): void {
         table(
           ['ID', 'KIND', 'REL', 'SCENES', 'SUMMARY'],
           rows.map((r) => [
-            displayId(r),
+            r.mediaId ?? '',
             r.kind ?? '',
             `${Math.round(r.relevance * 100)}%`,
             r.scenes.length
@@ -231,11 +234,11 @@ export function registerMedia(program: Command): void {
   media
     .command('get')
     .description('Get one media item by id (studio output, or an upload/stock item with --source)')
-    .argument('<id>', 'media id (short id, full id or first 8 characters); creations also accept a "-N" variation suffix')
+    .argument('<id>', 'media id (a1B2c3D4, or a1B2c3D4-2 for one output of several)')
     .option('--source <source>', `which library the id belongs to: ${GET_SOURCES.join(', ')} (default creations)`)
     .option(
       '--save <dir>',
-      'download each variation to <dir> (materialize the bytes for local viewing or re-ingestion)',
+      'download each output to <dir> (materialize the bytes for local viewing or re-ingestion)',
     )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       if (opts.source && !GET_SOURCES.includes(opts.source as MediaSource)) {
@@ -259,11 +262,11 @@ export function registerMedia(program: Command): void {
           const res = await fetch(v.url)
           if (!res.ok) {
             throw new CliError(
-              `Failed to download variation ${v.variation}: HTTP ${res.status}`,
+              `Failed to download ${v.mediaId}: HTTP ${res.status}`,
               EXIT.GENERAL,
             )
           }
-          const file = join(dir, `${displayId(item)}-v${v.variation}${saveExt(v.url, item.type)}`)
+          const file = join(dir, `${v.mediaId}${saveExt(v.url, item.type)}`)
           await writeFile(file, Buffer.from(await res.arrayBuffer()))
           saved.push(file)
         }
@@ -271,7 +274,7 @@ export function registerMedia(program: Command): void {
 
       emit(item, ctx, (m: MediaItem) => {
         const head = keyValues([
-          ['Id', displayId(m)], ...linkRow(m),
+          ['Id', m.mediaId], ...linkRow(m),
           ['Type', m.type],
           ['Kind', m.kind ?? 'creation'],
           ['Model', m.model ?? ''],
@@ -280,9 +283,9 @@ export function registerMedia(program: Command): void {
           ...costRows(m.charge),
         ])
         const variations = table(
-          ['VAR', 'STATUS', 'FAV', 'ARCH', 'SIZE', 'URL'],
+          ['MEDIA ID', 'STATUS', 'FAV', 'ARCH', 'SIZE', 'URL'],
           m.variations.map((v) => [
-            v.variation,
+            v.mediaId,
             v.status,
             v.isFavorited ? 'yes' : '',
             v.isArchived ? 'yes' : '',
@@ -349,6 +352,39 @@ export function registerMedia(program: Command): void {
           ? `\nSaved ${saved.length} keyframe(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
           : ''
         return `${keyframes.length} keyframe(s) at ${keyframes.map((k) => `${k.atSec}s`).join(', ')}.${savedBlock}`
+      })
+    })
+
+  media
+    .command('zoom')
+    .description("Cut a region from a media file's original and get it at its own detail (never enlarged)")
+    .argument('<idOrUrl>', 'a media id (a1B2c3D4-2) OR a media URL on our storage')
+    .argument('<region>', "x,y,width,height in the file's own pixels (clamped to the file)")
+    .option('--save <file>', 'write the cut to <file> (webp)')
+    .action(async (idOrUrl: string, regionArg: string, opts: Record<string, unknown>, command: Command) => {
+      const [x, y, width, height] = regionArg.split(',').map((v) => Number(v.trim()))
+      if (![x, y, width, height].every((v) => Number.isFinite(v)) || !(width! > 0) || !(height! > 0)) {
+        throw new CliError(`Invalid region "${regionArg}". Expected x,y,width,height with a positive width and height.`, EXIT.USAGE)
+      }
+      const { client, ctx } = makeClient(command)
+      const base = /^https?:\/\//.test(idOrUrl) ? { url: idOrUrl } : { mediaId: idOrUrl }
+      const result = await client.getMediaBatch([{ ...base, region: { x: x!, y: y!, width: width!, height: height! } } as MediaBatchItem])
+      const first = result.items[0]
+      let saved: string | null = null
+      const cut = first?.crop?.dataUrl ? bufferFromDataUrl(first.crop.dataUrl) : null
+      if (opts.save && cut) {
+        saved = String(opts.save)
+        await writeFile(saved, cut)
+      }
+      emit(result, ctx, () => {
+        if (!first?.ok) return `Could not resolve the media: ${first?.error ?? 'unknown error'}`
+        if (!first.crop) return `No region was cut: ${first.cropError ?? 'unknown reason'}`
+        const c = first.crop
+        return keyValues([
+          ['Region', `${c.region.width}x${c.region.height} at (${c.region.x}, ${c.region.y})`],
+          ['Size', `${c.width}x${c.height} (${c.pixelsPerSourcePixel} px per file px)`],
+          ...(saved ? [['Saved', saved] as [string, string]] : []),
+        ])
       })
     })
 
