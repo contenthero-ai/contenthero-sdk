@@ -2847,16 +2847,14 @@ export interface GetContextInput {
   /** mode='image': how many frames across the range. Omit for one at the focus point, or a proportional default. */
   count?: number
   /**
-   * mode='image': render at an explicit DISPLAY width in pixels, so you can judge legibility at the size the output
-   * will actually be seen (a classroom tile, a thumbnail, a feed card) rather than at full resolution, where
-   * small type always looks fine. Height is derived from the composition's aspect ratio and is deliberately
-   * not a parameter. Up to the project's native width and the plan's export ceiling; the size actually produced
-   * (and `pixelsPerCompositionUnit`) comes back on `rendered`.
+   * mode='image': the width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a
+   * feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
    */
   width?: number
   /**
-   * mode='image': crop to this rectangle, in composition units (the space `ProjectDetail.compositionSpace` describes),
-   * to see detail at full resolution while the image stays small. Without a `width` it renders at native scale.
+   * mode='image': render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect
+   * detail at full resolution. Without `width`, it renders at native scale; `rendered` reports
+   * `pixelsPerCompositionUnit`.
    */
   region?: CompositionRegion
 }

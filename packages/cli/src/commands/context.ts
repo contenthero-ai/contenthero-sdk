@@ -7,10 +7,10 @@
  * Returns the most-recent-active session's surface + focus + selection, plus the live participant set.
  * Structured by default. `--capture` pings the live tab for a fresh viewport screenshot (the user's SCREEN).
  * `--render` returns a server-side render of the COMPOSED OUTPUT (the editor frame / canvas slide) inline,
- * ephemeral and stored nowhere; `--frame` / `--slide` / `--slide-index` target a specific point. `--width`
- * renders at an explicit DISPLAY width so legibility can be judged at the size the output will actually be
- * seen (height follows the aspect ratio). `--save` writes whichever image was produced (render preferred
- * over snapshot) to a file.
+ * ephemeral and stored nowhere; `--frame` / `--slide` / `--slide-index` target a specific point. `--width` and
+ * `--region` say what the MCP's `get_context` fields say (approved messages 13 and 14, copied by hand until one
+ * source holds every field's description). `--save` writes whichever image was produced (render preferred over
+ * snapshot) to a file.
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
@@ -77,8 +77,8 @@ export function registerContext(program: Command): void {
     .option('--from-frame <n>', 'start timeline frame of the range (several frames, or a video)', (v) => parseInt(v, 10))
     .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
     .option('--count <n>', 'how many frames across the range (omit for one at the focus point)', (v) => parseInt(v, 10))
-    .option('--width <n>', 'still: render at this DISPLAY width in px, to judge legibility at real size (height follows the aspect ratio)', (v) => parseInt(v, 10))
-    .option('--region <x,y,w,h>', 'crop the render to this rectangle in composition units, to inspect detail at full resolution', parseRegion)
+    .option('--width <n>', 'image: the width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in rendered.', (v) => parseInt(v, 10))
+    .option('--region <x,y,w,h>', "image: render only this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without --width, it renders at native scale; rendered reports pixelsPerCompositionUnit.", parseRegion)
     .option('--save <path>', 'write the produced image(s) to this file (several frames append -1, -2, ...)')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
