@@ -93,6 +93,7 @@ export function registerGenerate(program: Command): void {
     const { client, ctx } = makeClient(command)
     const request = compact<GenerateRequest>({
       contentType: 'image',
+      kind: 'generate',
       modelId: opts.model as string,
       prompt,
       aspectRatio: opts.aspect as string | undefined,
@@ -138,6 +139,7 @@ export function registerGenerate(program: Command): void {
     if (klingMultiShot) parameters.shots = shots
     const request = compact<GenerateRequest>({
       contentType: 'video',
+      kind: 'generate',
       modelId: opts.model as string,
       prompt: klingMultiShot ? (prompt ?? shots!.map((s) => s.prompt).join(' ')) : prompt,
       aspectRatio: opts.aspect as string | undefined,
@@ -182,6 +184,7 @@ export function registerGenerate(program: Command): void {
       const { client, ctx } = makeClient(command)
       const request = compact<GenerateRequest>({
         contentType: 'audio',
+        kind: 'generate',
         modelId: opts.model as string,
         prompt: opts.prompt as string | undefined,
         text: opts.text as string | undefined,
@@ -254,6 +257,7 @@ export function registerGenerate(program: Command): void {
     const { client, ctx } = makeClient(command)
     const request = compact<GenerateRequest>({
       contentType: 'video',
+      kind: 'lip-sync',
       modelId: opts.model as string,
       prompt: opts.motion as string | undefined,
       text: opts.script as string | undefined,

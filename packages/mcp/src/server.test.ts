@@ -23,6 +23,33 @@ function cap(modelId, contentType, kind, outputType) {
   }
 }
 
+/**
+ * The fake registry. The MCP holds no model list of its own, so listModels and getModel both read this, as the
+ * server reads the database: an upscaler, a lip-sync model and a text-output audio model sit beside the generators.
+ */
+const FAKE_CATALOG = [
+  cap('nano-banana-2', 'image', 'generate', 'image'),
+  cap('gpt-image-2', 'image', 'generate', 'image'),
+  cap('sentinel-image-model', 'image', 'generate', 'image'),
+  cap('topaz-image-upscale', 'image', 'upscale', 'image'),
+  cap('topaz-video-upscale', 'video', 'upscale', 'video'),
+  cap('veo-3.1-fast', 'video', 'generate', 'video'),
+  cap('infinitalk', 'video', 'lip-sync', 'video'),
+  cap('elevenlabs-tts', 'audio', 'generate', 'audio'),
+  cap('elevenlabs-music', 'audio', 'generate', 'audio'),
+  cap('elevenlabs-sound-effects', 'audio', 'generate', 'audio'),
+  cap('elevenlabs-transcribe', 'audio', 'generate', 'text'),
+  cap('elevenlabs-voice-changer', 'audio', 'voice', 'audio'),
+]
+
+/** One model as getModel answers it: the catalog's own kind and medium over a full set of model fields. */
+function withCatalogEntry(model) {
+  const entry = FAKE_CATALOG.find((m) => m.modelId === model.modelId)
+  return entry
+    ? { ...model, contentType: entry.contentType, kind: entry.kind, capabilities: { ...model.capabilities, kind: entry.kind, outputType: entry.capabilities.outputType } }
+    : model
+}
+
 /** A minimal fake of the SDK client; override any method per test. */
 function fakeClient(overrides = {}) {
   return {
@@ -201,24 +228,10 @@ function fakeClient(overrides = {}) {
     }),
     estimateCost: async () => ({ getCost: true, creditsEstimate: 7, modelId: 'nano-banana-2', contentType: 'image' }),
     estimateBoardCost: async () => ({ getCost: true, creditsEstimate: 6, contentType: 'image' }),
-    // Discovery catalog the dynamic enums are built from. Includes a sentinel
-    // image model (only here, not in the static fallback) and entries that must
-    // be filtered out: an upscaler (kind) and transcribe/voice (outputType/kind).
-    listModels: async () => [
-      cap('nano-banana-2', 'image', 'generate', 'image'),
-      cap('gpt-image-2', 'image', 'generate', 'image'),
-      cap('sentinel-image-model', 'image', 'generate', 'image'),
-      cap('topaz-image-upscale', 'image', 'upscale', 'image'),
-      cap('topaz-video-upscale', 'video', 'upscale', 'video'),
-      cap('veo-3.1-fast', 'video', 'generate', 'video'),
-      cap('infinitalk', 'video', 'lip-sync', 'video'),
-      cap('elevenlabs-tts', 'audio', 'generate', 'audio'),
-      cap('elevenlabs-music', 'audio', 'generate', 'audio'),
-      cap('elevenlabs-sound-effects', 'audio', 'generate', 'audio'),
-      cap('elevenlabs-transcribe', 'audio', 'generate', 'text'),
-      cap('elevenlabs-voice-changer', 'audio', 'voice', 'audio'),
-    ],
-    getModel: async (modelId) => ({
+    // The fake registry. listModels and getModel both read it, as the server does: the MCP holds no list of its
+    // own, so a model's kind and medium come from here at call time.
+    listModels: async () => FAKE_CATALOG,
+    getModel: async (modelId) => withCatalogEntry({
       modelId,
       displayName: 'Veo 3.1 Fast',
       description: 'fast text+image to video',
@@ -1008,31 +1021,72 @@ test('generate_board get_cost returns an estimate', async () => {
   assert.ok(!res.isError)
 })
 
-test('generate_image accepts a model that exists only in the discovery catalog (dynamic enum)', async () => {
-  // sentinel-image-model is not in any static fallback list; it reaches the
-  // handler only because the enum was built from listModels.
-  const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({
-    name: 'generate_image',
-    arguments: { modelId: 'sentinel-image-model', prompt: 'x' },
-  })
-  assert.ok(!res.isError, 'a discovery-only model should be accepted')
+/**
+ * ⛔⛔ THE REGISTRY IS THE ONLY MODEL LIST, AND THE SERVER CHECKS EVERY ID AGAINST IT.
+ *
+ * Each generate tool used to carry an enum of model ids, built at startup from the catalog or, when that read failed,
+ * from a hardcoded copy (the hosted server used the copy always). The copy drifted: measured 2026-10-05 it still
+ * offered a disabled model, lacked six enabled ones, and its guidance led with a model the registry does not default
+ * to. So a tool takes any id, says what work it asks for, and the server refuses a model of another kind against the
+ * registry, naming the models that do that work. These are the two halves the MCP owns.
+ */
+test('every generate tool tells the server the work it asks for', async () => {
+  const sent = []
+  const mcp = await connect(
+    fakeClient({
+      generate: async (request) => {
+        sent.push(request)
+        return { outputId: `g${sent.length}`, appUrl: 'https://app/x', status: 'processing' }
+      },
+    }),
+  )
+  const call = (name, args) => mcp.callTool({ name, arguments: args })
+  await call('generate_image', { modelId: 'sentinel-image-model', prompt: 'x' })
+  await call('generate_video', { modelId: 'veo-3.1-fast', prompt: 'x' })
+  await call('upscale', { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' })
+  await call('upscale', { modelId: 'topaz-video-upscale', sourceUrl: 'https://cdn/in.mp4', factor: '2x', durationSeconds: 4 })
+  await call('generate_lip_sync', { modelId: 'infinitalk', imageUrl: 'https://cdn/face.png', audioUrl: 'https://cdn/v.mp3' })
+  assert.deepEqual(
+    sent.map((r) => [r.modelId, r.contentType, r.kind]),
+    [
+      ['sentinel-image-model', 'image', 'generate'],
+      ['veo-3.1-fast', 'video', 'generate'],
+      // An upscaler's medium is the registry's answer, asked at call time: the source rides where the model reads it.
+      ['topaz-image-upscale', 'image', 'upscale'],
+      ['topaz-video-upscale', 'video', 'upscale'],
+      ['infinitalk', 'video', 'lip-sync'],
+    ],
+  )
+  assert.deepEqual(sent[2].references, { images: ['https://cdn/in.png'] })
+  assert.deepEqual(sent[3].references, { videos: ['https://cdn/in.mp4'] })
 })
 
-test('generate_image rejects an upscale model (kind filter)', async () => {
-  const mcp = await connect(fakeClient())
-  let blocked = false
-  try {
-    const res = await mcp.callTool({
-      name: 'generate_image',
-      arguments: { modelId: 'topaz-image-upscale', prompt: 'x' },
-    })
-    blocked = res.isError === true
-  } catch {
-    blocked = true
-  }
-  assert.ok(blocked, 'an upscale model must not be selectable on generate_image')
+test("a model that does other work comes back as the server's refusal, naming the models to use", async () => {
+  const refusal = "Model 'topaz-image-upscale' is for image upscale, and this call asks for image generation. Image generation models: nano-banana-2, gpt-image-2."
+  const mcp = await connect(
+    fakeClient({
+      generate: async () => {
+        throw Object.assign(new Error(refusal), { status: 400 })
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'topaz-image-upscale', prompt: 'x' } })
+  assert.equal(res.isError, true)
+  assert.match(res.content[0].text, /Image generation models: nano-banana-2, gpt-image-2/)
 })
+
+test('the MCP package names no model and takes no model enum', () => {
+  // A list here is a copy of the registry, and a copy drifts. Model ids appear only in tests.
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+  const files = ['src/server.ts', 'src/models.ts', 'src/format.ts', 'src/index.ts']
+  for (const f of files) {
+    const code = strip(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+    assert.doesNotMatch(code, /\b(veo|seedance|nano-banana|gpt-image|seedream|kling-\d|wan-2|sora|elevenlabs-|topaz|infinitalk|auphonic)[\w.-]*/i, `${f} names a model`)
+    assert.doesNotMatch(code, /modelId:\s*z\s*\.enum\(/, `${f} gives a modelId an enum`)
+    assert.doesNotMatch(code, /FALLBACK|resolveModelEnums/, `${f} keeps a fallback model list`)
+  }
+})
+
 
 test('upscale accepts an upscale model and returns the result', async () => {
   // topaz-image-upscale is kind=upscale, so it is absent from generate_image but
@@ -1049,20 +1103,6 @@ test('upscale accepts an upscale model and returns the result', async () => {
   assert.match(res.content[0].text, /get_generation_status/)
 })
 
-test('upscale rejects a non-upscale model (enum filter)', async () => {
-  const mcp = await connect(fakeClient())
-  let blocked = false
-  try {
-    const res = await mcp.callTool({
-      name: 'upscale',
-      arguments: { modelId: 'nano-banana-2', sourceUrl: 'https://cdn/in.png', factor: '2x' },
-    })
-    blocked = res.isError === true
-  } catch {
-    blocked = true
-  }
-  assert.ok(blocked, 'a generate model must not be selectable on the upscale tool')
-})
 
 test('generate_lip_sync (script mode) builds a portrait + script request and returns the video', async () => {
   let captured
@@ -1142,35 +1182,7 @@ test('generate_lip_sync (audio mode) routes audioUrl into references.audio', asy
   assert.equal(captured.durationSeconds, 4.2)
 })
 
-test('generate_lip_sync accepts only lip-sync models (kind filter)', async () => {
-  const mcp = await connect(fakeClient())
-  let blocked = false
-  try {
-    const res = await mcp.callTool({
-      name: 'generate_lip_sync',
-      arguments: { modelId: 'veo-3.1-fast', imageUrl: 'https://cdn/face.png', audioUrl: 'https://cdn/v.mp3' },
-    })
-    blocked = res.isError === true
-  } catch {
-    blocked = true
-  }
-  assert.ok(blocked, 'a generate video model must not be selectable on generate_lip_sync')
-})
 
-test('generate_video rejects a lip-sync model (kind filter)', async () => {
-  const mcp = await connect(fakeClient())
-  let blocked = false
-  try {
-    const res = await mcp.callTool({
-      name: 'generate_video',
-      arguments: { modelId: 'infinitalk', prompt: 'x' },
-    })
-    blocked = res.isError === true
-  } catch {
-    blocked = true
-  }
-  assert.ok(blocked, 'a lip-sync model must not be selectable on generate_video')
-})
 
 test('list_avatars surfaces the id, base image, and default voice', async () => {
   const mcp = await connect(fakeClient())
@@ -1721,20 +1733,6 @@ test('transcribe returns the transcript text', async () => {
   assert.equal(captured.languageCode, 'en')
 })
 
-test('generate_audio rejects transcribe (outputType filter)', async () => {
-  const mcp = await connect(fakeClient())
-  let blocked = false
-  try {
-    const res = await mcp.callTool({
-      name: 'generate_audio',
-      arguments: { modelId: 'elevenlabs-transcribe', text: 'x' },
-    })
-    blocked = res.isError === true
-  } catch {
-    blocked = true
-  }
-  assert.ok(blocked, 'transcribe (text output) must not be selectable on generate_audio')
-})
 
 // -- posts (content pipeline) -------------------------------------------------
 

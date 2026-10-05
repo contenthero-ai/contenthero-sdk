@@ -54,6 +54,7 @@ export function registerUpscale(program: Command): void {
 
       const request = compact<GenerateRequest>({
         contentType: isVideo ? 'video' : 'image',
+        kind: 'upscale',
         modelId,
         upscaleFactor: opts.factor as string,
         duration: isVideo ? (opts.duration as number) : undefined,

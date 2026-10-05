@@ -46,7 +46,6 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
  */
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
-import { modelChipFor } from './model-presentation.js'
 import {
   ContentHero,
   GenerationTimeoutError,
@@ -62,6 +61,7 @@ import {
   type UpdateAvatarRequest,
 
   type Generation,
+  type GenerateResult,
   CONTENT_SORTS,
   withGraphicWarnings,
 } from '@contenthero/sdk'
@@ -79,18 +79,7 @@ import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
 
 export { GENERATION_WIDGET_URI, MEDIA_HOST } from './widget-resource.js'
 import { GENERATION_WIDGET_URI, MEDIA_HOST, WIDGET_RESOURCE_META } from './widget-resource.js'
-import {
-  resolveModelEnums,
-  type ResolvedModelEnums,
-  BOARD_TYPES,
-  BOARD_TYPE_GUIDANCE,
-  IMAGE_MODEL_GUIDANCE,
-  VIDEO_MODEL_GUIDANCE,
-  AUDIO_MODEL_GUIDANCE,
-  EDIT_AUDIO_MODEL_GUIDANCE,
-  UPSCALE_MODEL_GUIDANCE,
-  LIP_SYNC_MODEL_GUIDANCE,
-} from './models.js'
+import { BOARD_TYPES, BOARD_TYPE_GUIDANCE } from './models.js'
 import {
   assetResult,
   audioResult,
@@ -225,7 +214,15 @@ const SMART_WAIT_MS = 50_000
  * Passing one through would have the widget lay placeholders out against a string it cannot parse. Null
  * lets it fall back to its unshaped box, which is the honest state while nothing is known.
  */
-function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio'): PendingShape {
+function pendingShapeFrom(
+  args: unknown,
+  contentType: 'image' | 'video' | 'audio',
+  /**
+   * The submit response, which names the model from the registry. Absent on a path that never got one (a submit
+   * that timed out with its outputId), where the card shows no chip rather than the id.
+   */
+  submitted?: Pick<GenerateResult, 'modelDisplayName' | 'modelBrandColor' | 'modelIconKey'>,
+): PendingShape {
   const a = (args ?? {}) as {
     modelId?: string
     aspectRatio?: string
@@ -236,7 +233,6 @@ function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio
   }
   const ar = a.aspectRatio
   const displayAspect = !ar || ar === 'auto' || ar === 'adaptive' || !ar.includes(':') ? null : ar
-  const chip = modelChipFor(a.modelId)
   return {
     contentType,
     modelId: a.modelId ?? '',
@@ -248,9 +244,9 @@ function pendingShapeFrom(args: unknown, contentType: 'image' | 'video' | 'audio
      * about something and a card that is about a model id.
      */
     prompt: a.prompt ?? a.script ?? null,
-    modelName: chip?.name ?? null,
-    modelBrandColor: chip?.brandColor ?? null,
-    modelIconKey: chip?.iconKey ?? null,
+    modelName: submitted?.modelDisplayName ?? null,
+    modelBrandColor: submitted?.modelBrandColor ?? null,
+    modelIconKey: submitted?.modelIconKey ?? null,
   }
 }
 
@@ -917,8 +913,6 @@ export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
 export interface RegisterToolsOptions {
   /** Resolve the backend client for a given call (identity bound inside it). */
   getClient: GetClient
-  /** Per-tool model enums, fixed at registration (see resolveModelEnums). */
-  models: ResolvedModelEnums
   /** How long a job-starting tool waits within one call, and how often it looks. Tests shorten it. */
   jobWait?: JobWait
 }
@@ -952,11 +946,11 @@ function buildReferences(parts: References): References | undefined {
 const MEDIA_UPLOAD_BATCH_MAX = 25
 
 /**
- * Register the full ContentHero tool surface on `server`. Synchronous: the model
- * enums are supplied pre-resolved, and the backend client is resolved per call.
+ * Register the full ContentHero tool surface on `server`. Synchronous and model-free: the registry names the models,
+ * read through list_models and get_model, and the backend client is resolved per call.
  */
 export function registerTools(server: McpServer, opts: RegisterToolsOptions): void {
-  const { getClient, models } = opts
+  const { getClient } = opts
   const jobWait = opts.jobWait ?? { waitMs: JOB_WAIT_MS, pollMs: JOB_POLL_MS }
 
   /**
@@ -1198,13 +1192,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        modelId: z.enum(models.image).describe(IMAGE_MODEL_GUIDANCE),
+        modelId: z
+          .string()
+          .describe('The model id. list_models (contentType image) names every image model and what each is for; get_model gives one model\'s options and prompt guide.'),
         prompt: z
           .string()
           .optional()
           .describe('Describe the image to generate. Required for most models; optional for a few that can run from references alone.'),
         aspectRatio: z.string().optional().describe('e.g. 16:9, 1:1, 9:16. Validated per model.'),
-        resolution: z.string().optional().describe('e.g. 1K, 2K, 4K. Model-dependent (e.g. gpt-image-2, nano-banana-2/pro, flux-2-pro, seedream).'),
+        resolution: z.string().optional().describe('e.g. 1K, 2K, 4K. get_model lists the resolutions a model takes; validated per model.'),
         // ⛔ NO `mode`. It named a paid TIER the model id did not: flux-2-pro took "pro" or "flex",
         // flux-1-kontext took "pro" or "max", and the price moved with it, so the id the agent
         // named was not the thing it was billed for. Each tier is now its own model in the
@@ -1231,6 +1227,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const request = compact<GenerateRequest>({
           contentType: 'image',
+          kind: 'generate',
           modelId: args.modelId,
           prompt: args.prompt,
           aspectRatio: args.aspectRatio,
@@ -1267,7 +1264,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           pendingResult(
             submitted.outputId,
             pollAfterSecondsFor('image'),
-            pendingShapeFrom(args, 'image'),
+            pendingShapeFrom(args, 'image', submitted),
           ),
           submitted.charge,
         )
@@ -1357,9 +1354,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Generate Video',
       annotations: WRITE,
       description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Seedance 2.0 has two input modes selected by which references you pass: a startFrame (and optional endFrame) runs start/end-frame mode; referenceImages / referenceVideos / referenceAudio (without a startFrame) run references mode. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Waits up to ~50s; if the render is still running it returns an outputId to poll with get_generation_status. Some models choose an input mode by which references you pass (a startFrame with an optional endFrame, or references alone); get_model describes each model\'s modes. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        modelId: z.enum(models.video).describe(VIDEO_MODEL_GUIDANCE),
+        modelId: z
+          .string()
+          .describe('The model id. list_models (contentType video) names every video model and what each is for; get_model gives one model\'s options, input modes and prompt guide.'),
         prompt: z
           .string()
           .optional()
@@ -1383,11 +1382,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         referenceAudio: z
           .array(z.string())
           .optional()
-          .describe('Reference audio (e.g. Seedance references mode, audio-driven video): each a URL or a previous output id. Only used by models that accept audio references.'),
+          .describe('Reference audio (audio-driven video): each a URL or a previous output id. Only used by models that accept audio references; get_model says which do.'),
         klingElements: z
           .array(KLING_ELEMENT_INPUT)
           .optional()
-          .describe('Kling elements (Kling 3.0): each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Requires a startFrame. See get_model promptReferences (named_tag scheme).'),
+          .describe('Kling elements: each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Only for models that take them (get_model promptReferences, named_tag scheme). Requires a startFrame.'),
         elements: z
           .array(KLING_ELEMENT_INPUT)
           .optional()
@@ -1395,11 +1394,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         multiShot: z
           .boolean()
           .optional()
-          .describe('WAN 2.6: enable multi-shot mode (a single longer sequence with multiple shots) instead of single-shot. For Kling 3.0, pass per-shot prompts via `shots` instead, which turns on multi-shot automatically.'),
+          .describe('Enable multi-shot mode (one longer sequence of several shots) on a model that offers it; get_model says which do. On a model that takes per-shot prompts, pass `shots` instead, which turns multi-shot on.'),
         shots: z
           .array(z.object({ prompt: z.string(), duration: z.number() }))
           .optional()
-          .describe('Kling 3.0 multi-shot mode: an ordered list of shots, each with its own prompt and duration in seconds (1-12 each, total <=15). When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only. Audio is always on in multi-shot.'),
+          .describe('Multi-shot mode with per-shot prompts, on a model that takes them (get_model gives its shot limits): an ordered list of shots, each with its own prompt and duration in seconds. When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only.'),
         ...PLACEMENT_INPUT_FIELDS,
         getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
       },
@@ -1414,6 +1413,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (klingMultiShot) parameters.shots = args.shots
         const request = compact<GenerateRequest>({
           contentType: 'video',
+          kind: 'generate',
           modelId: args.modelId,
           prompt: klingMultiShot ? args.prompt ?? args.shots!.map((s) => s.prompt).join(' ') : args.prompt,
           aspectRatio: args.aspectRatio,
@@ -1461,7 +1461,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           pendingResult(
             submitted.outputId,
             pollAfterSecondsFor('video'),
-            pendingShapeFrom(args, 'video'),
+            pendingShapeFrom(args, 'video', submitted),
           ),
           submitted.charge,
         )
@@ -1485,12 +1485,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Generating audio'),
       annotations: WRITE,
       description:
-        'Generate audio with ElevenLabs: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Generate audio: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        modelId: z.enum(models.audio).describe(AUDIO_MODEL_GUIDANCE),
+        modelId: z
+          .string()
+          .describe('The model id. list_models (contentType audio) names every audio model and what each is for; get_model gives one model\'s inputs.'),
         prompt: z.string().optional().describe('For music / sfx: what to generate.'),
-        text: z.string().optional().describe('For TTS (elevenlabs-tts): the words to speak. Read the model\'s promptGuide with get_model before writing directions into it.'),
-        voiceId: z.string().optional().describe('For TTS: the ElevenLabs voice id.'),
+        text: z.string().optional().describe('For a speech model: the words to speak. Read the model\'s promptGuide with get_model before writing directions into it.'),
+        voiceId: z.string().optional().describe('For a speech model: the voice id (list_voices names them).'),
         voiceName: z.string().optional().describe('For TTS: human-readable voice name (display only).'),
         durationSeconds: z.number().optional().describe('For music / sfx: length in seconds.'),
         promptInfluence: z
@@ -1508,6 +1510,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const request = compact<GenerateRequest>({
           contentType: 'audio',
+          kind: 'generate',
           modelId: args.modelId,
           prompt: args.prompt,
           text: args.text,
@@ -1538,7 +1541,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST on outputs, one job per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        modelId: z.enum(models.editAudio).describe(EDIT_AUDIO_MODEL_GUIDANCE),
+        modelId: z
+          .string()
+          .describe('The model id: an audio model that takes one audio file and returns audio. list_models (contentType audio) names them; get_model gives one model\'s inputs and whether it finishes at once or is polled with get_generation_status.'),
         sourceUrl: z
           .string()
           .optional()
@@ -1598,7 +1603,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Upscale an existing image or video to a higher resolution. Provide the source media URL and a model-supported factor. Waits for the result; if the job is still running it returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        modelId: z.enum(models.upscale).describe(UPSCALE_MODEL_GUIDANCE),
+        modelId: z
+          .string()
+          .describe('The model id: an upscaler. list_models names them, each one\'s contentType saying whether it takes an image or a video; get_model gives its factors.'),
         sourceUrl: z.string().describe('The source image (image upscalers) or video (video upscalers): a URL or a previous output id (e.g. "<id>-1") to upscale an earlier generation.'),
         factor: z.string().describe('Upscale factor, e.g. 2x, 4x. Model-dependent; validated per model.'),
         durationSeconds: z
@@ -1611,9 +1618,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const isVideo = models.upscaleContentType[args.modelId] === 'video'
+        // The registry says what the upscaler takes, asked at call time rather than remembered: no list here can
+        // disagree with it.
+        const isVideo = (await client.getModel(args.modelId)).contentType === 'video'
         const request = compact<GenerateRequest>({
           contentType: isVideo ? 'video' : 'image',
+          kind: 'upscale',
           modelId: args.modelId,
           upscaleFactor: args.factor,
           duration: isVideo ? args.durationSeconds : undefined,
@@ -1644,7 +1654,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           pendingResult(
             submitted.outputId,
             pollAfterSecondsFor('image'),
-            pendingShapeFrom(args, 'image'),
+            pendingShapeFrom(args, 'image', submitted),
           ),
           submitted.charge,
         )
@@ -1670,7 +1680,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Waits up to ~50s; if still rendering it returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        modelId: z.enum(models.lipSync).describe(LIP_SYNC_MODEL_GUIDANCE),
+        modelId: z
+          .string()
+          .describe('The model id: a lip-sync model. list_models (contentType video) names them; get_model gives one model\'s resolutions and inputs.'),
         imageUrl: z.string().describe('The portrait to animate (the speaking subject): an image URL or a previous output id (e.g. "<id>-1") to chain.'),
         audioUrl: z
           .string()
@@ -1679,8 +1691,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         script: z
           .string()
           .optional()
-          .describe('Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl. Spoken by elevenlabs-tts: read its promptGuide with get_model before writing directions into the script.'),
-        voiceId: z.string().optional().describe('ElevenLabs voice id to speak the script (required with script).'),
+          .describe('Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl. Before writing directions into the script, read the speech model\'s promptGuide with get_model.'),
+        voiceId: z.string().optional().describe('The voice to speak the script (list_voices names them; required with script).'),
         voiceName: z.string().optional().describe('Human-readable voice name (display only).'),
         motionPrompt: z
           .string()
@@ -1699,6 +1711,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const request = compact<GenerateRequest>({
           contentType: 'video',
+          kind: 'lip-sync',
           modelId: args.modelId,
           prompt: args.motionPrompt,
           text: args.script,
@@ -1736,7 +1749,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           pendingResult(
             submitted.outputId,
             pollAfterSecondsFor('video'),
-            pendingShapeFrom(args, 'video'),
+            pendingShapeFrom(args, 'video', submitted),
           ),
           submitted.charge,
         )
@@ -2906,7 +2919,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Get one model's full request shape by id: the exact parameters it accepts (input types, prompt mode and char cap, duration range, resolutions, aspect ratios, max references, generation count, audio, features). Ground a generation against this instead of guessing the parameters, then preview cost with the matching generate tool's getCost option before running it.",
       inputSchema: {
-        modelId: z.string().describe('The model id, e.g. from list_models (such as "veo-3.1-fast").'),
+        modelId: z.string().describe('The model id, as list_models names it.'),
       },
     },
     async (args, extra) => {
@@ -4835,14 +4848,10 @@ export const SERVER_INSTRUCTIONS =
   'If a download is blocked, the environment you run in is not allowed to reach that host: tell the user to ' +
   `add ${MEDIA_HOST} to their AI tool's allowed network domains, and do not work around it.`
 
-/**
- * Build a stdio-style server bound to a single env-configured client. The model
- * enums are resolved live from the discovery catalog (the client has a key).
- */
+/** Build a stdio-style server bound to a single env-configured client. */
 export async function buildServer(options: BuildServerOptions = {}): Promise<McpServer> {
   const getClient = options.getClient ?? defaultGetClient
-  const models = await resolveModelEnums(getClient)
   const server = new McpServer({ ...SERVER_INFO }, { instructions: SERVER_INSTRUCTIONS })
-  registerTools(server, { getClient: () => getClient(), models, jobWait: options.jobWait })
+  registerTools(server, { getClient: () => getClient(), jobWait: options.jobWait })
   return server
 }

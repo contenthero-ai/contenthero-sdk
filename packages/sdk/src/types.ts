@@ -259,8 +259,14 @@ export interface TemplateWriteResult {
  * through `parameters`.
  */
 export interface GenerateRequest {
-  /** Media kind. Optional: inferred from the model when omitted. */
+  /** Media kind. Optional: inferred from the model when omitted; when given, a model of another medium is refused. */
   contentType?: 'image' | 'video' | 'audio'
+  /**
+   * The work this call asks for, in the registry's words (a model's `kind` in `listModels`). Optional; when given,
+   * the server refuses a model that does other work and names the models that do this work, instead of running
+   * whatever the model does.
+   */
+  kind?: 'generate' | 'upscale' | 'lip-sync' | 'background-removal'
   /** Model identifier, e.g. 'nano-banana-2'. Required. */
   modelId: string
   /** Text prompt. Required for image/video and for music/sfx audio. */
@@ -413,12 +419,13 @@ export interface GenerateResult {
   charge?: Charge
   /** Present when the result is already complete (audio). */
   outputUrls?: string[]
-  /**
-   * Present when the result is already complete (audio): the model that produced it and how to show it,
-   * the same fields a generation's status carries (see `Generation.modelDisplayName`). Null means show
-   * nothing; never substitute the id.
-   */
+  /** Present when the result is already complete (audio): the model that produced it. */
   modelId?: string
+  /**
+   * How to show the model, from the registry, on every submit: the same fields a generation's status carries (see
+   * `Generation.modelDisplayName`), so a card can name the model from its first frame without any copy of the model
+   * list on the client. Null means show nothing; never substitute the id.
+   */
   modelDisplayName?: string | null
   modelBrandColor?: string | null
   modelIconKey?: string | null
