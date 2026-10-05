@@ -26,7 +26,7 @@ const WIDGET_META = {
   ui: { resourceUri: GENERATION_WIDGET_URI },
   'openai/outputTemplate': GENERATION_WIDGET_URI,
 } as const
-import { GENERATION_WIDGET_URI } from './widget-uri.js'
+import { GENERATION_WIDGET_URI } from './widget-resource.js'
 import type {
   Avatar,
   AvatarSummary,
@@ -1472,30 +1472,53 @@ export function mediaDisplayResult(result: MediaBatchResult): CallToolResult {
   }
 }
 
-/** Phase 1 of an upload: the signed URL + the PUT-then-complete instructions. */
-export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
-  // The headers are listed EXPLICITLY rather than described, because this instruction is executed by an agent
-  // and "with the file's Content-Type" was about to become wrong. Object storage is moving to R2, where the
-  // presigned URL signs the owner in as `x-amz-meta-user_id`; a PUT missing it is refused with
-  // SignatureDoesNotMatch (verified: 403 with Content-Type alone, 200 with both). Telling the caller which
-  // headers to send, from the server's own answer, means the migration needs no change here at all.
-  const headers = r.uploadHeaders ?? { 'Content-Type': 'the file MIME type' }
+/** One file's phase 1 outcome: its signed upload, or why none was created. */
+export type MediaUploadOutcome = { fileName: string } & ({ upload: CreateMediaUploadResult } | { error: string })
+
+/**
+ * Phase 1 of an upload, for a batch: each file's signed URL and the headers its PUT must carry, then one
+ * completion for all of them.
+ *
+ * ⭐ ONE CALL FOR THE BATCH, because each completion used to be its own tool call and each one mounted its own
+ * card: twelve logos uploaded on 2026-10-05 put twelve cards in a row in the person's chat. Completing a batch
+ * together is what lets the person see it as one card (`uploadedMediaBatchResult`).
+ */
+export function mediaUploadsResult(outcomes: MediaUploadOutcome[]): CallToolResult {
+  const created = outcomes.flatMap((o) => ('upload' in o ? [o.upload] : []))
+  const blocks = outcomes.flatMap((o, i) => {
+    const label = `[${i + 1}] ${o.fileName}`
+    if ('error' in o) return [`${label}: could not create its upload: ${o.error}`]
+    const r = o.upload
+    // The headers are listed EXPLICITLY rather than described, because this instruction is executed by an
+    // agent and "with the file's Content-Type" was about to become wrong. On R2 the presigned URL signs the
+    // owner in as `x-amz-meta-user_id`, and a PUT missing it is refused with SignatureDoesNotMatch (verified:
+    // 403 with Content-Type alone, 200 with both). Listing them from the server's own answer means a change of
+    // storage needs no change here.
+    const headers = r.uploadHeaders ?? { 'Content-Type': 'the file MIME type' }
+    return [
+      `${label} (id ${r.outputId}), URL expires ${r.expiresAt}:`,
+      `   ${r.uploadUrl}`,
+      ...Object.entries(headers).map(([k, v]) => `     ${k}: ${v}`),
+    ]
+  })
+  if (created.length === 0) return text(lines(['No upload was created.', ...blocks]), true)
+  const ids = created.map((r) => r.outputId)
   return text(
     lines([
-      `Upload created (id ${r.outputId}). Two steps remain:`,
-      `1. PUT the file bytes to this URL (expires ${r.expiresAt}):`,
-      `   ${r.uploadUrl}`,
-      '   Send EXACTLY these headers, unchanged:',
-      ...Object.entries(headers).map(([k, v]) => `     ${k}: ${v}`),
-      `2. Call complete_media_upload(outputId: "${r.outputId}") to finalize.`,
+      `Created ${created.length === outcomes.length ? created.length : `${created.length} of ${outcomes.length}`} upload(s). Two steps remain:`,
+      "1. PUT each file's bytes to its URL, sending EXACTLY the headers listed under it, unchanged:",
+      ...blocks,
+      `2. Call complete_media_upload once with outputIds ${JSON.stringify(ids)} to finalize them together.`,
       'Once complete, reference the media by its outputId in generations or post assets.',
     ]),
   )
 }
 
-/** A finalized upload or import: a first-class media output. */
+/** One upload's phase 2 outcome: the media it became, or why it did not. */
+export type UploadedMediaOutcome = { outputId: string } & ({ media: UploadedMedia } | { error: string })
+
 /**
- * Media the person's own bytes just became.
+ * Media the person's own bytes just became, for a batch: one card for everything that landed.
  *
  * ## ⭐ AN UPLOAD IS NEW MEDIA IN THEIR LIBRARY, SO IT DISPLAYS
  *
@@ -1503,23 +1526,53 @@ export function mediaUploadResult(r: CreateMediaUploadResult): CallToolResult {
  * second. Confirmation is the value: a thumbnail says the right file landed, where a line of text says
  * only that something did.
  *
- * ⛔ This could not render at all until the API started returning `contentType`. Guessing image from a
- * url's extension is what renders a video as a broken image, so text was the honest answer while the type
- * was unknown, and it remains the answer for a `document`, which has no element.
+ * ⭐ ONE CARD FOR THE BATCH. A batch finalized together is one thing the person did, so it is one card, with a
+ * tile per file, the shape `show_media` already draws. Each tile carries its own id, since the files share no
+ * output.
+ *
+ * ⛔ A tile needs the file's `contentType`: guessing image from a url's extension is what renders a video as
+ * a broken image, so a `document`, which has no element, stays text.
  *
  * ⚠️ Referenceable, unlike an export: `outputId` is exactly what `generate_*` accepts, which is what the
  * prose has always told the caller.
  */
-export function uploadedMediaResult(r: UploadedMedia): CallToolResult {
-  const prose = `Media ready (${idOf({ id: r.outputId, appUrl: r.appUrl })}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`
-  return renderableMedia(prose, r.outputId, r.url, r.contentType, r.appUrl)
+export function uploadedMediaBatchResult(outcomes: UploadedMediaOutcome[]): CallToolResult {
+  const done = outcomes.flatMap((o) => ('media' in o ? [o.media] : []))
+  const prose = lines([
+    `Media ready (${done.length === outcomes.length ? done.length : `${done.length} of ${outcomes.length}`}):`,
+    ...outcomes.map((o, i) =>
+      'media' in o
+        ? `[${i + 1}] ${idOf({ id: o.media.outputId, appUrl: o.media.appUrl })}: ${o.media.url}`
+        : `[${i + 1}] ${o.outputId}: could not finalize: ${o.error}`,
+    ),
+    done.length > 0 ? 'Reference each by outputId in generate_* or add_post_asset, or find it via list_media / get_media.' : null,
+  ])
+  if (done.length === 0) return text(prose, true)
+  const tiles = done.flatMap((m) => {
+    const tile = libraryItemTile(m.outputId, m.url, m.contentType, m.appUrl)
+    return tile ? [tile] : []
+  })
+  if (tiles.length === 0) return text(prose)
+  return { content: [{ type: 'text', text: prose }], structuredContent: mediaWidgetData({ items: tiles }), _meta: WIDGET_META }
+}
+
+/** The tile one new library item draws as, or null for a kind with no element (a document). */
+function libraryItemTile(
+  outputId: string,
+  url: string,
+  contentType: string | undefined,
+  appUrl: string | null | undefined,
+): MediaWidgetItem | null {
+  const medium = contentType === 'image' || contentType === 'video' || contentType === 'audio' ? contentType : undefined
+  if (!medium) return null
+  return { url, name: outputId, contentType: medium, reference: outputId, openUrl: appUrl ?? undefined }
 }
 
 /**
- * The shared tail of every "here is one new library item" result.
+ * The tail of a "here is one new library item" result (an import).
  *
- * ⚠️ ONE PLACE, because an upload and an import differ in their prose and in nothing else that matters
- * here. Written twice they would drift the first time one of them learned something the other did not.
+ * ⚠️ Its tile comes from `libraryItemTile`, the one a batch of uploads draws too, so an imported file and an
+ * uploaded one cannot render as two slightly different shapes.
  */
 function renderableMedia(
   prose: string,
@@ -1528,24 +1581,11 @@ function renderableMedia(
   contentType: string | undefined,
   appUrl: string | null | undefined,
 ): CallToolResult {
-  const medium =
-    contentType === 'image' || contentType === 'video' || contentType === 'audio' ? contentType : undefined
-  if (!outputId || !medium) return text(prose)
+  const tile = outputId ? libraryItemTile(outputId, url, contentType, appUrl) : null
+  if (!outputId || !tile) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],
-    structuredContent: mediaWidgetData({
-      outputId,
-      contentType: medium,
-      items: [
-        {
-          url,
-          name: outputId,
-          contentType: medium,
-          reference: outputId,
-          openUrl: appUrl ?? undefined,
-        },
-      ],
-    }),
+    structuredContent: mediaWidgetData({ outputId, contentType: tile.contentType, items: [tile] }),
     _meta: WIDGET_META,
   }
 }

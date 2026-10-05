@@ -77,8 +77,8 @@ import { getClient as defaultGetClient } from './client.js'
  */
 import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
 
-export { GENERATION_WIDGET_URI } from './widget-uri.js'
-import { GENERATION_WIDGET_URI } from './widget-uri.js'
+export { GENERATION_WIDGET_URI, MEDIA_HOST } from './widget-resource.js'
+import { GENERATION_WIDGET_URI, MEDIA_HOST, WIDGET_RESOURCE_META } from './widget-resource.js'
 import {
   resolveModelEnums,
   type ResolvedModelEnums,
@@ -124,10 +124,12 @@ import {
   folderContentsResult,
   mediaBatchResult,
   mediaDisplayResult,
-  mediaUploadResult,
+  mediaUploadsResult,
+  type MediaUploadOutcome,
   importedMediaResult,
   importPendingResult,
-  uploadedMediaResult,
+  uploadedMediaBatchResult,
+  type UploadedMediaOutcome,
   assetOrderResult,
   assetRemovedResult,
   postRemovedResult,
@@ -886,84 +888,6 @@ function renders(progress: string) {
 }
 
 
-/**
- * ⛔⛔⛔ **WITHOUT THIS THE FRAME LOADS NOTHING, AND THE SPEC SAYS SO PLAINLY:**
- * "Empty or omitted → no network resources (secure default)."
- *
- * Measured in Claude Desktop 2026-09-19: the widget mounted, the chrome rendered, the variation strip and
- * the buttons worked, and every image was a broken icon showing its own filename. The frame was doing
- * exactly what it was told, which was to permit nothing.
- *
- * `resourceDomains` maps to `img-src`, `media-src`, `script-src`, `style-src` and `font-src`, so it is the
- * one field that decides whether an `<img>` or a `<video>` in this widget can reach our storage.
- *
- * ⚠️ NO `connectDomains`. The widget never calls `fetch`: it points element sources at urls and lets the
- * browser load them. Granting network access it does not use would widen the sandbox for nothing.
- *
- * ⚠️ These are the hosts that actually serve generated media, which is a SMALLER set than the server's SSRF
- * allowlist. That list governs what the SERVER may fetch and inline; this governs what the FRAME may load.
- * Two different questions, deliberately not one constant.
- */
-/**
- * The one host an agent downloads a user's files from: the gateway, whose capability urls carry their token in
- * the query string, so a link needs no header and no sign-in. Public-class files come from it too for an agent
- * (the token names the public store), so a sandbox that reaches only listed hosts needs this one line.
- *
- * ⚠️ The app holds the same fact as `AGENT_MEDIA_HOST` (`lib/media/agent-media-url.ts`), derived from its gateway
- * config; `__tests__/media/agent-media-host-is-published.test.ts` there fails if they differ.
- */
-export const MEDIA_HOST = 'media.contenthero.ai'
-
-/**
- * The public CDN, which browsers still read public-class files from. The frame may paint and read it, so a link
- * stored before every reader moved to the gateway still displays; an agent is never TOLD to reach it.
- */
-const PUBLIC_CDN_HOST = 'cdn.contenthero.ai'
-
-/**
- * What the frame may PAINT. Named once so the ChatGPT mirror below is derived rather than retyped.
- */
-const WIDGET_RESOURCE_DOMAINS = [MEDIA_HOST, PUBLIC_CDN_HOST].map((host) => `https://${host}`)
-
-/**
- * What the frame may READ.
- *
- * ⛔⛔ **A SEPARATE FIELD, AND OMITTING IT BLOCKS `fetch` ENTIRELY.** `resourceDomains` maps to `img-src`,
- * `media-src` and friends, which is why the pictures render. `connectDomains` maps to `connect-src`, and the
- * spec's default for an omitted list is "no network connections (secure default)". So the frame could
- * DISPLAY our media and could not READ it, which is exactly the shape needed to save a file: downloading
- * means holding the bytes.
- *
- * ⚠️ Same origins, deliberately a separate list rather than an alias of the one above. They answer
- * different questions (may the frame paint this, may the frame read this) and a future answer to one is not
- * automatically the answer to the other.
- */
-const WIDGET_CONNECT_DOMAINS = [MEDIA_HOST, PUBLIC_CDN_HOST].map((host) => `https://${host}`)
-
-const WIDGET_CSP = {
-  _meta: {
-    ui: {
-      csp: {
-        resourceDomains: WIDGET_RESOURCE_DOMAINS,
-        connectDomains: WIDGET_CONNECT_DOMAINS,
-      },
-    },
-    /**
-     * ⭐⭐ **THE SAME TWO LISTS UNDER CHATGPT'S NAMES, IN SNAKE CASE.** OpenAI's reference calls this
-     * "legacy CSP metadata" and it is still what their host reads, so a widget that mounts there without
-     * it renders a frame full of broken images: precisely the failure we already diagnosed in Claude when
-     * `resourceDomains` was missing, and it would have repeated verbatim one host over.
-     *
-     * ⛔ **DERIVED FROM THE ARRAYS ABOVE.** The two lists hold the same origins today and answer different
-     * questions, so they stay separate variables. What must never happen is a THIRD and FOURTH hand-typed
-     * copy: adding a domain for Claude and forgetting it for ChatGPT is a bug that only one of you can see.
-     */
-    'openai/widgetCSP': {
-      resource_domains: WIDGET_RESOURCE_DOMAINS,
-      connect_domains: WIDGET_CONNECT_DOMAINS,
-    },
-  },
-} as const
 
 
 /**
@@ -1020,6 +944,12 @@ function buildReferences(parts: References): References | undefined {
   const refs = compact(parts as Record<string, unknown>) as References
   return Object.keys(refs).length > 0 ? refs : undefined
 }
+
+/**
+ * How many files one `create_media_upload` or `complete_media_upload` takes. Each file is its own request to the
+ * server, run concurrently, so this bounds one call's fan-out; a larger set is several calls.
+ */
+const MEDIA_UPLOAD_BATCH_MAX = 25
 
 /**
  * Register the full ContentHero tool surface on `server`. Synchronous: the model
@@ -1106,9 +1036,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.resource(
     'generation-any-version',
     new ResourceTemplate('ui://contenthero/generation-{version}.html', { list: undefined }),
-    { description: 'Any previously published generation widget, served as the current one.', mimeType: RESOURCE_MIME_TYPE, ...WIDGET_CSP },
+    { description: 'Any previously published generation widget, served as the current one.', mimeType: RESOURCE_MIME_TYPE, ...WIDGET_RESOURCE_META },
     async (uri) => ({
-      contents: [{ uri: uri.href, mimeType: RESOURCE_MIME_TYPE, text: GENERATION_WIDGET_HTML, ...WIDGET_CSP }],
+      contents: [{ uri: uri.href, mimeType: RESOURCE_MIME_TYPE, text: GENERATION_WIDGET_HTML, ...WIDGET_RESOURCE_META }],
     }),
   )
 
@@ -1118,7 +1048,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     {
       description: 'Shows what a generation produced: every variation, playable and downloadable.',
       mimeType: RESOURCE_MIME_TYPE,
-      ...WIDGET_CSP,
+      ...WIDGET_RESOURCE_META,
     },
     async () => {
       /**
@@ -1138,7 +1068,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // content item and treats the `resources/list` entry as a FALLBACK, so a host that only consults the
       // read path would otherwise see no policy and apply the secure default of blocking everything.
       return {
-        contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text, ...WIDGET_CSP }],
+        contents: [{ uri: GENERATION_WIDGET_URI, mimeType: RESOURCE_MIME_TYPE, text, ...WIDGET_RESOURCE_META }],
       }
     },
   )
@@ -2839,23 +2769,35 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Media Upload',
       annotations: WRITE,
       description:
-        'Upload a local file as first-class media (phase 1 of 2). Returns a signed uploadUrl and the exact headers to send; PUT the file bytes to that URL with those headers unchanged, then call complete_media_upload with the returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import_media instead. Requires the assets:write scope.',
+        'Upload local files as first-class media (phase 1 of 2). Accepts 1-25 files in one call. Returns, for each file, a signed uploadUrl and the exact headers to send; PUT each file\'s bytes to its URL with those headers unchanged, then call complete_media_upload once with every returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import_media instead. Requires the assets:write scope.',
       inputSchema: {
-        fileName: z.string().describe('The file name (used for its extension), e.g. "cover.png".'),
-        contentType: z.string().describe('The file MIME type, e.g. "image/png" or "video/mp4".'),
-        sizeBytes: z.number().optional().describe('Optional file size in bytes.'),
+        files: z
+          .array(
+            z.object({
+              fileName: z.string().describe('The file name (used for its extension), e.g. "cover.png".'),
+              contentType: z.string().describe('The file MIME type, e.g. "image/png" or "video/mp4".'),
+              sizeBytes: z.number().optional().describe('Optional file size in bytes.'),
+            }),
+          )
+          .min(1)
+          .max(MEDIA_UPLOAD_BATCH_MAX)
+          .describe('1-25 files to upload.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return mediaUploadResult(
-          await client.createMediaUpload({
-            fileName: args.fileName,
-            contentType: args.contentType,
-            sizeBytes: args.sizeBytes,
+        // Each file is its own upload on the server; one failing does not stop the others, and says why.
+        const outcomes = await Promise.all(
+          args.files.map(async (f): Promise<MediaUploadOutcome> => {
+            try {
+              return { fileName: f.fileName, upload: await client.createMediaUpload(f) }
+            } catch (err) {
+              return { fileName: f.fileName, error: err instanceof Error ? err.message : String(err) }
+            }
           }),
         )
+        return mediaUploadsResult(outcomes)
       } catch (err) {
         return errorResult(err)
       }
@@ -2870,15 +2812,28 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Completing the upload'),
       annotations: WRITE,
       description:
-        'Finalize a media upload (phase 2 of 2) after the file bytes were PUT to the signed uploadUrl from create_media_upload. Publishes the media and returns its outputId + public URL. Requires the assets:write scope.',
+        'Finalize uploads (phase 2 of 2) after each file\'s bytes were PUT to its signed uploadUrl from create_media_upload. Accepts 1-25 outputIds in one call: finalize a batch together, so the person sees it as one card. Publishes each file and returns its outputId and URL. Requires the assets:write scope.',
       inputSchema: {
-        outputId: z.string().describe('The outputId returned by create_media_upload.'),
+        outputIds: z
+          .array(z.string())
+          .min(1)
+          .max(MEDIA_UPLOAD_BATCH_MAX)
+          .describe('1-25 outputIds returned by create_media_upload.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return uploadedMediaResult(await client.completeMediaUpload(args.outputId))
+        const outcomes = await Promise.all(
+          args.outputIds.map(async (outputId): Promise<UploadedMediaOutcome> => {
+            try {
+              return { outputId, media: await client.completeMediaUpload(outputId) }
+            } catch (err) {
+              return { outputId, error: err instanceof Error ? err.message : String(err) }
+            }
+          }),
+        )
+        return uploadedMediaBatchResult(outcomes)
       } catch (err) {
         return errorResult(err)
       }

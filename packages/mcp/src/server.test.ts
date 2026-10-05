@@ -5,8 +5,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
-import { GENERATION_WIDGET_URI } from './widget-uri.js'
-import { PACKAGE_VERSION } from './widget/generation.js'
+import { createHash } from 'node:crypto'
+import { GENERATION_WIDGET_URI, WIDGET_RESOURCE_META } from './widget-resource.js'
+import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
 import { assertGroupsCoverTools, groupedToolNames, TOOL_GROUPS } from './groups.js'
 
 /** A discovery-catalog entry, in the /api/v1/models projection shape. */
@@ -3534,7 +3535,7 @@ test('the widget binding is emitted in BOTH the modern and legacy spellings', as
   assert.equal(gen?._meta?.['ui/resourceUri'], GENERATION_WIDGET_URI)
 })
 
-test('the widget uri carries the package version, so a publish can never be served from cache', async () => {
+test('the widget uri is named by its version and its contents, so no change can be served from cache', async () => {
   /**
    * ⭐ THE REAL INVARIANT, asserted rather than the literal. A host caches a widget resource by its uri, so a
    * name that is the same across builds means new bytes are never fetched and a shipped fix stays invisible.
@@ -3545,6 +3546,11 @@ test('the widget uri carries the package version, so a publish can never be serv
     GENERATION_WIDGET_URI.includes(PACKAGE_VERSION),
     `widget uri "${GENERATION_WIDGET_URI}" must contain the package version "${PACKAGE_VERSION}"`,
   )
+  // ⭐ And a digest of everything a host caches under the name: the HTML and the resource metadata. A version
+  // alone left every rebuild of one version under one name, so a fix to the frame's metadata (2026-10-05,
+  // `prefersBorder`) could not reach a host that already held that version.
+  const digest = createHash('sha256').update(GENERATION_WIDGET_HTML).update(JSON.stringify(WIDGET_RESOURCE_META)).digest('hex').slice(0, 12)
+  assert.equal(GENERATION_WIDGET_URI, `ui://contenthero/generation-${PACKAGE_VERSION}-${digest}.html`)
   // And it must still be a `ui://` identifier, which is what makes the host ask this server for its contents.
   assert.ok(GENERATION_WIDGET_URI.startsWith('ui://'))
 
@@ -3661,6 +3667,24 @@ test('the ChatGPT CSP mirror lists the same origins as the MCP Apps one', async 
   assert.ok(csp?.resourceDomains?.length, 'the MCP Apps csp names no resource domains')
   assert.deepEqual(mirror?.resource_domains, csp?.resourceDomains, 'resource domains differ between hosts')
   assert.deepEqual(mirror?.connect_domains, csp?.connectDomains, 'connect domains differ between hosts')
+})
+
+/**
+ * ⭐⭐ The widget draws its own card, so it asks every host for no border of its own. Omitted, the host decides,
+ * and Claude decided to draw one: the card sat inside a second outline with a different corner radius (Claude
+ * Desktop, 2026-10-05). Asserted on both the listing and the read result, under both hosts' names, because a host
+ * may consult either.
+ */
+test('the widget asks every host for no border, on the listing and the read', async () => {
+  const mcp = await connect(fakeClient())
+  const { resources } = await mcp.listResources()
+  const listed = resources.find((r) => r.uri === GENERATION_WIDGET_URI)?._meta ?? {}
+  const { contents } = await mcp.readResource({ uri: GENERATION_WIDGET_URI })
+  const read = (contents[0] as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {}
+  for (const meta of [listed, read]) {
+    assert.equal((meta.ui as { prefersBorder?: boolean } | undefined)?.prefersBorder, false, 'MCP Apps prefersBorder')
+    assert.equal(meta['openai/widgetPrefersBorder'], false, 'ChatGPT widgetPrefersBorder')
+  }
 })
 
 /**
@@ -4009,4 +4033,56 @@ test('archive and favorite take a template', async () => {
   const assetTypes = (name) => tools.find((t) => t.name === name).inputSchema.properties.assetType.enum
   assert.ok(assetTypes('archive').includes('template'))
   assert.ok(assetTypes('favorite').includes('template'))
+})
+
+/**
+ * ⭐ A batch of uploads is one call each way and one card. Each completion used to be its own call, and each
+ * mounted its own card: twelve logos put twelve cards in a row in the person's chat (2026-10-05). A file that
+ * fails is named with its reason, never dropped, and does not stop the rest.
+ *
+ * Break-verified: mounting a card per finalized file, or dropping the failed one from the prose, turns this red.
+ */
+test('uploads go in a batch: one call each way, one card, and a failed file named', async () => {
+  const media = (id: string) => ({
+    outputId: id,
+    shortId: `s-${id}`,
+    url: `https://media.contenthero.ai/${id}/original.png?t=tok`,
+    contentType: 'image',
+    appUrl: `https://app.contenthero.ai/media/s-${id}`,
+  })
+  const mcp = await connect(
+    fakeClient({
+      createMediaUpload: async (f: { fileName: string }) => {
+        if (f.fileName === 'broken.png') throw new Error('Unsupported file type.')
+        return {
+          outputId: `o-${f.fileName}`,
+          uploadUrl: `https://upload.example/${f.fileName}`,
+          uploadHeaders: { 'content-type': 'image/png' },
+          expiresAt: '2026-10-05T17:00:00Z',
+        }
+      },
+      completeMediaUpload: async (id: string) => {
+        if (id === 'gone') throw new Error('Upload not found.')
+        return media(id)
+      },
+    }),
+  )
+
+  const created = await mcp.callTool({
+    name: 'create_media_upload',
+    arguments: { files: [{ fileName: 'a.png', contentType: 'image/png' }, { fileName: 'broken.png', contentType: 'image/png' }] },
+  })
+  const createdText = (created.content as Array<{ text: string }>)[0].text
+  assert.match(createdText, /Created 1 of 2 upload\(s\)/)
+  assert.match(createdText, /https:\/\/upload\.example\/a\.png/)
+  assert.match(createdText, /broken\.png: could not create its upload: Unsupported file type\./)
+  assert.match(createdText, /complete_media_upload once with outputIds \["o-a\.png"\]/)
+
+  const done = await mcp.callTool({ name: 'complete_media_upload', arguments: { outputIds: ['one', 'two', 'gone'] } })
+  const doneText = (done.content as Array<{ text: string }>)[0].text
+  assert.match(doneText, /Media ready \(2 of 3\)/)
+  assert.match(doneText, /gone: could not finalize: Upload not found\./)
+  assert.ok(done._meta, 'the batch mounts a card')
+  const items = (done.structuredContent as { items: Array<{ reference: string }> }).items
+  assert.deepEqual(items.map((i) => i.reference), ['one', 'two'], 'one card, one tile per finalized file')
 })

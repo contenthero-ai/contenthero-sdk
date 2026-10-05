@@ -208,7 +208,6 @@ const ALIASES: Record<string, Record<string, string>> = {
   create_folder: { type: '--smart', query: '--text' },
   update_folder: { folderIds: '--also', query: '--text', addItems: '--add', removeItems: '--remove' },
   get_media: { items: '<id>' },
-  create_media_upload: { fileName: '--name' },
   import_media: { fileName: '--name' },
   create_kling_element: { images: '--image' },
   get_generation_status: { outputIds: '<id>', wait: '--no-wait' },
@@ -250,8 +249,8 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   update_avatar: { ops: '`avatar look add` / `avatar look remove`' },
   update_brand_kit: { extract: 'the `brand-kit extract` subcommand' },
   add_brand_knowledge: { sourceType: 'one flag per source type: --text, --url, --youtube, --file, --file-url' },
-  create_media_upload: { sizeBytes: '`media upload` reads the size from the local file' },
-  complete_media_upload: { outputId: '`media upload` runs both steps, so the id never reaches the caller' },
+  create_media_upload: { files: '`media upload` takes one local file per run and reads its name, type and size from it' },
+  complete_media_upload: { outputIds: '`media upload` runs both steps, so the ids never reach the caller' },
   get_preview: {
     renderId: '`preview` starts the render and polls it in one command',
     bucketName: '`preview` starts the render and polls it in one command',
