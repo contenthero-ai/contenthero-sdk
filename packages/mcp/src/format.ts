@@ -1808,6 +1808,9 @@ export function modelResult(m: ModelInfo): CallToolResult {
       ...refLines.map((l) => `  ${l}`),
       enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
       ...promptReferenceLines(m.promptReferences),
+      ...(m.boardTypes?.length
+        ? ['', 'Board types (generate_board boardType):', ...m.boardTypes.map((t) => `  ${t.boardType}: ${t.summary}`)]
+        : []),
       '',
       "Build the request within this shape, preview cost with the matching generate tool's getCost option, then run it.",
     ]),

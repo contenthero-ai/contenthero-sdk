@@ -55,21 +55,22 @@ share `--cost` (preflight, charges nothing), `--wait` / `--no-wait` (default
 waits), and `--timeout <seconds>`.
 
 ```bash
+# Model ids come from `contenthero model list`
 # Preflight the cost, then generate and wait for the URLs
-contenthero generate image "a red ceramic cube on white" --model nano-banana-2 --cost
-contenthero generate image "a red ceramic cube on white" --model nano-banana-2
+contenthero generate image "a red ceramic cube on white" --model <imageModelId> --cost
+contenthero generate image "a red ceramic cube on white" --model <imageModelId>
 
 # Submit without blocking, then poll
-ID=$(contenthero generate video "drone shot over a canyon" --model veo-3.1-fast --no-wait | jq -r .outputId)
+ID=$(contenthero generate video "drone shot over a canyon" --model <videoModelId> --no-wait | jq -r .outputId)
 contenthero generation status "$ID"
 contenthero generation wait "$ID" --timeout 300
 
 # Chain: feed a previous output id straight in as a reference (URL or output id)
-contenthero generate video "slow zoom in" --model veo-3.1-fast --start-frame "$ID"
+contenthero generate video "slow zoom in" --model <videoModelId> --start-frame "$ID"
 
 # Audio (synchronous) and upscaling
-contenthero generate audio --model elevenlabs-tts --text "Hello there" --voice <voiceId>
-contenthero upscale "$ID" --model topaz-image-upscale --factor 2x
+contenthero generate audio --model <audioModelId> --text "Hello there" --voice <voiceId>
+contenthero upscale "$ID" --model <upscaleModelId> --factor 2x
 ```
 
 Exit code 4 means a render was accepted but did not finish before the timeout. The

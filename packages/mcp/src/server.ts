@@ -80,7 +80,6 @@ import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
 
 export { GENERATION_WIDGET_URI, MEDIA_HOST } from './widget-resource.js'
 import { GENERATION_WIDGET_URI, MEDIA_HOST, WIDGET_RESOURCE_META } from './widget-resource.js'
-import { BOARD_TYPES, BOARD_TYPE_GUIDANCE } from './models.js'
 import {
   assetResult,
   audioResult,
@@ -1359,7 +1358,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~40s; boards render slowly (minutes), so it usually returns an outputId to poll with get_generation_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
-        boardType: z.enum(BOARD_TYPES).describe(BOARD_TYPE_GUIDANCE),
+        boardType: z.string().describe("One of the board types listed by get_model('reference-boards')."),
         prompt: z
           .string()
           .optional()
@@ -1616,9 +1615,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_generation_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST of jobs, one per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every job\'s outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
+        operation: z
+          .enum(['isolate', 'enhance'])
+          .optional()
+          .describe('isolate: voice isolation. enhance: loudness leveling and noise cleanup. The server picks the model that performs it. Omitted: enhance in in-place mode, else isolate.'),
         modelId: z
           .string()
-          .describe('The model id: an audio model that takes one audio file and returns audio. list_models (contentType audio) names them; get_model gives one model\'s inputs and whether it finishes at once or is polled with get_generation_status.'),
+          .optional()
+          .describe('Instead of operation: an audio model that takes one audio file and returns audio (it resolves to the operation it performs). list_models (contentType audio) names them; get_model gives one model\'s inputs and whether it finishes at once or is polled with get_generation_status.'),
         sourceUrl: z
           .string()
           .optional()
@@ -1645,6 +1649,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const request = compact<EditAudioRequest>({
+          operation: args.operation,
           modelId: args.modelId,
           sourceUrl: args.sourceUrl,
           durationSeconds: args.durationSeconds,

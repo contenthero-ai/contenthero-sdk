@@ -758,25 +758,20 @@ test('generate_board surfaces a smart-wait timeout as a pollable pending result'
   assert.ok(!res.isError)
 })
 
-test('generate_board rejects an unknown boardType at the schema boundary', async () => {
+test('generate_board passes any boardType to the server, whose list is the only one', async () => {
+  let sent: unknown
   const mcp = await connect(
     fakeClient({
-      generateBoardAndWait: async () => {
-        throw new Error('handler should not be reached for an invalid boardType')
+      generateBoardAndWait: async (req: { boardType: string }) => {
+        sent = req.boardType
+        throw Object.assign(new Error('Invalid or missing boardType. Expected one of: character, pose.'), { status: 400 })
       },
     }),
   )
-  let blocked = false
-  try {
-    const res = await mcp.callTool({
-      name: 'generate_board',
-      arguments: { boardType: 'not-a-type', prompt: 'x' },
-    })
-    blocked = res.isError === true
-  } catch {
-    blocked = true
-  }
-  assert.ok(blocked, 'expected an invalid boardType to be blocked before the handler')
+  const res = await mcp.callTool({ name: 'generate_board', arguments: { boardType: 'not-a-type', prompt: 'x' } })
+  assert.equal(sent, 'not-a-type')
+  assert.equal(res.isError, true)
+  assert.match((res.content as Array<{ text: string }>)[0].text, /Expected one of/)
 })
 
 /**
@@ -1129,12 +1124,14 @@ test("a model that does other work comes back as the server's refusal, naming th
 test('the MCP package names no model and takes no model enum', () => {
   // A list here is a copy of the registry, and a copy drifts. Model ids appear only in tests.
   const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
-  const files = ['src/server.ts', 'src/models.ts', 'src/format.ts', 'src/index.ts']
+  // src/models.ts held the board types until 7.52; the server's list is the only one now (get_model('reference-boards')).
+  const files = ['src/server.ts', 'src/format.ts', 'src/index.ts']
   for (const f of files) {
     const code = strip(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
     assert.doesNotMatch(code, /\b(veo|seedance|nano-banana|gpt-image|seedream|kling-\d|wan-2|sora|elevenlabs-|topaz|infinitalk|auphonic)[\w.-]*/i, `${f} names a model`)
     assert.doesNotMatch(code, /modelId:\s*z\s*\.enum\(/, `${f} gives a modelId an enum`)
     assert.doesNotMatch(code, /FALLBACK|resolveModelEnums/, `${f} keeps a fallback model list`)
+    assert.doesNotMatch(code, /BOARD_TYPES|'mascot'/, `${f} keeps a copy of the board types`)
   }
 })
 
@@ -3939,7 +3936,7 @@ const SPENDING_CALLS = {
   generate_board: { boardType: 'character', prompt: 'a stoic ranger' },
   generate_video: { modelId: 'veo-3.1-fast', prompt: 'a city at dusk' },
   generate_audio: { modelId: 'elevenlabs-tts', text: 'hello', voiceId: 'v1' },
-  edit_audio: { modelId: 'elevenlabs-voice-isolator', sourceUrl: 'https://cdn/in.mp3' },
+  edit_audio: { operation: 'isolate', sourceUrl: 'https://cdn/in.mp3' },
   upscale: { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' },
   generate_lip_sync: { modelId: 'infinitalk', imageUrl: 'https://cdn/face.png', script: 'hi', voiceId: 'v1' },
   transcribe: { audioUrl: 'https://cdn/clip.mp3' },

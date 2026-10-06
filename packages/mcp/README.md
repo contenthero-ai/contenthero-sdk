@@ -50,9 +50,9 @@ claude mcp add contenthero --env CONTENTHERO_API_KEY=ch_live_xxx -- npx -y @cont
 
 Once connected, just ask in natural language. The agent picks the tool and model:
 
-> "Generate a 16:9 image of a golden retriever astronaut with nano-banana-2."
+> "Generate a 16:9 image of a golden retriever astronaut with `<imageModelId>`."
 
-> "Make an 8 second video of a city at dusk with audio using veo-3.1-fast."
+> "Make an 8 second video of a city at dusk with audio using `<videoModelId>`."
 
 > "Read this script aloud with ElevenLabs voice `<id>`."
 

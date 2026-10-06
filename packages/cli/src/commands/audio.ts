@@ -13,8 +13,8 @@ import { makeClient } from '../context.js'
 import { compact, runEditAudio, renderEnhanceClips, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { toFloat, toInt, toJson } from '../args.js'
 
-const VOICE_ISOLATION_MODEL_ID = 'elevenlabs-voice-isolator'
-const AUDIO_ENHANCE_MODEL_ID = 'auphonic-enhance'
+// Each subcommand names its OPERATION; the server picks the model that performs it from its registry, so no model
+// id is written here (these commands used to send a vendor's model id each).
 
 export function registerAudio(program: Command): void {
   const audio = program.command('audio').description('Audio editing (existing audio -> audio)')
@@ -33,7 +33,7 @@ export function registerAudio(program: Command): void {
     .action(async (source: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const request = compact<EditAudioRequest>({
-        modelId: VOICE_ISOLATION_MODEL_ID,
+        operation: 'isolate',
         sourceUrl: source,
         durationSeconds: opts.duration as number | undefined,
         projectId: opts.project as string | undefined,
@@ -58,7 +58,7 @@ export function registerAudio(program: Command): void {
     .action(async (source: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const request = compact<EditAudioRequest>({
-        modelId: AUDIO_ENHANCE_MODEL_ID,
+        operation: 'enhance',
         sourceUrl: source,
         durationSeconds: opts.duration as number | undefined,
       })
@@ -82,7 +82,7 @@ export function registerAudio(program: Command): void {
       const { client, ctx } = makeClient(command)
       const result = await client.editAudio(
         compact<EditAudioRequest>({
-          modelId: AUDIO_ENHANCE_MODEL_ID,
+          operation: 'enhance',
           projectId,
           clipIds: opts.clips as string[] | undefined,
           // Explicit even when clip ids are given, so the request states its MODE rather than leaving the

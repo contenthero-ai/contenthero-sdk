@@ -16,23 +16,12 @@
  */
 
 import { Option, type Command } from 'commander'
-import type { GenerateRequest, GenerateBoardRequest, BoardType } from '@contenthero/sdk'
+import type { GenerateRequest, GenerateBoardRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
 import { collect, toFloat, toInt, toJson } from '../args.js'
 
-const BOARD_TYPES: BoardType[] = [
-  'character',
-  'pose',
-  'mascot',
-  'creature',
-  'weapon',
-  'vehicle',
-  'object',
-  'location',
-  'shot',
-]
 
 
 /** Add the shared async flags to a waitable generate command. */
@@ -210,22 +199,16 @@ export function registerGenerate(program: Command): void {
       .command('board')
       .description('Generate a Reference Board (dense multi-panel reference sheet, 3:4 / 4K)')
       .argument('[prompt]', 'subject description (required when no --ref is given)')
-      .requiredOption('-t, --type <type>', `board type: ${BOARD_TYPES.join(', ')}`)
+      .requiredOption('-t, --type <type>', 'board type (`contenthero model get reference-boards` lists them)')
       .option('--ref <urlOrId>', 'source image (URL or output id); repeatable', collect)
       .option('-n, --num <count>', 'number of board variations (1-4)', toInt)
       .option('--name <name>', 'optional board name')
       .option('--avatar <id>', 'associate the board with this avatar (see `contenthero avatar list`)'),
   ).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
-    const boardType = opts.type as string
-    if (!BOARD_TYPES.includes(boardType as BoardType)) {
-      throw new CliError(
-        `Invalid --type "${boardType}". Expected one of: ${BOARD_TYPES.join(', ')}.`,
-        EXIT.USAGE,
-      )
-    }
+    // Not validated here: the server's list is the only one, and it refuses an unknown type by naming the valid ones.
     const { client, ctx } = makeClient(command)
     const request = compact<GenerateBoardRequest>({
-      boardType: boardType as BoardType,
+      boardType: opts.type as string,
       prompt,
       referenceImages: opts.ref as string[] | undefined,
       numImages: opts.num as number | undefined,

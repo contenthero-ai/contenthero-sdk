@@ -100,6 +100,9 @@ export function registerModel(program: Command): void {
           ...(model.promptReferences && model.promptReferences.scheme !== 'none'
             ? [['Referencing', `${model.promptReferences.scheme}: ${model.promptReferences.instruction}`] as [string, string]]
             : []),
+          ...(model.boardTypes?.length
+            ? [['Board types', model.boardTypes.map((t) => `${t.boardType} (${t.summary})`).join(', ')] as [string, string]]
+            : []),
         ])
       })
     })

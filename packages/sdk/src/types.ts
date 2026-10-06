@@ -341,17 +341,21 @@ export interface GenerateRequest {
   playheadFrame?: number
 }
 
-/** The nine Reference Board types. */
-export type BoardType =
-  | 'character'
-  | 'pose'
-  | 'mascot'
-  | 'creature'
-  | 'weapon'
-  | 'vehicle'
-  | 'object'
-  | 'location'
-  | 'shot'
+/**
+ * A Reference Board type: one of the `boardTypes` that `getModel('reference-boards')` lists.
+ *
+ * A string, not a union: the server's list is the only one, and a copy here would fall behind it. The server
+ * refuses a type it does not know, naming the valid ones.
+ */
+export type BoardType = string
+
+/** One board type as `getModel('reference-boards')` lists it. */
+export interface BoardTypeInfo {
+  boardType: BoardType
+  label: string
+  /** What the type is for. */
+  summary: string
+}
 
 /**
  * A Reference Board generation request. A board is a dense multi-panel reference
@@ -359,7 +363,7 @@ export type BoardType =
  * pipeline (3:4 / 4K). Provide at least one of `referenceImages` or `prompt`.
  */
 export interface GenerateBoardRequest {
-  /** One of the nine board types. Required. */
+  /** One of the board types `getModel('reference-boards')` lists. Required. */
   boardType: BoardType
   /**
    * Freeform description / context. The source image leads when both are given;
@@ -545,9 +549,17 @@ export interface CanvasPlacementIntent {
   asBackground?: boolean
 }
 
+/** What `editAudio` does: isolate the voice, or enhance (level loudness and clean up noise). */
+export type EditAudioOperation = 'isolate' | 'enhance'
+
 export interface EditAudioRequest {
-  /** The audio-processing model to run. */
-  modelId: string
+  /**
+   * The operation to perform. The server picks the model that performs it from its registry, so the caller never
+   * names a vendor. Omitted: `enhance` in in-place mode, else `isolate`.
+   */
+  operation?: EditAudioOperation
+  /** A model id instead of an operation; it resolves to the operation that model performs. Prefer `operation`. */
+  modelId?: string
   /**
    * Public URL (or a previous output id) of the source audio to process.
    *
@@ -568,7 +580,7 @@ export interface EditAudioRequest {
   /**
    * IN-PLACE mode: enhance the audio OF EXISTING CLIPS on `projectId`, rather than processing a standalone file.
    *
-   * Requires `projectId` and `modelId: 'auphonic-enhance'`. Omitting `clipIds` while passing
+   * Requires `projectId`; the operation is `enhance` (implied). Omitting `clipIds` while passing
    * `enhanceClips: true` means every audible clip on the timeline, the same whole-timeline default the sibling
    * timeline ops use. Silenced clips are excluded automatically; enhancing audio nobody can hear would spend
    * credits and then overwrite something the user deliberately muted.
@@ -1791,6 +1803,8 @@ export interface ModelInfo {
   capabilities: ModelCapabilities
   /** How to address references in the prompt (present on getModel; optional on list items). */
   promptReferences?: PromptReferences
+  /** The board pipeline only (`getModel('reference-boards')`): every board type `generateBoard` takes. */
+  boardTypes?: BoardTypeInfo[]
 }
 
 // ---------------------------------------------------------------------------

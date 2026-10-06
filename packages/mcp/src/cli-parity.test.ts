@@ -243,7 +243,8 @@ const ALIASES: Record<string, Record<string, string>> = {
 /** Inputs the CLI expresses by STRUCTURE rather than by a flag: a subcommand, or work it does for the caller. */
 const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   edit_audio: {
-    modelId: 'the subcommand picks the model: `audio isolate` or `audio enhance`',
+    operation: 'the subcommand names it: `audio isolate` or `audio enhance`',
+    modelId: 'the subcommand names the operation, and the server picks the model',
     enhanceClips: 'the `audio enhance-clips` subcommand',
   },
   update_avatar: { ops: '`avatar look add` / `avatar look remove`' },

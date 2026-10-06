@@ -20,6 +20,8 @@ export type {
   CostEstimate,
   GenerateBoardRequest,
   BoardType,
+  BoardTypeInfo,
+  EditAudioOperation,
   Generation,
   GenerationOutput,
   GenerationStatus,
