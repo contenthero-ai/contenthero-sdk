@@ -2170,6 +2170,13 @@ export interface CardAssetInput {
   metadata?: Record<string, unknown> | null
 }
 
+/**
+ * One in-place edit to a card's notes, for `UpdateCardInput.notesEdits`. `append` adds its text to the
+ * end exactly as given (no separator is inserted); `find` must match exactly one place, and `replace`
+ * swaps that occurrence (`""` deletes it).
+ */
+export type NotesEdit = { append: string } | { find: string; replace: string }
+
 export interface UpdateCardInput {
   title?: string
   platform?: PostPlatform
@@ -2211,8 +2218,18 @@ export interface UpdateCardInput {
    *
    * Only `notes` is guarded. Every other field on this input is last-write-wins, which is correct for a
    * title or a status and wrong for a document people append to.
+   *
+   * Optional with `notesEdits`: given, the edits land only on that revision (a mismatch is the same 409);
+   * absent, they apply to the notes as they are when the call arrives.
    */
   expectedRevision?: number
+  /**
+   * Change `notes` in place without resending them. Each edit is `{ append }`, which adds to the end, or
+   * `{ find, replace }`, where `find` must match exactly one place in the current notes. Edits apply in
+   * order, all or none, and the server refuses the whole call naming the failing edit when one cannot
+   * apply. Cannot be combined with `notes`.
+   */
+  notesEdits?: NotesEdit[]
   metadata?: Record<string, unknown> | null
   /**
    * The card's posts. DECLARATIVE and keyed by PLATFORM: pass the whole set, and a platform no

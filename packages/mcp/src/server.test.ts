@@ -2064,6 +2064,55 @@ test('list filters forward favorited/archived to the client', async () => {
   assert.equal(voiceOpts.favorited, true)
 })
 
+/**
+ * In-place notes edits. The tool passes them through untouched, in order, and does NOT demand a revision:
+ * the server applies them to the notes as they are when the call arrives. Which keys may combine is the
+ * server's rule, so the schema refuses only a key that is not an edit field.
+ */
+test('update_card passes notesEdits through in order, with no revision', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      updateCard: async (id, input) => {
+        captured = input
+        return { id, title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }
+      },
+    }),
+  )
+  const notesEdits = [{ append: '\n\nNew paragraph' }, { find: 'draft', replace: 'ready' }]
+  const res = await mcp.callTool({ name: 'update_card', arguments: { cardId: 'p1', notesEdits } })
+  assert.notEqual(res.isError, true)
+  assert.deepEqual(captured.notesEdits, notesEdits)
+  assert.equal('expectedRevision' in captured, false)
+  assert.equal('notes' in captured, false)
+})
+
+test('update_card advertises notesEdits with the approved description', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const field = tools.find((t) => t.name === 'update_card')?.inputSchema.properties?.notesEdits as
+    | { type?: string; description?: string; items?: { additionalProperties?: boolean } }
+    | undefined
+  assert.ok(field, 'notesEdits must be a parameter')
+  assert.equal(field.type, 'array')
+  assert.equal(
+    field.description,
+    'Change the notes in place without resending them. Each edit is { append: text }, which adds to the end, or { find, replace }, where find must match exactly one place in the current notes. Edits apply in order, all or none, to the notes as they are when the call arrives, so no expectedRevision is needed. Prefer this to notes for any change smaller than a rewrite.',
+  )
+  assert.equal(field.items?.additionalProperties, false, 'a key that is not an edit field is refused')
+})
+
+test('update_card refuses an edit carrying a key that is not an edit field', async () => {
+  let called = false
+  const mcp = await connect(fakeClient({ updateCard: async () => { called = true; return {} as never } }))
+  const res = await mcp.callTool({
+    name: 'update_card',
+    arguments: { cardId: 'p1', notesEdits: [{ append: 'x', mode: 'prepend' }] },
+  })
+  assert.equal(res.isError, true)
+  assert.equal(called, false)
+})
+
 test('update_card sets posts declaratively, keyed by platform', async () => {
   let captured
   const mcp = await connect(

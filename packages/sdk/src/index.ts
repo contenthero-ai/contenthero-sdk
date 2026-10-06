@@ -136,6 +136,7 @@ export type {
   ListStagesOptions,
   CreateCardInput,
   UpdateCardInput,
+  NotesEdit,
   PostInput,
   CardAssetInput,
   PublishPostResult,

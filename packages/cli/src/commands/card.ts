@@ -253,6 +253,11 @@ export function registerCard(program: Command): void {
       'the revision `card get` reported. Required with --notes: a card\'s notes have several independent writers, and a write that cannot name the revision it read would silently erase the others',
       toInt,
     )
+    .option(
+      '--notes-edits <json>',
+      'change the notes in place, as JSON, IN ORDER: {"append":"..."} adds to the end; {"find":"...","replace":"..."} swaps the one place find matches. All or none; no --expected-revision needed',
+      toJson,
+    )
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (short id, output id or first 8 characters, optionally with "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)', toList)
@@ -274,6 +279,7 @@ export function registerCard(program: Command): void {
         spaceId: opts.space as string | undefined,
         notes: opts.notes as string | undefined,
         expectedRevision: opts.expectedRevision as number | undefined,
+        notesEdits: opts.notesEdits as UpdateCardInput['notesEdits'],
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
         tags: opts.tags as string[] | undefined,

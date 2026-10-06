@@ -58,6 +58,7 @@ import {
   type PostInput,
   type BrandKitAccountInput,
   type CardAssetInput,
+  type NotesEdit,
   type UpdateAvatarRequest,
 
   type Generation,
@@ -3684,6 +3685,24 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             + 'notes actually change.',
           ),
         notes: z.string().optional().describe('Working notes on the card. Plain text or markdown; tables render here. No emojis.'),
+        // ⚠️ ONE LOOSE OBJECT RATHER THAN A UNION, deliberately. Which keys may combine is the server's rule
+        // (`lib/text/apply-text-edits.ts` in the app), and it answers a bad combination by naming the edit and
+        // why. A zod union here would reject the same input first with a generic schema error, and would be a
+        // second copy of the rule to keep in step. `.strict()` still refuses a key that is not an edit field.
+        notesEdits: z
+          .array(
+            z
+              .object({
+                append: z.string().optional(),
+                find: z.string().optional(),
+                replace: z.string().optional(),
+              })
+              .strict(),
+          )
+          .optional()
+          .describe(
+            'Change the notes in place without resending them. Each edit is { append: text }, which adds to the end, or { find, replace }, where find must match exactly one place in the current notes. Edits apply in order, all or none, to the notes as they are when the call arrives, so no expectedRevision is needed. Prefer this to notes for any change smaller than a rewrite.',
+          ),
         coverUrl: z.string().optional().describe('Public URL for the post cover.'),
         coverOutputId: z
           .string()
@@ -3711,13 +3730,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { cardId, cardIds, posts, assets, ...input } = args
+        const { cardId, cardIds, posts, assets, notesEdits, ...input } = args
         // The two declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than duplicating the shape in zod.
+        // `notesEdits` is cast for the same reason: the server owns which of its keys may combine.
         const patch = {
           ...input,
           ...(posts !== undefined ? { posts: posts as PostInput[] } : {}),
           ...(assets !== undefined ? { assets: assets as CardAssetInput[] } : {}),
+          ...(notesEdits !== undefined ? { notesEdits: notesEdits as NotesEdit[] } : {}),
         }
         // `cardIds` widens the path id, matching update_folder's folderId / folderIds. One card still
         // goes through updateCard so the single-card response shape is unchanged for every caller.

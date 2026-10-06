@@ -127,3 +127,14 @@ test('media watch --frame-width asks for wider keyframes', async () => {
   const items = seen[0]?.body?.items as Array<Record<string, unknown>>
   assert.equal(items[0]?.frameWidth, 1280)
 })
+
+test('card update --notes-edits sends the edits in order, with no revision required', async () => {
+  const edits = [{ append: '\n\nNew paragraph' }, { find: 'draft', replace: 'ready' }]
+  const r = await run('card', 'update', 'c1', '--notes-edits', JSON.stringify(edits))
+  assert.equal(r.method, 'PATCH')
+  assert.equal(r.path, '/api/v1/cards/c1')
+  assert.deepEqual(r.body?.notesEdits, edits)
+  // The point of the field: an edit is not a whole write, so the CLI must not demand the revision.
+  assert.equal(r.body && 'expectedRevision' in r.body, false)
+  assert.equal(r.body && 'notes' in r.body, false)
+})
