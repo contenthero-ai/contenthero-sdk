@@ -448,7 +448,7 @@ export function completedResult(
   // Each output by its media id, the name to pass back, so no reader numbers anything; one that produced nothing is
   // listed by its status, so the others keep their own numbers.
   const lines = [header, ...outputLines(gen)]
-  if (gen.deliveredShort) lines.push(`${gen.deliveredShort.reason} The charge is for what was delivered.`)
+  if (gen.deliveredShort) lines.push(gen.deliveredShort.reason)
   const p = gen.placement
   if (p) {
     if (p.projectType === 'canvas') {
@@ -1335,14 +1335,15 @@ export function mediaBatchResult(
    */
   const crowdedOut = images.some((s) => s?.reason === 'budget-spent')
   const summary =
-    `Resolved ${okCount}/${items.length} media item(s); ${shownImages} image(s) attached below` +
-    (keyframeCount > 0 ? ` (incl. ${keyframeCount} video keyframe(s))` : '') +
-    (reasons.length > 0 ? `; not attached: ${reasons.join('; ')}` : '') +
-    (crowdedOut ? '. Ask for fewer items per call to see the rest' : '') +
+    `Found ${okCount} of ${items.length} item(s); showing ${shownImages} image(s) below` +
+    (keyframeCount > 0 ? ` (including ${keyframeCount} video keyframe(s))` : '') +
+    '.' +
+    (reasons.length > 0 ? ` Not shown: ${reasons.join('; ')}.` : '') +
+    (crowdedOut ? ' Ask for fewer items per call to see the rest.' : '') +
     (keyframesDropped > 0
-      ? `; ${keyframesDropped} keyframe(s) not attached (over this result's size limit): ask for fewer frames or a narrower fromSec/toSec`
+      ? ` ${keyframesDropped} keyframe(s) not shown: too large for this reply. Ask for fewer frames or a narrower fromSec/toSec.`
       : '') +
-    `.\n\n` +
+    `\n\n` +
     items
       .map((it, i) => batchItemLine(it, i, Boolean(images[i]?.image) || (admitted[i]?.length ?? 0) > 0))
       .join('\n')

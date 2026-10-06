@@ -660,6 +660,8 @@ async function fetchAudioBytes(url: string, budget: number, deadline?: number): 
 type ImageSkipReason =
   | 'host-not-allowed'
   | 'fetch-failed'
+  /** The call's deadline came before the file did: nothing is wrong with the file, so it says so (7.49). */
+  | 'out-of-time'
   | 'not-ok'
   | 'not-an-image'
   /** Bigger than the whole per-result allowance: it would never have fit, at any position in the call. */
@@ -680,21 +682,25 @@ interface FetchedImage {
 
 type ImageFetch = { ok: true; image: FetchedImage } | { ok: false; reason: ImageSkipReason; detail?: string }
 
-/** Human-readable, and deliberately short: it rides in a tool result a person reads. */
-function skipLabel(reason: ImageSkipReason, detail?: string): string {
+/**
+ * Why an image is not shown, in words a person reads: each cause named plainly, with no status codes or byte counts
+ * (approved by Taylan, 2026-10-06). A missing file and a slow one read differently, because the remedy differs.
+ */
+function skipLabel(reason: ImageSkipReason): string {
   switch (reason) {
     case 'host-not-allowed':
-      return 'host not allowed'
+      return 'not a ContentHero file'
+    case 'out-of-time':
+      return 'took too long to load'
     case 'fetch-failed':
-      return `fetch failed${detail ? ` (${detail})` : ''}`
     case 'not-ok':
-      return `refused${detail ? ` (HTTP ${detail})` : ''}`
+      return "couldn't be loaded"
     case 'not-an-image':
-      return `not an image${detail ? ` (${detail})` : ''}`
+      return 'not an image'
     case 'over-budget':
-      return `too large to inline${detail ? ` (${detail})` : ''}`
+      return 'too large to show here'
     case 'budget-spent':
-      return `no room left in this result${detail ? ` (${detail})` : ''}`
+      return 'no room left in this reply'
   }
 }
 
@@ -712,7 +718,7 @@ function budgetReason(encodedLength: number): ImageSkipReason {
 async function fetchImage(url: string, budget: number, deadline?: number): Promise<ImageFetch> {
   if (!isAllowedImageHost(url)) return { ok: false, reason: 'host-not-allowed' }
   const ms = fetchTimeoutMs(deadline)
-  if (ms <= 0) return { ok: false, reason: 'fetch-failed', detail: 'out of time' }
+  if (ms <= 0) return { ok: false, reason: 'out-of-time' }
   let res: Response
   try {
     /**
@@ -727,6 +733,8 @@ async function fetchImage(url: string, budget: number, deadline?: number): Promi
      */
     res = await fetch(url, { signal: AbortSignal.timeout(ms) })
   } catch (err) {
+    // Cut at the call's deadline: the file is fine, the call ran out of time.
+    if (err instanceof Error && err.name === 'TimeoutError') return { ok: false, reason: 'out-of-time' }
     return { ok: false, reason: 'fetch-failed', detail: err instanceof Error ? err.name : undefined }
   }
   if (!res.ok) return { ok: false, reason: 'not-ok', detail: String(res.status) }
@@ -860,7 +868,7 @@ async function inlineImagesWithinBudget(
       budget -= hit.image.data.length
       out.push({ image: hit.image })
     } else {
-      out.push({ image: null, skipped: skipLabel(hit.reason, hit.detail), reason: hit.reason })
+      out.push({ image: null, skipped: skipLabel(hit.reason), reason: hit.reason })
     }
   }
   return out

@@ -1513,7 +1513,7 @@ test('get_media keyframes spend the one result budget: in order, and the ones th
   assert.deepEqual(images.map((i) => i.data[0]), ['A', 'B'])
   const total = res.content.reduce((n, c) => n + (c.type === 'image' ? c.data.length : 0), 0)
   assert.ok(total <= 900_000, `inline bytes ${total} exceed the allowance`)
-  assert.match(res.content[0].text, /1 keyframe\(s\) not attached \(over this result's size limit\): ask for fewer frames or a narrower fromSec\/toSec/)
+  assert.match(res.content[0].text, /1 keyframe\(s\) not shown: too large for this reply\. Ask for fewer frames or a narrower fromSec\/toSec\./)
   assert.ok(res.content.some((c) => c.type === 'text' && /2 of 3 keyframe\(s\) for item \[1\]/.test(c.text)))
 })
 
@@ -4160,13 +4160,46 @@ test('get_media with a region shows the cut, not the whole picture, and says how
   assert.match(res.content[0].text, /zoom: 400x300 at \(100, 50\) in the file's pixels, shown at 400x300 \(1 px per file px\)/)
 })
 
-test('a VEO output kept at 720p says so, and that the charge follows it', async () => {
+test('a VEO output kept at 720p says so in the server\'s one sentence, with nothing added', async () => {
+  const reason = 'Delivered 720p because 1080p is not available at this time. You were charged the 720p price.'
   const res = completedResult({
     outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast', error: null, createdAt: 't', completedAt: 't',
     outputs: outs(['https://cdn/v.mp4']),
-    deliveredShort: { reason: 'The 1080p version was not ready within 5 minutes, so the 720p video was kept.' },
+    deliveredShort: { reason },
   })
-  assert.match(res.content[0].text, /The 1080p version was not ready within 5 minutes, so the 720p video was kept\. The charge is for what was delivered\./)
+  const lines = res.content[0].text.split('\n')
+  assert.ok(lines.includes(reason), 'the sentence prints as its own line, unchanged')
+  assert.doesNotMatch(res.content[0].text, /charge is for what was delivered|not ready within/)
+})
+
+test('get_media says why an image is not shown in plain words, never a status code or a fetch error', async () => {
+  // Approved 2026-10-06: a slow file reads differently from a missing one, and neither prints HTTP codes or sizes.
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.includes('/slow.png')) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' })
+    return new Response('gone', { status: 404 })
+  }) as typeof fetch
+  try {
+    const item = (mediaId: string, imageUrl: string) => ({ ok: true, input: { mediaId }, url: imageUrl, imageUrl, type: 'image', mediaId, otherMediaIds: [] })
+    const mcp = await connect(
+      fakeClient({
+        getMediaBatch: async () => ({
+          items: [
+            item('Elsewhere1', 'https://cdn.example/a.png'),
+            item('SlowFile12', 'https://media.contenthero.ai/u/slow.png?t=tok'),
+            item('GoneFile12', 'https://media.contenthero.ai/u/gone.png?t=tok'),
+          ],
+        }),
+      }),
+    )
+    const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'Elsewhere1' }, { mediaId: 'SlowFile12' }, { mediaId: 'GoneFile12' }] } })
+    const text = res.content[0].text
+    assert.match(text, /^Found 3 of 3 item\(s\); showing 0 image\(s\) below\. Not shown: not a ContentHero file; took too long to load; couldn't be loaded\./)
+    assert.doesNotMatch(text, /HTTP|fetch failed|TimeoutError|out of time|inline|result's size/)
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })
 
 test('inline bytes stop at the call deadline instead of fetching past it', async () => {
