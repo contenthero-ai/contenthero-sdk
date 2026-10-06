@@ -1333,6 +1333,12 @@ export interface MediaSummary {
    * the file is not one of our registered objects; absent from a server that predates it.
    */
   assetId?: string | null
+  /**
+   * The smallest copy the library keeps of this image, for drawing it small; null when it keeps none. Present only
+   * when the listing was asked for small copies (`smallCopies`). Never a substitute for `url` when the file itself is
+   * wanted: to download, deliver or show it large.
+   */
+  smallUrl?: string | null
 }
 
 /** Full studio output detail as returned by `getMedia`. */
@@ -1513,6 +1519,8 @@ export interface ListMediaOptions {
   archived?: boolean
   limit?: number
   offset?: number
+  /** Give each image its `smallUrl`: the smallest copy the library keeps, for drawing it small. */
+  smallCopies?: boolean
 }
 
 /** Media kinds that semantic library search can return / filter by. */
@@ -1544,6 +1552,12 @@ export interface SearchMediaResult {
   relevance: number
   /** For videos, the specific scenes that matched, best first (empty for image/audio). */
   scenes: SearchMediaScene[]
+  /**
+   * The smallest copy the library keeps of this image, for drawing it small; null when it keeps none. Present only
+   * when the listing was asked for small copies (`smallCopies`). Never a substitute for `url` when the file itself is
+   * wanted: to download, deliver or show it large.
+   */
+  smallUrl?: string | null
 }
 
 /** Options for searchMedia. */
@@ -1552,6 +1566,8 @@ export interface SearchMediaOptions {
   kinds?: MediaKind[]
   /** Maximum number of assets to return (default 12, max 50). */
   limit?: number
+  /** Give each image its `smallUrl`: the smallest copy the library keeps, for drawing it small. */
+  smallCopies?: boolean
 }
 
 // ─── Library folders (Unified Content Library, Phase D) ──────────────────────
@@ -1594,7 +1610,18 @@ export interface DerivedFolder {
 
 /** One item inside a folder: media (variation-atomic) or an entity (project/post, manual folders only). */
 export type FolderItem =
-  | { type: 'media'; kind: MediaKind | null; mediaId: string | null; appUrl?: string; url: string | null; summary: string | null; isFavorited: boolean; relevance?: number }
+  | {
+      type: 'media'
+      kind: MediaKind | null
+      mediaId: string | null
+      appUrl?: string
+      url: string | null
+      /** The smallest copy kept of an image, when the folder was read with `smallCopies`; as on `MediaSummary`. */
+      smallUrl?: string | null
+      summary: string | null
+      isFavorited: boolean
+      relevance?: number
+    }
   | { type: 'project' | 'card'; id: string; name: string; subtype: string | null }
 
 export interface CreateFolderInput {

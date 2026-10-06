@@ -4210,6 +4210,40 @@ test('list_media pages with offset', async () => {
   assert.equal(opts.offset, 40)
 })
 
+test('the media listings take smallCopies and print each small copy as one, the file itself where none is kept (8.5)', async () => {
+  const asked: Record<string, unknown> = {}
+  const image = { url: 'https://media/a.png', smallUrl: 'https://media/a.vision.webp' }
+  const bare = { url: 'https://media/b.png', smallUrl: null }
+  const mcp = await connect(
+    fakeClient({
+      listMedia: async (o) => {
+        asked.list = o.smallCopies
+        return [
+          { id: '1', shortId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Aaaaaaaa', generationSize: 1, isFavorited: false, kind: 'creation', boardType: null, source: 'creations', fileName: null, durationSeconds: null, ...image },
+          { id: '2', shortId: 'Bbbbbbbb', appUrl: 'https://app/media/Bbbbbbbb', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Bbbbbbbb', generationSize: 1, isFavorited: false, kind: 'creation', boardType: null, source: 'creations', fileName: null, durationSeconds: null, ...bare },
+        ]
+      },
+      searchMedia: async (_q, o) => {
+        asked.search = o.smallCopies
+        return [{ mediaId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', kind: 'image', summary: null, tags: [], relevance: 0.9, scenes: [], ...image }]
+      },
+      getFolder: async (_id, o) => {
+        asked.folder = o?.smallCopies
+        return { folder: { name: 'Wall' }, items: [{ type: 'media', kind: 'image', mediaId: 'Bbbbbbbb', summary: null, isFavorited: false, ...bare }] }
+      },
+    }),
+  )
+  const list = (await mcp.callTool({ name: 'list_media', arguments: { smallCopies: true } })).content[0].text
+  assert.match(list, /\(media Aaaaaaaa.*\| small copy: https:\/\/media\/a\.vision\.webp$/m)
+  assert.doesNotMatch(list, /https:\/\/media\/a\.png/)
+  assert.match(list, /\(media Bbbbbbbb.*\| https:\/\/media\/b\.png$/m)
+  const search = (await mcp.callTool({ name: 'search_media', arguments: { query: 'serum', smallCopies: true } })).content[0].text
+  assert.match(search, /\| small copy: https:\/\/media\/a\.vision\.webp$/m)
+  const folder = (await mcp.callTool({ name: 'get_folder', arguments: { folderId: 'f1', smallCopies: true } })).content[0].text
+  assert.match(folder, /\(media Bbbbbbbb.*\| https:\/\/media\/b\.png$/m)
+  assert.deepEqual(asked, { list: true, search: true, folder: true })
+})
+
 test('get_media with a region shows the cut, not the whole picture, and says how it maps back', async () => {
   const cut = 'data:image/webp;base64,' + 'Q'.repeat(64)
   let captured

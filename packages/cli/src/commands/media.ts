@@ -1,7 +1,7 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
- *   media list [--type --kind --status --limit --offset]   recent outputs, newest first
- *   media search <query> [--kinds --limit]                  semantic search of the editable library
+ *   media list [--type --kind --status --limit --offset --small-copies]   recent outputs, newest first
+ *   media search <query> [--kinds --limit --small-copies]                  semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
  *   media zoom <idOrUrl> <x,y,width,height>                 a region, cut from the original at its own detail
  *
@@ -148,6 +148,7 @@ export function registerMedia(program: Command): void {
     .option('--archived', 'creations only: only outputs with an archived variation')
     .option('--limit <n>', 'how many to return (default 20)', toInt)
     .option('--offset <n>', 'how many to skip, for the next page (default 0)', toInt)
+    .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       if (opts.source && !LIST_SOURCES.includes(opts.source as MediaSource)) {
         throw new CliError(
@@ -177,6 +178,7 @@ export function registerMedia(program: Command): void {
         archived: opts.archived ? true : undefined,
         limit: opts.limit as number | undefined,
         offset: opts.offset as number | undefined,
+        smallCopies: opts.smallCopies ? true : undefined,
       })
       // One row per output (the atomic grain), each named by its own media id.
       emit(items, ctx, (rows: MediaSummary[]) =>
@@ -201,6 +203,7 @@ export function registerMedia(program: Command): void {
     .argument('<query>', 'natural-language description of the media to find')
     .option('--kinds <kinds>', `restrict to media kinds (comma-separated): ${SEARCH_KINDS.join(', ')}`, toList)
     .option('--limit <n>', 'max assets to return (default 12, max 50)', toInt)
+    .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
     .action(async (query: string, opts: Record<string, unknown>, command: Command) => {
       const kinds = opts.kinds as string[] | undefined
       if (kinds) {
@@ -214,6 +217,7 @@ export function registerMedia(program: Command): void {
       const results = await client.searchMedia(query, {
         kinds: kinds as MediaKind[] | undefined,
         limit: opts.limit as number | undefined,
+        smallCopies: opts.smallCopies ? true : undefined,
       })
       emit(results, ctx, (rows: SearchMediaResult[]) =>
         table(

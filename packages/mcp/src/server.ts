@@ -2490,6 +2490,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // One wording for the option every media listing takes (8.5): what a small copy is for, never its size.
+  const smallCopiesInput = z.boolean().optional().describe(
+    "Link each image's small copy instead of the file itself, where the library keeps one: for drawing images small, as a graphic that shows many at once does. Never for downloading or delivering a file, or showing it large.",
+  )
+
   // -- list_media -----------------------------------------------------------
   server.registerTool(
     'list_media',
@@ -2516,6 +2521,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         archived: z.boolean().optional().describe('Creations only. Only outputs that have an archived variation.'),
         limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
         offset: z.number().int().min(0).optional().describe('How many to skip, for the next page (default 0).'),
+        smallCopies: smallCopiesInput,
       },
     },
     async (args, extra) => {
@@ -2531,6 +2537,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             archived: args.archived,
             limit: args.limit,
             offset: args.offset,
+            smallCopies: args.smallCopies,
           }),
         )
       } catch (err) {
@@ -2556,13 +2563,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Restrict results to these media kinds. Omit to search all kinds.'),
         limit: z.number().int().min(1).max(50).optional().describe('Maximum number of assets to return (default 12, max 50).'),
+        smallCopies: smallCopiesInput,
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         return mediaSearchResult(
-          await client.searchMedia(args.query, { kinds: args.kinds, limit: args.limit }),
+          await client.searchMedia(args.query, { kinds: args.kinds, limit: args.limit, smallCopies: args.smallCopies }),
         )
       } catch (err) {
         return errorResult(err)
@@ -2606,10 +2614,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         "Return the contents of one folder. The folder id is either one of the account's own folder ids or a built-in derived-folder key. A manual folder returns exactly the items filed in it; a smart folder computes its members live from its saved query; a derived folder returns its built-in set. Items are media (with kind and a description) and, in manual folders, entities such as projects or posts.",
       inputSchema: {
         folderId: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, cards).'),
+        smallCopies: smallCopiesInput,
       },
     },
     async (args, extra) => {
-      try { const r = await (await getClient(extra)).getFolder(args.folderId); return folderContentsResult(r.folder, r.items) } catch (err) { return errorResult(err) }
+      try { const r = await (await getClient(extra)).getFolder(args.folderId, { smallCopies: args.smallCopies }); return folderContentsResult(r.folder, r.items) } catch (err) { return errorResult(err) }
     },
   )
 

@@ -44,9 +44,10 @@ export function registerFolder(program: Command): void {
     .command('get')
     .description("A folder's contents (a folder id or a derived key: recents, favorites, edits, canvas, cards)")
     .argument('<id>', 'folder id or derived key')
-    .action(async (id: string, _opts: Record<string, unknown>, command: Command) => {
+    .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const { items } = await client.getFolder(id)
+      const { items } = await client.getFolder(id, { smallCopies: opts.smallCopies ? true : undefined })
       emit(items, ctx, (rows: FolderItem[]) =>
         table(
           ['KIND', 'REF', 'DETAIL'],

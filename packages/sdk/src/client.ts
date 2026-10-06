@@ -773,6 +773,7 @@ export class ContentHero {
     if (options.archived) q.set('archived', 'true')
     if (options.limit != null) q.set('limit', String(options.limit))
     if (options.offset != null) q.set('offset', String(options.offset))
+    if (options.smallCopies) q.set('smallCopies', 'true')
     const qs = q.toString()
     const data = await this.request<{ media: MediaSummary[] }>(
       'GET',
@@ -804,6 +805,7 @@ export class ContentHero {
     const q = new URLSearchParams({ query })
     if (options.kinds && options.kinds.length > 0) q.set('kinds', options.kinds.join(','))
     if (options.limit != null) q.set('limit', String(options.limit))
+    if (options.smallCopies) q.set('smallCopies', 'true')
     const data = await this.request<{ results: SearchMediaResult[] }>(
       'GET',
       `/api/v1/media/search?${q.toString()}`,
@@ -818,11 +820,15 @@ export class ContentHero {
     return this.request<{ folders: Folder[]; derived: DerivedFolder[] }>('GET', '/api/v1/library/folders')
   }
 
-  /** A folder's contents. `folderId` is a folder id or a derived key (recents|favorites|edits|canvas|posts). */
-  async getFolder(folderId: string): Promise<{ folder: Folder | null; items: FolderItem[] }> {
+  /**
+   * A folder's contents. `folderId` is a folder id or a derived key (recents|favorites|edits|canvas|posts).
+   * `smallCopies` gives each image its `smallUrl`, the smallest copy the library keeps, for drawing it small.
+   */
+  async getFolder(folderId: string, options: { smallCopies?: boolean } = {}): Promise<{ folder: Folder | null; items: FolderItem[] }> {
+    const qs = options.smallCopies ? '?smallCopies=true' : ''
     const data = await this.request<{ folder: Folder | null; items: FolderItem[] }>(
       'GET',
-      `/api/v1/library/folders/${encodeURIComponent(folderId)}`,
+      `/api/v1/library/folders/${encodeURIComponent(folderId)}${qs}`,
     )
     return { folder: data.folder, items: data.items }
   }

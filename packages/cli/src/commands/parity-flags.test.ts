@@ -76,6 +76,13 @@ test('brand-kit create from a social profile alone is accepted (the flag its han
   assert.deepEqual(r.body?.brandAccounts, [{ platform: 'instagram', handleOrUrl: 'acme' }])
 })
 
+test('media list, media search and folder get send --small-copies (8.5)', async () => {
+  assert.equal((await run('media', 'list', '--small-copies')).query.get('smallCopies'), 'true')
+  assert.equal((await run('media', 'search', 'serum', '--small-copies')).query.get('smallCopies'), 'true')
+  assert.equal((await run('folder', 'get', 'f1', '--small-copies')).query.get('smallCopies'), 'true')
+  assert.equal((await run('media', 'list')).query.get('smallCopies'), null)
+})
+
 test('folder update --text re-queries a smart folder', async () => {
   const r = await run('folder', 'update', 'f1', '--text', 'sunsets')
   assert.deepEqual(r.body?.query, { text: 'sunsets' })

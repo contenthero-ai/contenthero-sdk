@@ -1071,6 +1071,15 @@ export function statusActionResult(
   return text(`${action} ${what}.`)
 }
 
+/**
+ * An item's link in a listing: its small copy, marked as one, when the listing was asked for small copies and the
+ * library keeps one (8.5); otherwise the file itself.
+ */
+function listingLink(item: { url: string | null; smallUrl?: string | null }): string {
+  if (item.smallUrl) return ` | small copy: ${item.smallUrl}`
+  return item.url ? ` | ${item.url}` : ''
+}
+
 /** List of library media, one row per VARIATION (the atomic grain). */
 export function mediaListResult(items: MediaSummary[]): CallToolResult {
   if (!items.length) return text('No media found.')
@@ -1092,7 +1101,7 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
     const assetStr = m.assetId ? ` | asset ${m.assetId}` : ''
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
-    const urlStr = m.url ? ` | ${m.url}` : ''
+    const urlStr = listingLink(m)
     return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${nameStr}${durStr}${assetStr} | ${m.status}${promptStr}${urlStr}`
   })
   return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
@@ -1108,7 +1117,7 @@ export function mediaSearchResult(results: SearchMediaResult[]): CallToolResult 
     const scenesStr = r.scenes.length
       ? ` | scenes: ${r.scenes.map((s) => `${(s.startMs / 1000).toFixed(1)}-${(s.endMs / 1000).toFixed(1)}s`).join(', ')}`
       : ''
-    const urlStr = r.url ? ` | ${r.url}` : ''
+    const urlStr = listingLink(r)
     return `- ${kindTag} (${idOf({ id: r.mediaId, appUrl: r.appUrl }, 'media')})${rel}${summaryStr}${scenesStr}${urlStr}`
   })
   return text([`${results.length} match(es) (most relevant first):`, ...rows].join('\n'))
@@ -1136,7 +1145,7 @@ export function folderContentsResult(folder: { name: string } | null, items: Fol
       const rel = i.relevance != null ? ` | ${Math.round(i.relevance * 100)}%` : ''
       const fav = i.isFavorited ? ' [favorite]' : ''
       const summ = i.summary ? ` | ${i.summary.slice(0, 80)}${i.summary.length > 80 ? '...' : ''}` : ''
-      return `- [${i.kind ?? 'media'}] (${idOf({ id: i.mediaId, appUrl: i.appUrl }, 'media')})${rel}${fav}${summ}${i.url ? ` | ${i.url}` : ''}`
+      return `- [${i.kind ?? 'media'}] (${idOf({ id: i.mediaId, appUrl: i.appUrl }, 'media')})${rel}${fav}${summ}${listingLink(i)}`
     }
     return `- [${i.type}] ${i.name} (${idOf(i)})${i.subtype ? ` | ${i.subtype}` : ''}`
   })
