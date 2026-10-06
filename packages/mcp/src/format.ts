@@ -1159,7 +1159,7 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   let note = ''
   if (!hasImage) {
     if (it.type === 'audio') note = '\n    (audio: no visual; use the url)'
-    else if (it.type === 'video') note = '\n    (video: no still available for this view; use the url)'
+    else if (it.type === 'video' && !it.keyframeError) note = '\n    (video: no still available for this view; use the url)'
     else if (it.type === 'transcript') note = '\n    (transcript: text only)'
   }
   // MEASURED GEOMETRY, when the spine has it. Without these numbers a caller cannot compute an asset's true
@@ -1187,7 +1187,9 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
     : it.cropError
       ? `\n    zoom not shown: ${it.cropError}`
       : ''
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${prompt}${note}`
+  // A failure says what failed. Reported as "no still available" until 2026-10-06, which read as expected behavior.
+  const keyframes = it.keyframeError ? `\n    keyframes not shown: ${it.keyframeError}` : ''
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${keyframes}${prompt}${note}`
 }
 
 /**

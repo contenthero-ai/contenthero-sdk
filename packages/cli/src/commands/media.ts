@@ -347,7 +347,12 @@ export function registerMedia(program: Command): void {
 
       emit(result, ctx, () => {
         if (!first?.ok) return `Could not resolve the media: ${first?.error ?? 'unknown error'}`
-        if (keyframes.length === 0) return 'No keyframes returned (is it a video, and is the ffmpeg service configured?).'
+        // The server says why when it can; the guess remains only for a server too old to say.
+        if (keyframes.length === 0) {
+          return first.keyframeError
+            ? `No keyframes: ${first.keyframeError}.`
+            : 'No keyframes returned (is it a video, and is the ffmpeg service configured?).'
+        }
         const savedBlock = saved.length
           ? `\nSaved ${saved.length} keyframe(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
           : ''

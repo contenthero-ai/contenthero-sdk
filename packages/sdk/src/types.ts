@@ -1448,6 +1448,8 @@ export interface ResolvedMediaBatchItem {
    * source-time window, each an inline `data:image/jpeg;base64,...`. The MCP turns each into an image block.
    */
   keyframes?: { atSec: number; dataUrl: string }[]
+  /** Why a video that asked for keyframes has none, in words (the video service is down, say). */
+  keyframeError?: string
   /**
    * MEASURED PIXEL GEOMETRY from the storage spine. Absent for an asset that is not ours or not yet measured.
    *
