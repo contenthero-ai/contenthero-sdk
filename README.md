@@ -27,9 +27,10 @@ import { ContentHero } from '@contenthero/sdk'
 
 const ch = new ContentHero({ apiKey: process.env.CONTENTHERO_API_KEY })
 
+// Model ids come from `listModels()` (the `list_models` MCP tool).
 // Estimate first, then generate.
-const { creditsEstimate } = await ch.estimateCost({ modelId: 'nano-banana-2', prompt: 'a neon city at dusk' })
-const result = await ch.generateAndWait({ modelId: 'nano-banana-2', prompt: 'a neon city at dusk' })
+const { creditsEstimate } = await ch.estimateCost({ modelId: '<imageModelId>', prompt: 'a neon city at dusk' })
+const result = await ch.generateAndWait({ modelId: '<imageModelId>', prompt: 'a neon city at dusk' })
 console.log(result.outputUrls)
 ```
 
