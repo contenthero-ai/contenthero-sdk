@@ -4237,18 +4237,6 @@ test('get_media with a region shows the cut, not the whole picture, and says how
   assert.match(res.content[0].text, /zoom: 400x300 at \(100, 50\) in the file's pixels, shown at 400x300 \(1 px per file px\)/)
 })
 
-test('a VEO output kept at 720p says so in the server\'s one sentence, with nothing added', async () => {
-  const reason = 'Delivered 720p because 1080p is not available at this time. You were charged the 720p price.'
-  const res = completedResult({
-    outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast', error: null, createdAt: 't', completedAt: 't',
-    outputs: outs(['https://cdn/v.mp4']),
-    deliveredShort: { reason },
-  })
-  const lines = res.content[0].text.split('\n')
-  assert.ok(lines.includes(reason), 'the sentence prints as its own line, unchanged')
-  assert.doesNotMatch(res.content[0].text, /charge is for what was delivered|not ready within/)
-})
-
 test('get_media says why an image is not shown in plain words, never a status code or a fetch error', async () => {
   // Approved 2026-10-06: a slow file reads differently from a missing one, and neither prints HTTP codes or sizes.
   const realFetch = globalThis.fetch

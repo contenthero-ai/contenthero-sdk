@@ -626,12 +626,6 @@ export interface Generation {
    * generation fills these in one at a time; `status` remains the only terminal signal.
    */
   outputs: GenerationOutput[]
-  /**
-   * Set when the output arrived short of the request: a VEO 1080p or 4K upgrade that was not ready within its time,
-   * so the 720p video was kept. `charge` is already figured on what was delivered; `reason` says why, to tell the
-   * person.
-   */
-  deliveredShort?: { reason: string }
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
   /** What it cost: held while it runs, charged per output that landed. Absent on an older server. */

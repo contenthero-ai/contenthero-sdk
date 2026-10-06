@@ -448,7 +448,6 @@ export function completedResult(
   // Each output by its media id, the name to pass back, so no reader numbers anything; one that produced nothing is
   // listed by its status, so the others keep their own numbers.
   const lines = [header, ...outputLines(gen)]
-  if (gen.deliveredShort) lines.push(gen.deliveredShort.reason)
   const p = gen.placement
   if (p) {
     if (p.projectType === 'canvas') {

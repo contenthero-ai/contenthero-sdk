@@ -84,7 +84,6 @@ function generationHuman(g: Generation): string {
     pairs.push(['URL', g.alreadyExisted.url])
   }
   for (const o of g.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
-  if (g.deliveredShort) pairs.push(['Note', g.deliveredShort.reason])
   pairs.push(...costRows(g.charge))
   if (g.status === 'processing' || g.status === 'pending') {
     pairs.push(['Next', `contenthero generation status ${g.outputId}`])
