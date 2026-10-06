@@ -2684,7 +2684,8 @@ export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
  * an image. Rendering a tile for any of them would show a broken picture where the text already gives a
  * working download link, so they stay text.
  */
-const EXPORT_MEDIUM: Record<string, 'image' | 'video'> = { mp4: 'video', png: 'image', jpg: 'image' }
+// The timeline's sound (7.67) plays in the widget, as a generated sound does; subtitles and transcripts stay text.
+const EXPORT_MEDIUM: Record<string, 'image' | 'video' | 'audio'> = { mp4: 'video', png: 'image', jpg: 'image', mp3: 'audio', aac: 'audio', wav: 'audio' }
 
 /**
  * An export, DISPLAYED. Separate from {@link exportJobResult} by name, not by a flag.

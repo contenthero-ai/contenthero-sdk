@@ -3047,7 +3047,7 @@ export interface ImportProjectInput {
 
 /** Options for starting a project export. All optional; defaults: format 'mp4', 720p, watermark on. */
 export interface StartExportInput {
-  /** 'mp4' (both project types) or 'png'/'jpg' (both) or 'pdf'/'pptx' (canvas only). */
+  /** A format the export catalog lists (`getExportFormats`): video, stills, documents, and for an editor project its sound, subtitles and transcript. */
   format?: string
   /** Video resolution (mp4): '480p'|'720p'|'1080p'|'2k'|'4k'. 1080p+ is plan-gated. */
   resolution?: string
@@ -3057,6 +3057,12 @@ export interface StartExportInput {
   watermark?: boolean
   /** Editor still (png/jpg) only: the timeline frame to render. Clamped to the composition length. Defaults 0. */
   frame?: number
+  /** Subtitles (srt, vtt) only: the longest a line may be, 20 to 80 characters. Defaults 42. */
+  maxCharsPerLine?: number
+  /** Subtitles (srt, vtt) only: lines per subtitle card, 1 to 4. Defaults 2. */
+  maxLinesPerCard?: number
+  /** Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode. */
+  timecodes?: boolean
 }
 
 /** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */

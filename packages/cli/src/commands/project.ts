@@ -234,13 +234,16 @@ export function registerProject(program: Command): void {
 
   project
     .command('export')
-    .description('Export a project to a file (mp4/png/jpg both project types; pdf/pptx canvas) (requires editor:write)')
+    .description('Export a project to a file: video, stills, documents, and for an editor project its sound, subtitles and transcript (`contenthero schema export` lists every format) (requires editor:write)')
     .argument('<projectId>', 'the project id')
-    .option('--format <format>', 'mp4 | png | jpg | pdf | pptx (default mp4)')
+    .option('--format <format>', 'a format `contenthero schema export` lists (default mp4)')
     .option('--resolution <res>', 'output resolution for ANY format: 480p|720p|1080p|2k|4k. Defaults 720p for an editor mp4, the project native size for a still. 1080p+ is plan-gated')
     .option('--quality <q>', 'mp4 quality: low|recommended|high')
     .option('--frame <n>', 'editor still (png/jpg) only: timeline frame to render (default 0)', toInt)
     .option('--no-watermark', 'remove the watermark (plan-gated)')
+    .option('--max-chars-per-line <n>', 'subtitles only: longest line, 20 to 80 characters (default 42)', toInt)
+    .option('--max-lines-per-card <n>', 'subtitles only: lines per card, 1 to 4 (default 2)', toInt)
+    .option('--timecodes', 'transcripts only: start each paragraph with its timecode')
     .option('--wait', 'poll until the export finishes and print the URL')
     .option('--timeout <ms>', 'max wait when --wait (default 600000)', toInt)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
@@ -250,6 +253,9 @@ export function registerProject(program: Command): void {
         resolution: opts.resolution as string | undefined,
         quality: opts.quality as string | undefined,
         ...(opts.frame !== undefined ? { frame: opts.frame as number } : {}),
+        ...(opts.maxCharsPerLine !== undefined ? { maxCharsPerLine: opts.maxCharsPerLine as number } : {}),
+        ...(opts.maxLinesPerCard !== undefined ? { maxLinesPerCard: opts.maxLinesPerCard as number } : {}),
+        ...(opts.timecodes ? { timecodes: true } : {}),
         // commander sets opts.watermark=false when --no-watermark is passed; leave undefined otherwise.
         ...(opts.watermark === false ? { watermark: false } : {}),
       }

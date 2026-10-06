@@ -589,6 +589,20 @@ test('a completed mp4 export renders, with no reference and no destination', () 
   assert.equal(sc.items[0]!.openUrl, null, "an export's home is a download, not a library detail view")
 })
 
+/** The timeline's sound (7.67) plays where a generated sound plays; subtitles and transcripts have no element. */
+test("a completed sound export plays; a subtitle or transcript export stays a download link", () => {
+  for (const fmt of ['mp3', 'aac', 'wav']) {
+    const res = completedExportResult({ exportId: 'exp-2', status: 'completed', outputUrl: 'https://media.contenthero.ai/e.m4a' }, fmt)
+    const sc = res.structuredContent as { items: Array<{ contentType: string }> }
+    assert.equal(sc.items[0]!.contentType, 'audio', fmt)
+  }
+  for (const fmt of ['srt', 'vtt', 'txt', 'docx']) {
+    const res = completedExportResult({ exportId: 'exp-3', status: 'completed', outputUrl: 'https://media.contenthero.ai/e.srt' }, fmt)
+    assert.equal(res.structuredContent, undefined, fmt)
+    assert.match((res.content[0] as { text: string }).text, /Download: https:\/\/media\.contenthero\.ai\/e\.srt/)
+  }
+})
+
 /**
  * ⚠️ pdf and pptx have no element, and a multi-slide png export comes back as a ZIP. A tile for any of them
  * shows a broken picture where the text already gives a working download link.
