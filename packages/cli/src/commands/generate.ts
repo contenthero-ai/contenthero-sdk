@@ -116,6 +116,7 @@ export function registerGenerate(program: Command): void {
       .option('--aspect <ratio>', 'aspect ratio, e.g. 16:9, 9:16')
       .option('--resolution <res>', 'resolution, e.g. 720p, 1080p, 4K (model-dependent)')
       .option('--duration <seconds>', 'clip length in seconds (model-dependent)', toFloat)
+      .option('--keep-input-length', "keep the input video's full length (video edit only)")
       .option('--audio', 'enable generated audio (models that support it)')
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
       .option('--negative <text>', 'what to avoid (models that support it)')
@@ -147,6 +148,7 @@ export function registerGenerate(program: Command): void {
       duration: klingMultiShot
         ? shots!.reduce((sum, s) => sum + s.duration, 0)
         : (opts.duration as number | undefined),
+      keepInputLength: opts.keepInputLength === true ? true : undefined,
       audioEnabled: opts.audio === true ? true : undefined,
       numGenerations: opts.num as number | undefined,
       negativePrompt: opts.negative as string | undefined,

@@ -1439,6 +1439,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .optional()
           .describe('Clip length in seconds. Model-dependent; some models lock it.'),
+        keepInputLength: z
+          .boolean()
+          .optional()
+          .describe("Video edit only, on models that offer it: keep the input video's full length instead of a set duration. Charged for that length."),
         audioEnabled: z
           .boolean()
           .optional()
@@ -1489,6 +1493,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           duration: klingMultiShot ? args.shots!.reduce((sum, s) => sum + s.duration, 0) : args.duration,
+          keepInputLength: args.keepInputLength,
           audioEnabled: args.audioEnabled,
           numGenerations: args.numGenerations,
           negativePrompt: args.negativePrompt,

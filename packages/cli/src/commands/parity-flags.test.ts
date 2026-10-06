@@ -138,3 +138,16 @@ test('card update --notes-edits sends the edits in order, with no revision requi
   assert.equal(r.body && 'expectedRevision' in r.body, false)
   assert.equal(r.body && 'notes' in r.body, false)
 })
+
+test('generate video --keep-input-length sends keepInputLength and no duration', async () => {
+  const r = await run('generate', 'video', 'make it night', '-m', 'wan-2.7', '--ref-video', 'https://cdn/s.mp4',
+    '--keep-input-length', '--cost')
+  assert.equal(r.body?.keepInputLength, true)
+  assert.equal(r.body?.duration, undefined)
+})
+
+test('generate video help describes --keep-input-length in the approved words', () => {
+  const video = buildProgram().commands.find((c) => c.name() === 'generate')!.commands.find((c) => c.name() === 'video')!
+  const flag = video.options.find((o) => o.long === '--keep-input-length')
+  assert.equal(flag?.description, "keep the input video's full length (video edit only)")
+})

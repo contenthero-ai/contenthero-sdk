@@ -283,6 +283,11 @@ export interface GenerateRequest {
   numGenerations?: number
   /** Clip duration in seconds (video models). */
   duration?: number
+  /**
+   * Video edit only, on models that offer it: keep the input video's full length instead of a set `duration`
+   * (pass one or the other). Charged for that length, as measured by the server.
+   */
+  keepInputLength?: boolean
   /** Enable generated audio on video models that support it. */
   audioEnabled?: boolean
   negativePrompt?: string

@@ -873,6 +873,34 @@ test('generate_board forwards avatarId', async () => {
   assert.equal(captured.avatarId, 'av1')
 })
 
+test('generate_video forwards keepInputLength, described in the approved words', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generate: async (req) => {
+        captured = req
+        return {
+          outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast',
+          outputs: outs(['https://cdn/v.mp4']), error: null, createdAt: 't', completedAt: 't2',
+        }
+      },
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  const field = tools.find((t) => t.name === 'generate_video').inputSchema.properties.keepInputLength
+  assert.equal(
+    field.description,
+    "Video edit only, on models that offer it: keep the input video's full length instead of a set duration. Charged for that length.",
+  )
+  // Forwarding is model-agnostic; whether the model and mode offer it is decided server-side.
+  await mcp.callTool({
+    name: 'generate_video',
+    arguments: { modelId: 'veo-3.1-fast', prompt: 'x', referenceVideos: ['https://cdn/s.mp4'], keepInputLength: true },
+  })
+  assert.equal(captured.keepInputLength, true)
+  assert.equal(captured.duration, undefined)
+})
+
 test('generate_video forwards wan multiShot and reference audio', async () => {
   let captured
   const mcp = await connect(
