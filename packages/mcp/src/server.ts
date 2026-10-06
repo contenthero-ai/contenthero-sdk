@@ -4539,6 +4539,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         frame: z.number().int().min(0).optional().describe('Editor still (png/jpg) only: which timeline frame to render. Clamped to the composition length. Defaults 0. Use the playhead frame from get_context to render exactly the frame the user is viewing.'),
         maxCharsPerLine: z.number().int().optional().describe('Subtitles (srt, vtt) only: the longest a line may be, 20 to 80 characters. Defaults 42.'),
         maxLinesPerCard: z.number().int().optional().describe('Subtitles (srt, vtt) only: lines per subtitle card, 1 to 4. Defaults 2.'),
+        showSpeakers: z.boolean().optional().describe('Subtitles (srt, vtt) only: name who speaks, when the captions hold more than one speaker. Defaults false.'),
         timecodes: z.boolean().optional().describe('Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode.'),
       },
     },

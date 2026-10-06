@@ -3061,6 +3061,8 @@ export interface StartExportInput {
   maxCharsPerLine?: number
   /** Subtitles (srt, vtt) only: lines per subtitle card, 1 to 4. Defaults 2. */
   maxLinesPerCard?: number
+  /** Subtitles (srt, vtt) only: name who speaks, when the captions hold more than one speaker. Defaults false. */
+  showSpeakers?: boolean
   /** Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode. */
   timecodes?: boolean
 }

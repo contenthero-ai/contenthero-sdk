@@ -243,6 +243,7 @@ export function registerProject(program: Command): void {
     .option('--no-watermark', 'remove the watermark (plan-gated)')
     .option('--max-chars-per-line <n>', 'subtitles only: longest line, 20 to 80 characters (default 42)', toInt)
     .option('--max-lines-per-card <n>', 'subtitles only: lines per card, 1 to 4 (default 2)', toInt)
+    .option('--show-speakers', 'subtitles only: name who speaks, when there is more than one speaker')
     .option('--timecodes', 'transcripts only: start each paragraph with its timecode')
     .option('--wait', 'poll until the export finishes and print the URL')
     .option('--timeout <ms>', 'max wait when --wait (default 600000)', toInt)
@@ -255,6 +256,7 @@ export function registerProject(program: Command): void {
         ...(opts.frame !== undefined ? { frame: opts.frame as number } : {}),
         ...(opts.maxCharsPerLine !== undefined ? { maxCharsPerLine: opts.maxCharsPerLine as number } : {}),
         ...(opts.maxLinesPerCard !== undefined ? { maxLinesPerCard: opts.maxLinesPerCard as number } : {}),
+        ...(opts.showSpeakers ? { showSpeakers: true } : {}),
         ...(opts.timecodes ? { timecodes: true } : {}),
         // commander sets opts.watermark=false when --no-watermark is passed; leave undefined otherwise.
         ...(opts.watermark === false ? { watermark: false } : {}),
