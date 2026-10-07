@@ -288,6 +288,17 @@ function pendingShapeFrom(
  * tools list under "Read-only"; the rest list under "Interactive". publish is
  * also flagged destructive (it pushes content to public social accounts).
  */
+/**
+ * The paging inputs every paged listing takes (9.7b), in one wording: how many, and the cursor a page's last line
+ * hands back (`moreLine`). The server owns the default; `max` refuses here what the server would refuse.
+ */
+function pageInput(max = 100) {
+  return {
+    limit: z.number().int().min(1).max(max).optional().describe('How many to return.'),
+    cursor: z.string().optional().describe("The previous page's cursor."),
+  }
+}
+
 const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 
@@ -2384,15 +2395,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         "The complete, paginated index of a brand kit's knowledge items (titles and metadata, no bodies). Use it to browse what exists, or to find an item's id before get_brand_knowledge or remove_brand_knowledge. For relevance retrieval, use search_brand_knowledge instead. Requires the brandkit:read scope.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
-        limit: z.number().int().min(1).max(200).optional().describe('How many to return (default 50).'),
-        offset: z.number().int().min(0).optional().describe('Pagination offset.'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         return brandKnowledgeListResult(
-          await client.listBrandKnowledge(args.brandKitId, { limit: args.limit, offset: args.offset }),
+          await client.listBrandKnowledge(args.brandKitId, { limit: args.limit, cursor: args.cursor }),
         )
       } catch (err) {
         return errorResult(err)
@@ -2502,7 +2512,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the account's media, newest first. `source` selects which library: 'creations' (default) is studio generations, each an output with one or more variations (images, video, or audio); 'uploads' is the editor Uploads tab, the raw video, image, and audio files the user uploaded to edit with; 'stock' is stock media the user has already used in a project (cached and reusable); 'all' returns every library merged across sources, each item self-describing via its `source`. Filter with contentType and page with limit/offset. NOTE THE GRAIN: a page is counted in VARIATIONS, not generations, so limit:3 on a four-variation generation returns three variations of that one generation, not three different ones. Each variation is individually addressable and favoritable, which is why it is the unit. To survey distinct generations, ask for a larger limit and group the results by their shared id. For creations you can also filter by kind ('board'/'creation'/'look') or favorited/archived. Each item shows its id and, for a single-file item like an upload, its file name, duration, and resolved URL inline, so you can reference it directly (for example, add an upload to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
+        "List the account's media, newest first. `source` selects which library: 'creations' (default) is studio generations, each an output with one or more variations (images, video, or audio); 'uploads' is the editor Uploads tab, the raw video, image, and audio files the user uploaded to edit with; 'stock' is stock media the user has already used in a project (cached and reusable); 'all' returns every library merged across sources, each item self-describing via its `source`. Filter with contentType, and page with limit and cursor. NOTE THE GRAIN: a page is counted in VARIATIONS, not generations, so limit:3 on a four-variation generation returns three variations of that one generation, not three different ones. Each variation is individually addressable and favoritable, which is why it is the unit. To survey distinct generations, ask for a larger limit and group the results by their shared id. For creations you can also filter by kind ('board'/'creation'/'look') or favorited/archived. Each item shows its id and, for a single-file item like an upload, its file name, duration, and resolved URL inline, so you can reference it directly (for example, add an upload to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
       inputSchema: {
         source: z
           .enum(['creations', 'uploads', 'stock', 'all'])
@@ -2519,8 +2529,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         status: z.string().optional().describe("Status filter; defaults to 'completed'."),
         favorited: z.boolean().optional().describe('Creations only. Only outputs that have a favorited variation.'),
         archived: z.boolean().optional().describe('Creations only. Only outputs that have an archived variation.'),
-        limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
-        offset: z.number().int().min(0).optional().describe('How many to skip, for the next page (default 0).'),
+        ...pageInput(),
         smallCopies: smallCopiesInput,
       },
     },
@@ -2536,7 +2545,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             favorited: args.favorited,
             archived: args.archived,
             limit: args.limit,
-            offset: args.offset,
+            cursor: args.cursor,
             smallCopies: args.smallCopies,
           }),
         )
@@ -2562,7 +2571,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.enum(['image', 'video', 'audio']))
           .optional()
           .describe('Restrict results to these media kinds. Omit to search all kinds.'),
-        limit: z.number().int().min(1).max(50).optional().describe('Maximum number of assets to return (default 12, max 50).'),
+        ...pageInput(),
         smallCopies: smallCopiesInput,
       },
     },
@@ -2570,7 +2579,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return mediaSearchResult(
-          await client.searchMedia(args.query, { kinds: args.kinds, limit: args.limit, smallCopies: args.smallCopies }),
+          await client.searchMedia(args.query, { kinds: args.kinds, limit: args.limit, cursor: args.cursor, smallCopies: args.smallCopies }),
         )
       } catch (err) {
         return errorResult(err)
@@ -2614,11 +2623,19 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         "Return the contents of one folder. The folder id is either one of the account's own folder ids or a built-in derived-folder key. A manual folder returns exactly the items filed in it; a smart folder computes its members live from its saved query; a derived folder returns its built-in set. Items are media (with kind and a description) and, in manual folders, entities such as projects or posts.",
       inputSchema: {
         folderId: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, cards).'),
+        ...pageInput(),
         smallCopies: smallCopiesInput,
       },
     },
     async (args, extra) => {
-      try { const r = await (await getClient(extra)).getFolder(args.folderId, { smallCopies: args.smallCopies }); return folderContentsResult(r.folder, r.items) } catch (err) { return errorResult(err) }
+      try {
+        const client = await getClient(extra)
+        return folderContentsResult(
+          await client.getFolder(args.folderId, { limit: args.limit, cursor: args.cursor, smallCopies: args.smallCopies }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
     },
   )
 
@@ -3301,8 +3318,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
         stage: z.string().optional().describe('Filter by a stage id, slug, or name. Resolved within the chosen space.'),
         search: z.string().optional().describe('Case-insensitive title search, scoped to the chosen space.'),
-        limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 50).'),
-        offset: z.number().int().min(0).optional().describe('Pagination offset.'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
@@ -3316,7 +3332,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             stage: args.stage,
             search: args.search,
             limit: args.limit,
-            offset: args.offset,
+            cursor: args.cursor,
           }),
         )
       } catch (err) {
@@ -3976,8 +3992,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),
         brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit.'),
         favorited: z.boolean().optional().describe('Only content the account has favorited.'),
-        limit: z.number().int().min(1).max(100).optional().describe('How many to return (default 20).'),
-        offset: z.number().int().min(0).optional().describe('Pagination offset.'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
@@ -4265,6 +4280,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         surface: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
         kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
         search: z.string().optional().describe('Case-insensitive title search.'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
@@ -4702,8 +4718,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         category: z.array(z.string()).optional().describe('Only templates in these categories.'),
         search: z.string().optional().describe('Every word, in any order, in the name or the tags.'),
         archived: z.boolean().optional().describe('true lists only archived templates, to restore one with archive.'),
-        cursor: z.string().optional().describe("The previous page's cursor."),
-        limit: z.number().int().min(1).max(500).optional().describe('Up to 500; 100 by default.'),
+        ...pageInput(500),
       },
     },
     async (args, extra) => {

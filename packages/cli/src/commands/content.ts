@@ -35,9 +35,9 @@ import type {
 } from '@contenthero/sdk'
 import { CONTENT_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, displayId } from '../output.js'
+import { emit, keyValues, table, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toFloat, toInt, toList } from '../args.js'
+import { toFloat, toInt, toList, withPageFlags } from '../args.js'
 
 /** A table of tracked accounts. KIND is present because the list spans both tiers by default. */
 export function trackedAccountsTable(rows: TrackedAccount[]): string {
@@ -133,35 +133,35 @@ export function registerContent(program: Command): void {
     .command('content')
     .description('Tracked social content: what is working, for the creators watched and for this account')
 
-  content
-    .command('list')
-    .description('List tracked content, ranked by outlier score, or by relevance when you pass --search')
-    .option('--scope <scope>', `which accounts: ${SCOPES.join(', ')} (default all)`)
-    .option('--platform <platform>', 'filter to one platform (youtube, instagram)')
-    .option('--type <type>', 'content type, e.g. video, short, reel')
-    .option('--min-score <n>', 'only content at or above this outlier score', toFloat)
-    .option('--max-score <n>', 'only content at or below this outlier score', toFloat)
-    .option('--min-views <n>', 'minimum view count', toInt)
-    .option('--max-views <n>', 'maximum view count', toInt)
-    .option('--min-duration <n>', 'minimum duration in seconds', toInt)
-    .option('--max-duration <n>', 'maximum duration in seconds', toInt)
-    .option('--min-followers <n>', "minimum follower count of the post's account", toInt)
-    .option('--max-followers <n>', "maximum follower count of the post's account", toInt)
-    .option('--since <window>', `published within: ${WINDOWS.join(', ')}`)
-    .option('--published-after <iso>', 'published on or after this ISO timestamp (wins over --since)')
-    .option('--published-before <iso>', 'published on or before this ISO timestamp')
-    .option(
-      '--search <text>',
-      'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance; returns only the posts judged relevant, so no rows means nothing matched',
-    )
-    .option('--sort <sort>', `sort field: ${CONTENT_SORTS.join(', ')} (default relevance with --search, otherwise score)`)
-    .option('--asc', 'sort ascending (default descending)')
-    .option('--account <id>', 'limit to this tracked account; repeatable', collectAccount)
-    .option('--added-by-you', 'only the one-off posts saved by url')
-    .option('--brand-kit <id>', 'scope to the accounts linked to this brand kit')
-    .option('--favorite', 'only content the account has favorited')
-    .option('--limit <n>', 'how many to return (default 20)', toInt)
-    .option('--offset <n>', 'pagination offset', toInt)
+  withPageFlags(
+    content
+      .command('list')
+      .description('List tracked content, ranked by outlier score, or by relevance when you pass --search')
+      .option('--scope <scope>', `which accounts: ${SCOPES.join(', ')} (default all)`)
+      .option('--platform <platform>', 'filter to one platform (youtube, instagram)')
+      .option('--type <type>', 'content type, e.g. video, short, reel')
+      .option('--min-score <n>', 'only content at or above this outlier score', toFloat)
+      .option('--max-score <n>', 'only content at or below this outlier score', toFloat)
+      .option('--min-views <n>', 'minimum view count', toInt)
+      .option('--max-views <n>', 'maximum view count', toInt)
+      .option('--min-duration <n>', 'minimum duration in seconds', toInt)
+      .option('--max-duration <n>', 'maximum duration in seconds', toInt)
+      .option('--min-followers <n>', "minimum follower count of the post's account", toInt)
+      .option('--max-followers <n>', "maximum follower count of the post's account", toInt)
+      .option('--since <window>', `published within: ${WINDOWS.join(', ')}`)
+      .option('--published-after <iso>', 'published on or after this ISO timestamp (wins over --since)')
+      .option('--published-before <iso>', 'published on or before this ISO timestamp')
+      .option(
+        '--search <text>',
+        'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance; returns only the posts judged relevant, so no rows means nothing matched',
+      )
+      .option('--sort <sort>', `sort field: ${CONTENT_SORTS.join(', ')} (default relevance with --search, otherwise score)`)
+      .option('--asc', 'sort ascending (default descending)')
+      .option('--account <id>', 'limit to this tracked account; repeatable', collectAccount)
+      .option('--added-by-you', 'only the one-off posts saved by url')
+      .option('--brand-kit <id>', 'scope to the accounts linked to this brand kit')
+      .option('--favorite', 'only content the account has favorited'),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       if (opts.sort && !(CONTENT_SORTS as readonly string[]).includes(opts.sort as string)) {
         throw new CliError(`Invalid --sort "${opts.sort}". Expected one of: ${CONTENT_SORTS.join(', ')}.`, EXIT.USAGE)
@@ -196,11 +196,11 @@ export function registerContent(program: Command): void {
         brandKitId: opts.brandKit as string | undefined,
         favorited: opts.favorite ? true : undefined,
         limit: opts.limit as number | undefined,
-        offset: opts.offset as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
       emit(result, ctx, (r: ContentListResult) => {
         const t = outliersTable(r.outliers)
-        return `${t}\n\n${r.outliers.length} of ${r.total}${r.hasMore ? ' (more available)' : ''}`
+        return withMore(`${t}\n\n${r.outliers.length} of ${r.total}`, r.nextCursor)
       })
     })
 

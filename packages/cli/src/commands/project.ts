@@ -22,11 +22,11 @@
  */
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
-import { describeEditorOps, describeScope, withGraphicWarnings, type EditorOp, type ImportProjectSource } from '@contenthero/sdk'
+import { describeEditorOps, describeScope, withGraphicWarnings, type EditorOp, type ImportProjectSource, type ProjectListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit } from '../output.js'
+import { emit, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toInt } from '../args.js'
+import { toInt, withPageFlags } from '../args.js'
 
 /** `--surface`, the project type's name before cli 0.3.12, still accepted and hidden from help. `--type` wins. */
 function deprecatedTypeAlias(): Option {
@@ -54,24 +54,28 @@ export function registerProject(program: Command): void {
     .command('project')
     .description("Read + edit a project's composition (canvas or timeline) via ops")
 
-  project
-    .command('list')
-    .description('List projects, both editor + canvas (requires editor:read)')
-    .option('--filter <state>', 'archived | favorited (omitted = active)')
-    .option('--type <type>', 'editor | canvas (omitted = both)')
-    .addOption(deprecatedTypeAlias())
-    .option('--search <text>', 'case-insensitive title search')
+  withPageFlags(
+    project
+      .command('list')
+      .description('List projects, both editor + canvas (requires editor:read)')
+      .option('--filter <state>', 'archived | favorited (omitted = active)')
+      .option('--type <type>', 'editor | canvas (omitted = both)')
+      .addOption(deprecatedTypeAlias())
+      .option('--search <text>', 'case-insensitive title search'),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const projects = await client.listProjects({
+      const page = await client.listProjects({
         filter: opts.filter as 'archived' | 'favorited' | undefined,
         type: (opts.type ?? opts.surface) as 'editor' | 'canvas' | undefined,
         search: opts.search as string | undefined,
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
-      emit(projects, ctx, () =>
-        projects.length === 0
+      emit(page, ctx, (p: ProjectListResult) =>
+        p.projects.length === 0
           ? 'No projects found.'
-          : projects.map((p) => `${p.id}  [${p.type}]  ${p.title}  ${p.orientation}`).join('\n'),
+          : withMore(p.projects.map((r) => `${r.id}  [${r.type}]  ${r.title}  ${r.orientation}`).join('\n'), p.nextCursor),
       )
     })
 

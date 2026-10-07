@@ -52,11 +52,12 @@ import type {
   GenerationOutput,
   GenerateResult,
   EditAudioResult,
-  MediaSummary,
-  SearchMediaResult,
+  MediaListResult,
+  SearchMediaPage,
+  FolderContents,
+  ProjectListResult,
   Folder,
   DerivedFolder,
-  FolderItem,
   MediaBatchResult,
   ResolvedMediaBatchItem,
   CreateMediaUploadResult,
@@ -87,7 +88,6 @@ import type {
   Voice,
   VoiceSummary,
   ApplyEditorOpsResult,
-  ProjectSummary,
   ProjectDetail,
   LiveContextResult,
   LayerTypeCatalog,
@@ -835,6 +835,22 @@ function lines(parts: Array<string | null | undefined>): string {
   return parts.filter((p): p is string => !!p).join('\n')
 }
 
+/**
+ * The last line of every paged listing when a next page exists: the cursor to pass, in one wording for every tool.
+ * Nothing on the last page, so an agent is told more exists exactly when it does.
+ */
+export function moreLine(nextCursor: string | null | undefined): string | null {
+  return nextCursor ? `More: pass cursor "${nextCursor}".` : null
+}
+
+/** Free text cut for a listing line: a prompt, a file name, a summary. */
+function clipped(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}...` : value
+}
+
+/** How much of a prompt or a file name a listing line shows. */
+const LISTING_TEXT_MAX = 80
+
 /** List of avatars, each with the fields an agent needs to drive lip-sync. */
 export function avatarListResult(avatars: AvatarSummary[]): CallToolResult {
   if (!avatars.length) {
@@ -1021,11 +1037,11 @@ export function brandKnowledgeListResult(result: BrandKnowledgeListResult): Call
   if (!result.items.length) {
     return text('No knowledge items in this brand kit yet. Add one with add_brand_knowledge.')
   }
-  const more = result.hasMore ? ` (showing ${result.items.length} of ${result.total})` : ''
-  const lines = result.items.map(
+  const more = result.nextCursor ? ` (showing ${result.items.length} of ${result.total})` : ''
+  const rows = result.items.map(
     (k) => `- ${k.title ?? '(untitled)'} [${k.sourceType ?? 'unknown'}] (${idOf(k)})`,
   )
-  return text([`${result.total} knowledge item(s)${more}:`, ...lines].join('\n'))
+  return text(lines([`${result.total} knowledge item(s)${more}:`, ...rows, moreLine(result.nextCursor)]))
 }
 
 export function brandKnowledgeDetailResult(item: BrandKnowledgeDetail): CallToolResult {
@@ -1080,21 +1096,22 @@ function listingLink(item: { url: string | null; smallUrl?: string | null }): st
   return item.url ? ` | ${item.url}` : ''
 }
 
-/** List of library media, one row per VARIATION (the atomic grain). */
-export function mediaListResult(items: MediaSummary[]): CallToolResult {
+/** A page of library media, one row per VARIATION (the atomic grain). */
+export function mediaListResult(page: MediaListResult): CallToolResult {
+  const items = page.media
   if (!items.length) return text('No media found.')
   const rows = items.map((m) => {
     // A studio generation lists as one row per output, each named by its own media id; say when it has siblings.
     const varTag = m.generationSize > 1 ? ` | one of ${m.generationSize} outputs` : ''
     const favTag = m.isFavorited ? ' [favorite]' : ''
-    const promptStr = m.prompt ? ` | ${m.prompt.slice(0, 80)}${m.prompt.length > 80 ? '...' : ''}` : ''
+    const promptStr = m.prompt ? ` | ${clipped(m.prompt, LISTING_TEXT_MAX)}` : ''
     const kindTag =
       m.kind === 'board'
         ? ` | board${m.boardType ? `:${m.boardType}` : ''}`
         : m.kind && m.kind !== 'creation'
           ? ` | ${m.kind}`
           : ''
-    const nameStr = m.fileName ? ` | ${m.fileName}` : ''
+    const nameStr = m.fileName ? ` | ${clipped(m.fileName, LISTING_TEXT_MAX)}` : ''
     const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
     // The asset id is what get_project reports as a clip's sourceId: printed so an agent can match a clip to the
     // library item it was cut from. A field the text does not print is invisible to the agent that fetched it.
@@ -1104,23 +1121,24 @@ export function mediaListResult(items: MediaSummary[]): CallToolResult {
     const urlStr = listingLink(m)
     return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${nameStr}${durStr}${assetStr} | ${m.status}${promptStr}${urlStr}`
   })
-  return text([`${items.length} item(s) (newest first):`, ...rows].join('\n'))
+  return text(lines([`${items.length} item(s) (newest first):`, ...rows, moreLine(page.nextCursor)]))
 }
 
-/** Semantic library-search matches: assets ranked by relevance, with matched scene timestamps for video. */
-export function mediaSearchResult(results: SearchMediaResult[]): CallToolResult {
+/** A page of semantic library-search matches: assets ranked by relevance, with matched scene timestamps for video. */
+export function mediaSearchResult(page: SearchMediaPage): CallToolResult {
+  const results = page.results
   if (!results.length) return text('No matching media found.')
   const rows = results.map((r) => {
     const rel = ` | ${Math.round(r.relevance * 100)}%`
     const kindTag = r.kind ? `[${r.kind}]` : '[media]'
-    const summaryStr = r.summary ? ` | ${r.summary.slice(0, 90)}${r.summary.length > 90 ? '...' : ''}` : ''
+    const summaryStr = r.summary ? ` | ${clipped(r.summary, 90)}` : ''
     const scenesStr = r.scenes.length
       ? ` | scenes: ${r.scenes.map((s) => `${(s.startMs / 1000).toFixed(1)}-${(s.endMs / 1000).toFixed(1)}s`).join(', ')}`
       : ''
     const urlStr = listingLink(r)
     return `- ${kindTag} (${idOf({ id: r.mediaId, appUrl: r.appUrl }, 'media')})${rel}${summaryStr}${scenesStr}${urlStr}`
   })
-  return text([`${results.length} match(es) (most relevant first):`, ...rows].join('\n'))
+  return text(lines([`${results.length} match(es) (most relevant first):`, ...rows, moreLine(page.nextCursor)]))
 }
 
 /** The user's folders (their own + the built-in derived folders). */
@@ -1136,20 +1154,20 @@ export function folderListResult(data: { folders: Folder[]; derived: DerivedFold
   ].join('\n'))
 }
 
-/** One folder's contents (media items + entities). */
-export function folderContentsResult(folder: { name: string } | null, items: FolderItem[]): CallToolResult {
+/** A page of one folder's contents (media items + entities). */
+export function folderContentsResult({ folder, items, nextCursor }: FolderContents): CallToolResult {
   const header = folder ? `"${folder.name}" - ${items.length} item(s):` : `${items.length} item(s):`
   if (!items.length) return text(`${header}\n(empty)`)
   const rows = items.map((i) => {
     if (i.type === 'media') {
       const rel = i.relevance != null ? ` | ${Math.round(i.relevance * 100)}%` : ''
       const fav = i.isFavorited ? ' [favorite]' : ''
-      const summ = i.summary ? ` | ${i.summary.slice(0, 80)}${i.summary.length > 80 ? '...' : ''}` : ''
+      const summ = i.summary ? ` | ${clipped(i.summary, 80)}` : ''
       return `- [${i.kind ?? 'media'}] (${idOf({ id: i.mediaId, appUrl: i.appUrl }, 'media')})${rel}${fav}${summ}${listingLink(i)}`
     }
     return `- [${i.type}] ${i.name} (${idOf(i)})${i.subtype ? ` | ${i.subtype}` : ''}`
   })
-  return text([header, ...rows].join('\n'))
+  return text(lines([header, ...rows, moreLine(nextCursor)]))
 }
 
 /** One resolved batch item's metadata line (no image; that is added separately). */
@@ -1682,7 +1700,7 @@ export function templateListResult(page: TemplateListResult): CallToolResult {
     lines([
       `${page.templates.length} template(s):`,
       ...page.templates.map((t) => `- ${templateLine(t)}`),
-      page.nextCursor ? `More: pass cursor "${page.nextCursor}".` : null,
+      moreLine(page.nextCursor),
       'Place one with an insert_template op in update_timeline or update_canvas; get_template reads its code and controls.',
     ]),
   )
@@ -1919,8 +1937,8 @@ export function cardListResult(result: CardListResult): CallToolResult {
    */
   const where = result.space ? ` in ${result.space.name}` : ''
   if (!result.cards.length) return text(`No cards found${where}.`)
-  const more = result.hasMore ? ` (showing ${result.cards.length} of ${result.total}; raise limit/offset for more)` : ''
-  return text([`${result.total} card(s)${where}${more}:`, ...result.cards.map(cardLine)].join('\n'))
+  const more = result.nextCursor ? ` (showing ${result.cards.length} of ${result.total})` : ''
+  return text(lines([`${result.total} card(s)${where}${more}:`, ...result.cards.map(cardLine), moreLine(result.nextCursor)]))
 }
 
 /**
@@ -2206,9 +2224,9 @@ export function outlierListResult(result: ContentListResult): CallToolResult {
   if (!result.outliers.length) {
     return text('No content found. Track some creators in the ContentHero app, or widen the filters.')
   }
-  const more = result.hasMore ? ` (showing ${result.outliers.length} of ${result.total})` : ''
+  const more = result.nextCursor ? ` (showing ${result.outliers.length} of ${result.total})` : ''
   return text(
-    [`${result.total} outlier(s) by score${more}:`, ...result.outliers.map(outlierLine)].join('\n'),
+    lines([`${result.total} outlier(s) by score${more}:`, ...result.outliers.map(outlierLine), moreLine(result.nextCursor)]),
   )
 }
 
@@ -2648,14 +2666,14 @@ function parseDataUrl(dataUrl: unknown): { data: string; mimeType: string } | nu
   return { mimeType, data }
 }
 
-/** The project list: one line per project (id, kind, title, state flags). */
-export function projectListResult(projects: ProjectSummary[]): CallToolResult {
+/** A page of projects: one line per project (id, kind, title, state flags). */
+export function projectListResult({ projects, nextCursor }: ProjectListResult): CallToolResult {
   if (projects.length === 0) return text('No projects found.')
-  const lines = projects.map((p) => {
+  const rows = projects.map((p) => {
     const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
     return `- ${p.id}  [${p.type}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}${linkAfter(p.appUrl)}`
   })
-  return text(`${projects.length} project(s):\n${lines.join('\n')}`)
+  return text(lines([`${projects.length} project(s):`, ...rows, moreLine(nextCursor)]))
 }
 
 /** A freshly created project: the id + kind to start editing against. */

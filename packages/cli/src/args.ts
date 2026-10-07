@@ -3,6 +3,7 @@
  * input so the central error boundary reports exit 2 with a clear message.
  */
 
+import type { Command } from 'commander'
 import { CliError, EXIT } from './errors.js'
 
 /** Parse an integer option value. */
@@ -12,6 +13,16 @@ export function toInt(value: string): number {
     throw new CliError(`Expected an integer, got "${value}".`, EXIT.USAGE)
   }
   return n
+}
+
+/**
+ * The paging flags every paged list takes (9.7b), in one wording: how many, and the cursor the page before printed
+ * (`moreLine`). The server owns the default and the maximum.
+ */
+export function withPageFlags(command: Command): Command {
+  return command
+    .option('--limit <n>', 'how many to return', toInt)
+    .option('--cursor <cursor>', "the previous page's cursor")
 }
 
 /** Parse a numeric option value (integer or decimal). */

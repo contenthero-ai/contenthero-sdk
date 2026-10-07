@@ -28,10 +28,10 @@ import type {
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { costRows, emit, keyValues, table, linkRow, displayId } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, isClear, toInt, toJson, toList } from '../args.js'
+import { collect, isClear, toInt, toJson, toList, withPageFlags } from '../args.js'
 
 /**
  * Turn repeated `--logo` / `--asset` refs into the declarative media list the API takes.
@@ -359,22 +359,25 @@ export function registerBrandKit(program: Command): void {
     .command('knowledge')
     .description('A brand kit\'s knowledge base: list, get, semantic search, add, remove')
 
-  knowledge
-    .command('list')
-    .description('List the knowledge items in a brand kit (the complete index)')
-    .argument('<brandKitId>', 'the brand kit id')
-    .option('--limit <n>', 'how many to return (default 50)', toInt)
-    .option('--offset <n>', 'pagination offset', toInt)
+  withPageFlags(
+    knowledge
+      .command('list')
+      .description('List the knowledge items in a brand kit (the complete index)')
+      .argument('<brandKitId>', 'the brand kit id'),
+  )
     .action(async (brandKitId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const result = await client.listBrandKnowledge(brandKitId, {
         limit: opts.limit as number | undefined,
-        offset: opts.offset as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
       emit(result, ctx, (r: BrandKnowledgeListResult) =>
-        table(
-          ['ID', 'TITLE', 'SOURCE', 'CREATED'],
-          r.items.map((k) => [displayId(k), k.title ?? '', k.sourceType ?? '', k.createdAt ?? '']),
+        withMore(
+          table(
+            ['ID', 'TITLE', 'SOURCE', 'CREATED'],
+            r.items.map((k) => [displayId(k), k.title ?? '', k.sourceType ?? '', k.createdAt ?? '']),
+          ),
+          r.nextCursor,
         ),
       )
     })

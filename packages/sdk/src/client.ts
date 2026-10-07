@@ -16,7 +16,12 @@ import {
 import type {
   Folder,
   DerivedFolder,
-  FolderItem,
+  FolderContents,
+  GetFolderOptions,
+  MediaListResult,
+  PageOptions,
+  ProjectListResult,
+  SearchMediaPage,
   CreateFolderInput,
   UpdateFolderInput,
   BrandKitAccountInput,
@@ -72,7 +77,6 @@ import type {
   ArchiveInput,
   ApplyEditorOpsInput,
   ApplyEditorOpsResult,
-  ProjectSummary,
   ProjectDetail,
   LiveContextResult,
   GetContextInput,
@@ -94,9 +98,7 @@ import type {
   TypeCatalogOptions,
   TranscriptResult,
   MediaItem,
-  MediaSummary,
   MediaSource,
-  SearchMediaResult,
   SearchMediaOptions,
   MediaBatchItem,
   MediaBatchResult,
@@ -694,14 +696,13 @@ export class ContentHero {
   // Brand knowledge (a brand kit's knowledge base)
   // -------------------------------------------------------------------------
 
-  /** The complete, paginated index of a brand kit's knowledge items. Requires `brandkit:read`. */
+  /** The complete index of a brand kit's knowledge items, a page at a time. Requires `brandkit:read`. */
   async listBrandKnowledge(
     brandKitId: string,
-    options: { limit?: number; offset?: number } = {},
+    options: PageOptions = {},
   ): Promise<BrandKnowledgeListResult> {
     const q = new URLSearchParams()
-    if (options.limit != null) q.set('limit', String(options.limit))
-    if (options.offset != null) q.set('offset', String(options.offset))
+    setPage(q, options)
     const qs = q.toString()
     return this.request<BrandKnowledgeListResult>(
       'GET',
@@ -760,7 +761,7 @@ export class ContentHero {
    * selects the library: 'creations' (default, studio outputs) or 'uploads' (the
    * editor Uploads tab).
    */
-  async listMedia(options: ListMediaOptions = {}): Promise<MediaSummary[]> {
+  async listMedia(options: ListMediaOptions = {}): Promise<MediaListResult> {
     const q = new URLSearchParams()
     if (options.source) q.set('source', options.source)
     if (options.contentType) {
@@ -771,15 +772,10 @@ export class ContentHero {
     if (options.kind) q.set('kind', options.kind)
     if (options.favorited) q.set('favorited', 'true')
     if (options.archived) q.set('archived', 'true')
-    if (options.limit != null) q.set('limit', String(options.limit))
-    if (options.offset != null) q.set('offset', String(options.offset))
+    setPage(q, options)
     if (options.smallCopies) q.set('smallCopies', 'true')
     const qs = q.toString()
-    const data = await this.request<{ media: MediaSummary[] }>(
-      'GET',
-      `/api/v1/media${qs ? `?${qs}` : ''}`,
-    )
-    return data.media
+    return this.request<MediaListResult>('GET', `/api/v1/media${qs ? `?${qs}` : ''}`)
   }
 
   /**
@@ -801,16 +797,12 @@ export class ContentHero {
    * description, tags, and, for videos, the timestamps of the scenes that matched, so a precise moment can be
    * located. Searches only the account's own usable library, never inspiration, published posts, or knowledge.
    */
-  async searchMedia(query: string, options: SearchMediaOptions = {}): Promise<SearchMediaResult[]> {
+  async searchMedia(query: string, options: SearchMediaOptions = {}): Promise<SearchMediaPage> {
     const q = new URLSearchParams({ query })
     if (options.kinds && options.kinds.length > 0) q.set('kinds', options.kinds.join(','))
-    if (options.limit != null) q.set('limit', String(options.limit))
+    setPage(q, options)
     if (options.smallCopies) q.set('smallCopies', 'true')
-    const data = await this.request<{ results: SearchMediaResult[] }>(
-      'GET',
-      `/api/v1/media/search?${q.toString()}`,
-    )
-    return data.results
+    return this.request<SearchMediaPage>('GET', `/api/v1/media/search?${q.toString()}`)
   }
 
   // ─── Library folders (Unified Content Library, Phase D) ────────────────────
@@ -821,16 +813,20 @@ export class ContentHero {
   }
 
   /**
-   * A folder's contents. `folderId` is a folder id or a derived key (recents|favorites|edits|canvas|posts).
-   * `smallCopies` gives each image its `smallUrl`, the smallest copy the library keeps, for drawing it small.
+   * A folder's contents, a page at a time. `folderId` is a folder id or a derived key
+   * (recents|favorites|edits|canvas|posts). `smallCopies` gives each image its `smallUrl`, the smallest copy the
+   * library keeps, for drawing it small.
    */
-  async getFolder(folderId: string, options: { smallCopies?: boolean } = {}): Promise<{ folder: Folder | null; items: FolderItem[] }> {
-    const qs = options.smallCopies ? '?smallCopies=true' : ''
-    const data = await this.request<{ folder: Folder | null; items: FolderItem[] }>(
+  async getFolder(folderId: string, options: GetFolderOptions = {}): Promise<FolderContents> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    if (options.smallCopies) q.set('smallCopies', 'true')
+    const qs = q.toString()
+    const data = await this.request<FolderContents>(
       'GET',
-      `/api/v1/library/folders/${encodeURIComponent(folderId)}${qs}`,
+      `/api/v1/library/folders/${encodeURIComponent(folderId)}${qs ? `?${qs}` : ''}`,
     )
-    return { folder: data.folder, items: data.items }
+    return { folder: data.folder, items: data.items, nextCursor: data.nextCursor }
   }
 
   async createFolder(input: CreateFolderInput): Promise<Folder> {
@@ -1113,8 +1109,7 @@ export class ContentHero {
     for (const category of ([] as string[]).concat(options.category ?? [])) q.append('category', category)
     if (options.search) q.set('search', options.search)
     if (options.archived) q.set('archived', options.archived)
-    if (options.cursor) q.set('cursor', options.cursor)
-    if (options.limit != null) q.set('limit', String(options.limit))
+    setPage(q, options)
     const qs = q.toString()
     return this.request<TemplateListResult>('GET', `/api/v1/templates${qs ? `?${qs}` : ''}`)
   }
@@ -1173,8 +1168,7 @@ export class ContentHero {
     if (options.stage) q.set('stage', options.stage)
     if (options.isFavorite) q.set('is_favorite', 'true')
     if (options.search) q.set('search', options.search)
-    if (options.limit != null) q.set('limit', String(options.limit))
-    if (options.offset != null) q.set('offset', String(options.offset))
+    setPage(q, options)
     if (options.spaceId) q.set('space_id', options.spaceId)
     const qs = q.toString()
     return this.request<CardListResult>('GET', `/api/v1/cards${qs ? `?${qs}` : ''}`)
@@ -1527,8 +1521,7 @@ export class ContentHero {
     if (options.addedByYou) q.set('added_by_you', 'true')
     if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
     if (options.favorited) q.set('favorited', 'true')
-    if (options.limit != null) q.set('limit', String(options.limit))
-    if (options.offset != null) q.set('offset', String(options.offset))
+    setPage(q, options)
     const qs = q.toString()
     return this.request<ContentListResult>('GET', `/api/v1/content${qs ? `?${qs}` : ''}`)
   }
@@ -1642,9 +1635,9 @@ export class ContentHero {
 
   /**
    * List the caller's projects (both editor + canvas) as lightweight summaries. Filter by archived /
-   * favorited state, by `kind`, or by a title search. Requires the `editor:read` scope.
+   * favorited state, by `kind`, or by a title search, a page at a time. Requires the `editor:read` scope.
    */
-  async listProjects(input: ListProjectsInput = {}): Promise<ProjectSummary[]> {
+  async listProjects(input: ListProjectsInput = {}): Promise<ProjectListResult> {
     const q = new URLSearchParams()
     if (input.filter) q.set('filter', input.filter)
     // One field on the wire: `type`, with the deprecated aliases folded into it here. Until sdk 0.4.16 this sent only
@@ -1652,12 +1645,9 @@ export class ContentHero {
     const type = input.type ?? input.surface ?? input.kind
     if (type) q.set('type', type)
     if (input.search) q.set('search', input.search)
+    setPage(q, input)
     const qs = q.toString()
-    const { projects } = await this.request<{ projects: ProjectSummary[] }>(
-      'GET',
-      `/api/v1/projects${qs ? `?${qs}` : ''}`,
-    )
-    return projects
+    return this.request<ProjectListResult>('GET', `/api/v1/projects${qs ? `?${qs}` : ''}`)
   }
 
   /**
@@ -1974,6 +1964,12 @@ export class ContentHero {
 }
 
 /** Read an env var without assuming `process` exists (keeps non-Node bundles happy). */
+/** A page's two parameters on a listing's query: the ONE place every paged listing writes them. */
+function setPage(q: URLSearchParams, page: PageOptions): void {
+  if (page.limit != null) q.set('limit', String(page.limit))
+  if (page.cursor) q.set('cursor', page.cursor)
+}
+
 function readEnv(name: string): string | undefined {
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
     ?.env

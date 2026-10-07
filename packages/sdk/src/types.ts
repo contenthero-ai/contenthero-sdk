@@ -103,6 +103,27 @@ export interface CreateKlingElementRequest {
 export type CreateElementRequest = CreateKlingElementRequest
 
 // ---------------------------------------------------------------------------
+// Paging: the one shape every paged listing takes and returns
+// ---------------------------------------------------------------------------
+
+/**
+ * A page of a listing: how many, and where the page before ended. A cursor is opaque and belongs to the listing and
+ * the filters that produced it; one passed with other filters or another sort is refused.
+ */
+export interface PageOptions {
+  /** How many to return. The server sets the default and the maximum. */
+  limit?: number
+  /** The `nextCursor` of the page before. Omitted, the first page. */
+  cursor?: string
+}
+
+/** What every paged listing returns beside its items. */
+export interface Paged {
+  /** Pass as `cursor` for the next page; null on the last. */
+  nextCursor: string | null
+}
+
+// ---------------------------------------------------------------------------
 // Templates (the editor's Elements: reusable graphics, shapes and animated emoji)
 // ---------------------------------------------------------------------------
 
@@ -179,7 +200,7 @@ export interface Template extends TemplateSummary {
   code: string | null
 }
 
-export interface ListTemplatesOptions {
+export interface ListTemplatesOptions extends PageOptions {
   /** `all` (the default), `system` (ContentHero's) or `user` (the caller's own). */
   scope?: TemplateScope
   kind?: TemplateKind
@@ -189,16 +210,10 @@ export interface ListTemplatesOptions {
   search?: string
   /** `only` lists archived templates, to restore one; they are left out otherwise. */
   archived?: 'only'
-  /** The `nextCursor` of the page before. */
-  cursor?: string
-  /** Up to 500; 100 by default. */
-  limit?: number
 }
 
-export interface TemplateListResult {
+export interface TemplateListResult extends Paged {
   templates: TemplateSummary[]
-  /** Pass as `cursor` for the next page; null on the last. */
-  nextCursor: string | null
 }
 
 /**
@@ -1066,11 +1081,10 @@ export interface BrandKnowledgeDetail extends BrandKnowledgeItem {
   content: string | null
 }
 
-/** Result of `listBrandKnowledge`: a page of items plus pagination metadata. */
-export interface BrandKnowledgeListResult {
+/** Result of `listBrandKnowledge`: a page of items, how many there are in all, and the next page's cursor. */
+export interface BrandKnowledgeListResult extends Paged {
   items: BrandKnowledgeItem[]
   total: number
-  hasMore: boolean
 }
 
 /** One ranked chunk match from `searchBrandKnowledge`. */
@@ -1506,7 +1520,7 @@ export interface MediaBatchResult {
 }
 
 /** Options for `listMedia`. */
-export interface ListMediaOptions {
+export interface ListMediaOptions extends PageOptions {
   /** Which library to read; defaults to 'creations' (studio outputs). 'uploads' = the editor Uploads tab. */
   source?: MediaSource
   contentType?: MediaType | MediaType[]
@@ -1517,10 +1531,13 @@ export interface ListMediaOptions {
   favorited?: boolean
   /** When true, return only outputs that have an archived variation. */
   archived?: boolean
-  limit?: number
-  offset?: number
   /** Give each image its `smallUrl`: the smallest copy the library keeps, for drawing it small. */
   smallCopies?: boolean
+}
+
+/** Result of `listMedia`: a page of media, one entry per variation, newest first. */
+export interface MediaListResult extends Paged {
+  media: MediaSummary[]
 }
 
 /** Media kinds that semantic library search can return / filter by. */
@@ -1561,13 +1578,16 @@ export interface SearchMediaResult {
 }
 
 /** Options for searchMedia. */
-export interface SearchMediaOptions {
+export interface SearchMediaOptions extends PageOptions {
   /** Restrict results to these media kinds. Omit to search all kinds. */
   kinds?: MediaKind[]
-  /** Maximum number of assets to return (default 12, max 50). */
-  limit?: number
   /** Give each image its `smallUrl`: the smallest copy the library keeps, for drawing it small. */
   smallCopies?: boolean
+}
+
+/** Result of `searchMedia`: a page of matches, most relevant first. */
+export interface SearchMediaPage extends Paged {
+  results: SearchMediaResult[]
 }
 
 // ─── Library folders (Unified Content Library, Phase D) ──────────────────────
@@ -1623,6 +1643,18 @@ export type FolderItem =
       relevance?: number
     }
   | { type: 'project' | 'card'; id: string; name: string; subtype: string | null }
+
+/** Options for `getFolder`. */
+export interface GetFolderOptions extends PageOptions {
+  /** Give each image its `smallUrl`: the smallest copy the library keeps, for drawing it small. */
+  smallCopies?: boolean
+}
+
+/** Result of `getFolder`: the folder (null for a derived key) and a page of its contents. */
+export interface FolderContents extends Paged {
+  folder: Folder | null
+  items: FolderItem[]
+}
 
 export interface CreateFolderInput {
   name: string
@@ -2065,13 +2097,12 @@ export interface ResolvedSpace {
   name: string
 }
 
-/** Result of `listCards`: a page of cards, pagination metadata, and the SCOPE it answers about. */
-export interface CardListResult {
+/** Result of `listCards`: a page of cards, how many there are in all, the next page's cursor, and the SCOPE it answers about. */
+export interface CardListResult extends Paged {
   /** ⚠️ `cards`, NOT `posts`. This has always held CARDS. `Post` now means a publish DESTINATION,
    *  and the stale name is what let an app-side realtime binding subscribe to the wrong table. */
   cards: CardSummary[]
   total: number
-  hasMore: boolean
   /**
    * ⭐⭐⭐ THE SPACE THIS LIST IS AN ANSWER ABOUT. This read is scoped to ONE space and falls back to the
    * account's default when none is named, so without this a list of the wrong board is indistinguishable
@@ -2098,7 +2129,7 @@ export interface StageListResult {
 }
 
 /** Options for `listCards`. */
-export interface ListCardsOptions {
+export interface ListCardsOptions extends PageOptions {
   /**
    * `true` lists ARCHIVED cards instead of live ones. Archived are excluded by default.
    *
@@ -2111,8 +2142,6 @@ export interface ListCardsOptions {
   stage?: string
   isFavorite?: boolean
   search?: string
-  limit?: number
-  offset?: number
   /**
    * Which SPACE's board to list. Omitted means the account's DEFAULT space, not
    * every space.
@@ -2495,7 +2524,7 @@ export type ContentScope = 'all' | 'inspiration' | 'brand'
 export const CONTENT_SORTS = ['relevance', 'score', 'date', 'views', 'engagement'] as const
 export type ContentSort = (typeof CONTENT_SORTS)[number]
 
-export interface ListContentOptions {
+export interface ListContentOptions extends PageOptions {
   /**
    * `inspiration` = creators they watch, `brand` = their own accounts, `all` = both (the default).
    * Each row carries `isOwn`, so one list can answer both questions.
@@ -2529,8 +2558,6 @@ export interface ListContentOptions {
   /** Scope to the accounts linked to this brand kit. */
   brandKitId?: string
   favorited?: boolean
-  limit?: number
-  offset?: number
 }
 
 /** Options for `getContent`. */
@@ -2562,11 +2589,10 @@ export interface ListTrackedAccountsOptions {
   brandKitId?: string
 }
 
-/** Result of `listContent`: a page of content plus pagination metadata. */
-export interface ContentListResult {
+/** Result of `listContent`: a page of content, how many there are in all, and the next page's cursor. */
+export interface ContentListResult extends Paged {
   outliers: ContentSummary[]
   total: number
-  hasMore: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -3020,7 +3046,7 @@ export interface EditorSelectedItem {
  */
 
 /** Filters for `listProjects`. */
-export interface ListProjectsInput {
+export interface ListProjectsInput extends PageOptions {
   /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */
   filter?: 'archived' | 'favorited'
   /** Restrict to one type. Omitted returns both. */
@@ -3031,6 +3057,11 @@ export interface ListProjectsInput {
   kind?: ProjectType
   /** Case-insensitive title search. */
   search?: string
+}
+
+/** Result of `listProjects`: a page of project summaries. */
+export interface ProjectListResult extends Paged {
+  projects: ProjectSummary[]
 }
 
 /** Input to `createProject`. All optional; the server applies the same defaults as the in-app new-project

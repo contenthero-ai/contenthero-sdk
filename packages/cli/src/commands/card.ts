@@ -26,10 +26,10 @@ import type {
   UpdateCardInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow, displayId } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, isClear, toInt, toJson, toList } from '../args.js'
+import { collect, isClear, toInt, toJson, toList, withPageFlags } from '../args.js'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -121,17 +121,17 @@ function parsePlatformSettings(json: string | undefined): Record<string, unknown
 export function registerCard(program: Command): void {
   const card = program.command('card').description('Planner cards: the unit of work on a space board')
 
-  card
-    .command('list')
-    .description("List one space's cards (newest-updated first; defaults to the default space)")
-    .option('--space <id>', "which space's board (from `contenthero space list`); default space if omitted")
-    .option('--archived', 'only ARCHIVED cards (excluded by default)')
-    .option('--platform <platform>', 'filter by platform')
-    .option('--stage <stage>', 'filter by stage (id, slug, or name)')
-    .option('--search <text>', 'case-insensitive title search')
-    .option('--favorite', 'only favorited posts')
-    .option('--limit <n>', 'how many to return (default 50)', toInt)
-    .option('--offset <n>', 'pagination offset', toInt)
+  withPageFlags(
+    card
+      .command('list')
+      .description("List one space's cards (newest-updated first; defaults to the default space)")
+      .option('--space <id>', "which space's board (from `contenthero space list`); default space if omitted")
+      .option('--archived', 'only ARCHIVED cards (excluded by default)')
+      .option('--platform <platform>', 'filter by platform')
+      .option('--stage <stage>', 'filter by stage (id, slug, or name)')
+      .option('--search <text>', 'case-insensitive title search')
+      .option('--favorite', 'only favorited posts'),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
       const { client, ctx } = makeClient(command)
@@ -143,7 +143,7 @@ export function registerCard(program: Command): void {
         search: opts.search as string | undefined,
         isFavorite: opts.favorite === true ? true : undefined,
         limit: opts.limit as number | undefined,
-        offset: opts.offset as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
       emit(result, ctx, (r: CardListResult) => {
         /**
@@ -163,7 +163,7 @@ export function registerCard(program: Command): void {
           ['ID', 'PLATFORM', 'TITLE'],
           r.cards.map((p) => [displayId(p), p.platform ?? '', p.title]),
         )
-        return `${t}\n\n${r.cards.length} of ${r.total}${where}${r.hasMore ? ' (more available)' : ''}`
+        return withMore(`${t}\n\n${r.cards.length} of ${r.total}${where}`, r.nextCursor)
       })
     })
 

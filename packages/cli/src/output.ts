@@ -20,6 +20,20 @@ export function emit(
   }
 }
 
+/**
+ * The line a paged list ends with when a next page exists: the flag to pass for it. Nothing on the last page. With
+ * `--json` the page's `nextCursor` carries the same cursor.
+ */
+export function moreLine(nextCursor: string | null | undefined): string | null {
+  return nextCursor ? `More: --cursor ${nextCursor}` : null
+}
+
+/** A human list and, when there is one, its next page's line. */
+export function withMore(body: string, nextCursor: string | null | undefined): string {
+  const more = moreLine(nextCursor)
+  return more ? `${body}\n${more}` : body
+}
+
 /** A two-space-gutter, left-aligned table with a dim header row. */
 export function table(headers: string[], rows: Array<Array<string | number>>): string {
   const cells = rows.map((r) => r.map((c) => String(c ?? '')))

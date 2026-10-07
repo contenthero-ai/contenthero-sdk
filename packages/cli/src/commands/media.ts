@@ -1,7 +1,7 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
- *   media list [--type --kind --status --limit --offset --small-copies]   recent outputs, newest first
- *   media search <query> [--kinds --limit --small-copies]                  semantic search of the editable library
+ *   media list [--type --kind --status --limit --cursor --small-copies]   recent outputs, newest first
+ *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
  *   media zoom <idOrUrl> <x,y,width,height>                 a region, cut from the original at its own detail
  *
@@ -12,12 +12,12 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import { pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaSummary, type MediaType, type SearchMediaResult, type UploadedMedia } from '@contenthero/sdk'
+import { pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaListResult, type MediaType, type SearchMediaPage, type UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
-import { costRows, emit, keyValues, table, linkRow, displayId } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toInt, toList } from '../args.js'
+import { toInt, toList, withPageFlags } from '../args.js'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: string): Buffer | null {
@@ -137,17 +137,17 @@ export function importedHuman(m: ImportedMedia): string {
 export function registerMedia(program: Command): void {
   const media = program.command('media').description("Browse the account's studio outputs")
 
-  media
-    .command('list')
-    .description("List recent media (newest first). --source uploads|stock|all beyond creations.")
-    .option('--source <source>', `which library: ${LIST_SOURCES.join(', ')} (default creations)`)
-    .option('--type <type>', `filter by media type: ${MEDIA_TYPES.join(', ')}`)
-    .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
-    .option('--status <status>', "status filter (defaults to 'completed')")
-    .option('--favorite', 'creations only: only outputs with a favorited variation')
-    .option('--archived', 'creations only: only outputs with an archived variation')
-    .option('--limit <n>', 'how many to return (default 20)', toInt)
-    .option('--offset <n>', 'how many to skip, for the next page (default 0)', toInt)
+  withPageFlags(
+    media
+      .command('list')
+      .description("List recent media (newest first). --source uploads|stock|all beyond creations.")
+      .option('--source <source>', `which library: ${LIST_SOURCES.join(', ')} (default creations)`)
+      .option('--type <type>', `filter by media type: ${MEDIA_TYPES.join(', ')}`)
+      .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
+      .option('--status <status>', "status filter (defaults to 'completed')")
+      .option('--favorite', 'creations only: only outputs with a favorited variation')
+      .option('--archived', 'creations only: only outputs with an archived variation'),
+  )
     .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
     .action(async (opts: Record<string, unknown>, command: Command) => {
       if (opts.source && !LIST_SOURCES.includes(opts.source as MediaSource)) {
@@ -169,7 +169,7 @@ export function registerMedia(program: Command): void {
         )
       }
       const { client, ctx } = makeClient(command)
-      const items = await client.listMedia({
+      const page = await client.listMedia({
         source: opts.source as MediaSource | undefined,
         contentType: opts.type as MediaType | undefined,
         kind: opts.kind as Kind | undefined,
@@ -177,32 +177,36 @@ export function registerMedia(program: Command): void {
         favorited: opts.favorite ? true : undefined,
         archived: opts.archived ? true : undefined,
         limit: opts.limit as number | undefined,
-        offset: opts.offset as number | undefined,
+        cursor: opts.cursor as string | undefined,
         smallCopies: opts.smallCopies ? true : undefined,
       })
       // One row per output (the atomic grain), each named by its own media id.
-      emit(items, ctx, (rows: MediaSummary[]) =>
-        table(
-          ['ID', 'FAV', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
-          rows.map((m) => [
-            m.mediaId,
-            m.isFavorited ? '★' : '',
-            m.type,
-            m.kind ?? '',
-            m.fileName ?? m.model ?? '',
-            m.status,
-            clip(m.prompt),
-          ]),
+      emit(page, ctx, (p: MediaListResult) =>
+        withMore(
+          table(
+            ['ID', 'FAV', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
+            p.media.map((m) => [
+              m.mediaId,
+              m.isFavorited ? '★' : '',
+              m.type,
+              m.kind ?? '',
+              clip(m.fileName ?? m.model),
+              m.status,
+              clip(m.prompt),
+            ]),
+          ),
+          p.nextCursor,
         ),
       )
     })
 
-  media
-    .command('search')
-    .description('Semantically search your library (creations, uploads, stock, brand) by describing the content')
-    .argument('<query>', 'natural-language description of the media to find')
-    .option('--kinds <kinds>', `restrict to media kinds (comma-separated): ${SEARCH_KINDS.join(', ')}`, toList)
-    .option('--limit <n>', 'max assets to return (default 12, max 50)', toInt)
+  withPageFlags(
+    media
+      .command('search')
+      .description('Semantically search your library (creations, uploads, stock, brand) by describing the content')
+      .argument('<query>', 'natural-language description of the media to find')
+      .option('--kinds <kinds>', `restrict to media kinds (comma-separated): ${SEARCH_KINDS.join(', ')}`, toList),
+  )
     .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
     .action(async (query: string, opts: Record<string, unknown>, command: Command) => {
       const kinds = opts.kinds as string[] | undefined
@@ -214,23 +218,27 @@ export function registerMedia(program: Command): void {
         }
       }
       const { client, ctx } = makeClient(command)
-      const results = await client.searchMedia(query, {
+      const page = await client.searchMedia(query, {
         kinds: kinds as MediaKind[] | undefined,
         limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
         smallCopies: opts.smallCopies ? true : undefined,
       })
-      emit(results, ctx, (rows: SearchMediaResult[]) =>
-        table(
-          ['ID', 'KIND', 'REL', 'SCENES', 'SUMMARY'],
-          rows.map((r) => [
-            r.mediaId ?? '',
-            r.kind ?? '',
-            `${Math.round(r.relevance * 100)}%`,
-            r.scenes.length
-              ? r.scenes.map((s) => `${(s.startMs / 1000).toFixed(0)}-${(s.endMs / 1000).toFixed(0)}s`).join(' ')
-              : '',
-            clip(r.summary),
-          ]),
+      emit(page, ctx, (p: SearchMediaPage) =>
+        withMore(
+          table(
+            ['ID', 'KIND', 'REL', 'SCENES', 'SUMMARY'],
+            p.results.map((r) => [
+              r.mediaId ?? '',
+              r.kind ?? '',
+              `${Math.round(r.relevance * 100)}%`,
+              r.scenes.length
+                ? r.scenes.map((s) => `${(s.startMs / 1000).toFixed(0)}-${(s.endMs / 1000).toFixed(0)}s`).join(' ')
+                : '',
+              clip(r.summary),
+            ]),
+          ),
+          p.nextCursor,
         ),
       )
     })

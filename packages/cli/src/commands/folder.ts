@@ -9,10 +9,10 @@
 
 import type { Command } from 'commander'
 import type { FolderItemRef } from '@contenthero/sdk'
-import type { Folder, DerivedFolder, FolderItem } from '@contenthero/sdk'
+import type { Folder, DerivedFolder, FolderContents } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, table, displayId } from '../output.js'
-import { collect } from '../args.js'
+import { emit, table, displayId, withMore } from '../output.js'
+import { collect, withPageFlags } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 
 function clip(s: string | null | undefined, n = 50): string {
@@ -40,22 +40,31 @@ export function registerFolder(program: Command): void {
       )
     })
 
-  folder
-    .command('get')
-    .description("A folder's contents (a folder id or a derived key: recents, favorites, edits, canvas, cards)")
-    .argument('<id>', 'folder id or derived key')
+  withPageFlags(
+    folder
+      .command('get')
+      .description("A folder's contents (a folder id or a derived key: recents, favorites, edits, canvas, cards)")
+      .argument('<id>', 'folder id or derived key'),
+  )
     .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const { items } = await client.getFolder(id, { smallCopies: opts.smallCopies ? true : undefined })
-      emit(items, ctx, (rows: FolderItem[]) =>
-        table(
-          ['KIND', 'REF', 'DETAIL'],
-          rows.map((i) =>
-            i.type === 'media'
-              ? [i.kind ?? 'media', i.mediaId ?? '', clip(i.summary)]
-              : [i.type, displayId(i), clip(i.name)],
+      const page = await client.getFolder(id, {
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
+        smallCopies: opts.smallCopies ? true : undefined,
+      })
+      emit(page, ctx, (p: FolderContents) =>
+        withMore(
+          table(
+            ['KIND', 'REF', 'DETAIL'],
+            p.items.map((i) =>
+              i.type === 'media'
+                ? [i.kind ?? 'media', i.mediaId ?? '', clip(i.summary)]
+                : [i.type, displayId(i), clip(i.name)],
+            ),
           ),
+          p.nextCursor,
         ),
       )
     })

@@ -114,10 +114,13 @@ function fakeClient(overrides = {}) {
       description: 'Shure SM7B',
       useCase: null,
     }),
-    listMedia: async () => [
-      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
-      { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
-    ],
+    listMedia: async () => ({
+      media: [
+        { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+        { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+      ],
+      nextCursor: null,
+    }),
     getMedia: async (id) => ({
       id: 'out-uuid-1',
       type: 'image',
@@ -320,7 +323,7 @@ function fakeClient(overrides = {}) {
         { id: 'p1', title: 'Launch clip', description: null, platform: 'instagram', status: 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: ['instagram'] },
       ],
       total: 1,
-      hasMore: false,
+      nextCursor: null,
     }),
     getCard: async (id) => ({
       id,
@@ -376,7 +379,7 @@ function fakeClient(overrides = {}) {
     listContent: async () => ({
       outliers: [{ id: 'c1', platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast' }],
       total: 1,
-      hasMore: false,
+      nextCursor: null,
     }),
     getContent: async (id, options) => ({
       id, platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast',
@@ -390,7 +393,7 @@ function fakeClient(overrides = {}) {
     listBrandKnowledge: async () => ({
       items: [{ id: 'kn1', title: 'Launch playbook', sourceType: 'text', sourceUrl: null, createdAt: 't', updatedAt: 't' }],
       total: 1,
-      hasMore: false,
+      nextCursor: null,
     }),
     getBrandKnowledge: async (_id, knowledgeId) => ({ id: knowledgeId, title: 'Launch playbook', sourceType: 'text', sourceUrl: null, createdAt: 't', updatedAt: 't', content: 'Lead with the customer outcome.' }),
     searchBrandKnowledge: async (_id, query) => [{ knowledgeId: 'kn1', title: 'Launch playbook', content: `match for ${query}`, similarity: 0.82, sourceUrl: null, chunkIndex: 0 }],
@@ -413,9 +416,12 @@ function fakeClient(overrides = {}) {
     favorite: async () => {},
     archive: async () => {},
     applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
-    listProjects: async () => [
-      { id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
-    ],
+    listProjects: async () => ({
+      projects: [
+        { id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
+      ],
+      nextCursor: null,
+    }),
     getProject: async (projectId, options) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
     createProject: async (input) => ({ id: 'new1', type: input.type ?? 'editor', kind: input.type ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: input.type ?? 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
@@ -925,7 +931,7 @@ test('list_media forwards the kind filter', async () => {
     fakeClient({
       listMedia: async (opts) => {
         captured = opts
-        return []
+        return { media: [], nextCursor: null }
       },
     }),
   )
@@ -1816,7 +1822,7 @@ test('list_cards flags an archived card and forwards the filter', async () => {
         },
       ],
       total: 1,
-      hasMore: false,
+      nextCursor: null,
     }
   }
   const mcp = await connect(client)
@@ -2069,7 +2075,7 @@ test('list filters forward favorited/archived to the client', async () => {
     fakeClient({
       listMedia: async (opts) => {
         mediaOpts = opts
-        return []
+        return { media: [], nextCursor: null }
       },
       listBrandKits: async (opts) => {
         kitOpts = opts
@@ -2341,7 +2347,7 @@ test('list_content passes filters through to the client', async () => {
     fakeClient({
       listContent: async (options) => {
         captured = options
-        return { outliers: [], total: 0, hasMore: false }
+        return { outliers: [], total: 0, nextCursor: null }
       },
     }),
   )
@@ -2791,7 +2797,7 @@ test('list_content forwards brandKitId for brand-scoped reads', async () => {
     fakeClient({
       listContent: async (options) => {
         captured = options
-        return { outliers: [], total: 0, hasMore: false }
+        return { outliers: [], total: 0, nextCursor: null }
       },
     }),
   )
@@ -3216,7 +3222,7 @@ test('list_media forwards the uploads source', async () => {
     fakeClient({
       listMedia: async (opts) => {
         captured = opts
-        return []
+        return { media: [], nextCursor: null }
       },
     }),
   )
@@ -3227,8 +3233,8 @@ test('list_media forwards the uploads source', async () => {
 test('list_media surfaces an upload file name, duration, and url inline', async () => {
   const mcp = await connect(
     fakeClient({
-      listMedia: async () => [
-        {
+      listMedia: async () => ({
+        media: [{
           id: 'up-uuid-1',
           type: 'video',
           model: null,
@@ -3244,8 +3250,9 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
           source: 'uploads',
           fileName: 'C0001.MP4',
           durationSeconds: 1792,
-        },
-      ],
+        }],
+        nextCursor: null,
+      }),
     }),
   )
   const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'uploads' } })
@@ -3265,7 +3272,7 @@ test('list_media prints each item\'s asset id', async () => {
     url: 'https://cdn/editor-media-1.mp4', generationSize: 1, isFavorited: false, kind: 'upload', boardType: null,
     source: 'uploads', fileName: null, durationSeconds: null, assetId: '15bf8171-0000-4000-8000-000000000000',
   }
-  const mcp = await connect(fakeClient({ listMedia: async () => [item, { ...item, id: 'up-uuid-2', assetId: null }] }))
+  const mcp = await connect(fakeClient({ listMedia: async () => ({ media: [item, { ...item, id: 'up-uuid-2', assetId: null }], nextCursor: null }) }))
   const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'uploads' } })
   const [first, second] = res.content[0].text.split('\n').slice(1)
   assert.match(first, /\| asset 15bf8171-0000-4000-8000-000000000000 \|/)
@@ -4185,7 +4192,7 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
 /**
  * 7.42, 7.44, 7.45, 7.49, 7.50 at the MCP boundary (2026-10-06).
  *
- * Break-verified: waiting with the old 50s and no deadline turns the first red; dropping `offset` turns the second
+ * Break-verified: waiting with the old 50s and no deadline turns the first red; dropping `cursor` turns the second
  * red; showing the full still instead of the crop turns the third red; dropping the shortfall line turns the fourth
  * red; fetching past the deadline turns the fifth red.
  */
@@ -4203,11 +4210,14 @@ test('get_generation_status waits 40s for every id at once, inside the host ceil
   assert.deepEqual(asked, { ids: ['g1', 'g2'], timeoutMs: 40_000 })
 })
 
-test('list_media pages with offset', async () => {
+test('list_media pages with a cursor, and offset is refused', async () => {
   let opts
-  const mcp = await connect(fakeClient({ listMedia: async (o) => ((opts = o), []) }))
-  await mcp.callTool({ name: 'list_media', arguments: { limit: 20, offset: 40 } })
-  assert.equal(opts.offset, 40)
+  const mcp = await connect(fakeClient({ listMedia: async (o) => ((opts = o), { media: [], nextCursor: null }) }))
+  await mcp.callTool({ name: 'list_media', arguments: { limit: 20, cursor: 'c40' } })
+  assert.equal(opts.cursor, 'c40')
+  assert.equal(opts.limit, 20)
+  const old = await mcp.callTool({ name: 'list_media', arguments: { limit: 20, offset: 40 } })
+  assert.ok(old.isError, 'offset is no longer an input')
 })
 
 test('the media listings take smallCopies and print each small copy as one, the file itself where none is kept (8.5)', async () => {
@@ -4218,18 +4228,18 @@ test('the media listings take smallCopies and print each small copy as one, the 
     fakeClient({
       listMedia: async (o) => {
         asked.list = o.smallCopies
-        return [
+        return { nextCursor: null, media: [
           { id: '1', shortId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Aaaaaaaa', generationSize: 1, isFavorited: false, kind: 'creation', boardType: null, source: 'creations', fileName: null, durationSeconds: null, ...image },
           { id: '2', shortId: 'Bbbbbbbb', appUrl: 'https://app/media/Bbbbbbbb', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Bbbbbbbb', generationSize: 1, isFavorited: false, kind: 'creation', boardType: null, source: 'creations', fileName: null, durationSeconds: null, ...bare },
-        ]
+        ] }
       },
       searchMedia: async (_q, o) => {
         asked.search = o.smallCopies
-        return [{ mediaId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', kind: 'image', summary: null, tags: [], relevance: 0.9, scenes: [], ...image }]
+        return { results: [{ mediaId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', kind: 'image', summary: null, tags: [], relevance: 0.9, scenes: [], ...image }], nextCursor: null }
       },
       getFolder: async (_id, o) => {
         asked.folder = o?.smallCopies
-        return { folder: { name: 'Wall' }, items: [{ type: 'media', kind: 'image', mediaId: 'Bbbbbbbb', summary: null, isFavorited: false, ...bare }] }
+        return { folder: { name: 'Wall' }, items: [{ type: 'media', kind: 'image', mediaId: 'Bbbbbbbb', summary: null, isFavorited: false, ...bare }], nextCursor: null }
       },
     }),
   )
@@ -4242,6 +4252,61 @@ test('the media listings take smallCopies and print each small copy as one, the 
   const folder = (await mcp.callTool({ name: 'get_folder', arguments: { folderId: 'f1', smallCopies: true } })).content[0].text
   assert.match(folder, /\(media Bbbbbbbb.*\| https:\/\/media\/b\.png$/m)
   assert.deepEqual(asked, { list: true, search: true, folder: true })
+})
+
+/**
+ * 9.7b: ONE paging mechanism for every paged listing. Each tool forwards `limit` and `cursor` and refuses `offset`, and
+ * its text ends with the next page's cursor exactly when there is one, in the one wording (`moreLine`). Break-verified:
+ * dropping `moreLine` from a formatter, or forwarding no cursor, turns this red by tool name.
+ */
+test('every paged listing forwards limit and cursor, refuses offset, and ends with the next cursor only when there is one', async () => {
+  const base = fakeClient()
+  const media = (await base.listMedia()).media
+  const template = { id: 't1', scope: 'system', kind: 'shape', name: 'Circle', category: 'shapes', version: 1, coverage: 'full', archived_at: null }
+  const pages = {
+    list_media: { method: 'listMedia', args: {}, page: { media } },
+    search_media: { method: 'searchMedia', args: { query: 'cat' }, page: { results: [{ mediaId: 'Out12345-1', kind: 'image', summary: null, tags: [], relevance: 0.8, scenes: [], url: 'https://cdn/1.png' }] } },
+    get_folder: { method: 'getFolder', args: { folderId: 'favorites' }, page: { folder: null, items: [{ type: 'media', kind: 'image', mediaId: 'Out12345-1', url: null, summary: null, isFavorited: true }] } },
+    list_cards: { method: 'listCards', args: {}, page: await base.listCards() },
+    list_content: { method: 'listContent', args: {}, page: await base.listContent() },
+    list_brand_knowledge: { method: 'listBrandKnowledge', args: { brandKitId: 'k1' }, page: await base.listBrandKnowledge() },
+    list_templates: { method: 'listTemplates', args: {}, page: { templates: [template] } },
+    list_projects: { method: 'listProjects', args: {}, page: { projects: (await base.listProjects()).projects } },
+  }
+  for (const [tool, { method, args, page }] of Object.entries(pages)) {
+    for (const nextCursor of ['next-9', null]) {
+      let asked
+      const mcp = await connect(fakeClient({ [method]: async (...a) => ((asked = a.at(-1)), { ...page, nextCursor }) }))
+      const res = await mcp.callTool({ name: tool, arguments: { ...args, limit: 5, cursor: 'c-1' } })
+      assert.ok(!res.isError, `${tool}: ${res.content[0].text}`)
+      assert.equal(asked.cursor, 'c-1', `${tool} forwards cursor`)
+      assert.equal(asked.limit, 5, `${tool} forwards limit`)
+      assert.equal('offset' in asked, false, `${tool} sends no offset`)
+      const body = res.content[0].text
+      if (nextCursor) assert.match(body, /\nMore: pass cursor "next-9"\.(\n|$)/, `${tool} names the next page`)
+      else assert.doesNotMatch(body, /More:/, `${tool} says nothing on the last page`)
+      const refused = await mcp.callTool({ name: tool, arguments: { ...args, offset: 10 } })
+      assert.ok(refused.isError, `${tool} refuses offset`)
+    }
+  }
+})
+
+test('a paged listing caps limit at 100, templates at 500', async () => {
+  const mcp = await connect(fakeClient({ listTemplates: async () => ({ templates: [], nextCursor: null }) }))
+  assert.ok((await mcp.callTool({ name: 'list_media', arguments: { limit: 101 } })).isError)
+  assert.ok(!(await mcp.callTool({ name: 'list_media', arguments: { limit: 100 } })).isError)
+  assert.ok((await mcp.callTool({ name: 'list_templates', arguments: { limit: 501 } })).isError)
+  assert.ok(!(await mcp.callTool({ name: 'list_templates', arguments: { limit: 500 } })).isError)
+})
+
+test('list_media cuts a long file name the way it cuts a prompt', async () => {
+  const long = `${'interview-take-'.repeat(10)}final.mp4`
+  const row = { ...(await fakeClient().listMedia()).media[0], fileName: long, prompt: long }
+  const mcp = await connect(fakeClient({ listMedia: async () => ({ media: [row], nextCursor: null }) }))
+  const body = (await mcp.callTool({ name: 'list_media', arguments: {} })).content[0].text
+  const cut = `${long.slice(0, 80)}...`
+  assert.equal(body.split(cut).length - 1, 2, 'the file name and the prompt are each cut at the same length')
+  assert.doesNotMatch(body, /final\.mp4/)
 })
 
 test('get_media with a region shows the cut, not the whole picture, and says how it maps back', async () => {

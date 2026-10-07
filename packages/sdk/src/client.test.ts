@@ -268,10 +268,10 @@ test('a 409 is a ConflictError carrying each stale section', async () => {
 })
 
 test('listMedia builds the query string and getMedia encodes the token', async () => {
-  const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 0, url: null, generationSize: 1, isFavorited: false }] } }])
+  const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 0, url: null, generationSize: 1, isFavorited: false }], nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: list.fetch, baseUrl: 'https://example.test' })
-  const media = await c1.listMedia({ contentType: 'image', limit: 5 })
-  assert.equal(media[0].id, 'o1')
+  const page = await c1.listMedia({ contentType: 'image', limit: 5 })
+  assert.equal(page.media[0]?.id, 'o1')
   assert.equal(list.calls[0]?.url, 'https://example.test/api/v1/media?contentType=image&limit=5')
 
   const get = stubFetch([{ status: 200, body: { id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 1, url: null, generationSize: 2, isFavorited: false, script: null, aspectRatio: null, resolution: null, duration: null, creditsUsed: null, variations: [], selectedVariation: 2, thumbnailUrl: null } }])
@@ -455,7 +455,7 @@ test('list filters append favorited and archived query params', async () => {
  * shape test passes whether or not the param was ever sent.
  */
 test('space_id reaches the wire for cards and stages', async () => {
-  const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, hasMore: false } }])
+  const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: cards.fetch, baseUrl: 'https://example.test' })
   await c1.listCards({ spaceId: 'sp1', search: 'lesson' })
   assert.ok(cards.calls[0]?.url.includes('space_id=sp1'), 'listCards must send space_id')
@@ -468,7 +468,7 @@ test('space_id reaches the wire for cards and stages', async () => {
 })
 
 test('omitting spaceId sends no space_id, so the server picks the default space', async () => {
-  const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, hasMore: false } }])
+  const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: cards.fetch, baseUrl: 'https://example.test' })
   await c1.listCards()
   assert.equal(cards.calls[0]?.url, 'https://example.test/api/v1/cards')
@@ -603,13 +603,13 @@ test('getProject never asks the server to render, even when an old caller passes
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p1?detail=full')
 })
 
-test('listProjects GETs /api/v1/projects with filters and unwraps { projects }', async () => {
+test('listProjects GETs /api/v1/projects with filters and returns its page', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [{ id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'A', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null }] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const rows = await client.listProjects({ type: 'editor', search: 'A' })
+  const page = await client.listProjects({ type: 'editor', search: 'A' })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects?type=editor&search=A')
-  assert.equal(rows.length, 1)
-  assert.equal(rows[0]?.id, 'p1')
+  assert.equal(page.projects.length, 1)
+  assert.equal(page.projects[0]?.id, 'p1')
 })
 
 test('createProject POSTs to /api/v1/projects and unwraps { project }', async () => {
@@ -776,14 +776,45 @@ test('searchMedia forwards query, kinds, and limit (P5)', async () => {
   assert.equal(calls[1]?.url, 'https://example.test/api/v1/media/search?query=waves&kinds=video%2Cimage&limit=5')
 })
 
-test('searchMedia returns the results array', async () => {
+test('searchMedia returns a page of results and the next cursor', async () => {
   const { fetch } = stubFetch([
-    { status: 200, body: { results: [{ id: 'x1', sourceTable: 'studio_outputs', kind: 'video', url: 'u', summary: 's', tags: [], relevance: 0.9, scenes: [] }] } },
+    { status: 200, body: { results: [{ id: 'x1', sourceTable: 'studio_outputs', kind: 'video', url: 'u', summary: 's', tags: [], relevance: 0.9, scenes: [] }], nextCursor: 'n1' } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const results = await client.searchMedia('x')
-  assert.equal(results.length, 1)
-  assert.equal(results[0]?.id, 'x1')
+  const page = await client.searchMedia('x')
+  assert.equal(page.results.length, 1)
+  assert.equal(page.results[0]?.id, 'x1')
+  assert.equal(page.nextCursor, 'n1')
+})
+
+/**
+ * ONE paging shape for every paged listing (9.7b): `limit` and `cursor` go out, `offset` never does, and the page
+ * comes back with its items key and `nextCursor`. Table-driven, so a listing that drifts back to its own shape fails
+ * here by name.
+ */
+test('every paged listing sends limit and cursor, never offset, and returns nextCursor', async () => {
+  const page = { limit: 7, cursor: 'c-1' }
+  const listings: Array<{ name: string; path: string; body: Record<string, unknown>; call: (c: ContentHero) => Promise<{ nextCursor: string | null }> }> = [
+    { name: 'listMedia', path: '/api/v1/media', body: { media: [] }, call: (c) => c.listMedia(page) },
+    { name: 'searchMedia', path: '/api/v1/media/search', body: { results: [] }, call: (c) => c.searchMedia('q', page) },
+    { name: 'getFolder', path: '/api/v1/library/folders/f1', body: { folder: null, items: [] }, call: (c) => c.getFolder('f1', page) },
+    { name: 'listCards', path: '/api/v1/cards', body: { cards: [], total: 0, space: { id: 's', name: 'S' } }, call: (c) => c.listCards(page) },
+    { name: 'listContent', path: '/api/v1/content', body: { outliers: [], total: 0 }, call: (c) => c.listContent(page) },
+    { name: 'listBrandKnowledge', path: '/api/v1/brand-kits/k1/knowledge', body: { items: [], total: 0 }, call: (c) => c.listBrandKnowledge('k1', page) },
+    { name: 'listTemplates', path: '/api/v1/templates', body: { templates: [] }, call: (c) => c.listTemplates(page) },
+    { name: 'listProjects', path: '/api/v1/projects', body: { projects: [] }, call: (c) => c.listProjects(page) },
+  ]
+  for (const l of listings) {
+    const { fetch, calls } = stubFetch([{ status: 200, body: { ...l.body, nextCursor: 'next-1' } }])
+    const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+    const result = await l.call(client)
+    const url = new URL(calls[0]!.url)
+    assert.equal(url.pathname, l.path, l.name)
+    assert.equal(url.searchParams.get('limit'), '7', `${l.name} must send limit`)
+    assert.equal(url.searchParams.get('cursor'), 'c-1', `${l.name} must send cursor`)
+    assert.equal(url.searchParams.has('offset'), false, `${l.name} must not send offset`)
+    assert.equal(result.nextCursor, 'next-1', `${l.name} must return nextCursor`)
+  }
 })
 
 // --- A submitted generation must never lose its outputId -------------------------
@@ -1038,7 +1069,7 @@ test('every listProjects filter reaches the request, aliases included', async ()
   // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
   // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both
   // project types back (found by a Cowork test, 2026-09-27).
-  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', surface: 'canvas', kind: 'canvas', search: 'deck' }
+  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', surface: 'canvas', kind: 'canvas', search: 'deck', limit: 10, cursor: 'c9' }
   for (const key of Object.keys(every) as Array<keyof ListProjectsInput>) {
     const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [] } }])
     const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

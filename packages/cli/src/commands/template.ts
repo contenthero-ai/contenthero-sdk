@@ -12,8 +12,8 @@
 import { readFileSync } from 'node:fs'
 import type { Command } from 'commander'
 import { makeClient } from '../context.js'
-import { emit, table, keyValues } from '../output.js'
-import { collect, toFloat, toInt, toJson } from '../args.js'
+import { emit, table, keyValues, withMore } from '../output.js'
+import { collect, toFloat, toInt, toJson, withPageFlags } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 import type { Template, TemplateFields, TemplateListResult, TemplateSummary, TemplateWriteResult } from '@contenthero/sdk'
 
@@ -108,16 +108,16 @@ function withFieldFlags(command: Command): Command {
 export function registerTemplate(program: Command): void {
   const group = program.command('template').description("Templates: the editor's Elements (graphics, shapes, animated emoji)")
 
-  group
-    .command('list')
-    .description("List ContentHero's templates and your own, without their code")
-    .option('--scope <scope>', 'system | user | all (default all)')
-    .option('--kind <kind>', 'graphic | shape | emoji')
-    .option('--category <category>', 'only this category; repeatable', collect)
-    .option('--search <text>', 'every word, in any order, in the name or the tags')
-    .option('--archived', 'only archived templates, to restore one')
-    .option('--cursor <cursor>', "the previous page's cursor")
-    .option('--limit <n>', 'up to 500 (default 100)', toInt)
+  withPageFlags(
+    group
+      .command('list')
+      .description("List ContentHero's templates and your own, without their code")
+      .option('--scope <scope>', 'system | user | all (default all)')
+      .option('--kind <kind>', 'graphic | shape | emoji')
+      .option('--category <category>', 'only this category; repeatable', collect)
+      .option('--search <text>', 'every word, in any order, in the name or the tags')
+      .option('--archived', 'only archived templates, to restore one'),
+  )
     .action(async (opts: { scope?: string; kind?: string; category?: string[]; search?: string; archived?: boolean; cursor?: string; limit?: number }, command: Command) => {
       if (opts.scope && !SCOPES.includes(opts.scope as (typeof SCOPES)[number])) {
         throw new CliError(`Invalid --scope "${opts.scope}". Expected one of: ${SCOPES.join(', ')}.`, EXIT.USAGE)
@@ -136,13 +136,13 @@ export function registerTemplate(program: Command): void {
         limit: opts.limit,
       })
       emit(page, ctx, (p: TemplateListResult) =>
-        [
+        withMore(
           table(
             ['ID', 'NAME', 'KIND', 'CATEGORY', 'WHOSE', 'VERSION', 'SIZE'],
             p.templates.map((t) => [t.id, t.name, t.kind, t.category, t.scope === 'system' ? 'ContentHero' : 'yours', t.version, box(t)]),
           ),
-          ...(p.nextCursor ? [`More: --cursor ${p.nextCursor}`] : []),
-        ].join('\n'),
+          p.nextCursor,
+        ),
       )
     })
 
