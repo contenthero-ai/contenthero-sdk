@@ -10,10 +10,10 @@
  *   schema layer [--json-schema]                 canvas layer types and their fields
  *   schema export                                export formats per project type
  *   schema link                                  the link contract: how to build any app address from a noun + id
- *   schema graphic                               the authoring guide for a graphic's code, as one document
- *   schema effect [--name n]                     every effect a graphic or a clip can use, or one effect in full
+ *   schema code                                  the authoring guide for a clip's code, as one document
+ *   schema effect [--name n]                     every effect code or a clip can use, or one effect in full
  *
- * timeline, layer, export, graphic and effect require editor:read.
+ * timeline, layer, export, code and effect require editor:read.
  */
 
 import type { Command, Option } from 'commander'
@@ -86,13 +86,13 @@ function collectLeaves(cmd: Command, prefix: string[]): CommandSchema[] {
   return out
 }
 
-const KINDS = ['commands', 'platform', 'timeline', 'layer', 'export', 'link', 'graphic', 'effect'] as const
+const KINDS = ['commands', 'platform', 'timeline', 'layer', 'export', 'link', 'code', 'effect'] as const
 type Kind = (typeof KINDS)[number]
 
 export function registerSchema(program: Command): void {
   program
     .command('schema')
-    .description('Read a vocabulary another command accepts: commands, platform, timeline, layer, export, link, graphic or effect')
+    .description('Read a vocabulary another command accepts: commands, platform, timeline, layer, export, link, code or effect')
     .argument('<kind>', `which vocabulary: ${KINDS.join(', ')}`)
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
     .option('--platform <platform>', 'kind platform only: the platform to read; omit to list every platform')
@@ -209,9 +209,9 @@ export function registerSchema(program: Command): void {
         emit(cat, ctx, () => cat.layerTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n'))
         return
       }
-      if (k === 'graphic') {
+      if (k === 'code') {
         // The document the app renders, printed as is (the MCP prints the same one); --json gives the structured fields.
-        const guide = await client.getGraphicGuide()
+        const guide = await client.getCodeGuide()
         emit(guide, ctx, () => guide.markdown.trimEnd())
         return
       }

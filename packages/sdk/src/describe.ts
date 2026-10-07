@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, EditorOpResult, GraphicDiagnostic, ProjectReadScope } from './types.js'
+import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ProjectReadScope } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -98,13 +98,13 @@ const EDITOR_OP_RESULT_EXPOSURE = {
 void EDITOR_OP_RESULT_EXPOSURE
 
 /**
- * One graphic compiler finding, printed the way a compiler prints one: where, what, then the author's line with a caret
- * under the column (approved message 27, 2026-10-05). The line is printed without its indentation, and the caret moves
- * with it; a column past the end of what was sent gets no caret.
+ * One compiler finding about a clip's code, printed the way a compiler prints one: where, what, then the author's line
+ * with a caret under the column (approved message 27, 2026-10-05). The line is printed without its indentation, and
+ * the caret moves with it; a column past the end of what was sent gets no caret.
  */
-function graphicDiagnosticLines(d: GraphicDiagnostic): string[] {
+function codeDiagnosticLines(d: CodeDiagnostic): string[] {
   const where = d.line != null ? `, line ${d.line}${d.column != null ? `, column ${d.column}` : ''}` : ''
-  const head = `  - graphic ${d.itemId}${where}: ${d.severity} (${d.code}): ${d.message}`
+  const head = `  - code in ${d.itemId}${where}: ${d.severity} (${d.code}): ${d.message}`
   if (!d.snippet || d.line == null) return [head]
   const code = d.snippet.trimStart()
   const gutter = `      ${d.line} | `
@@ -116,24 +116,24 @@ function graphicDiagnosticLines(d: GraphicDiagnostic): string[] {
 }
 
 /**
- * What the graphics warned about in a render or an export, in the words an op result uses for a finding. A warning
- * stopped nothing: the graphic drew, though perhaps not as its author meant. Null when there are none.
+ * What the code warned about in a render or an export, in the words an op result uses for a finding. A warning
+ * stopped nothing: the code drew, though perhaps not as its author meant. Null when there are none.
  */
-export function describeGraphicWarnings(warnings: readonly GraphicDiagnostic[] | null | undefined): string | null {
+export function describeCodeWarnings(warnings: readonly CodeDiagnostic[] | null | undefined): string | null {
   if (!warnings?.length) return null
-  return ['Graphic warnings:', ...warnings.flatMap(graphicDiagnosticLines)].join('\n')
+  return ['Code warnings:', ...warnings.flatMap(codeDiagnosticLines)].join('\n')
 }
 
-/** A result's text, then what the graphics warned about, when anything did. */
-export function withGraphicWarnings(prose: string, warnings: readonly GraphicDiagnostic[] | null | undefined): string {
-  const warned = describeGraphicWarnings(warnings)
+/** A result's text, then what the code warned about, when anything did. */
+export function withCodeWarnings(prose: string, warnings: readonly CodeDiagnostic[] | null | undefined): string {
+  const warned = describeCodeWarnings(warnings)
   return warned ? `${prose}\n${warned}` : prose
 }
 
 /**
  * An applyEditorOps batch, for the MCP's tool result and the CLI's output alike: what applied, the new revision, what
- * was created, jobs to poll, each failure with its reason, warnings, and every graphic compiler finding with its line
- * (a refused graphic's error names only the first, and a warning on code that applied appears nowhere else).
+ * was created, jobs to poll, each failure with its reason, warnings, and every compiler finding with its line
+ * (the error on refused code names only the first, and a warning on code that applied appears nowhere else).
  */
 export function describeEditorOps(r: ApplyEditorOpsResult): string {
   const okCount = r.results.filter((x) => x.ok).length
@@ -154,8 +154,8 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   if (warnings.length) lines.push(`Warnings: ${warnings.join('; ')}.`)
   const diagnostics = r.results.flatMap((x) => x.diagnostics ?? [])
   if (diagnostics.length) {
-    lines.push('Graphic code:')
-    for (const d of diagnostics) lines.push(...graphicDiagnosticLines(d))
+    lines.push('Code:')
+    for (const d of diagnostics) lines.push(...codeDiagnosticLines(d))
   }
   return lines.join('\n')
 }

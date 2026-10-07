@@ -10,7 +10,7 @@
  * in a Kling prompt as @name. Create one, then pass its id to `generate video --kling-element`.
  *
  * ⚠️ `element` was this command's name until 2026-10-04, when the word also named the editor's Elements panel
- * (graphic templates). It answers for one release window as a HIDDEN alias: the same subcommands, registered by the
+ * (templates). It answers for one release window as a HIDDEN alias: the same subcommands, registered by the
  * same function onto a second parent, so the two cannot drift. Delete that mount when the window closes.
  */
 

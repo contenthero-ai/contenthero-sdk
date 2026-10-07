@@ -18,7 +18,7 @@ before(async () => {
   server = createServer((req, res) => {
     seen.push(req.url ?? '')
     res.setHeader('content-type', 'application/json')
-    res.end(JSON.stringify({ effects: [], graphicHosts: ['Solid'], name: 'glow', params: {}, defaults: {}, keyframeable: [] }))
+    res.end(JSON.stringify({ effects: [], codeHosts: ['Solid'], name: 'glow', params: {}, defaults: {}, keyframeable: [] }))
   })
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`

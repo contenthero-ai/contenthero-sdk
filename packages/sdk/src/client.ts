@@ -90,7 +90,7 @@ import type {
   ExportJob,
   ExportFormatCatalog,
   LinkFormats,
-  GraphicGuide,
+  CodeGuide,
   EffectList,
   EffectDetail,
   LayerTypeCatalog,
@@ -1095,7 +1095,7 @@ export class ContentHero {
   }
 
   // -------------------------------------------------------------------------
-  // Templates (the editor's Elements: reusable graphics, shapes and animated emoji)
+  // Templates (the editor's Elements: reusable code, shapes and animated emoji)
   // -------------------------------------------------------------------------
 
   /**
@@ -1805,16 +1805,16 @@ export class ContentHero {
   }
 
   /**
-   * The authoring guide for graphic code: what the sandbox has, the composition's units, the brand prop names, the
+   * The authoring guide for a clip's code: what the sandbox has, the composition's units, the brand prop names, the
    * size limit, the workflow and examples, built by the app from the sandbox's own manifest. Read it before writing
-   * a graphic. Requires the `editor:read` scope.
+   * code. Requires the `editor:read` scope.
    */
-  async getGraphicGuide(): Promise<GraphicGuide> {
-    return this.request<GraphicGuide>('GET', '/api/v1/editor/graphic-guide')
+  async getCodeGuide(): Promise<CodeGuide> {
+    return this.request<CodeGuide>('GET', '/api/v1/editor/code-guide')
   }
 
   /**
-   * Every effect a graphic or a video or image clip can use, by group: what it does, where a graphic imports it, and
+   * Every effect code or a video or image clip can use, by group: what it does, where code imports it, and
    * whether a clip can carry it. Requires the `editor:read` scope.
    */
   async listEffects(): Promise<EffectList> {

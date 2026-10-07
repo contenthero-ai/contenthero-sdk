@@ -1,5 +1,5 @@
 /**
- * `contenthero template` - the editor's Elements: reusable graphics, shapes and animated emoji.
+ * `contenthero template` - the editor's Elements: reusable code, shapes and animated emoji.
  *   template list [--scope ...] [--kind ...]        ContentHero's and your own, without their code
  *   template get <id>                               one template, with its code and controls
  *   template create [--from-item <id> ...] ...      save one of your own
@@ -18,7 +18,7 @@ import { CliError, EXIT } from '../errors.js'
 import type { Template, TemplateFields, TemplateListResult, TemplateSummary, TemplateWriteResult } from '@contenthero/sdk'
 
 const SCOPES = ['system', 'user', 'all'] as const
-const KINDS = ['graphic', 'shape', 'emoji'] as const
+const KINDS = ['code', 'shape', 'emoji'] as const
 
 /** A template's own size: a share of the canvas on each axis, or the whole frame. */
 function box(t: TemplateSummary): string {
@@ -58,7 +58,7 @@ function fieldsFrom(opts: Record<string, unknown>): TemplateFields {
   if (opts.category !== undefined) fields.category = opts.category as string
   if (opts.description !== undefined) fields.description = opts.description as string
   if (opts.tag !== undefined) fields.tags = opts.tag as string[]
-  // A graphic's code, from a file: code is many lines, and a shell argument is no place for it.
+  // Its code, from a file: code is many lines, and a shell argument is no place for it.
   if (opts.code !== undefined) fields.code = readFileSync(opts.code === '-' ? 0 : (opts.code as string), 'utf8')
   if (opts.lottie !== undefined) {
     const recolor = ((opts.recolor as string[] | undefined) ?? []).map((pair) => {
@@ -90,7 +90,7 @@ function withFieldFlags(command: Command): Command {
     .option('--category <category>', 'its category: one `template list` shows, or a new one')
     .option('--description <text>', 'what it is for')
     .option('--tag <tag>', 'a word it is found by; repeatable', collect)
-    .option('--code <file>', "a graphic's code, read from a file ('-' for stdin)")
+    .option('--code <file>', "its code, read from a file ('-' for stdin)")
     .option('--lottie <url>', 'a Lottie file of ours')
     .option('--recolor <hex=prop>', 'a color in the Lottie file that a prop recolors; repeatable', collect)
     .option('--emoji <name>', "an animated emoji's name, such as party-popper")
@@ -106,14 +106,14 @@ function withFieldFlags(command: Command): Command {
 }
 
 export function registerTemplate(program: Command): void {
-  const group = program.command('template').description("Templates: the editor's Elements (graphics, shapes, animated emoji)")
+  const group = program.command('template').description("Templates: the editor's Elements (code, shapes, animated emoji)")
 
   withPageFlags(
     group
       .command('list')
       .description("List ContentHero's templates and your own, without their code")
       .option('--scope <scope>', 'system | user | all (default all)')
-      .option('--kind <kind>', 'graphic | shape | emoji')
+      .option('--kind <kind>', 'code | shape | emoji')
       .option('--category <category>', 'only this category; repeatable', collect)
       .option('--search <text>', 'every word, in any order, in the name or the tags')
       .option('--archived', 'only archived templates, to restore one'),
@@ -158,8 +158,8 @@ export function registerTemplate(program: Command): void {
   withFieldFlags(
     group
       .command('create')
-      .description('Save a template of your own: from a placed graphic or shape, as a copy of a template, or from its fields')
-      .option('--from-item <itemId>', 'a graphic or shape placed on a project (with --from-project)')
+      .description('Save a template of your own: from a placed code clip, code layer or shape, as a copy of a template, or from its fields')
+      .option('--from-item <itemId>', 'a code clip, code layer or shape placed on a project (with --from-project)')
       .option('--from-project <projectId>', 'the project --from-item is on')
       .option('--from-template <templateId>', 'a template to copy, keeping its lineage'),
   ).action(async (opts: Record<string, unknown>, command: Command) => {

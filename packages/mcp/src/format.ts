@@ -96,12 +96,12 @@ import type {
   ExportJob,
   ExportFormatCatalog,
   LinkFormats,
-  GraphicGuide,
+  CodeGuide,
   EffectList,
   EffectDetail,
-  GraphicDiagnostic,
+  CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeEditorOps, describeGraphicWarnings, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withGraphicWarnings } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1729,7 +1729,6 @@ export function templateResult(t: Template, verb?: string, warnings: string[] = 
       t.props_schema ? `controls: ${JSON.stringify(t.props_schema)}` : null,
       t.skeleton?.shape ? `shape: ${t.skeleton.shape}` : null,
       t.skeleton?.emoji ? `emoji: ${t.skeleton.emoji}` : null,
-      t.render_backend === 'lottie' && t.lottie_url ? `Lottie file: ${t.lottie_url}` : null,
       t.thumbnail_url ? `preview: ${t.thumbnail_url}` : null,
       t.code ? `code:\n\`\`\`tsx\n${t.code}\n\`\`\`` : null,
     ]),
@@ -2641,7 +2640,7 @@ export function liveContextResult(
   }
   const failure = describeRenderFailure(rendered)
   if (failure) lines.push(failure)
-  const warned = describeGraphicWarnings(isPlainRecord(rendered) && Array.isArray(rendered.warnings) ? (rendered.warnings as GraphicDiagnostic[]) : null)
+  const warned = describeCodeWarnings(isPlainRecord(rendered) && Array.isArray(rendered.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
   if (warned) lines.push(warned)
 
   const content: CallToolResult['content'] = [
@@ -2728,7 +2727,7 @@ export function completedExportResult(
   job: ExportJob,
   format: string,
 ): CallToolResult {
-  const prose = withGraphicWarnings(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`, job.warnings)
+  const prose = withCodeWarnings(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`, job.warnings)
   const medium = EXPORT_MEDIUM[format]
   if (job.status !== 'completed' || !job.outputUrl || !medium) return exportJobResult(job)
   {
@@ -2758,14 +2757,14 @@ export function completedExportResult(
 /** `appUrl` and `shortId` are optional here: a timed-out wait knows only the export's id and status. */
 export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
   if (job.status === 'completed') {
-    return text(withGraphicWarnings(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`, job.warnings))
+    return text(withCodeWarnings(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`, job.warnings))
   }
   if (job.status === 'failed') {
-    return text(withGraphicWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
+    return text(withCodeWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
   }
   const pct = typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''
   return text(
-    withGraphicWarnings(
+    withCodeWarnings(
       `Export ${job.exportId} is ${job.status}${pct}. Still rendering. Poll get_export with this exportId for the download URL.`,
       job.warnings,
     ),
@@ -2786,24 +2785,24 @@ export function exportFormatsResult(cat: ExportFormatCatalog): CallToolResult {
  * tab's item names. Text, not JSON, because an agent reads it to build links and the prose is a third of the size.
  */
 /**
- * The graphic authoring guide, as the document the app renders (`markdown`): the app builds it from the sandbox's
+ * The code guide, as the document the app renders (`markdown`): the app builds it from the sandbox's
  * manifest and renders it once, so this prints it rather than rendering a second copy that could drift.
  */
-export function graphicGuideResult(g: GraphicGuide): CallToolResult {
+export function codeGuideResult(g: CodeGuide): CallToolResult {
   return text(`${g.markdown.trimEnd()}\n\n(Guide version ${g.version}.)`)
 }
 
-/** The effect catalog: every effect by group, where it can go, and the elements a graphic gives effects to. */
+/** The effect catalog: every effect by group, where it can go, and the elements code gives effects to. */
 export function effectListResult(list: EffectList): CallToolResult {
   const groups = new Map<string, string[]>()
   for (const e of list.effects) {
-    const where = e.onClips ? 'graphics and clips' : `graphics only; on a clip, ${e.gradedBy} does this`
+    const where = e.onClips ? 'code and clips' : `code only; on a clip, ${e.gradedBy} does this`
     groups.set(e.group, [...(groups.get(e.group) ?? []), `- ${e.name} (${e.importPath}): ${e.description}. ${where}.`])
   }
   const lines = [...groups].flatMap(([group, rows]) => [`${group}:`, ...rows, ''])
   return text(
     [
-      `${list.effects.length} effects. In a graphic, they go on ${list.graphicHosts.join(', ')}; on a video or image clip, in its effects.`,
+      `${list.effects.length} effects. In code, they go on ${list.codeHosts.join(', ')}; on a video or image clip, in its effects.`,
       '',
       ...lines,
       "Read one with get_schema kind 'effect' and its name for its parameters.",

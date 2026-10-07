@@ -22,7 +22,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
-import { describeEditorOps, describeScope, withGraphicWarnings, type EditorOp, type ImportProjectSource, type ProjectListResult } from '@contenthero/sdk'
+import { describeEditorOps, describeScope, withCodeWarnings, type EditorOp, type ImportProjectSource, type ProjectListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -269,7 +269,7 @@ export function registerProject(program: Command): void {
         ? await client.exportProjectAndWait(projectId, input, { timeoutMs: (opts.timeout as number | undefined) ?? 600000 })
         : await client.startExport(projectId, input)
       emit(job, ctx, () =>
-        withGraphicWarnings(
+        withCodeWarnings(
           job.status === 'completed'
             ? `Export ${job.exportId} completed: ${job.outputUrl}`
             : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export-status ${job.exportId}`,
@@ -286,7 +286,7 @@ export function registerProject(program: Command): void {
       const { client, ctx } = makeClient(command)
       const job = await client.getExport(exportId)
       emit(job, ctx, () =>
-        withGraphicWarnings(
+        withCodeWarnings(
           job.status === 'completed' ? `completed: ${job.outputUrl}` : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''}`,
           job.warnings,
         ),

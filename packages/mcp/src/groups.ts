@@ -55,7 +55,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb:
       'The identity layer: avatars with their looks, the voices they speak with, and the Kling elements that keep a character, location or prop consistent across Kling generations.',
     // Kling elements moved here from the editor group on 2026-10-04: they are reference identity for generation, like
-    // an avatar, and nothing to do with the editor's Elements panel (graphic templates).
+    // an avatar, and nothing to do with the editor's Elements panel (templates).
     tools: [
       'list_avatars', 'get_avatar', 'create_avatar', 'update_avatar', 'delete_avatar',
       'list_voices', 'get_voice',

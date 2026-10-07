@@ -428,7 +428,7 @@ function fakeClient(overrides = {}) {
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', type: 'canvas', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     getLayerTypes: async () => ({ projectType: 'canvas', surface: 'canvas', description: 'canvas types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [{ type: 'text', description: 'text', props: [{ name: 'text', type: 'string' }], supports: ['transform'] }] }),
-    getGraphicGuide: async () => ({ version: 'abc12345', markdown: '# Writing a graphic\n\nA graphic is a React component.\n', compositionLongestEdge: 960, maxCodeBytes: 524288, modules: [], noImportNeeded: [], notAvailable: [], clockCalls: [], brandProps: [], examples: [] }),
+    getCodeGuide: async () => ({ version: 'abc12345', markdown: "# Writing a clip's code\n\nA clip's code is a React component.\n", compositionLongestEdge: 960, maxCodeBytes: 524288, modules: [], noImportNeeded: [], notAvailable: [], clockCalls: [], brandProps: [], examples: [] }),
     getTimelineTypes: async () => ({ projectType: 'editor', surface: 'editor', description: 'timeline types', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [{ type: 'audio', description: 'audio', props: [{ name: 'audioUrl', type: 'string' }], supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'media', holds: ['video'] }] }),
     exportProjectAndWait: async (_projectId, input) => (input?.format && input.format !== 'mp4'
       ? { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/out.zip', progress: 1 }
@@ -3037,16 +3037,24 @@ test("get_schema kind 'layer' lists canvas layer types + props", async () => {
 })
 
 /**
- * get_schema kind 'graphic' prints the guide the app rendered, verbatim, so the MCP never holds a second rendering of
+ * get_schema kind 'code' prints the guide the app rendered, verbatim, so the MCP never holds a second rendering of
  * it that could drift. Break-verified: dropping the case leaves the kind unhandled and the call returns nothing.
  */
-test("get_schema kind 'graphic' prints the app's graphic guide as one document, with its version", async () => {
+test("get_schema kind 'code' prints the app's code guide as one document, with its version", async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'graphic' } })
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'code' } })
   const body = (res.content[0]).text
-  assert.match(body, /^# Writing a graphic\n\nA graphic is a React component\./)
+  assert.match(body, /^# Writing a clip's code\n\nA clip's code is a React component\./)
   assert.match(body, /\(Guide version abc12345\.\)$/)
   assert.ok(!res.isError)
+  // The retired kind 'graphic' is refused at the schema boundary (a rejected call or an isError result), never served.
+  let refused = false
+  try {
+    refused = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'graphic' } })).isError === true
+  } catch {
+    refused = true
+  }
+  assert.ok(refused, "kind 'graphic' must be refused")
 })
 
 /**
@@ -3062,7 +3070,7 @@ test("get_schema kind 'effect' lists the effects, reads one by name, and refuses
           { name: 'glow', group: 'Blur & Shadow', description: 'Soft halo effect', importPath: '@remotion/effects/glow', onClips: true },
           { name: 'blur', group: 'Blur & Shadow', description: 'Gaussian blur effect', importPath: '@remotion/effects/blur', onClips: false, gradedBy: 'Blur' },
         ],
-        graphicHosts: ['Solid', 'Img'],
+        codeHosts: ['Solid', 'Img'],
       }),
       getEffect: async (name) => (asked.push(`get ${name}`), {
         name, group: 'Blur & Shadow', description: 'Soft halo effect', importPath: '@remotion/effects/glow', onClips: true,
@@ -3073,8 +3081,8 @@ test("get_schema kind 'effect' lists the effects, reads one by name, and refuses
     }),
   )
   const list = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'effect' } })).content[0].text
-  assert.match(list, /^2 effects\. In a graphic, they go on Solid, Img; on a video or image clip, in its effects\./)
-  assert.match(list, /- blur \(@remotion\/effects\/blur\): Gaussian blur effect\. graphics only; on a clip, Blur does this\./)
+  assert.match(list, /^2 effects\. In code, they go on Solid, Img; on a video or image clip, in its effects\./)
+  assert.match(list, /- blur \(@remotion\/effects\/blur\): Gaussian blur effect\. code only; on a clip, Blur does this\./)
   const one = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'effect', name: 'glow' } })).content[0].text
   assert.match(one, /- radius: number 0\.\.200, default 20 \(Radius\)/)
   assert.match(one, /Keyframeable on a clip \(effects\.<id>\.<param>\): radius/)
@@ -4086,9 +4094,9 @@ const TEMPLATE_TOOLS = ['list_templates', 'get_template', 'create_template', 'up
 
 test('the template tools are filed with the editor, and reach the template SDK methods by templateId', async () => {
   const row = {
-    id: '22222222-2222-4222-8222-222222222222', scope: 'user', user_id: 'u1', kind: 'graphic', name: 'Lower third', category: 'lower-thirds',
+    id: '22222222-2222-4222-8222-222222222222', scope: 'user', user_id: 'u1', kind: 'code', name: 'Lower third', category: 'lower-thirds',
     description: null, tags: ['name'], props: { title: 'Hi' }, props_schema: { title: { control: 'text', label: 'Title' } }, duration_frames: 120,
-    render_backend: 'code', skeleton: { type: 'graphic' }, coverage: 'partial', width_fraction: 0.25, height_fraction: 0.125, resize: 'scale',
+    skeleton: { type: 'video' }, coverage: 'partial', width_fraction: 0.25, height_fraction: 0.125, resize: 'scale',
     aspect: 2, version: 3, archived_at: null, source_template_id: null, source_template_version: null, code: 'export default () => null',
     thumbnail_url: 'https://media.contenthero.ai/templates/2222/v3.png',
   }
@@ -4105,8 +4113,8 @@ test('the template tools are filed with the editor, and reach the template SDK m
   const editor = TOOL_GROUPS.find((g) => g.slug === 'editor')
   assert.deepEqual(TEMPLATE_TOOLS.filter((n) => !editor.tools.includes(n)), [])
 
-  const listed = await mcp.callTool({ name: 'list_templates', arguments: { scope: 'user', kind: 'graphic', category: ['lower-thirds'], archived: true } })
-  assert.match(listed.content[0].text, /^1 template\(s\):\n- Lower third \(id 2{8}-.*\) \| graphic \| lower-thirds \| yours \| version 3 \| 25% x 13% of the canvas/)
+  const listed = await mcp.callTool({ name: 'list_templates', arguments: { scope: 'user', kind: 'code', category: ['lower-thirds'], archived: true } })
+  assert.match(listed.content[0].text, /^1 template\(s\):\n- Lower third \(id 2{8}-.*\) \| code \| lower-thirds \| yours \| version 3 \| 25% x 13% of the canvas/)
   assert.match(listed.content[0].text, /More: pass cursor "c2"\./)
   const got = await mcp.callTool({ name: 'get_template', arguments: { templateId: row.id } })
   assert.match(got.content[0].text, /```tsx\nexport default \(\) => null\n```/)
@@ -4120,7 +4128,7 @@ test('the template tools are filed with the editor, and reach the template SDK m
   assert.equal(deleted.content[0].text, `Deleted template ${row.id}. Clips placed from it keep everything.`)
 
   assert.deepEqual(calls, [
-    `list ${JSON.stringify({ scope: 'user', kind: 'graphic', category: ['lower-thirds'], archived: 'only' })}`,
+    `list ${JSON.stringify({ scope: 'user', kind: 'code', category: ['lower-thirds'], archived: 'only' })}`,
     `get ${row.id}`,
     `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { projectId: 'p1', itemId: 'g1' } })}`,
     `create ${JSON.stringify({ name: 'Mine', fromTemplateId: row.id })}`,

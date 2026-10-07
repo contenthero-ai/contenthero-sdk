@@ -48,6 +48,11 @@ test('template list sends its filters as the API reads them', async () => {
     { scope: r.query.get('scope'), kind: r.query.get('kind'), category: r.query.getAll('category'), search: r.query.get('search'), archived: r.query.get('archived'), limit: r.query.get('limit') },
     { scope: 'user', kind: 'shape', category: ['shapes', 'arrows'], search: 'star', archived: 'only', limit: '20' },
   )
+  assert.equal((await run('template', 'list', '--kind', 'code')).query.get('kind'), 'code')
+  // The retired kind is refused before any request.
+  seen.length = 0
+  await assert.rejects(buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'template', 'list', '--kind', 'graphic'], { from: 'user' }))
+  assert.equal(seen.length, 0)
 })
 
 test('template get, update and delete address one template by id; update sends the version read', async () => {
@@ -67,7 +72,7 @@ test('template create saves from a placed item, from a copy, or from fields with
   const copy = await run('template', 'create', '--from-template', ROW.id, '--name', 'Mine')
   assert.deepEqual(copy.body, { name: 'Mine', fromTemplateId: ROW.id })
 
-  const file = join(mkdtempSync(join(tmpdir(), 'ch-template-')), 'graphic.tsx')
+  const file = join(mkdtempSync(join(tmpdir(), 'ch-template-')), 'code.tsx')
   writeFileSync(file, 'export default function G() { return null }\n')
   const fields = await run(
     'template', 'create', '--name', 'G', '--category', 'probe', '--code', file,

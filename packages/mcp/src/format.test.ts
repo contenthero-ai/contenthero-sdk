@@ -663,19 +663,19 @@ test('a 503 tells the agent to retry the same call, never that the key is bad', 
 })
 
 /**
- * The graphic compiler's findings reach the agent with their lines.
+ * The compiler's findings on a clip's code reach the agent with their lines.
  *
- * The app refuses an op whose graphic code does not compile, and its error names only the first finding; a warning on
+ * The app refuses an op whose code does not compile, and its error names only the first finding; a warning on
  * code that applied appears nowhere else. Neither helps unless the formatter prints them, since the agent reads text.
  */
 const textOf = (r: { content: Array<{ type: string; text?: string }> }) => r.content.map((c) => c.text ?? '').join('\n')
 
-test('a refused graphic prints every finding with its line, and the author\'s line under it', () => {
+test('refused code prints every finding with its line, and the author\'s line under it', () => {
   const r = editorOpsResult({
     revision: 5,
     results: [{
       op: 'create_clip', opId: 'a', ok: false,
-      error: 'invalid graphic g1: Line 2, column 23: "Freeze" is not available from "remotion".',
+      error: 'invalid code in g1: Line 2, column 23: "Freeze" is not available from "remotion".',
       diagnostics: [
         { itemId: 'g1', severity: 'error', code: 'not-exported', message: '"Freeze" is not available from "remotion".', line: 2, column: 23, snippet: 'export default () => <Freeze frame={0}>x</Freeze>' },
         { itemId: 'g1', severity: 'warning', code: 'nondeterministic', message: 'Math.random() differs on every render.', line: 3, column: 5 },
@@ -684,9 +684,9 @@ test('a refused graphic prints every finding with its line, and the author\'s li
   })
   assert.equal(r.isError, true)
   const out = textOf(r)
-  assert.match(out, /- graphic g1, line 2, column 23: error \(not-exported\): "Freeze" is not available from "remotion"\./)
+  assert.match(out, /- code in g1, line 2, column 23: error \(not-exported\): "Freeze" is not available from "remotion"\./)
   assert.match(out, /\n {6}2 \| export default \(\) => <Freeze frame=\{0\}>x<\/Freeze>\n {8}\| {23}\^\n/)
-  assert.match(out, /- graphic g1, line 3, column 5: warning \(nondeterministic\)/)
+  assert.match(out, /- code in g1, line 3, column 5: warning \(nondeterministic\)/)
 })
 
 /**
@@ -716,22 +716,22 @@ test('a warning on code that applied is printed, and the result is not an error'
     results: [{ op: 'update_layer', opId: 'b', ok: true, diagnostics: [{ itemId: 'l1', severity: 'warning', code: 'nondeterministic', message: 'Date.now() differs on every render.' }] }],
   })
   assert.ok(!r.isError)
-  assert.match(textOf(r), /Graphic code:\n {2}- graphic l1: warning \(nondeterministic\): Date\.now\(\) differs on every render\./)
+  assert.match(textOf(r), /Code:\n {2}- code in l1: warning \(nondeterministic\): Date\.now\(\) differs on every render\./)
 })
 
-test('a batch with no graphic findings prints no graphic block', () => {
+test('a batch with no code findings prints no code block', () => {
   const r = editorOpsResult({ revision: 7, results: [{ op: 'create_clip', opId: 'c', ok: true, createdIds: ['x'] }] })
-  assert.doesNotMatch(textOf(r), /Graphic code/)
+  assert.doesNotMatch(textOf(r), /^Code:/m)
 })
 
 
 /**
- * ⭐ A GRAPHIC'S WARNINGS REACH THE AGENT ON EVERY EXPORT RESULT (1.17). A warning stops nothing, so a field the
- * printer skipped would be invisible: the export would read as clean while a graphic drew not as its author meant.
+ * ⭐ CODE'S WARNINGS REACH THE AGENT ON EVERY EXPORT RESULT (1.17). A warning stops nothing, so a field the
+ * printer skipped would be invisible: the export would read as clean while code drew not as its author meant.
  * Printed in the words an op result uses for a finding, with where in the code it is. Break-verified: dropping the
  * warnings from the poll's prose turns this red.
  */
-test("an export result says what the graphics warned about, in the op result's words", () => {
+test("an export result says what the code warned about, in the op result's words", () => {
   const warnings = [
     { itemId: 'g1', severity: 'warning' as const, code: 'nondeterministic', message: 'setTimeout runs on the clock', line: 3, column: 22, snippet: 'setTimeout(() => {}, 10)' },
     { itemId: 'g2', severity: 'warning' as const, code: 'interpolate-repaired', message: 'interpolate was given keyframes out of order (30, 0)' },
@@ -739,9 +739,9 @@ test("an export result says what the graphics warned about, in the op result's w
   for (const status of ['completed', 'rendering', 'failed']) {
     const res = exportJobResult({ exportId: 'exp-1', status, outputUrl: 'https://x/e.mp4', errorMessage: 'stopped', warnings })
     const text = (res.content[0] as { text: string }).text
-    assert.match(text, /Graphic warnings:\n  - graphic g1, line 3, column 22: warning \(nondeterministic\): setTimeout runs on the clock\n      3 \| setTimeout/)
-    assert.match(text, /  - graphic g2: warning \(interpolate-repaired\): interpolate was given keyframes out of order \(30, 0\)/)
+    assert.match(text, /Code warnings:\n  - code in g1, line 3, column 22: warning \(nondeterministic\): setTimeout runs on the clock\n      3 \| setTimeout/)
+    assert.match(text, /  - code in g2: warning \(interpolate-repaired\): interpolate was given keyframes out of order \(30, 0\)/)
   }
   const quiet = exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.mp4' })
-  assert.doesNotMatch((quiet.content[0] as { text: string }).text, /Graphic warnings/)
+  assert.doesNotMatch((quiet.content[0] as { text: string }).text, /Code warnings/)
 })

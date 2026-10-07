@@ -124,11 +124,11 @@ export interface Paged {
 }
 
 // ---------------------------------------------------------------------------
-// Templates (the editor's Elements: reusable graphics, shapes and animated emoji)
+// Templates (the editor's Elements: reusable code, shapes and animated emoji)
 // ---------------------------------------------------------------------------
 
-/** What a template draws: a graphic (code or a Lottie file), a shape, or an animated emoji. */
-export type TemplateKind = 'graphic' | 'shape' | 'emoji'
+/** What a template draws: code (which may play a Lottie file), a shape, or an animated emoji. */
+export type TemplateKind = 'code' | 'shape' | 'emoji'
 
 /** Whose templates: ContentHero's, the caller's own, or both. */
 export type TemplateScope = 'system' | 'user' | 'all'
@@ -152,12 +152,8 @@ export interface TemplateSummary {
   /** Each prop's control (`control`, `label`, `default`, and `brand`, the brand value it takes when placed). */
   props_schema: Record<string, unknown> | null
   duration_frames: number
-  /** How it draws: `code`, `lottie` or `emoji`; null for a shape. */
-  render_backend: 'code' | 'lottie' | 'emoji' | null
-  /** What it makes: a graphic, or a shape (with the shape's name); an emoji graphic names its emoji. */
-  skeleton: { type: 'graphic' | 'shape'; shape?: string; emoji?: string } | null
-  lottie_url: string | null
-  lottie_recolor: Array<{ from: string; role: string }> | null
+  /** What it makes: a video, or a shape (with the shape's name); an animated emoji's video names its emoji. */
+  skeleton: { type: 'video' | 'shape'; shape?: string; emoji?: string } | null
   /** Its default box: the whole frame, or a fraction of the canvas on each axis. */
   coverage: 'full' | 'partial'
   width_fraction: number | null
@@ -195,7 +191,7 @@ export interface TemplateSummary {
   updated_at: string
 }
 
-/** One template, whole: with its code (null for a shape, a Lottie file or an emoji, which draw without one). */
+/** One template, whole: with its code (null for a shape, which draws without one). */
 export interface Template extends TemplateSummary {
   code: string | null
 }
@@ -225,7 +221,7 @@ export interface TemplateFields {
   category?: string
   description?: string | null
   tags?: string[]
-  /** A graphic's code: checked as it is written, refused when it does not compile. */
+  /** The code: checked as it is written, refused when it does not compile. */
   code?: string
   /** A Lottie file of ours, and the colors in it that take props (each `role` is a prop name). */
   lottie?: { url: string; recolor?: Array<{ from: string; role: string }> }
@@ -252,9 +248,9 @@ export interface TemplateFields {
 }
 
 /**
- * Save a template, from exactly one source: its fields; `fromItem`, a graphic or shape placed on a project (its code,
- * props, controls and box, as fractions of that canvas); or `fromTemplateId`, a copy (with its lineage). Fields given
- * beside `fromItem` or `fromTemplateId` override what it carries.
+ * Save a template, from exactly one source: its fields; `fromItem`, a code clip, code layer or shape placed on a
+ * project (its code, props, controls and box, as fractions of that canvas); or `fromTemplateId`, a copy (with its
+ * lineage). Fields given beside `fromItem` or `fromTemplateId` override what it carries.
  */
 export type CreateTemplateRequest =
   | TemplateFields
@@ -2742,12 +2738,12 @@ export interface ApplyEditorOpsInput {
 }
 
 /**
- * A finding from the graphic compiler about one graphic's code. The app compiles a graphic's code whenever an op writes
- * it: an error refuses the op, and a warning lets it apply while naming what may go wrong. Code an op only carries (an
+ * A finding from the compiler about one clip's or layer's code. The app compiles the code whenever an op writes it:
+ * an error refuses the op, and a warning lets it apply while naming what may go wrong. Code an op only carries (an
  * undo puts it back) applies either way, with its findings, so an undo never fails over code the project already held.
  */
-export interface GraphicDiagnostic {
-  /** The graphic: a clip on a timeline, a layer on a canvas. */
+export interface CodeDiagnostic {
+  /** The clip on a timeline, or the layer on a canvas, whose code it is. */
   itemId: string
   severity: 'error' | 'warning'
   /** The kind of finding, for a caller that branches on it. The app can add kinds; `message` always explains. */
@@ -2774,9 +2770,9 @@ export interface EditorOpResult {
   /** For an async effect op (remove_background): the studio_outputs id of the dispatched job, so the caller can
    *  wait_for_generation on it. Present only on a successfully-dispatched async op. */
   generatingOutputId?: string
-  /** The graphic compiler's findings for graphic code this op wrote or carried. An error among them is why `ok` is
+  /** The compiler's findings for code this op wrote or carried. An error among them is why `ok` is
    *  false; warnings ride on an op that applied. */
-  diagnostics?: GraphicDiagnostic[]
+  diagnostics?: CodeDiagnostic[]
 }
 
 /** Result of `applyEditorOps`: the new revision + per-op results. */
@@ -2990,8 +2986,8 @@ export interface PreviewJob {
   fromFrame: number
   toFrame: number
   durationSeconds: number
-  /** What the compiler warns about in the graphics this range draws. Absent when nothing. */
-  warnings?: GraphicDiagnostic[]
+  /** What the compiler warns about in the code this range draws. Absent when nothing. */
+  warnings?: CodeDiagnostic[]
 }
 
 /** The poll result for a preview render. */
@@ -3005,10 +3001,10 @@ export interface PreviewStatus {
   estimatedCostUsd?: number
   /** The first error, when it failed. */
   error?: string
-  /** Every distinct error, when it failed; a graphic's names the graphic. */
+  /** Every distinct error, when it failed; a code clip's names the clip. */
   errors?: string[]
-  /** What the graphics warned about while the preview rendered (when done, and only when some did). */
-  warnings?: GraphicDiagnostic[]
+  /** What the code warned about while the preview rendered (when done, and only when some did). */
+  warnings?: CodeDiagnostic[]
 }
 
 /** A resolved selected editor timeline clip, threaded so you see the selection without a `getProject` hop. */
@@ -3142,10 +3138,10 @@ export interface ExportJob {
   /** 0..1 render progress. */
   progress?: number
   /**
-   * What the graphics warned about: the compiler's findings before the render, and what the render itself found. A
-   * warning stops nothing; the graphic drew, though perhaps not as its author meant. Absent when nothing did.
+   * What the code warned about: the compiler's findings before the render, and what the render itself found. A
+   * warning stops nothing; the code drew, though perhaps not as its author meant. Absent when nothing did.
    */
-  warnings?: GraphicDiagnostic[]
+  warnings?: CodeDiagnostic[]
 }
 
 /** One format in the export catalog. */
@@ -3206,24 +3202,24 @@ export interface LinkSection {
 }
 
 /**
- * The authoring guide for graphic code, from `getGraphicGuide`: what the sandbox has, the composition's units, the brand
+ * The authoring guide for a clip's code, from `getCodeGuide`: what the sandbox has, the composition's units, the brand
  * prop names, the size limit, the workflow and examples. The app builds it from the sandbox's own manifest, so it
  * cannot teach what the sandbox lacks. `markdown` is the whole guide as one document; the other fields are the same
  * facts, structured.
  */
-export interface GraphicGuide {
+export interface CodeGuide {
   /** Changes whenever anything in the guide does, so two readings can be told apart. */
   version: string
   markdown: string
-  /** The composition's longest edge, in the units a graphic's box is measured in. */
+  /** The composition's longest edge, in the units a clip's box is measured in. */
   compositionLongestEdge: number
-  /** The largest graphic code accepted, in UTF-8 bytes. */
+  /** The largest code accepted, in UTF-8 bytes. */
   maxCodeBytes: number
   /** What each importable module provides: its names, or `any` for a package whose every export is open. */
   modules: Array<{ module: string; names: string[] | 'any' }>
-  /** Names a graphic can use without importing them, with the module each comes from (null for the sandbox's own). */
+  /** Names code can use without importing them, with the module each comes from (null for the sandbox's own). */
   noImportNeeded: Array<{ name: string; module: string | null }>
-  /** Globals and APIs a graphic cannot use, with why. */
+  /** Globals and APIs code cannot use, with why. */
   notAvailable: Array<{ name: string; module: string | null; reason: string }>
   /** Calls the compiler warns about, with what to use instead. */
   clockCalls: Array<{ call: string; instead: string }>
@@ -3234,12 +3230,12 @@ export interface GraphicGuide {
 
 /** One effect, as `listEffects` lists it (motion graphics 7.25, 7.37). */
 export interface EffectSummary {
-  /** The effect's function name, as a graphic imports it and a clip stores it. */
+  /** The effect's function name, as code imports it and a clip stores it. */
   name: string
   /** Its group: Color, Blur & Shadow, Reveal, Transform, Distort, Stylize, Generate. */
   group: string
   description: string
-  /** Where a graphic imports it from. */
+  /** Where code imports it from. */
   importPath: string
   /** Whether a video or image clip can carry it. */
   onClips: boolean
@@ -3250,8 +3246,8 @@ export interface EffectSummary {
 /** Every effect of `@remotion/effects` the app has, from `listEffects`. */
 export interface EffectList {
   effects: EffectSummary[]
-  /** The elements a graphic's code gives `effects` to. */
-  graphicHosts: string[]
+  /** The elements code gives `effects` to. */
+  codeHosts: string[]
 }
 
 /** One parameter of an effect, as the effect's own schema states it. */

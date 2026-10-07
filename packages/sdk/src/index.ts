@@ -176,7 +176,7 @@ export type {
   EditorOp,
   ApplyEditorOpsInput,
   EditorOpResult,
-  GraphicDiagnostic,
+  CodeDiagnostic,
   ApplyEditorOpsResult,
   ProjectType,
   ProjectKind,
@@ -198,7 +198,7 @@ export type {
   ExportFormatSpec,
   ExportFormatCatalog,
   LinkFormats,
-  GraphicGuide,
+  CodeGuide,
   EffectList,
   EffectSummary,
   EffectDetail,
@@ -238,4 +238,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeEditorOps, describeGraphicWarnings, describeLimit, describeRenderFailure, describeReserved, describeScope, withGraphicWarnings } from './describe.js'
+export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'

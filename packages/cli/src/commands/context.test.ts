@@ -57,7 +57,7 @@ before(async () => {
 })
 after(() => server.close())
 
-test("a render's graphic warnings are printed with where they are", () => {
+test("a render's code warnings are printed with where they are", () => {
   const out = contextSummary(
     noTab({
       mode: 'image',
@@ -67,7 +67,7 @@ test("a render's graphic warnings are printed with where they are", () => {
     }),
     nothingSaved,
   )
-  assert.match(out, /Graphic warnings:\n  - graphic g1: warning \(interpolate-repaired\): interpolate was given keyframes out of order \(30, 0\)/)
+  assert.match(out, /Code warnings:\n  - code in g1: warning \(interpolate-repaired\): interpolate was given keyframes out of order \(30, 0\)/)
 })
 
 test('--save with a failed render reports the render, not a missing snapshot', async () => {

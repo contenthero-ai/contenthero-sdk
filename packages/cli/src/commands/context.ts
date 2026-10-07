@@ -18,7 +18,7 @@ import type { CompositionRegion, LiveContextResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { describeGraphicWarnings, describeRenderFailure, withGraphicWarnings, type GraphicDiagnostic } from '@contenthero/sdk'
+import { describeCodeWarnings, describeRenderFailure, withCodeWarnings, type CodeDiagnostic } from '@contenthero/sdk'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: unknown): Buffer | null {
@@ -55,7 +55,7 @@ export function contextSummary(result: LiveContextResult, saved: { count: number
       `${result.participants.length} live participant(s).`
     : 'No one is viewing this in the app right now; the render is from the saved project.'
   const failure = describeRenderFailure(rendered)
-  const warned = describeGraphicWarnings(Array.isArray(rendered?.warnings) ? (rendered.warnings as GraphicDiagnostic[]) : null)
+  const warned = describeCodeWarnings(Array.isArray(rendered?.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
   const savedLine = saved.count > 0 ? `\n${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}` : ''
   return head + (failure ? `\n${failure}` : '') + (warned ? `\n${warned}` : '') + savedLine
 }
@@ -160,13 +160,13 @@ export function registerContext(program: Command): void {
       }
       emit(status, ctx, () => {
         if (status.status === 'done') {
-          return withGraphicWarnings(`Preview video ready: ${status.url}${opts.save ? `\nSaved to ${String(opts.save)}` : ''}`, [...(job.warnings ?? []), ...(status.warnings ?? [])])
+          return withCodeWarnings(`Preview video ready: ${status.url}${opts.save ? `\nSaved to ${String(opts.save)}` : ''}`, [...(job.warnings ?? []), ...(status.warnings ?? [])])
         }
         if (status.status === 'failed') {
           const errors = status.errors?.length ? status.errors : [status.error ?? 'unknown error']
           return errors.length === 1 ? `Preview render failed: ${errors[0]}` : `Preview render failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`
         }
-        return withGraphicWarnings(`Still rendering after the timeout; poll again with renderId "${job.renderId}", bucketName "${job.bucketName}".`, job.warnings)
+        return withCodeWarnings(`Still rendering after the timeout; poll again with renderId "${job.renderId}", bucketName "${job.bucketName}".`, job.warnings)
       })
     })
 }

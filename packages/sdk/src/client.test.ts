@@ -687,18 +687,18 @@ test('getTimelineTypes GETs the timeline catalog', async () => {
   assert.equal(cat.surface, 'editor')
 })
 
-test('getGraphicGuide GETs the graphic authoring guide', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: { version: 'abc12345', markdown: '# Writing a graphic\n' } }])
+test('getCodeGuide GETs the code authoring guide', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { version: 'abc12345', markdown: "# Writing a clip's code\n" } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const guide = await client.getGraphicGuide()
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/graphic-guide')
+  const guide = await client.getCodeGuide()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/code-guide')
   assert.equal(calls[0]?.init?.method ?? 'GET', 'GET')
   assert.equal(guide.version, 'abc12345')
 })
 
 test('listEffects and getEffect read the effect catalog, one effect by its name', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { effects: [{ name: 'glow', group: 'Blur & Shadow', description: 'd', importPath: '@remotion/effects/glow', onClips: true }], graphicHosts: ['Solid'] } },
+    { status: 200, body: { effects: [{ name: 'glow', group: 'Blur & Shadow', description: 'd', importPath: '@remotion/effects/glow', onClips: true }], codeHosts: ['Solid'] } },
     { status: 200, body: { name: 'light leak', params: {} } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
@@ -1166,7 +1166,7 @@ test('templates live at /api/v1/templates: a list pages with a cursor, reads unw
     { status: 200, body: { deleted: true, id: TEMPLATE.id } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const page = await client.listTemplates({ scope: 'user', kind: 'graphic', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: 50 })
+  const page = await client.listTemplates({ scope: 'user', kind: 'code', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: 50 })
   assert.deepEqual(page, { templates: [TEMPLATE], nextCursor: 'eyJvZmZzZXQiOjF9' })
   assert.deepEqual(await client.listTemplateCategories({ scope: 'all' }), [{ category: 'lower-thirds', count: 4 }])
   assert.deepEqual(await client.getTemplate(TEMPLATE.id), TEMPLATE)
@@ -1189,7 +1189,7 @@ test('templates live at /api/v1/templates: a list pages with a cursor, reads unw
   const params = new URL(calls[0]!.url).searchParams
   assert.deepEqual(
     { scope: params.get('scope'), kind: params.get('kind'), category: params.getAll('category'), search: params.get('search'), cursor: params.get('cursor'), limit: params.get('limit') },
-    { scope: 'user', kind: 'graphic', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: '50' },
+    { scope: 'user', kind: 'code', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: '50' },
   )
   assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' })
   // The version read rides the body, where the route reads it.
