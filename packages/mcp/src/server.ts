@@ -2502,7 +2502,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   // One wording for the option every media listing takes (8.5): what a small copy is for, never its size.
   const smallCopiesInput = z.boolean().optional().describe(
-    "Link each image's small copy instead of the file itself, where the library keeps one: for drawing images small, as a graphic that shows many at once does. Never for downloading or delivering a file, or showing it large.",
+    "Link each image's small copy instead of the file itself, where the library keeps one: for drawing images small, as code that shows many at once does. Never for downloading or delivering a file, or showing it large.",
   )
 
   // -- list_media -----------------------------------------------------------
