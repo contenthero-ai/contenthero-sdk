@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { table, keyValues, displayId } from './output.js'
+import { table, keyValues, displayId, clip } from './output.js'
 
 /**
  * ⚠️ **THESE ASSERT LAYOUT, NOT COLOR, AND THE TEST SCRIPT SETS `NO_COLOR=1` TO KEEP THAT TRUE.**
@@ -69,4 +69,12 @@ test('no command prints a truncated UUID', () => {
   assert.ok(files.length >= 10, `expected the command sources, found ${files.length}`)
   const offenders = files.filter((f) => /\b(id|Id)\.slice\(0,\s*8\)/.test(readFileSync(new URL(f, dir), 'utf8')))
   assert.deepEqual(offenders, [])
+})
+
+test('clip: one line, at most max characters, an ellipsis only when cut', () => {
+  // The one table-cell shortener (space, folder and media each had their own). Break-verified: dropping the
+  // whitespace collapse or the ellipsis turns this red.
+  assert.equal(clip('a  b\nc', 10), 'a b c')
+  assert.equal(clip('abcdefghij', 5), 'abcd…')
+  assert.equal(clip(null, 5), '')
 })

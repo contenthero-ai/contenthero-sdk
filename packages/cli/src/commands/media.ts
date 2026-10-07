@@ -15,7 +15,7 @@ import type { Command } from 'commander'
 import { pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaListResult, type MediaType, type SearchMediaPage, type UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
-import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, withMore, clip } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt, toList, withPageFlags } from '../args.js'
 
@@ -63,12 +63,6 @@ function saveExt(url: string, type: string): string {
   return EXT_BY_TYPE[type] ?? ''
 }
 
-/** Shorten a prompt for table display. */
-function clip(text: string | null, max = 48): string {
-  if (!text) return ''
-  const oneLine = text.replace(/\s+/g, ' ').trim()
-  return oneLine.length > max ? oneLine.slice(0, max - 1) + '…' : oneLine
-}
 
 function uploadedHuman(m: UploadedMedia): string {
   return keyValues([
@@ -190,9 +184,9 @@ export function registerMedia(program: Command): void {
               m.isFavorited ? '★' : '',
               m.type,
               m.kind ?? '',
-              clip(m.fileName ?? m.model),
+              clip(m.fileName ?? m.model, 48),
               m.status,
-              clip(m.prompt),
+              clip(m.prompt, 48),
             ]),
           ),
           p.nextCursor,
@@ -235,7 +229,7 @@ export function registerMedia(program: Command): void {
               r.scenes.length
                 ? r.scenes.map((s) => `${(s.startMs / 1000).toFixed(0)}-${(s.endMs / 1000).toFixed(0)}s`).join(' ')
                 : '',
-              clip(r.summary),
+              clip(r.summary, 48),
             ]),
           ),
           p.nextCursor,

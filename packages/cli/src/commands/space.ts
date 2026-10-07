@@ -15,12 +15,8 @@
 import type { Command } from 'commander'
 import type { Space } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, table, displayId } from '../output.js'
+import { emit, table, displayId, clip } from '../output.js'
 
-function clip(s: string | null | undefined, n = 40): string {
-  if (!s) return ''
-  return s.length > n ? s.slice(0, n - 1) + '…' : s
-}
 
 export function registerSpace(program: Command): void {
   const space = program
@@ -39,7 +35,7 @@ export function registerSpace(program: Command): void {
           ['ID', 'NAME', 'CARDS', 'FLAGS'],
           rows.map((s) => [
             displayId(s),
-            clip(s.name),
+            clip(s.name, 40),
             String(s.postCount ?? 0),
             [s.isFavorite ? 'favorite' : '', s.archivedAt ? 'archived' : ''].filter(Boolean).join(' '),
           ]),

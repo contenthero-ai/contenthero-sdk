@@ -35,6 +35,13 @@ export function withMore(body: string, nextCursor: string | null | undefined): s
 }
 
 /** A two-space-gutter, left-aligned table with a dim header row. */
+/** Text shortened to one line of at most `max` characters for a table cell, ending in an ellipsis when cut. */
+export function clip(text: string | null | undefined, max: number): string {
+  if (!text) return ''
+  const oneLine = text.replace(/\s+/g, ' ').trim()
+  return oneLine.length > max ? oneLine.slice(0, max - 1) + '…' : oneLine
+}
+
 export function table(headers: string[], rows: Array<Array<string | number>>): string {
   const cells = rows.map((r) => r.map((c) => String(c ?? '')))
   const widths = headers.map((h, i) =>

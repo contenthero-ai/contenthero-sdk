@@ -11,14 +11,10 @@ import type { Command } from 'commander'
 import type { FolderItemRef } from '@contenthero/sdk'
 import type { Folder, DerivedFolder, FolderContents } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, table, displayId, withMore } from '../output.js'
+import { emit, table, displayId, withMore, clip } from '../output.js'
 import { collect, withPageFlags } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 
-function clip(s: string | null | undefined, n = 50): string {
-  if (!s) return ''
-  return s.length > n ? s.slice(0, n - 1) + '…' : s
-}
 
 export function registerFolder(program: Command): void {
   const folder = program.command('folder').description('Organize the library into manual and smart folders')
@@ -60,8 +56,8 @@ export function registerFolder(program: Command): void {
             ['KIND', 'REF', 'DETAIL'],
             p.items.map((i) =>
               i.type === 'media'
-                ? [i.kind ?? 'media', i.mediaId ?? '', clip(i.summary)]
-                : [i.type, displayId(i), clip(i.name)],
+                ? [i.kind ?? 'media', i.mediaId ?? '', clip(i.summary, 50)]
+                : [i.type, displayId(i), clip(i.name, 50)],
             ),
           ),
           p.nextCursor,
