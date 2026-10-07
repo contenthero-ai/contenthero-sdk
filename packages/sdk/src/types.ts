@@ -225,9 +225,9 @@ export interface TemplateFields {
   code?: string
   /** A Lottie file of ours, and the colors in it that take props (each `role` is a prop name). */
   lottie?: { url: string; recolor?: Array<{ from: string; role: string }> }
-  /** An animated emoji's name, such as `party-popper`. */
+  /** An animated emoji's name, as the animated emoji list names it. */
   emoji?: string
-  /** A shape's name, such as `star`. */
+  /** A shape's name, as get_schema (kind 'layer') lists them. */
   shape?: string
   props?: Record<string, unknown>
   propsSchema?: Record<string, unknown> | null

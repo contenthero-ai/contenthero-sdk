@@ -11,6 +11,8 @@
   `video` or `shape` (was `graphic` or `shape`).
 - The help text and the compiler findings say code where they said graphic (`Code warnings:`, `Code:`,
   `- code in <id> ...`).
+- `template create` and `template update` describe `--emoji` and `--shape` by where their values are listed instead of
+  an example value.
 - Requires `@contenthero/sdk` 0.4.24 (`getCodeGuide`).
 
 ## 0.3.20
