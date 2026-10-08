@@ -4542,3 +4542,19 @@ test('a brand kit logo is sent with isPrimary, the name the API reads', async ()
   assert.ok(fields.includes('isPrimary'))
   assert.equal(fields.includes('is_primary'), false)
 })
+
+test('a brand kit logo can be marked isDisplay, on create and update alike', async () => {
+  const sent: Record<string, unknown> = {}
+  const mcp = await connect(
+    fakeClient({
+      updateBrandKit: async (_id, input) => ((sent.update = input), { id: 'bk1', name: 'K', isDefault: false, brandAccounts: [], inspirationAccounts: [] }),
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  for (const name of ['create_brand_kit', 'update_brand_kit']) {
+    const schema = tools.find((t) => t.name === name)?.inputSchema as { properties: { logos: { items: { properties: Record<string, unknown> } } } }
+    assert.ok('isDisplay' in schema.properties.logos.items.properties, `${name} offers isDisplay`)
+  }
+  await mcp.callTool({ name: 'update_brand_kit', arguments: { brandKitId: 'bk1', logos: [{ url: 'https://x/icon.png', isDisplay: true }] } })
+  assert.deepEqual((sent.update as { logos: unknown }).logos, [{ url: 'https://x/icon.png', isDisplay: true }])
+})

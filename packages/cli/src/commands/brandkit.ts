@@ -96,6 +96,7 @@ function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
     )
     .option('--inspiration-account <ref>', `a competitor/creator profile: same forms as --brand-account. Repeatable${replaces}`, collect)
     .option('--logo <ref>', `a logo: a url, or a generation id to copy in (e.g. out9-2). Repeatable; the first is primary${replaces}`, collect)
+    .option('--display-logo <ref>', 'the logo for compact places: one of the --logo refs; at most one per kit')
     .option('--asset <ref>', `a brand asset: a url, or a generation id to copy in. Repeatable${replaces}`, collect)
     .option(
       '--color <hex[:role[:name]]>',
@@ -128,12 +129,23 @@ export function typographyRefs(opts: Record<string, unknown>): UpdateBrandKitInp
   return Object.keys(fonts).length > 0 ? fonts : undefined
 }
 
+/**
+ * `--display-logo`: marks the logo that `--logo` names with the same ref as the one for compact places. It names a logo
+ * of this list, since the list is the kit's whole set of logos.
+ */
+function withDisplayLogo(logos: Array<Record<string, unknown>> | undefined, ref: string | undefined): Array<Record<string, unknown>> | undefined {
+  if (ref === undefined) return logos
+  const match = logos?.find((l) => l.url === ref || l.outputId === ref)
+  if (!logos || !match) throw new CliError('--display-logo must be one of the --logo refs.', EXIT.USAGE)
+  return logos.map((l) => (l === match ? { ...l, isDisplay: true } : l))
+}
+
 /** The shared identity fields, read back from the options `identityOptions` declared. */
 function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
   return {
     brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
     inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
-    logos: mediaRefs(opts.logo as string[] | undefined, { primaryFirst: true }),
+    logos: withDisplayLogo(mediaRefs(opts.logo as string[] | undefined, { primaryFirst: true }), opts.displayLogo as string | undefined),
     assets: mediaRefs(opts.asset as string[] | undefined, { primaryFirst: false }),
     brandColors: colorRefs(opts.color as string[] | undefined),
     typography: typographyRefs(opts),

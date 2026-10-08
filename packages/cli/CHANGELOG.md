@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `brand-kit create` and `brand-kit update` take `--display-logo <ref>`: one of the `--logo` refs, sent as that logo's
+  `isDisplay`, the logo for the kit's compact places.
 - Breaking: `--json` output follows the API's camelCase response fields (templates, Kling elements, brand kit media,
   project versions, `movedCards` on `stage delete`).
 - Breaking: no manual position. `stage list` and `stage delete` drop their ORDER column (the rows are the board's

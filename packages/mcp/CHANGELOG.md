@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `create_brand_kit` and `update_brand_kit` logo entries take `isDisplay`: the logo for the kit's compact places, at most
+  one per kit.
 - Breaking: the brand kit tools' logo entries take `isPrimary` (was `is_primary`), the name the API reads.
 - No manual position: `create_stage` and `update_stage` no longer print `Position:`, and `update_stage` no longer
   reports a renumbered board (the API carries no position; `list_stages` returns the board in order).

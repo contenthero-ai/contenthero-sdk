@@ -255,3 +255,14 @@ test('stage update moves by naming a neighbor or an edge, never a position', asy
   assert.equal(r.method, 'PATCH')
   assert.deepEqual(r.body, { spaceId: 'sp1', afterId: null })
 })
+
+test('brand-kit --display-logo marks the named logo isDisplay, and must name one of the --logo refs', async () => {
+  const r = await run('brand-kit', 'update', 'bk1', '--logo', 'https://x/full.png', '--logo', 'https://x/icon.png', '--display-logo', 'https://x/icon.png')
+  assert.deepEqual(r.body?.logos, [{ url: 'https://x/full.png', isPrimary: true }, { url: 'https://x/icon.png', isDisplay: true }])
+  seen.length = 0
+  const failure = await buildProgram()
+    .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'brand-kit', 'update', 'bk1', '--logo', 'https://x/a.png', '--display-logo', 'https://x/b.png'], { from: 'user' })
+    .then(() => null, (err: unknown) => err)
+  assert.ok(failure, 'a display logo that is not among the logos is refused')
+  assert.equal(seen.length, 0, 'nothing is sent for a refused command')
+})

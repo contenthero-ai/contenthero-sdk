@@ -1195,6 +1195,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     outputId: z.string().optional().describe('A generation to copy in: "<id>", or "<id>-2" for variation 2.'),
     name: z.string().optional(),
     isPrimary: z.boolean().optional().describe("Make this the kit's cover. Exactly one logo ends up primary."),
+    isDisplay: z.boolean().optional().describe("Make this the logo shown in the kit's compact places. At most one logo per kit."),
     layout: z.enum(['horizontal', 'stacked', 'icon', 'wordmark']).optional(),
     colorMode: z.enum(['full_color', 'light', 'dark', 'grayscale']).optional(),
   })
@@ -2240,7 +2241,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         duplicateFrom: z.string().optional().describe('Copy an existing brand kit id instead of starting empty.'),
         brandColors: z.array(brandColorEntrySchema).optional().describe("The kit's palette, each { hex, name?, role? }."),
         typography: typographySchema.optional().describe("The kit's fonts, { titleFont?, bodyFont? }."),
-        logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, isPrimary?, layout?, colorMode? }. Use outputId to bring in a generation."),
+        logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?, colorMode? }. Use outputId to bring in a generation."),
         assets: z.array(assetEntrySchema).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
         sections: z
           .array(sectionEntrySchema)
@@ -2305,7 +2306,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .boolean()
           .optional()
           .describe("Re-run this kit's import from its websites and own accounts. Returns immediately; poll analysisStatus and extractionStatus."),
-        logos: z.array(logoEntrySchema).optional().describe('The kit\'s logos, each { url | outputId, name?, isPrimary?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
+        logos: z.array(logoEntrySchema).optional().describe('The kit\'s logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
         assets: z.array(assetEntrySchema).optional().describe('The kit\'s brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.'),
         sections: z
           .array(sectionEntrySchema)
