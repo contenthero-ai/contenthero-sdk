@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, SORT_ORDERS } from '@contenthero/sdk'
+import { GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -4406,7 +4406,7 @@ test('every sortable list tool offers exactly its list\'s sort fields and the tw
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const props = (name: string) => (tools.find((t) => t.name === name)?.inputSchema as { properties: Record<string, { enum?: string[] }> }).properties
-  for (const [tool, list] of [['list_cards', 'cards'], ['list_projects', 'projects'], ['list_spaces', 'spaces'], ['list_content', 'content']] as const) {
+  for (const [tool, list] of [['list_cards', 'cards'], ['list_projects', 'projects'], ['list_spaces', 'spaces'], ['list_content', 'content'], ['list_media', 'media']] as const) {
     assert.deepEqual(props(tool).sort?.enum, [...LIST_SORTS[list]], `${tool} sort`)
     assert.deepEqual(props(tool).order?.enum, [...SORT_ORDERS], `${tool} order`)
   }
@@ -4498,4 +4498,25 @@ test('the project tools reach their SDK methods: fields, copy, settings, version
     'undo p1 {"expectedRevision":9}',
     'redo p1 {"expectedRevision":10}',
   ])
+})
+
+test('list_media follows the library-file contract: its sources, its types, no status, and its sort', async () => {
+  let seen
+  const mcp = await connect(
+    fakeClient({
+      listMedia: async (o) => (
+        (seen = o),
+        { media: [{ mediaId: 'Exp00001', type: 'video', model: null, prompt: null, status: 'completed', source: 'exports', fileName: 'cut.mp4', sizeBytes: 5 * 1024 * 1024, assetId: 'as1', isFavorited: false, kind: null, generationSize: 1, url: 'https://media.contenthero.ai/x/original.mp4', durationSeconds: 12 }], nextCursor: null }
+      ),
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  const props = (tools.find((t) => t.name === 'list_media')?.inputSchema as { properties: Record<string, { enum?: string[] }> }).properties
+  assert.deepEqual(props.source?.enum, [...MEDIA_LIST_SOURCES])
+  assert.equal(props.status, undefined, 'status takes only completed, so the tool does not ask for it')
+  const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'exports', contentType: ['video', 'doc'], sort: 'sizeBytes', order: 'desc' } })
+  assert.deepEqual(JSON.parse(JSON.stringify(seen)), { source: 'exports', contentType: ['video', 'doc'], sort: 'sizeBytes', order: 'desc' })
+  assert.match(res.content[0].text, /cut\.mp4 \| 12s \| 5\.0 MB \| asset as1 \| exports/)
+  assert.ok((await mcp.callTool({ name: 'list_media', arguments: { source: 'stock' } })).isError, 'stock is refused')
+  assert.ok((await mcp.callTool({ name: 'list_media', arguments: { contentType: ['transcript'] } })).isError, 'transcript is refused')
 })

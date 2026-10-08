@@ -65,6 +65,8 @@ import {
   type GenerateResult,
   LIST_SORTS,
   SORT_ORDERS,
+  MEDIA_LIST_SOURCES,
+  MEDIA_LIST_TYPES,
   type SortableList,
   withCodeWarnings,
 } from '@contenthero/sdk'
@@ -2537,23 +2539,23 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the account's media, newest first. `source` selects which library: 'creations' (default) is studio generations, each an output with one or more variations (images, video, or audio); 'uploads' is the editor Uploads tab, the raw video, image, and audio files the user uploaded to edit with; 'stock' is stock media the user has already used in a project (cached and reusable); 'all' returns every library merged across sources, each item self-describing via its `source`. Filter with contentType, and page with limit and cursor. NOTE THE GRAIN: a page is counted in VARIATIONS, not generations, so a page can hold several variations of one generation. Each variation is individually addressable and favoritable, which is why it is the unit. To survey distinct generations, follow nextCursor and group the results by their shared id. For creations you can also filter by kind ('board'/'creation'/'look') or favorited/archived. Each item shows its id and, for a single-file item like an upload, its file name, duration, and resolved URL inline, so you can reference it directly (for example, add an upload to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
+        "List the library's files: every file the account keeps, or one part of the library with `source`, each item naming the part it is in. Filter by contentType, kind, favorited or archived; order with sort and order; page with limit and cursor. Each item shows its media id, its file name and size, its asset id (the id get_project reports as a clip's sourceId) and its resolved URL inline, so you can reference it directly (for example, add it to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
       inputSchema: {
         source: z
-          .enum(['creations', 'uploads', 'stock', 'all'])
+          .enum(MEDIA_LIST_SOURCES)
           .optional()
-          .describe("Which library to read: 'creations' (default, studio generations), 'uploads' (the editor Uploads tab), 'stock' (used stock media), or 'all' (every library merged newest-first)."),
+          .describe("Which part of the library to read: 'all' (the default, every file), 'creations' (studio generations), 'uploads' (files the user uploaded), or 'exports' (renders of their projects)."),
         contentType: z
-          .enum(['image', 'video', 'audio', 'transcript'])
+          .array(z.enum(MEDIA_LIST_TYPES))
           .optional()
-          .describe('Filter to one media type.'),
+          .describe('Only these media types.'),
         kind: z
           .enum(['creation', 'board', 'look'])
           .optional()
           .describe("Creations only. Filter by asset class: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all."),
-        status: z.string().optional().describe("Status filter; defaults to 'completed'."),
-        favorited: z.boolean().optional().describe('Creations only. Only outputs that have a favorited variation.'),
-        archived: z.boolean().optional().describe('Creations only. Only outputs that have an archived variation.'),
+        favorited: z.boolean().optional().describe('Only favorited files.'),
+        archived: z.boolean().optional().describe('Only archived files.'),
+        ...sortInput('media'),
         ...pageInput(),
         smallCopies: smallCopiesInput,
       },
@@ -2566,9 +2568,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             source: args.source,
             contentType: args.contentType,
             kind: args.kind,
-            status: args.status,
             favorited: args.favorited,
             archived: args.archived,
+            sort: args.sort,
+            order: args.order,
             limit: args.limit,
             cursor: args.cursor,
             smallCopies: args.smallCopies,

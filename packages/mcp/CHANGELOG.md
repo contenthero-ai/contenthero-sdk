@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking: `list_media` follows the library-file contract. `source` is `all` (the default), `creations`, `uploads` or
+  `exports` (`stock` is gone); `contentType` is a list of `image`, `video`, `audio`, `doc` and `other` (`transcript` is
+  gone); `status` is gone (a listed file is always completed). It takes `sort` (`createdAt`, `fileName`, `sizeBytes`)
+  and `order`. `favorited` and `archived` apply to every file. Each line shows the file's size and source, and the page
+  no longer says newest first.
 - Breaking: every sortable list tool (`list_cards`, `list_projects`, `list_spaces`, `list_content`) takes `sort` (the
   fields the API declares for that list, from the SDK's `LIST_SORTS`) and `order` (`asc` | `desc`). `list_content`'s
   `sortBy` and `sortOrder` are gone; its fields are `relevance` (with a search only), `outlierScore`, `publishedAt`,

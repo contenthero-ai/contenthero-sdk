@@ -111,7 +111,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeFileSize, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1106,7 +1106,7 @@ function listingLink(item: { url: string | null; smallUrl?: string | null }): st
   return item.url ? ` | ${item.url}` : ''
 }
 
-/** A page of library media, one row per VARIATION (the atomic grain). */
+/** A page of the library's files, one row per file, in the order asked for. */
 export function mediaListResult(page: MediaListResult): CallToolResult {
   const items = page.media
   if (!items.length) return text('No media found.')
@@ -1123,15 +1123,16 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
           : ''
     const nameStr = m.fileName ? ` | ${clipped(m.fileName, LISTING_TEXT_MAX)}` : ''
     const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
+    const sizeStr = m.sizeBytes != null ? ` | ${describeFileSize(m.sizeBytes)}` : ''
     // The asset id is what get_project reports as a clip's sourceId: printed so an agent can match a clip to the
     // library item it was cut from. A field the text does not print is invisible to the agent that fetched it.
     const assetStr = m.assetId ? ` | asset ${m.assetId}` : ''
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = listingLink(m)
-    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${nameStr}${durStr}${assetStr} | ${m.status}${promptStr}${urlStr}`
+    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${nameStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
   })
-  return text(lines([`${items.length} item(s) (newest first):`, ...rows, moreLine(page.nextCursor)]))
+  return text(lines([`${items.length} item(s):`, ...rows, moreLine(page.nextCursor)]))
 }
 
 /** A page of semantic library-search matches: assets ranked by relevance, with matched scene timestamps for video. */
