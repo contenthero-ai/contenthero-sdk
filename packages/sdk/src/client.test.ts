@@ -1233,8 +1233,9 @@ test('every sortable listing sends sort and order, and only those names', async 
     { name: 'listProjects', path: '/api/v1/projects', body: { projects: [] }, call: (c) => c.listProjects({ sort: LIST_SORTS.projects[2], order: 'asc' }) },
     { name: 'listSpaces', path: '/api/v1/spaces', body: { spaces: [] }, call: (c) => c.listSpaces({ sort: LIST_SORTS.spaces[2], order: 'asc' }) },
     { name: 'listContent', path: '/api/v1/content', body: { content: [], total: 0 }, call: (c) => c.listContent({ sort: LIST_SORTS.content[2], order: 'asc' }) },
+    { name: 'listMedia', path: '/api/v1/media', body: { media: [] }, call: (c) => c.listMedia({ sort: LIST_SORTS.media[2], order: 'asc' }) },
   ]
-  const expected: Record<string, string> = { listCards: 'title', listProjects: 'title', listSpaces: 'cardCount', listContent: 'publishedAt' }
+  const expected: Record<string, string> = { listCards: 'title', listProjects: 'title', listSpaces: 'cardCount', listContent: 'publishedAt', listMedia: 'sizeBytes' }
   for (const l of listings) {
     const { fetch, calls } = stubFetch([{ status: 200, body: { ...l.body, nextCursor: null } }])
     await l.call(new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' }))
@@ -1353,4 +1354,15 @@ test('version history, undo and redo reach their routes with the bodies the API 
       'POST /api/v1/projects/p1/redo {"expectedRevision":10}',
     ],
   )
+})
+
+test('listMedia sends the library contract: a source partition, several types, and only completed', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { media: [{ mediaId: 'm1', fileName: 'a.mp4', sizeBytes: 2048, assetId: 'as1' }], nextCursor: null } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const page = await client.listMedia({ source: 'exports', contentType: ['video', 'doc'], status: 'completed', favorited: true, sort: 'fileName', order: 'asc' })
+  assert.deepEqual(Object.fromEntries(new URL(calls[0]!.url).searchParams), {
+    source: 'exports', contentType: 'video,doc', status: 'completed', favorited: 'true', sort: 'fileName', order: 'asc',
+  })
+  assert.equal(page.media[0]?.sizeBytes, 2048)
+  assert.equal(page.media[0]?.assetId, 'as1')
 })

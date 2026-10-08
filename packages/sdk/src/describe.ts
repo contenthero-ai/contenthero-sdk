@@ -159,3 +159,11 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   }
   return lines.join('\n')
 }
+
+/** A file size as the app shows one: binary units, one decimal above KB. */
+export function describeFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}

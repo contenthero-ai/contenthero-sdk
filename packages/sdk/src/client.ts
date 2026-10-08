@@ -768,9 +768,8 @@ export class ContentHero {
   }
 
   /**
-   * List the account's recent media (the list half of the list+get pair). `source`
-   * selects the library: 'creations' (default, studio outputs) or 'uploads' (the
-   * editor Uploads tab).
+   * List the library's files (the list half of the list+get pair), sorted by `sort` and `order`, a page at a time.
+   * Every file by default; `source` reads one part of the library.
    */
   async listMedia(options: ListMediaOptions = {}): Promise<MediaListResult> {
     const q = new URLSearchParams()
@@ -783,10 +782,10 @@ export class ContentHero {
     if (options.kind) q.set('kind', options.kind)
     if (options.favorited) q.set('favorited', 'true')
     if (options.archived) q.set('archived', 'true')
+    setSort(q, options)
     setPage(q, options)
     if (options.smallCopies) q.set('smallCopies', 'true')
-    const qs = q.toString()
-    return this.request<MediaListResult>('GET', `/api/v1/media${qs ? `?${qs}` : ''}`)
+    return this.request<MediaListResult>('GET', `/api/v1/media${queryOf(q)}`)
   }
 
   /**

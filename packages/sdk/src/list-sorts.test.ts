@@ -10,11 +10,8 @@ import { LIST_SORTS } from './types.js'
  * which the API validates every `sort` against. Two declarations drift, so this holds the SDK's to the app's whenever
  * the app sits beside this repository (a developer checkout); without it there is nothing to compare and the test
  * says so rather than passing silently.
- *
- * `media` is declared in the app and deliberately absent here until the media API takes `sort`.
  */
 const APP_SORTS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'contenthero-app', 'lib', 'lists', 'sorts.ts')
-const NOT_YET_ON_THE_API = new Set(['media'])
 
 test('LIST_SORTS matches the fields the app declares for every list the API sorts', { skip: existsSync(APP_SORTS) ? false : 'no contenthero-app checkout beside this repository' }, () => {
   const source = readFileSync(APP_SORTS, 'utf8')
@@ -23,9 +20,8 @@ test('LIST_SORTS matches the fields the app declares for every list the API sort
     declared.set(m[1]!, [...m[2]!.matchAll(/'([^']+)'/g)].map((f) => f[1]!))
   }
   assert.ok(declared.size > 0, 'read no list declarations from the app: has its shape changed?')
-  const expected = Object.fromEntries([...declared].filter(([list]) => !NOT_YET_ON_THE_API.has(list)))
   assert.deepEqual(
     Object.fromEntries(Object.entries(LIST_SORTS).map(([list, fields]) => [list, [...fields]])),
-    expected,
+    Object.fromEntries(declared),
   )
 })

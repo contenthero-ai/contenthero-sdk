@@ -6,7 +6,7 @@
  */
 
 export { ContentHero, importedMediaFrom } from './client.js'
-export { LIST_SORTS, SORT_ORDERS } from './types.js'
+export { LIST_SORTS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES } from './types.js'
 export type {
   SortableList,
   SortFieldOf,
@@ -16,6 +16,9 @@ export type {
   ProjectSort,
   SpaceSort,
   ContentSort,
+  MediaSort,
+  MediaListSource,
+  MediaListType,
 } from './types.js'
 export type { ContentHeroOptions, FetchLike } from './client.js'
 export type {
@@ -271,4 +274,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeLimit, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'
+export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeFileSize, describeLimit, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Breaking: `listMedia` follows the library-file contract. `source` is `all` (the default when none is named),
+  `creations`, `uploads` or `exports` (`MEDIA_LIST_SOURCES`); `stock` and `files` are for a single read only.
+  `contentType` takes `image`, `video`, `audio`, `doc` and `other` (`MEDIA_LIST_TYPES`), not `transcript`. `kind` is
+  `creation`, `board` or `look` (no `upload`: that is `source: 'uploads'`). `status` takes only `completed`. It sorts by
+  `sort` and `order` (`LIST_SORTS.media`: `createdAt`, `fileName`, `sizeBytes`; `fileName` is refused for creations).
+- `MediaSummary` carries `sizeBytes`; `MediaType` adds `doc` and `other`; `MediaSource` adds `exports`.
+- New: `describeFileSize`, a file size in the units the app shows.
 - Breaking: every sortable listing sorts by `sort` (a field of that list) and `order` (`asc` | `desc`), declared once in
   `LIST_SORTS` (`cards`, `projects`, `spaces`, `content`) with `SORT_ORDERS`; `CardSort`, `ProjectSort`, `SpaceSort` and
   `ContentSort` are typed from it. `listCards`, `listProjects`, `listSpaces` and `listContent` take them (`SortOptions`).

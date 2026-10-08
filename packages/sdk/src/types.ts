@@ -137,13 +137,15 @@ export interface Paged {
  * name of the response field it orders by. ONE declaration: the SDK's option types, the MCP tool schemas and the CLI's
  * `--sort` choices all read from here, so a field cannot reach one surface and not the others.
  *
- * `relevance` orders a search's results, and the server refuses it without a search.
+ * `relevance` orders a search's results, and the server refuses it without a search. `fileName` orders media by a name a
+ * person gave, so the server refuses it for creations, which have none.
  */
 export const LIST_SORTS = {
   cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title'],
   projects: ['updatedAt', 'createdAt', 'title'],
   spaces: ['updatedAt', 'name', 'cardCount'],
   content: ['relevance', 'outlierScore', 'publishedAt', 'viewCount', 'engagementRate'],
+  media: ['createdAt', 'fileName', 'sizeBytes'],
 } as const
 
 /** A listing that sorts. */
@@ -156,6 +158,7 @@ export type CardSort = SortFieldOf<'cards'>
 export type ProjectSort = SortFieldOf<'projects'>
 export type SpaceSort = SortFieldOf<'spaces'>
 export type ContentSort = SortFieldOf<'content'>
+export type MediaSort = SortFieldOf<'media'>
 
 /** The direction of every sort: one word, two values. */
 export const SORT_ORDERS = ['asc', 'desc'] as const
@@ -1339,18 +1342,27 @@ export interface BrandImportOutcome {
 /** An account to link: an existing tracked-account id, or a profile to ADD by handle or url. */
 export type BrandKitAccountInput = string | { platform?: string; handleOrUrl: string }
 
-/** A studio output's media kind. */
-export type MediaType = 'image' | 'video' | 'audio' | 'transcript'
+/** A media item's type. A transcript is not a library file, so a listing refuses it (read it with `getTranscript`). */
+export type MediaType = 'image' | 'video' | 'audio' | 'doc' | 'other' | 'transcript'
+
+/** The types a media listing filters by. */
+export const MEDIA_LIST_TYPES = ['image', 'video', 'audio', 'doc', 'other'] as const
+export type MediaListType = (typeof MEDIA_LIST_TYPES)[number]
 
 /**
- * Which library a media read targets. 'creations' = studio generations (with variations);
- * 'uploads' = the editor Uploads tab (the user-level upload library); 'stock' = stock media
- * the user has used (cached and reusable); 'files' = any stored file the Library shows (a brand
- * upload, a planner upload, a canvas render; get only); 'all' = every library merged newest-first,
- * each item self-describing via its `source` (list only). A get without a source finds the item in
- * whichever library holds it.
+ * The parts a media listing reads the library's files in: every file (`all`, the default), or one partition of them:
+ * `creations` (studio generations), `uploads` (files the user uploaded), `exports` (renders of their projects). Each
+ * listed item names the partition it is in, in its `source`.
  */
-export type MediaSource = 'creations' | 'uploads' | 'stock' | 'files' | 'all'
+export const MEDIA_LIST_SOURCES = ['all', 'creations', 'uploads', 'exports'] as const
+export type MediaListSource = (typeof MEDIA_LIST_SOURCES)[number]
+
+/**
+ * Where a media item lives: a listing's partitions, and for a single read `stock` (stock media the user has used)
+ * and `files` (any stored file the library shows). A get without a source finds the item in whichever library holds
+ * it.
+ */
+export type MediaSource = MediaListSource | 'stock' | 'files'
 
 /** One variation (output) of a studio generation. */
 export interface MediaVariation {
@@ -1404,10 +1416,12 @@ export interface MediaSummary {
   kind: string | null
   /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
   boardType: string | null
-  /** Which library this item came from ('creations' | 'uploads' | 'stock' | 'files'); self-describing. */
+  /** Which part of the library this item is in; self-describing. */
   source: MediaSource
-  /** Original file name (uploads); null for studio outputs. */
+  /** The file's name, which a download saves under: one a person gave, or one made for a creation. */
   fileName: string | null
+  /** The file's size in bytes, as the library shows it and the storage meter counts it; listings only. */
+  sizeBytes?: number
   /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
   durationSeconds: number | null
   /**
@@ -1589,22 +1603,24 @@ export interface MediaBatchResult {
 }
 
 /** Options for `listMedia`. */
-export interface ListMediaOptions extends PageOptions {
-  /** Which library to read; defaults to 'creations' (studio outputs). 'uploads' = the editor Uploads tab. */
-  source?: MediaSource
-  contentType?: MediaType | MediaType[]
-  status?: string
-  /** Filter by asset class: 'creation', 'board', 'look', or 'upload'. */
-  kind?: 'creation' | 'board' | 'look' | 'upload'
-  /** When true, return only outputs that have a favorited (non-archived) variation. */
+export interface ListMediaOptions extends PageOptions, SortOptions<MediaSort> {
+  /** Which part of the library to read; every file when omitted. */
+  source?: MediaListSource
+  /** One type, or several (sent comma-separated). */
+  contentType?: MediaListType | MediaListType[]
+  /** A listed file exists once its generation completed, so this takes only `completed`. */
+  status?: 'completed'
+  /** Creations only: the generation's class. */
+  kind?: 'creation' | 'board' | 'look'
+  /** When true, only favorited files that are not archived. */
   favorited?: boolean
-  /** When true, return only outputs that have an archived variation. */
+  /** When true, only archived files. */
   archived?: boolean
   /** Give each image its `smallUrl`: the smallest copy the library keeps, for drawing it small. */
   smallCopies?: boolean
 }
 
-/** Result of `listMedia`: a page of media, one entry per variation, newest first. */
+/** Result of `listMedia`: a page of the library's files, in the order asked for. */
 export interface MediaListResult extends Paged {
   media: MediaSummary[]
 }

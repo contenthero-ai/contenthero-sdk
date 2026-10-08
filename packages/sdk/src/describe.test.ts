@@ -34,3 +34,11 @@ test('a failed render, and the frames of a range that did not render, are said i
     '1 frame could not be rendered (frames 30). render_failed: Lambda timed out',
   )
 })
+
+test('describeFileSize reads as the app shows a size', async () => {
+  const { describeFileSize } = await import('./describe.js')
+  assert.equal(describeFileSize(512), '512 B')
+  assert.equal(describeFileSize(2048), '2.0 KB')
+  assert.equal(describeFileSize(5 * 1024 * 1024), '5.0 MB')
+  assert.equal(describeFileSize(3 * 1024 * 1024 * 1024), '3.0 GB')
+})
