@@ -142,12 +142,26 @@ export function registerContext(program: Command): void {
     .option('--timeout <sec>', 'max seconds to wait for the render (default 120)', (v) => parseInt(v, 10))
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const job = await client.createPreview({
+      const deadline = Date.now() + (Number(opts.timeout) || 120) * 1000
+      const input = {
         projectId: opts.project as string,
         fromFrame: opts.fromFrame as number | undefined,
         toFrame: opts.toFrame as number | undefined,
-      })
-      const deadline = Date.now() + (Number(opts.timeout) || 120) * 1000
+      }
+      // While a score in the range is still rendering its audio, nothing starts: wait as long as the API asks, then
+      // ask again, within the same timeout as the render itself.
+      let started = await client.createPreview(input)
+      while (started.status === 'preparing' && Date.now() + started.retryAfter * 1000 < deadline) {
+        const waitMs = started.retryAfter * 1000
+        await new Promise((r) => setTimeout(r, waitMs))
+        started = await client.createPreview(input)
+      }
+      if (started.status === 'preparing') {
+        const preparing = started
+        emit(preparing, ctx, () => preparing.message)
+        return
+      }
+      const job = started
       let status = await client.getPreview(job)
       while (status.status === 'rendering' && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 3000))

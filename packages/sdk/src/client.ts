@@ -77,7 +77,7 @@ import type {
   LiveContextResult,
   GetContextInput,
   PreviewInput,
-  PreviewJob,
+  PreviewStart,
   PreviewStatus,
   ListProjectsInput,
   CreateProjectInput,
@@ -1734,10 +1734,12 @@ export class ContentHero {
   /**
    * Create an async PREVIEW render (ephemeral, never stored). Currently a short low-res COMPOSED VIDEO of an
    * editor range, so you can assess motion, cuts, transitions, and pacing a still cannot show. Returns a job
-   * handle; poll it with `getPreview`. Requires the `context:read` scope.
+   * handle (`status: 'rendering'`); poll it with `getPreview`. While a score in the range is still rendering its
+   * audio, returns `status: 'preparing'` instead: nothing started, so call this again after `retryAfter` seconds.
+   * Requires the `context:read` scope.
    */
-  async createPreview(input: PreviewInput): Promise<PreviewJob> {
-    return this.request<PreviewJob>('POST', '/api/v1/preview', input)
+  async createPreview(input: PreviewInput): Promise<PreviewStart> {
+    return this.request<PreviewStart>('POST', '/api/v1/preview', input)
   }
 
   /**

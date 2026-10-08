@@ -3228,8 +3228,9 @@ export interface PreviewInput {
   toFrame?: number
 }
 
-/** The handle returned by `createPreview`; feed `renderId` + `bucketName` to `getPreview`. */
+/** A preview that started: its handle. Feed `renderId` + `bucketName` to `getPreview`. */
 export interface PreviewJob {
+  status: 'rendering'
   renderId: string
   bucketName: string
   fromFrame: number
@@ -3238,6 +3239,22 @@ export interface PreviewJob {
   /** What the compiler warns about in the code this range draws. Absent when nothing. */
   warnings?: CodeDiagnostic[]
 }
+
+/**
+ * A preview that could not start yet: a score in the range is still rendering its audio. Nothing was rendered and
+ * nothing was charged; call `createPreview` again after `retryAfter` seconds.
+ */
+export interface PreviewPreparing {
+  status: 'preparing'
+  code: 'SOUND_PREPARING'
+  /** What is happening, in words that can be shown to a person. */
+  message: string
+  /** Seconds to wait before asking again. */
+  retryAfter: number
+}
+
+/** What `createPreview` answers: a started preview, or one whose audio is still rendering. Branch on `status`. */
+export type PreviewStart = PreviewJob | PreviewPreparing
 
 /** The poll result for a preview render. */
 export interface PreviewStatus {

@@ -3026,7 +3026,7 @@ test('get_context frames spend the one result budget and name the frames that di
 test('get_context mode=video returns the renderId handle; get_preview returns the url when done', async () => {
   const mcp = await connect(
     fakeClient({
-      createPreview: async (input) => ({ renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2, projectId: input.projectId }),
+      createPreview: async (input) => ({ status: 'rendering', renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2, projectId: input.projectId }),
       getPreview: async () => ({ status: 'done', url: 'https://x/preview.mp4', estimatedCostUsd: 0.01 }),
     }),
   )
@@ -3035,6 +3035,24 @@ test('get_context mode=video returns the renderId handle; get_preview returns th
   assert.match((start.content[0]).text, /bucketName="b1"/)
   const poll = await mcp.callTool({ name: 'get_preview', arguments: { renderId: 'r1', bucketName: 'b1' } })
   assert.match((poll.content[0]).text, /https:\/\/x\/preview\.mp4/)
+})
+
+/**
+ * A score whose audio is still rendering (9.8 F): the API accepted the ask but started nothing, so the agent is told in
+ * the API's own words and given the wait, never a handle it would poll forever.
+ */
+test('get_context mode=video relays a preview whose audio is still rendering, with the wait', async () => {
+  const mcp = await connect(
+    fakeClient({
+      createPreview: async () => ({ status: 'preparing', code: 'SOUND_PREPARING', message: 'The audio is still rendering.', retryAfter: 60 }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', mode: 'video' } })
+  const body = (res.content[0]).text
+  assert.match(body, /The audio is still rendering\./)
+  assert.match(body, /\[retry_after_seconds: 60\]/)
+  assert.doesNotMatch(body, /renderId/)
+  assert.notEqual(res.isError, true)
 })
 
 test("get_schema kind 'layer' lists canvas layer types + props", async () => {

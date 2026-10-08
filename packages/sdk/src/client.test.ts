@@ -663,6 +663,16 @@ test('startExport POSTs to /api/v1/projects/:id/export', async () => {
   assert.equal(job.status, 'rendering')
 })
 
+test('createPreview returns a preview whose audio is still rendering as its own state', async () => {
+  const preparing = { status: 'preparing', code: 'SOUND_PREPARING', message: 'm', retryAfter: 60 }
+  const { fetch, calls } = stubFetch([{ status: 202, body: preparing }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const start = await client.createPreview({ projectId: 'p1' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/preview')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(start, preparing)
+})
+
 test('getExport GETs /api/v1/exports/:id', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/o.mp4' } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

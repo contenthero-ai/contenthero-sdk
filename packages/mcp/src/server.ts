@@ -4460,6 +4460,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             fromFrame: args.fromFrame,
             toFrame: args.toFrame,
           })
+          // A score in the range is still rendering its audio: nothing started, so the same call is made again later.
+          if (job.status === 'preparing') return text(`${job.message} [retry_after_seconds: ${job.retryAfter}]`)
           return text(
             withCodeWarnings(
               `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
