@@ -9,7 +9,7 @@
  * (media URLs), then schedule or publish. Stages accept an id, slug, or name and
  * resolve server-side; use `contenthero stage list` to discover them, and
  * `contenthero space list` to pick the board first. Writes need planner:write
- * (assets need assets:write, publish needs publish:write); the key's scopes are
+ * (assets need library:write, publish needs publish:write); the key's scopes are
  * the consent.
  */
 

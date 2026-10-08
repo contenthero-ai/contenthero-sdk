@@ -418,7 +418,7 @@ export function registerMedia(program: Command): void {
 
   media
     .command('upload')
-    .description('Upload a local file as first-class media (requires assets:write)')
+    .description('Upload a local file as first-class media (requires library:write)')
     .argument('<file>', 'path to the local file')
     .option('--content-type <mime>', 'MIME type override (else inferred from the extension)')
     .option('--name <name>', 'file name override (else the basename)')
@@ -438,7 +438,7 @@ export function registerMedia(program: Command): void {
 
   media
     .command('import')
-    .description('Import a remote URL as first-class media (requires assets:write)')
+    .description('Import a remote URL as first-class media (requires library:write)')
     .argument('<url>', 'public https URL to fetch and re-host')
     .option('--content-type <mime>', 'MIME type override (else taken from the response)')
     .option('--name <name>', 'file name override (used for the extension)')

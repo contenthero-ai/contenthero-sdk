@@ -3,7 +3,7 @@
  *   brand-kit list | get | create | extract | update
  *   brand-kit knowledge list | get | search | add | remove
  *
- * Reads are open; writes need brandkit:write. A kit's content is its sections, each one Markdown document,
+ * Reads are open; writes need brand:write. A kit's content is its sections, each one Markdown document,
  * written by key with `update --sections` (JSON). A section is archived with `archive brand_kit_section <id>`.
  */
 
@@ -273,7 +273,7 @@ export function registerBrandKit(program: Command): void {
   identityOptions(
     brandKit
       .command('create')
-      .description('Create a brand kit: empty, imported from its websites and accounts, or as a copy (requires brandkit:write)')
+      .description('Create a brand kit: empty, imported from its websites and accounts, or as a copy (requires brand:write)')
       .option('--name <text>', "the kit's name; optional when a website or social profile url is given")
       .option('--website-url <url>', "one of the brand's websites. Repeatable; the first is the primary site", collect)
       .option('--extract', 'import the kit from its websites and own --brand-account profiles (returns immediately)')
@@ -330,7 +330,7 @@ export function registerBrandKit(program: Command): void {
   withPlacementFlags(identityOptions(
     brandKit
       .command('update')
-      .description('Update a brand kit: section content, colors and fonts, media and accounts, and its place among your kits (requires brandkit:write)')
+      .description('Update a brand kit: section content, colors and fonts, media and accounts, and its place among your kits (requires brand:write)')
       .argument('<id>', 'the brand kit id')
       .option('--name <text>')
       .option('--website-url <url>', "one of the brand's websites. Repeatable; the first is the primary site. Replaces the list", collect)
@@ -438,7 +438,7 @@ export function registerBrandKit(program: Command): void {
 
   knowledge
     .command('add')
-    .description('Add an item to a brand kit\'s knowledge base (requires brandkit:write)')
+    .description('Add an item to a brand kit\'s knowledge base (requires brand:write)')
     .argument('<brandKitId>', 'the brand kit id')
     .option('--text <text>', 'add a text note')
     .option('--url <url>', 'scrape and add a web page')
@@ -506,7 +506,7 @@ export function registerBrandKit(program: Command): void {
 
   knowledge
     .command('remove')
-    .description('Remove a knowledge item and its embeddings (requires brandkit:write)')
+    .description('Remove a knowledge item and its embeddings (requires brand:write)')
     .argument('<brandKitId>', 'the brand kit id')
     .argument('<knowledgeId>', 'the knowledge item id to remove')
     .action(async (brandKitId: string, knowledgeId: string, _opts, command: Command) => {

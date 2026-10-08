@@ -127,7 +127,7 @@ export function registerTrackedAccount(program: Command): void {
   withPlacementFlags(
     account
       .command('update')
-      .description('Move a tracked account within its list (requires brandkit:write)')
+      .description('Move a tracked account within its list (requires inspiration:write)')
       .argument('<id>', 'the tracked account id'),
   ).action(async (id: string, opts: Record<string, unknown>, command: Command) => {
     const placement = placementFrom(opts)

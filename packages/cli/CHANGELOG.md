@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The help names the API's renamed scopes: `brand:write`, `library:write`, and `inspiration:write` for
+  `tracked-account update`.
 - Breaking: every hand-arranged list moves by `--after <id>`, `--before <id>` or `--position top|bottom`, one wording
   from `withPlacementFlags`: `card create` and `card update`, `stage create` and `stage update`, `brand-kit update`
   (the kit among yours), `avatar update`, `template create` and `template update`. `stage update` loses `--to-start` and

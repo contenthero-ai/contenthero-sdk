@@ -2243,7 +2243,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Brand Kit',
       annotations: WRITE,
       description:
-        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; or FROM A SOCIAL PROFILE, pass its url in brandAccounts (your own) or inspirationAccounts (a creator you watch) with no name at all, and the kit is named after the handle and starts ingesting that account's posts if it is YouTube or Instagram; (2) IMPORTED, pass websiteUrls (primary first) and/or the brand's own YouTube or Instagram in brandAccounts, with extract:true, and ContentHero takes the colors, typography, logos and assets from the first website and analyzes every website and those accounts' posts to write the kit's empty sections, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). Every new kit starts with its starter sections, empty. A brand with NO WEBSITE (so nothing to extract) is built by passing its content directly: sections, written by key into those starter sections, and logos, whose entries may name outputId to bring in a generation you just made rather than a url. With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the sections fill in over the next few minutes (longer while a newly linked account's posts arrive), so poll analysisStatus and extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrls or a social profile url is given: it defaults to the first site's hostname or the @handle, a placeholder extraction or you overwrite later. Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brandkit:write scope.",
+        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; or FROM A SOCIAL PROFILE, pass its url in brandAccounts (your own) or inspirationAccounts (a creator you watch) with no name at all, and the kit is named after the handle and starts ingesting that account's posts if it is YouTube or Instagram; (2) IMPORTED, pass websiteUrls (primary first) and/or the brand's own YouTube or Instagram in brandAccounts, with extract:true, and ContentHero takes the colors, typography, logos and assets from the first website and analyzes every website and those accounts' posts to write the kit's empty sections, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). Every new kit starts with its starter sections, empty. A brand with NO WEBSITE (so nothing to extract) is built by passing its content directly: sections, written by key into those starter sections, and logos, whose entries may name outputId to bring in a generation you just made rather than a url. With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the sections fill in over the next few minutes (longer while a newly linked account's posts arrive), so poll analysisStatus and extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrls or a social profile url is given: it defaults to the first site's hostname or the @handle, a placeholder extraction or you overwrite later. Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brand:write scope.",
       inputSchema: {
         name: z.string().optional().describe("The kit's name. Optional when websiteUrls or a social profile is given."),
         websiteUrls: z
@@ -2311,7 +2311,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit: its section content, colors and fonts, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). A section entry's afterId, beforeId or position moves that section within its tab; its neighbors are section ids. Requires the brandkit:write scope. afterId, beforeId or position moves the kit itself among the caller's kits. extract:true RE-RUNS the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
+        "Update a brand kit: its section content, colors and fonts, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). A section entry's afterId, beforeId or position moves that section within its tab; its neighbors are section ids. Requires the brand:write scope. afterId, beforeId or position moves the kit itself among the caller's kits. extract:true RE-RUNS the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
         ...placementInput(),
@@ -2394,7 +2394,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Search Brand Knowledge',
       annotations: READ,
       description:
-        "Semantic search over a brand kit's knowledge base (everything the owner has uploaded: notes, docs, articles, video transcripts). Returns the most relevant passages, ranked. This is the deep-grounding read: use it to pull what the brand has said about a topic before drafting or deciding. Requires the brandkit:read scope.",
+        "Semantic search over a brand kit's knowledge base (everything the owner has uploaded: notes, docs, articles, video transcripts). Returns the most relevant passages, ranked. This is the deep-grounding read: use it to pull what the brand has said about a topic before drafting or deciding. Requires the brand:read scope.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id (from list_brand_kits / get_brand_kit).'),
         query: z.string().describe('What to search for, in natural language.'),
@@ -2424,7 +2424,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Brand Knowledge',
       annotations: READ,
       description:
-        "The complete, paginated index of a brand kit's knowledge items (titles and metadata, no bodies). Use it to browse what exists, or to find an item's id before get_brand_knowledge or remove_brand_knowledge. For relevance retrieval, use search_brand_knowledge instead. Requires the brandkit:read scope.",
+        "The complete, paginated index of a brand kit's knowledge items (titles and metadata, no bodies). Use it to browse what exists, or to find an item's id before get_brand_knowledge or remove_brand_knowledge. For relevance retrieval, use search_brand_knowledge instead. Requires the brand:read scope.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
         ...pageInput(),
@@ -2449,7 +2449,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Brand Knowledge',
       annotations: READ,
       description:
-        "Get one knowledge item's stored body by id (the capped anchor text; the full document is embedded for search, not stored verbatim). Use search_brand_knowledge for the deep content. Requires the brandkit:read scope.",
+        "Get one knowledge item's stored body by id (the capped anchor text; the full document is embedded for search, not stored verbatim). Use search_brand_knowledge for the deep content. Requires the brand:read scope.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
         knowledgeId: z.string().describe('The knowledge item id (from list_brand_knowledge or search_brand_knowledge).'),
@@ -2472,7 +2472,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Add Brand Knowledge',
       annotations: WRITE,
       description:
-        "Add an item to a brand kit's knowledge base so it can be searched later. This is how the brand's knowledge grows over time: capture a lesson learned, a brand decision, an asset description, an article, or a video. Source can be text (a note), url (a page to scrape), youtube (a video transcript), or file. For a file, pass either fileData (base64, best for small documents and images) or fileUrl (a hosted URL the server fetches, needed for large files and video/audio). Requires the brandkit:write scope. SPENDS CREDITS for images, video and audio (text, links, YouTube and documents are free): pass getCost to preview the price first, which runs nothing and charges nothing.",
+        "Add an item to a brand kit's knowledge base so it can be searched later. This is how the brand's knowledge grows over time: capture a lesson learned, a brand decision, an asset description, an article, or a video. Source can be text (a note), url (a page to scrape), youtube (a video transcript), or file. For a file, pass either fileData (base64, best for small documents and images) or fileUrl (a hosted URL the server fetches, needed for large files and video/audio). Requires the brand:write scope. SPENDS CREDITS for images, video and audio (text, links, YouTube and documents are free): pass getCost to preview the price first, which runs nothing and charges nothing.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
         sourceType: z.enum(['text', 'url', 'youtube', 'file']).describe('How the content is provided.'),
@@ -2515,7 +2515,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Remove Brand Knowledge',
       annotations: WRITE,
       description:
-        "Remove a knowledge item and its embedding chunks from a brand kit's knowledge base. Requires the brandkit:write scope.",
+        "Remove a knowledge item and its embedding chunks from a brand kit's knowledge base. Requires the brand:write scope.",
       inputSchema: {
         brandKitId: z.string().describe('The brand kit id.'),
         knowledgeId: z.string().describe('The knowledge item id to remove.'),
@@ -2931,7 +2931,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Media Upload',
       annotations: WRITE,
       description:
-        'Upload local files as first-class media (phase 1 of 2). Accepts 1-25 files in one call. Returns, for each file, a signed uploadUrl and the exact headers to send; PUT each file\'s bytes to its URL with those headers unchanged, then call complete_media_upload once with every returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import_media instead. Requires the assets:write scope.',
+        'Upload local files as first-class media (phase 1 of 2). Accepts 1-25 files in one call. Returns, for each file, a signed uploadUrl and the exact headers to send; PUT each file\'s bytes to its URL with those headers unchanged, then call complete_media_upload once with every returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import_media instead. Requires the library:write scope.',
       inputSchema: {
         files: z
           .array(
@@ -2974,7 +2974,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Completing the upload'),
       annotations: WRITE,
       description:
-        'Finalize uploads (phase 2 of 2) after each file\'s bytes were PUT to its signed uploadUrl from create_media_upload. Accepts 1-25 outputIds in one call: finalize a batch together, so the person sees it as one card. Publishes each file and returns its outputId and URL. Requires the assets:write scope.',
+        'Finalize uploads (phase 2 of 2) after each file\'s bytes were PUT to its signed uploadUrl from create_media_upload. Accepts 1-25 outputIds in one call: finalize a batch together, so the person sees it as one card. Publishes each file and returns its outputId and URL. Requires the library:write scope.',
       inputSchema: {
         outputIds: z
           .array(z.string())
@@ -3010,7 +3010,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Importing media'),
       annotations: WRITE,
       description:
-        'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the assets:write scope.',
+        'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the library:write scope.',
       inputSchema: {
         url: z.string().describe('A public https URL to fetch and re-host.'),
         contentType: z.string().optional().describe('Optional MIME override (else taken from the response).'),
@@ -4008,7 +4008,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Tracked Account',
       annotations: WRITE,
       description:
-        "Move a tracked account within its list (its kind's: the creators they watch, or their own profiles), after or before another of the same kind, or to an end. Returns the account with its performance, as get_tracked_account does. Requires the brandkit:write scope.",
+        "Move a tracked account within its list (its kind's: the creators they watch, or their own profiles), after or before another of the same kind, or to an end. Returns the account with its performance, as get_tracked_account does. Requires the inspiration:write scope.",
       inputSchema: {
         accountId: z.string().describe('The account id from list_tracked_accounts.'),
         ...placementInput(),

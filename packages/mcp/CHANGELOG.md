@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The tool descriptions name the API's renamed scopes: `brand:read`, `brand:write`, `library:write`, and
+  `inspiration:write` for `update_tracked_account`.
 - Breaking: every hand-arranged list moves by neighbor or end, one wording from `placementInput()`: `afterId`, `beforeId`,
   or `position` (`top` | `bottom`). `create_card` and `update_card`, `create_stage` and `update_stage`,
   `update_brand_kit` (the kit among the caller's) and its section entries (within their tab), `update_avatar`,

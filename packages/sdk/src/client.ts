@@ -610,7 +610,7 @@ export class ContentHero {
   }
 
   /**
-   * Create a brand kit. Requires the `brandkit:write` scope.
+   * Create a brand kit. Requires the `brand:write` scope.
    *
    * Three sources, and the input decides which: EMPTY (just a name), IMPORTED (`websiteUrls` and/or its own
    * accounts in `brandAccounts`, with `extract: true`), or A COPY (`duplicateFrom`).
@@ -642,7 +642,7 @@ export class ContentHero {
   /**
    * Re-run an existing kit's import: visuals from its first website, and the analysis of every website and its own
    * accounts, which writes only into sections still empty. Returns at once; poll `extractionStatus` and
-   * `analysisStatus`. Needs a website or an own YouTube or Instagram account, and the `brandkit:write` scope.
+   * `analysisStatus`. Needs a website or an own YouTube or Instagram account, and the `brand:write` scope.
    */
   async extractBrandKit(brandKitId: string): Promise<BrandImportOutcome> {
     const data = await this.request<{ import: BrandImportOutcome }>(
@@ -686,7 +686,7 @@ export class ContentHero {
    * Update a brand kit: section content (`sections`, the sections you name, all or nothing), media, colors,
    * typography and linked accounts. A stale `expectedVersion` on any section throws a ConflictError whose
    * `conflicts` lists each stale section's current `{ key, version, body }`, and NOTHING in the patch is written.
-   * Requires the `brandkit:write` scope. Returns the full updated kit.
+   * Requires the `brand:write` scope. Returns the full updated kit.
    */
   async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput & Placement): Promise<BrandKit> {
     return this.request<BrandKit>('PATCH', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`, input)
@@ -696,7 +696,7 @@ export class ContentHero {
   // Brand knowledge (a brand kit's knowledge base)
   // -------------------------------------------------------------------------
 
-  /** The complete index of a brand kit's knowledge items, a page at a time. Requires `brandkit:read`. */
+  /** The complete index of a brand kit's knowledge items, a page at a time. Requires `brand:read`. */
   async listBrandKnowledge(
     brandKitId: string,
     options: PageOptions = {},
@@ -710,7 +710,7 @@ export class ContentHero {
     )
   }
 
-  /** Get one knowledge item with its stored body. Requires `brandkit:read`. */
+  /** Get one knowledge item with its stored body. Requires `brand:read`. */
   async getBrandKnowledge(brandKitId: string, knowledgeId: string): Promise<BrandKnowledgeDetail> {
     const data = await this.request<{ item: BrandKnowledgeDetail }>(
       'GET',
@@ -719,7 +719,7 @@ export class ContentHero {
     return data.item
   }
 
-  /** Semantic search over a brand kit's knowledge base. Requires `brandkit:read`. */
+  /** Semantic search over a brand kit's knowledge base. Requires `brand:read`. */
   async searchBrandKnowledge(
     brandKitId: string,
     query: string,
@@ -735,7 +735,7 @@ export class ContentHero {
     return data.matches
   }
 
-  /** Add an item to a brand kit's knowledge base (text/url/youtube/file). Requires `brandkit:write`. */
+  /** Add an item to a brand kit's knowledge base (text/url/youtube/file). Requires `brand:write`. */
   /**
    * What `addBrandKnowledge` would charge for this item, without adding it. Text, links, YouTube and documents are
    * free; an image is one item; video and audio are measured (not processed) and priced per chunk.
@@ -748,7 +748,7 @@ export class ContentHero {
     return this.request<AddBrandKnowledgeResult>('POST', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}/knowledge`, input)
   }
 
-  /** Remove a knowledge item and its embedding chunks. Requires `brandkit:write`. */
+  /** Remove a knowledge item and its embedding chunks. Requires `brand:write`. */
   async removeBrandKnowledge(brandKitId: string, knowledgeId: string): Promise<{ id: string }> {
     return this.request<{ id: string }>(
       'DELETE',
@@ -1499,7 +1499,7 @@ export class ContentHero {
 
   /**
    * Move a tracked account within its list (its kind's: the creators watched, or the owner's own profiles), after or
-   * before another or to an end. Answers the account as `getTrackedAccount` does. Requires `brandkit:write`.
+   * before another or to an end. Answers the account as `getTrackedAccount` does. Requires `inspiration:write`.
    */
   async updateTrackedAccount(accountId: string, placement: Placement): Promise<TrackedAccountDetail> {
     return this.request<TrackedAccountDetail>('PATCH', `/api/v1/accounts/${encodeURIComponent(accountId)}`, placement)

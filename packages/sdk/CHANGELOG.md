@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Scope names in the docs follow the API's rename: `brand:read` (was `brandkit:read`), `brand:write` (was
+  `brandkit:write`), `library:write` (was `assets:write`); `updateTrackedAccount` needs `inspiration:write`.
 - Breaking: every hand-arranged list moves by neighbor or end, with one `Placement` (`afterId`, `beforeId`, or
   `position: 'top' | 'bottom'`, `PLACEMENT_ENDS`); neighbors and an end together are refused. `createCard` and
   `updateCard` (within the column, or the column it moves to), `createStage` and `updateStage`, `updateBrandKit` (the

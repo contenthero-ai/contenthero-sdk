@@ -98,7 +98,7 @@ export function registerFolder(program: Command): void {
 
   folder
     .command('update')
-    .description('Rename, move, re-query a folder, and file or unfile items (requires assets:write)')
+    .description('Rename, move, re-query a folder, and file or unfile items (requires library:write)')
     .argument('<id>', 'the folder id')
     .option('--name <text>', 'a new name')
     .option('--parent <id>', 'move under this folder id, or "none" for the top level')
