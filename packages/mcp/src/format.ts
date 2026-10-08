@@ -1665,7 +1665,7 @@ export function klingElementListResult({ klingElements: items, nextCursor }: Kli
     return text('No Kling elements. Create one with create_kling_element, then reference it in a Kling generation by klingElementId.')
   }
   const rows = items.map((e) => {
-    const media = e.input_video_url ? '1 video' : `${e.input_urls.length} image(s)`
+    const media = e.inputVideoUrl ? '1 video' : `${e.inputUrls.length} image(s)`
     return `- ${e.name} (${idOf(e)}) | ${e.category} | ${media}${e.description ? ` | ${e.description.slice(0, 60)}` : ''}`
   })
   return text(lines([`${items.length} Kling element(s):`, ...rows, moreLine(nextCursor)]))
@@ -1685,7 +1685,7 @@ export function klingElementResult(e: KlingElement, verb?: string): CallToolResu
     lines([
       `${e.name} (${idOf(e)}) | ${e.category}`,
       e.description ? `description: ${e.description}` : null,
-      e.input_video_url ? `video: ${e.input_video_url}` : `images (${e.input_urls.length}): ${e.input_urls.join(', ')}`,
+      e.inputVideoUrl ? `video: ${e.inputVideoUrl}` : `images (${e.inputUrls.length}): ${e.inputUrls.join(', ')}`,
       `Reference in a Kling prompt as @${e.name}; pass generate_video's klingElements [{ klingElementId: "${e.id}" }].`,
     ]),
   )
@@ -1695,15 +1695,15 @@ export function klingElementResult(e: KlingElement, verb?: string): CallToolResu
 
 /** A template's own size: a share of the canvas on each axis, or the whole frame. */
 function templateBox(t: TemplateSummary): string {
-  return t.coverage === 'partial' && t.width_fraction && t.height_fraction
-    ? `${Math.round(t.width_fraction * 100)}% x ${Math.round(t.height_fraction * 100)}% of the canvas`
+  return t.coverage === 'partial' && t.widthFraction && t.heightFraction
+    ? `${Math.round(t.widthFraction * 100)}% x ${Math.round(t.heightFraction * 100)}% of the canvas`
     : 'full frame'
 }
 
 /** One template in a line: what it is, whose, its version and its size. */
 function templateLine(t: TemplateSummary): string {
   const whose = t.scope === 'system' ? 'ContentHero' : 'yours'
-  return `${t.name} (id ${t.id}) | ${t.kind} | ${t.category} | ${whose} | version ${t.version} | ${templateBox(t)}${t.archived_at ? ' | archived' : ''}`
+  return `${t.name} (id ${t.id}) | ${t.kind} | ${t.category} | ${whose} | version ${t.version} | ${templateBox(t)}${t.archivedAt ? ' | archived' : ''}`
 }
 
 /** A page of templates, and how to get the next. */
@@ -1734,15 +1734,15 @@ export function templateResult(t: Template, verb?: string, warnings: string[] = 
   return text(
     lines([
       templateLine(t),
-      `${t.duration_frames} frames${t.resize === 'scale' ? ', keeps its proportions in any box' : ', lays out again in the box it is given'}`,
+      `${t.durationFrames} frames${t.resize === 'scale' ? ', keeps its proportions in any box' : ', lays out again in the box it is given'}`,
       t.description ? `description: ${t.description}` : null,
       t.tags?.length ? `tags: ${t.tags.join(', ')}` : null,
-      t.source_template_id ? `saved from template ${t.source_template_id}, version ${t.source_template_version}` : null,
+      t.sourceTemplateId ? `saved from template ${t.sourceTemplateId}, version ${t.sourceTemplateVersion}` : null,
       `props: ${JSON.stringify(t.props)}`,
-      t.props_schema ? `controls: ${JSON.stringify(t.props_schema)}` : null,
+      t.propsSchema ? `controls: ${JSON.stringify(t.propsSchema)}` : null,
       t.skeleton?.shape ? `shape: ${t.skeleton.shape}` : null,
       t.skeleton?.emoji ? `emoji: ${t.skeleton.emoji}` : null,
-      t.thumbnail_url ? `preview: ${t.thumbnail_url}` : null,
+      t.thumbnailUrl ? `preview: ${t.thumbnailUrl}` : null,
       t.code ? `code:\n\`\`\`tsx\n${t.code}\n\`\`\`` : null,
     ]),
   )
@@ -2090,22 +2090,13 @@ export function stageListResult(result: StageListResult): CallToolResult {
   return text(lines([`${result.stages.length} stage(s)${where} (in order):`, ...rows, moreLine(result.nextCursor)]))
 }
 
-/** One created or updated stage. */
-export function stageResult(s: Stage, respaced = false): CallToolResult {
+/** One created or updated stage. No position: the board's order is the order `list_stages` returns. */
+export function stageResult(s: Stage): CallToolResult {
   const lines = [
     `Stage ${s.name} (${idOf(s)})`,
     s.slug ? `Slug: ${s.slug}` : null,
     s.color ? `Color: ${s.color}` : null,
-    `Position: ${s.sortOrder}`,
   ].filter(Boolean) as string[]
-  /*
-    ⚠️ SAID OUT LOUD, because it is the one answer the caller cannot derive. A move with no room between
-    two columns renumbers the WHOLE board, so every other stage the agent is holding is stale and a
-    renumbered key looks like any other number.
-  */
-  if (respaced) {
-    lines.push('The whole board was renumbered to make room. Call list_stages again: every other stage position you are holding is now stale.')
-  }
   return text(lines.join('\n'))
 }
 
@@ -2732,7 +2723,7 @@ export function projectVersionListResult(projectId: string, { versions, nextCurs
   if (!versions.length) return text(`Project ${projectId} has no saved versions.`)
   const rows = versions.map(
     (v) =>
-      `- ${v.id} | ${v.created_at}${v.label ? ` | "${v.label}"` : ''} | ${v.trigger_reason}${v.author_name ? ` | by ${v.author_name}` : ''}${v.revision != null ? ` | revision ${v.revision}` : ''}`,
+      `- ${v.id} | ${v.createdAt}${v.label ? ` | "${v.label}"` : ''} | ${v.triggerReason}${v.authorName ? ` | by ${v.authorName}` : ''}${v.revision != null ? ` | revision ${v.revision}` : ''}`,
   )
   return text(lines([`${versions.length} version(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
 }

@@ -189,7 +189,7 @@ function fakeClient(overrides = {}) {
       typography: null,
       socialAccounts: [],
       assets: [],
-      sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 1, body: 'Confident and direct.', updatedAt: 't' }],
+      sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', width: 'full', version: 1, body: 'Confident and direct.', updatedAt: 't' }],
       brandAccounts: [{ platform: 'instagram', name: 'ContentHero', handle: 'contenthero', avatarUrl: null, followerCount: 100 }],
       inspirationAccounts: [],
       knowledge: [{ id: 'kn1', title: 'Origin', sourceType: 'note', sourceUrl: null, contentPreview: 'We started...' }],
@@ -349,7 +349,7 @@ function fakeClient(overrides = {}) {
       notes: null,
       revision: 3,
       metadata: null,
-      assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null, sortOrder: 0 }],
+      assets: [{ id: 'as1', assetType: 'image', assetId: null, assetUrl: 'https://cdn/a.png', displayName: null }],
       posts: [{ id: 'd1', connectedAccountId: 'ca1', platform: 'instagram', format: 'reel', status: 'draft', scheduledAt: null, publishedAt: null, platformSettings: { caption: 'Launch!', mediaItems: [{ url: 'https://cdn/x.png' }] } }],
       tags: ['contenthero', 'feature'],
     }),
@@ -357,8 +357,8 @@ function fakeClient(overrides = {}) {
     updateCard: async (id, input) => ({ id, title: input.title ?? 'Launch clip', description: null, platform: 'instagram', status: input.status ?? 'draft', stageId: 'st1', boardOrder: 0, contentType: null, coverUrl: null, isFavorite: false, scheduledAt: null, publishedAt: null, publishUrl: null, createdAt: 't', updatedAt: 't', platforms: [] }),
     listStages: async () => ({
       stages: [
-        { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6', sortOrder: 0 },
-        { id: 'st2', name: 'Published', slug: 'published', color: '#10B981', sortOrder: 5 },
+        { id: 'st1', name: 'Ideation', slug: 'ideation', color: '#8B5CF6' },
+        { id: 'st2', name: 'Published', slug: 'published', color: '#10B981' },
       ],
       space: { id: 'sp1', name: 'Product Development' },
     }),
@@ -422,7 +422,7 @@ function fakeClient(overrides = {}) {
     importMedia: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
     favorite: async () => {},
     archive: async () => {},
-    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.op_id ?? 'mock-op-id', ok: true })) }),
+    applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.opId ?? 'mock-op-id', ok: true })) }),
     listProjects: async () => ({
       projects: [
         { id: 'p1', type: 'editor', surface: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null },
@@ -1757,7 +1757,7 @@ test('get_brand_kit returns the whole kit as JSON and passes the id through', as
           typography: null,
           socialAccounts: [],
           assets: [],
-          sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 1, body: 'confident', updatedAt: 't' }],
+          sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', width: 'full', version: 1, body: 'confident', updatedAt: 't' }],
           brandAccounts: [],
           inspirationAccounts: [],
           knowledge: [],
@@ -2580,13 +2580,13 @@ test('get_brand_kit reads three ways and refuses the combinations that cannot me
         if (options?.detail === 'summary') {
           return {
             id, name: 'CH',
-            sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 3, updatedAt: 't', charCount: 412, outline: ['Personality', 'Principles'] }],
+            sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', width: 'full', version: 3, updatedAt: 't', charCount: 412, outline: ['Personality', 'Principles'] }],
           }
         }
         if (options) {
           return {
             id, name: 'CH',
-            sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', sortOrder: 1, width: 'full', version: 3, updatedAt: 't', body: '## Personality\n\nWarm.', revisions: [{ version: 2, body: 'Older.', bodySource: 'user', createdAt: 't0' }] }],
+            sections: [{ id: 's1', key: 'voice_and_tone', role: 'voice_and_tone', tab: 'voice', sectionName: 'Voice & Tone', width: 'full', version: 3, updatedAt: 't', body: '## Personality\n\nWarm.', revisions: [{ version: 2, body: 'Older.', bodySource: 'user', createdAt: 't0' }] }],
           }
         }
         return { id, name: 'CH', isDefault: true, sections: [] }
@@ -4038,7 +4038,7 @@ test('the Kling element tools reach the Kling element SDK methods, by klingEleme
   const row = {
     id: '11111111-1111-4111-8111-111111111111', shortId: 'Kling001', appUrl: 'https://app/kling-element/Kling001',
     name: 'hero', category: 'character', description: 'the subject',
-    input_urls: ['https://cdn/a.png', 'https://cdn/b.png'], input_video_url: null, preview_url: 'https://cdn/a.png', created_at: 't',
+    inputUrls: ['https://cdn/a.png', 'https://cdn/b.png'], inputVideoUrl: null, previewUrl: 'https://cdn/a.png', createdAt: 't',
   }
   const calls = []
   const mcp = await connect(
@@ -4102,11 +4102,11 @@ const TEMPLATE_TOOLS = ['list_templates', 'get_template', 'create_template', 'up
 
 test('the template tools are filed with the editor, and reach the template SDK methods by templateId', async () => {
   const row = {
-    id: '22222222-2222-4222-8222-222222222222', scope: 'user', user_id: 'u1', kind: 'code', name: 'Lower third', category: 'lower-thirds',
-    description: null, tags: ['name'], props: { title: 'Hi' }, props_schema: { title: { control: 'text', label: 'Title' } }, duration_frames: 120,
-    skeleton: { type: 'video' }, coverage: 'partial', width_fraction: 0.25, height_fraction: 0.125, resize: 'scale',
-    aspect: 2, version: 3, archived_at: null, source_template_id: null, source_template_version: null, code: 'export default () => null',
-    thumbnail_url: 'https://media.contenthero.ai/templates/2222/v3.png',
+    id: '22222222-2222-4222-8222-222222222222', scope: 'user', kind: 'code', name: 'Lower third', category: 'lower-thirds',
+    description: null, tags: ['name'], props: { title: 'Hi' }, propsSchema: { title: { control: 'text', label: 'Title' } }, durationFrames: 120,
+    skeleton: { type: 'video' }, coverage: 'partial', widthFraction: 0.25, heightFraction: 0.125, resize: 'scale',
+    aspect: 2, version: 3, archivedAt: null, sourceTemplateId: null, sourceTemplateVersion: null, code: 'export default () => null',
+    thumbnailUrl: 'https://media.contenthero.ai/templates/2222/v3.png',
   }
   const calls = []
   const mcp = await connect(
@@ -4456,7 +4456,7 @@ test('the project tools reach their SDK methods: fields, copy, settings, version
       duplicateProject: async (id) => (calls.push(`duplicate ${id}`), summary),
       getTimelineSettings: async (id) => (calls.push(`settings ${id}`), settings),
       updateTimelineSettings: async (id, change) => (calls.push(`settings ${id} ${JSON.stringify(change)}`), settings),
-      listProjectVersions: async (id, page) => (calls.push(`versions ${id} ${JSON.stringify(page)}`), { versions: [{ id: 'v1', created_at: 't', label: 'Final', trigger_reason: 'manual', author_name: 'Taylan', revision: 4, kind: 'tracks', created_by: 'u', size_bytes: 1 }], nextCursor: null }),
+      listProjectVersions: async (id, page) => (calls.push(`versions ${id} ${JSON.stringify(page)}`), { versions: [{ id: 'v1', createdAt: 't', label: 'Final', triggerReason: 'manual', authorName: 'Taylan', revision: 4, kind: 'tracks', createdBy: 'u', sizeBytes: 1 }], nextCursor: null }),
       saveProjectVersion: async (id, o) => (calls.push(`save ${id} ${JSON.stringify(o)}`), { id: 'v2', label: o.label }),
       restoreProjectVersion: async (id, v) => (calls.push(`restore ${id} ${v}`), { revision: 9, kind: 'tracks' }),
       copyProjectVersion: async (id, v) => (calls.push(`copy ${id} ${v}`), summary),
@@ -4519,4 +4519,26 @@ test('list_media follows the library-file contract: its sources, its types, no s
   assert.match(res.content[0].text, /cut\.mp4 \| 12s \| 5\.0 MB \| asset as1 \| exports/)
   assert.ok((await mcp.callTool({ name: 'list_media', arguments: { source: 'stock' } })).isError, 'stock is refused')
   assert.ok((await mcp.callTool({ name: 'list_media', arguments: { contentType: ['transcript'] } })).isError, 'transcript is refused')
+})
+
+test('update_stage answers with the stage and no position, since the API carries none', async () => {
+  let sent
+  const mcp = await connect(
+    fakeClient({
+      updateStage: async (id, input) => ((sent = { id, input }), { id, shortId: 'Stage001', name: 'Done', slug: 'done', color: '#10B981' }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'update_stage', arguments: { stageId: 'st1', spaceId: 'sp1', afterId: '' } })
+  assert.equal(JSON.parse(JSON.stringify(sent)).input.afterId, null)
+  assert.doesNotMatch(res.content[0].text, /Position|renumbered/)
+  assert.match(res.content[0].text, /^Stage Done/)
+})
+
+test('a brand kit logo is sent with isPrimary, the name the API reads', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const schema = tools.find((t) => t.name === 'update_brand_kit')?.inputSchema as { properties: { logos: { items: { properties: Record<string, unknown> } } } }
+  const fields = Object.keys(schema.properties.logos.items.properties)
+  assert.ok(fields.includes('isPrimary'))
+  assert.equal(fields.includes('is_primary'), false)
 })

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Breaking: the brand kit tools' logo entries take `isPrimary` (was `is_primary`), the name the API reads.
+- No manual position: `create_stage` and `update_stage` no longer print `Position:`, and `update_stage` no longer
+  reports a renumbered board (the API carries no position; `list_stages` returns the board in order).
+- Templates, Kling elements and project versions are read by the API's camelCase fields; a brand kit's full read
+  carries its logos, assets and social accounts camelCase.
+
 - Breaking: `list_media` follows the library-file contract. `source` is `all` (the default), `creations`, `uploads` or
   `exports` (`stock` is gone); `contentType` is a list of `image`, `video`, `audio`, `doc` and `other` (`transcript` is
   gone); `status` is gone (a listed file is always completed). It takes `sort` (`createdAt`, `fileName`, `sizeBytes`)
