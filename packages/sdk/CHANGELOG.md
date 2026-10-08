@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Breaking: every hand-arranged list moves by neighbor or end, with one `Placement` (`afterId`, `beforeId`, or
+  `position: 'top' | 'bottom'`, `PLACEMENT_ENDS`); neighbors and an end together are refused. `createCard` and
+  `updateCard` (within the column, or the column it moves to), `createStage` and `updateStage`, `updateBrandKit` (the
+  kit among the caller's) and each section write (within its tab, neighbors are section ids), `updateAvatar`,
+  `createTemplate` and `updateTemplate` (a placement alone is a move) take it. A stage's edge is `position`, no
+  longer a null neighbor.
+- Breaking: `reorderBrandKits` is removed (the API refuses `orderedIds`); move one kit with `updateBrandKit`.
+- Breaking: `TemplateFields.orderKey` is removed (the API refuses it).
+- New: `updateTrackedAccount` moves a tracked account within its list (`PATCH /api/v1/accounts/{id}`).
+- New: `updateFolder`'s `moveItem` (`FolderItemMove`) moves one item within a manual folder.
+- `LIST_SORTS.cards` adds `position`: one stage's own order, top first; it needs a stage.
+
 - Breaking: every response field is camelCase, as the API now declares it.
   - `TemplateSummary`/`Template`: `propsSchema`, `durationFrames`, `widthFraction`, `heightFraction`, `thumbnailUrl`,
     `previewUrl`, `codeMd5`, `sourceTemplateId`, `sourceTemplateVersion`, `archivedAt`, `groupKey`, `subgroupKey`,

@@ -38,7 +38,6 @@ import type {
   BrandKitSummaryRead,
   BrandKitSectionFilter,
   BrandKitSectionsRead,
-  BrandKitSummary,
   BrandKnowledgeDetail,
   BrandKnowledgeItem,
   BrandKnowledgeListResult,
@@ -157,6 +156,7 @@ import type {
   UndoResult,
   SortOptions,
   ProjectSummary,
+  Placement,
 } from './types.js'
 
 /** Minimal fetch signature, so a custom implementation can be injected. */
@@ -653,17 +653,6 @@ export class ContentHero {
   }
 
   /**
-   * Reorder the account's brand kits. Collection-level because ordering is a property of the SET: a per-kit
-   * position would let two kits claim one slot. Pass every id, in the order you want.
-   */
-  async reorderBrandKits(orderedIds: string[]): Promise<BrandKitSummary[]> {
-    const data = await this.request<{ brandKits: BrandKitSummary[] }>('PATCH', '/api/v1/brand-kits', {
-      orderedIds,
-    })
-    return data.brandKits
-  }
-
-  /**
    * Get one brand kit, read three ways:
    * - `{ detail: 'summary' }`: every section with its key, role, version, length and outline (its own headings), and
    *   NO bodies. The cheap first read: decide what to load, then load just that.
@@ -699,7 +688,7 @@ export class ContentHero {
    * `conflicts` lists each stale section's current `{ key, version, body }`, and NOTHING in the patch is written.
    * Requires the `brandkit:write` scope. Returns the full updated kit.
    */
-  async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput): Promise<BrandKit> {
+  async updateBrandKit(brandKitId: string, input: UpdateBrandKitInput & Placement): Promise<BrandKit> {
     return this.request<BrandKit>('PATCH', `/api/v1/brand-kits/${encodeURIComponent(brandKitId)}`, input)
   }
 
@@ -1153,10 +1142,11 @@ export class ContentHero {
   }
 
   /**
-   * Change one of the caller's own templates: only the fields given. Pass the `version` you read as
-   * `expectedVersion` to refuse (409) a write over content that changed since. Placed copies keep what they had.
+   * Change one of the caller's own templates: only the fields given, and where it sits among the caller's templates
+   * (`afterId`, `beforeId`, `position`; a placement alone is a move). Pass the `version` you read as `expectedVersion`
+   * to refuse (409) a write over content that changed since. Placed copies keep what they had.
    */
-  async updateTemplate(id: string, fields: TemplateFields, options: { expectedVersion?: number } = {}): Promise<TemplateWriteResult> {
+  async updateTemplate(id: string, fields: TemplateFields & Placement, options: { expectedVersion?: number } = {}): Promise<TemplateWriteResult> {
     const body = options.expectedVersion != null ? { ...fields, expectedVersion: options.expectedVersion } : fields
     return this.request<TemplateWriteResult>('PATCH', `/api/v1/templates/${encodeURIComponent(id)}`, body)
   }
@@ -1267,21 +1257,17 @@ export class ContentHero {
    * two columns whose names derive the same slug, and the server refuses the
    * second rather than inventing `done-2`.
    *
-   * `afterId` / `beforeId` place the column. Omit both and it goes to the end.
+   * A placement (`afterId`, `beforeId`, `position`) places the column; `top` is the first column. Name none and it
+   * goes to the end.
    */
-  async createStage(input: {
-    name: string
-    spaceId?: string
-    color?: string
-    afterId?: string | null
-    beforeId?: string | null
-  }): Promise<Stage> {
+  async createStage(input: { name: string; spaceId?: string; color?: string } & Placement): Promise<Stage> {
     const data = await this.request<{ stage: Stage }>('POST', '/api/v1/stages', {
       name: input.name,
       spaceId: input.spaceId,
       color: input.color,
       afterId: input.afterId,
       beforeId: input.beforeId,
+      position: input.position,
     })
     return data.stage
   }
@@ -1293,29 +1279,24 @@ export class ContentHero {
    * re-derives the slug, so a column called Done has the slug `done`; a rename
    * that would collide with another column on the same board is REFUSED.
    *
-   * Moving names NEIGHBORS rather than a position, because a position computed
-   * against a list you fetched earlier is stale by the time it arrives. Pass
-   * `afterId: null` to move it to the far left, `beforeId: null` for the far
-   * right. Omit both to leave it where it is.
+   * Moving names NEIGHBORS (`afterId`, `beforeId`) or an end (`position`,
+   * `top` being the first column), never a number, because a number computed
+   * against a list you fetched earlier is stale by the time it arrives. Name
+   * none to leave it where it is.
    *
    * No position comes back: `listStages` returns the board in its order, so a
    * caller never holds a number a move could make stale.
    */
   async updateStage(
     stageId: string,
-    input: {
-      spaceId: string
-      name?: string
-      color?: string
-      afterId?: string | null
-      beforeId?: string | null
-    },
+    input: { spaceId: string; name?: string; color?: string } & Placement,
   ): Promise<Stage> {
     const body: Record<string, unknown> = { spaceId: input.spaceId }
     if (input.name !== undefined) body.name = input.name
     if (input.color !== undefined) body.color = input.color
     if (input.afterId !== undefined) body.afterId = input.afterId
     if (input.beforeId !== undefined) body.beforeId = input.beforeId
+    if (input.position !== undefined) body.position = input.position
 
     const data = await this.request<{ stage: Stage }>(
       'PATCH',
@@ -1514,6 +1495,14 @@ export class ContentHero {
    */
   async getTrackedAccount(accountId: string): Promise<TrackedAccountDetail> {
     return this.request<TrackedAccountDetail>('GET', `/api/v1/accounts/${encodeURIComponent(accountId)}`)
+  }
+
+  /**
+   * Move a tracked account within its list (its kind's: the creators watched, or the owner's own profiles), after or
+   * before another or to an end. Answers the account as `getTrackedAccount` does. Requires `brandkit:write`.
+   */
+  async updateTrackedAccount(accountId: string, placement: Placement): Promise<TrackedAccountDetail> {
+    return this.request<TrackedAccountDetail>('PATCH', `/api/v1/accounts/${encodeURIComponent(accountId)}`, placement)
   }
 
   /**

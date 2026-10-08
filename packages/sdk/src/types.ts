@@ -139,10 +139,11 @@ export interface Paged {
  * `--sort` choices all read from here, so a field cannot reach one surface and not the others.
  *
  * `relevance` orders a search's results, and the server refuses it without a search. `fileName` orders media by a name a
- * person gave, so the server refuses it for creations, which have none.
+ * person gave, so the server refuses it for creations, which have none. A card's `position` is one stage's own order,
+ * top first, so it needs a stage.
  */
 export const LIST_SORTS = {
-  cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title'],
+  cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title', 'position'],
   projects: ['updatedAt', 'createdAt', 'title'],
   spaces: ['updatedAt', 'name', 'cardCount'],
   content: ['relevance', 'outlierScore', 'publishedAt', 'viewCount', 'engagementRate'],
@@ -160,6 +161,28 @@ export type ProjectSort = SortFieldOf<'projects'>
 export type SpaceSort = SortFieldOf<'spaces'>
 export type ContentSort = SortFieldOf<'content'>
 export type MediaSort = SortFieldOf<'media'>
+
+// ---------------------------------------------------------------------------
+// Placement: how every hand-arranged list moves an item
+// ---------------------------------------------------------------------------
+
+/** The two ends of a hand-arranged list. */
+export const PLACEMENT_ENDS = ['top', 'bottom'] as const
+export type PlacementEnd = (typeof PLACEMENT_ENDS)[number]
+
+/**
+ * Where an item lands in a hand-arranged list: after a named neighbor, before one, between two, or at an end. Never a
+ * number: the server derives the place from the neighbors as they are. Neighbors and `position` together are refused,
+ * since they can disagree. Naming none leaves the item where it is.
+ */
+export interface Placement {
+  /** The item it lands immediately after, from the same list. */
+  afterId?: string
+  /** The item it lands immediately before, from the same list. */
+  beforeId?: string
+  /** An end of the list, instead of a neighbor. */
+  position?: PlacementEnd
+}
 
 /** The direction of every sort: one word, two values. */
 export const SORT_ORDERS = ['asc', 'desc'] as const
@@ -303,7 +326,6 @@ export interface TemplateFields {
   artboard?: { width: number; height: number; content: { x: number; y: number; width: number; height: number } } | null
   thumbnailUrl?: string | null
   previewUrl?: string | null
-  orderKey?: number
   /** Lineage, which `fromItem` and `fromTemplateId` set for you: kept only for a template the caller can see. */
   sourceTemplateId?: string | null
   sourceTemplateVersion?: number | null
@@ -314,10 +336,12 @@ export interface TemplateFields {
  * project (its code, props, controls and box, as fractions of that canvas); or `fromTemplateId`, a copy (with its
  * lineage). Fields given beside `fromItem` or `fromTemplateId` override what it carries.
  */
-export type CreateTemplateRequest =
-  | TemplateFields
-  | (TemplateFields & { fromItem: { projectId: string; itemId: string } })
-  | (TemplateFields & { fromTemplateId: string })
+export type CreateTemplateRequest = Placement &
+  (
+    | TemplateFields
+    | (TemplateFields & { fromItem: { projectId: string; itemId: string } })
+    | (TemplateFields & { fromTemplateId: string })
+  )
 
 /** A write's result: the template as stored, and what the checks warned about (written anyway). */
 export interface TemplateWriteResult {
@@ -903,8 +927,8 @@ export interface CreateAvatarResult {
   charge?: Charge
 }
 
-/** Fields `updateAvatar` can change. Omitted fields are left alone. */
-export interface UpdateAvatarRequest {
+/** Fields `updateAvatar` can change, and where it moves among the caller's avatars. Omitted fields are left alone. */
+export interface UpdateAvatarRequest extends Placement {
   /** At least 3 characters. */
   name?: string
   /**
@@ -1098,8 +1122,10 @@ export interface BrandKitSectionFilter {
  * With a `key`, it edits that section: a new `body`, `revertTo` an earlier version (which lands as a NEW version),
  * a new `sectionName`, or a new `width`. Without a key, it ADDS a section of your own, and `sectionName` and `tab`
  * are required. To remove a section, archive it (`archive` with assetType `brand_kit_section`).
+ *
+ * A placement (`afterId`, `beforeId`, `position`) moves the section within its tab; its neighbors are section ids.
  */
-export interface BrandKitSectionWrite {
+export interface BrandKitSectionWrite extends Placement {
   key?: string
   sectionName?: string
   tab?: string
@@ -1857,6 +1883,8 @@ export interface UpdateFolderInput {
   addItems?: FolderItemRef[]
   /** Unfile these items. Only the pointer goes; the asset is never touched. */
   removeItems?: FolderItemRef[]
+  /** Move one item within this manual folder: after or before another of its items, or to an end. */
+  moveItem?: FolderItemMove
   /** Apply this patch to several folders. Attribute fields (name, query, icon, color) need one. */
   folderIds?: string[]
 }
@@ -1866,6 +1894,14 @@ export interface UpdateFolderInput {
  * `mediaId` (`a1B2c3D4-2` for one output of several), a project or a card by its id.
  */
 export type FolderItemRef = { mediaId: string } | { projectId: string } | { cardId: string }
+
+/** A move within a manual folder: the item, and the items it lands after or before (each named as `addItems` names one), or an end. */
+export interface FolderItemMove {
+  item: FolderItemRef
+  after?: FolderItemRef
+  before?: FolderItemRef
+  position?: PlacementEnd
+}
 
 /** Fields to start a presigned media upload (phase 1 of uploadMedia). */
 export interface CreateMediaUploadInput {
@@ -2359,8 +2395,11 @@ export interface ListStagesOptions extends PageOptions {
   spaceId?: string
 }
 
-/** Fields to create a post. `stage` accepts a stage id, slug, or name. */
-export interface CreateCardInput {
+/**
+ * Fields to create a post. `stage` accepts a stage id, slug, or name. A placement (`afterId`, `beforeId`, `position`)
+ * puts it in its column.
+ */
+export interface CreateCardInput extends Placement {
   title: string
   platform: PostPlatform
   /**
@@ -2441,7 +2480,11 @@ export interface CardAssetInput {
  */
 export type NotesEdit = { append: string } | { find: string; replace: string }
 
-export interface UpdateCardInput {
+/**
+ * A change to a card. A placement (`afterId`, `beforeId`, `position`) moves it within its column, or within the column
+ * it is moving to when `stage` changes too.
+ */
+export interface UpdateCardInput extends Placement {
   title?: string
   platform?: PostPlatform
   /** Archive or restore the card. `status` is untouched because a card no longer has one. */

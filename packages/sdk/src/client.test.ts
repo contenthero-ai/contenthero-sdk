@@ -986,11 +986,10 @@ test('createStage may omit the space, and every other stage write may not', asyn
 })
 
 /**
- * 🚨 OMITTED AND NULL ARE OPPOSITE INSTRUCTIONS FOR AN ANCHOR. Omitting both means "do not move it";
- * `afterId: null` means "move it to the far left". Collapsing them would make every rename also jump
- * the column to one end.
+ * A rename must never move the column: a placement that is not named is not sent. An end is `position`, never a null
+ * neighbor (the ordering contract).
  */
-test('updateStage sends only the fields given, and distinguishes null from absent', async () => {
+test('updateStage sends only the fields given, and moves only when a placement is named', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { stage: { id: 'st1', name: 'Done', slug: 'done', color: null } } },
   ])
@@ -1007,9 +1006,9 @@ test('updateStage sends only the fields given, and distinguishes null from absen
 
   const edge = stubFetch([{ status: 200, body: { stage: { id: 'st1', name: 'Done', slug: 'done', color: null } } }])
   const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: edge.fetch, baseUrl: 'https://example.test' })
-  const moved = await c2.updateStage('st1', { spaceId: 'sp1', afterId: null })
+  const moved = await c2.updateStage('st1', { spaceId: 'sp1', position: 'top' })
   const edgeBody = JSON.parse(String(edge.calls[0]?.init?.body))
-  assert.equal(edgeBody.afterId, null, 'an explicit null must reach the wire as null')
+  assert.deepEqual(edgeBody, { spaceId: 'sp1', position: 'top' })
   // The stage itself comes back, with no position: the list is the board's order.
   assert.equal(moved.id, 'st1')
   assert.equal('sortOrder' in moved, false)
@@ -1383,4 +1382,35 @@ test('responses are read camelCase: templates, brand kit media, versions', async
   assert.equal(kit.socialAccounts[0]?.avatarUrl, 'p')
   const v = await client.saveProjectVersion('p1')
   assert.equal(v.triggerReason, 'manual')
+})
+
+/** The ordering contract: every hand-arranged list moves by neighbor or end, with the same three names. */
+test('every hand-arranged list takes afterId, beforeId and position, on the route that moves it', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { post: { id: 'c' }, stage: { id: 's' }, template: { id: 't' }, warnings: [], account: { id: 'a' }, folder: { id: 'f' } } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.createCard({ title: 'T', platform: 'youtube', position: 'top' })
+  await client.updateCard('c1', { stage: 'Review', afterId: 'c2' })
+  await client.createStage({ name: 'S', position: 'bottom' })
+  await client.updateBrandKit('bk1', { beforeId: 'bk2' })
+  await client.updateBrandKit('bk1', { sections: [{ key: 'about', afterId: 's2' }] })
+  await client.updateAvatar('av1', { position: 'top' })
+  await client.updateTrackedAccount('ta1', { afterId: 'ta2' })
+  await client.updateFolder('f1', { moveItem: { item: { mediaId: 'm1' }, after: { cardId: 'c1' } } })
+  await client.createTemplate({ name: 'N', category: 'c', code: 'x', position: 'top' })
+  await client.updateTemplate('t1', { beforeId: 't2' })
+  const sent = calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname} ${c.init?.body}`)
+  assert.deepEqual(sent, [
+    'POST /api/v1/cards {"title":"T","platform":"youtube","position":"top"}',
+    'PATCH /api/v1/cards/c1 {"stage":"Review","afterId":"c2"}',
+    'POST /api/v1/stages {"name":"S","position":"bottom"}',
+    'PATCH /api/v1/brand-kits/bk1 {"beforeId":"bk2"}',
+    'PATCH /api/v1/brand-kits/bk1 {"sections":[{"key":"about","afterId":"s2"}]}',
+    'PATCH /api/v1/avatars/av1 {"position":"top"}',
+    'PATCH /api/v1/accounts/ta1 {"afterId":"ta2"}',
+    'PATCH /api/v1/library/folders/f1 {"moveItem":{"item":{"mediaId":"m1"},"after":{"cardId":"c1"}}}',
+    'POST /api/v1/templates {"name":"N","category":"c","code":"x","position":"top"}',
+    'PATCH /api/v1/templates/t1 {"beforeId":"t2"}',
+  ])
+  // The whole-list reorder is retired: no method sends orderedIds.
+  assert.equal('reorderBrandKits' in client, false)
 })
