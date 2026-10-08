@@ -29,9 +29,9 @@ function detail(e: KlingElement): string {
     ['Name', e.name],
     ['Category', e.category],
     ...(e.description ? [['Description', e.description] as [string, string]] : []),
-    ...(e.input_video_url
-      ? [['Video', e.input_video_url] as [string, string]]
-      : [['Images', String(e.input_urls.length)] as [string, string]]),
+    ...(e.inputVideoUrl
+      ? [['Video', e.inputVideoUrl] as [string, string]]
+      : [['Images', String(e.inputUrls.length)] as [string, string]]),
   ])
 }
 
@@ -49,7 +49,7 @@ function addKlingElementCommands(group: Command): void {
         withMore(
           table(
             ['ID', 'NAME', 'CATEGORY', 'MEDIA'],
-            p.klingElements.map((e) => [e.id, e.name, e.category, e.input_video_url ? '1 video' : `${e.input_urls.length} images`]),
+            p.klingElements.map((e) => [e.id, e.name, e.category, e.inputVideoUrl ? '1 video' : `${e.inputUrls.length} images`]),
           ),
           p.nextCursor,
         ),

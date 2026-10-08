@@ -28,7 +28,7 @@ const ROW = {
   id: 'r1', shortId: 'R1short1', mediaId: 'R1short1', type: 'media', kind: 'image', title: 'Row', name: 'Row', status: 'completed',
   isFavorited: false, model: 'm', prompt: null, fileName: null, summary: null, relevance: 0.5, scenes: [], platform: 'youtube',
   sourceType: 'text', createdAt: null, category: 'shapes', scope: 'system', version: 1, coverage: 'full', orientation: '16:9',
-  input_urls: [], input_video_url: null, voiceId: 'v1', sortOrder: 0, created_at: 't', label: null, revision: 1,
+  inputUrls: [], inputVideoUrl: null, voiceId: 'v1', createdAt: 't', label: null, revision: 1, source: 'creations',
 }
 
 before(async () => {

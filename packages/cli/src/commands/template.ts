@@ -22,8 +22,8 @@ const KINDS = ['code', 'shape', 'emoji'] as const
 
 /** A template's own size: a share of the canvas on each axis, or the whole frame. */
 function box(t: TemplateSummary): string {
-  return t.coverage === 'partial' && t.width_fraction && t.height_fraction
-    ? `${Math.round(t.width_fraction * 100)}% x ${Math.round(t.height_fraction * 100)}%`
+  return t.coverage === 'partial' && t.widthFraction && t.heightFraction
+    ? `${Math.round(t.widthFraction * 100)}% x ${Math.round(t.heightFraction * 100)}%`
     : 'full frame'
 }
 
@@ -37,9 +37,9 @@ function detail(t: Template): string {
       ['Whose', t.scope === 'system' ? 'ContentHero' : 'yours'],
       ['Version', t.version],
       ['Size', box(t)],
-      ['Frames', t.duration_frames],
-      ...(t.archived_at ? [['Archived', t.archived_at] as [string, string]] : []),
-      ...(t.source_template_id ? [['Saved from', `${t.source_template_id} (version ${t.source_template_version})`] as [string, string]] : []),
+      ['Frames', t.durationFrames],
+      ...(t.archivedAt ? [['Archived', t.archivedAt] as [string, string]] : []),
+      ...(t.sourceTemplateId ? [['Saved from', `${t.sourceTemplateId} (version ${t.sourceTemplateVersion})`] as [string, string]] : []),
       ['Props', JSON.stringify(t.props)],
     ]),
     ...(t.code ? ['', t.code] : []),

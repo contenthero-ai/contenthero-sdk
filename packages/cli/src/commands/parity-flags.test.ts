@@ -243,3 +243,15 @@ test('media list refuses the sources and types the API refuses', async () => {
     assert.equal(seen.length, 0, 'nothing is sent for a refused command')
   }
 })
+
+test('brand-kit create sends logos camelCase, the first one primary, and assets with no primary', async () => {
+  const r = await run('brand-kit', 'create', '--name', 'Acme', '--logo', 'https://x/logo.png', '--logo', 'Gen12345', '--asset', 'https://x/a.png')
+  assert.deepEqual(r.body?.logos, [{ url: 'https://x/logo.png', isPrimary: true }, { outputId: 'Gen12345' }])
+  assert.deepEqual(r.body?.assets, [{ url: 'https://x/a.png' }])
+})
+
+test('stage update moves by naming a neighbor or an edge, never a position', async () => {
+  const r = await run('stage', 'update', 'st1', '--space', 'sp1', '--to-start')
+  assert.equal(r.method, 'PATCH')
+  assert.deepEqual(r.body, { spaceId: 'sp1', afterId: null })
+})

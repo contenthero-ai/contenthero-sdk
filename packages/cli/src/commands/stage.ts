@@ -24,7 +24,7 @@ import { withPageFlags } from '../args.js'
 
 /** One stage, printed the same way by create and update. */
 function line(s: Stage): string {
-  return `${s.name} (${s.id})${s.slug ? ` slug ${s.slug}` : ''} at ${s.sortOrder}`
+  return `${s.name} (${s.id})${s.slug ? ` slug ${s.slug}` : ''}`
 }
 
 export function registerStage(program: Command): void {
@@ -48,9 +48,10 @@ export function registerStage(program: Command): void {
         // the default space, so an unfamiliar set of columns should say whose it is rather than look wrong.
         const where = r.space ? ` in ${r.space.name}` : ''
         if (!r.stages.length) return `No stages found${where}.`
+        // The rows are the board's order: no position column, since the API carries none.
         const t = table(
-          ['ORDER', 'NAME', 'SLUG', 'ID'],
-          r.stages.map((s) => [s.sortOrder, s.name, s.slug ?? '', s.id]),
+          ['NAME', 'SLUG', 'ID'],
+          r.stages.map((s) => [s.name, s.slug ?? '', s.id]),
         )
         return withMore(`${t}\n\n${r.stages.length} stage(s)${where}`, r.nextCursor)
       })
@@ -116,22 +117,14 @@ export function registerStage(program: Command): void {
         // `null` is the API's word for an edge; `undefined` is "leave it where it is".
         const afterId = opts.toStart ? null : opts.after
         const beforeId = opts.toEnd ? null : opts.before
-        const { stage: s, respaced } = await client.updateStage(id, {
+        const s = await client.updateStage(id, {
           spaceId: opts.space,
           name: opts.name,
           color: opts.color,
           afterId,
           beforeId,
         })
-        emit({ stage: s, respaced }, ctx, (d: { stage: Stage; respaced: boolean }) =>
-          [
-            `Updated stage ${line(d.stage)}`,
-            // The one answer the caller cannot derive: a move with no room renumbers the whole board.
-            d.respaced ? 'The whole board was renumbered; re-run `stage list` for current positions.' : null,
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        )
+        emit(s, ctx, (d: Stage) => `Updated stage ${line(d)}`)
       },
     )
 
@@ -155,8 +148,8 @@ export function registerStage(program: Command): void {
                 ? `, moving ${d.movedCards} ${d.movedCards === 1 ? 'card' : 'cards'}`
                 : ' (it held no cards)'),
             table(
-              ['ORDER', 'NAME', 'ID'],
-              d.stages.map((s) => [s.sortOrder, s.name, s.id]),
+              ['NAME', 'ID'],
+              d.stages.map((s) => [s.name, s.id]),
             ),
           ].join('\n'),
         )

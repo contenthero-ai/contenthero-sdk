@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Breaking: `--json` output follows the API's camelCase response fields (templates, Kling elements, brand kit media,
+  project versions, `movedCards` on `stage delete`).
+- Breaking: no manual position. `stage list` and `stage delete` drop their ORDER column (the rows are the board's
+  order), `stage update` prints the stage and its `--json` is the stage alone (no `respaced`).
+- `brand-kit create --logo` sends `isPrimary` (was `is_primary`) on the first logo only; `--asset` entries carry none.
+
 - Breaking: `media list` follows the library-file contract. `--source` is `all` (the default), `creations`, `uploads`
   or `exports` (`stock` is refused); `--type` takes `image`, `video`, `audio`, `doc` and `other`, comma-separated
   (`transcript` is refused); `--kind` is `creation`, `board` or `look` (no `upload`: use `--source uploads`); `--status`

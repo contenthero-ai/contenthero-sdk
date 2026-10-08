@@ -46,11 +46,13 @@ import { collect, isClear, toInt, toJson, toList, withPageFlags } from '../args.
  * only signal a flat flag carries. Anything richer (layout, color mode, moving primary without reordering)
  * is a JSON body through the API.
  */
-function mediaRefs(refs: string[] | undefined): Array<Record<string, unknown>> | undefined {
+function mediaRefs(refs: string[] | undefined, { primaryFirst }: { primaryFirst: boolean }): Array<Record<string, unknown>> | undefined {
   if (!refs || refs.length === 0) return undefined
-  return refs.map((ref, i) =>
-    /^https?:\/\//i.test(ref) ? { url: ref, ...(i === 0 ? { is_primary: true } : {}) } : { outputId: ref, ...(i === 0 ? { is_primary: true } : {}) },
-  )
+  return refs.map((ref, i) => ({
+    ...(/^https?:\/\//i.test(ref) ? { url: ref } : { outputId: ref }),
+    // Only a logo can be primary; an asset has no cover to be.
+    ...(primaryFirst && i === 0 ? { isPrimary: true } : {}),
+  }))
 }
 
 /**
@@ -131,8 +133,8 @@ function identityInput(opts: Record<string, unknown>): UpdateBrandKitInput {
   return {
     brandAccounts: accountRefs(opts.brandAccount as string[] | undefined),
     inspirationAccounts: accountRefs(opts.inspirationAccount as string[] | undefined),
-    logos: mediaRefs(opts.logo as string[] | undefined),
-    assets: mediaRefs(opts.asset as string[] | undefined),
+    logos: mediaRefs(opts.logo as string[] | undefined, { primaryFirst: true }),
+    assets: mediaRefs(opts.asset as string[] | undefined, { primaryFirst: false }),
     brandColors: colorRefs(opts.color as string[] | undefined),
     typography: typographyRefs(opts),
   }

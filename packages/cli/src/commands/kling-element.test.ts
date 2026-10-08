@@ -22,10 +22,10 @@ const ROW = {
   name: 'hero',
   category: 'character',
   description: 'the subject',
-  input_urls: ['https://media.contenthero.ai/a.jpg', 'https://media.contenthero.ai/b.jpg'],
-  input_video_url: null,
-  preview_url: 'https://media.contenthero.ai/a.jpg',
-  created_at: 't',
+  inputUrls: ['https://media.contenthero.ai/a.jpg', 'https://media.contenthero.ai/b.jpg'],
+  inputVideoUrl: null,
+  previewUrl: 'https://media.contenthero.ai/a.jpg',
+  createdAt: 't',
 }
 
 before(async () => {

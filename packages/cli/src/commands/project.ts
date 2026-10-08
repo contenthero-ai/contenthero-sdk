@@ -492,7 +492,7 @@ function registerVersions(project: Command): void {
         : withMore(
             table(
               ['ID', 'SAVED', 'LABEL', 'BY', 'REVISION'],
-              p.versions.map((v) => [v.id, v.created_at, v.label ?? '', v.author_name ?? '', v.revision ?? '']),
+              p.versions.map((v) => [v.id, v.createdAt, v.label ?? '', v.authorName ?? '', v.revision ?? '']),
             ),
             p.nextCursor,
           ),
