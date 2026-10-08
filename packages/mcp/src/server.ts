@@ -2539,7 +2539,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the library's files: every file the account keeps, or one part of the library with `source`, each item naming the part it is in. Filter by contentType, kind, favorited or archived; order with sort and order; page with limit and cursor. Each item shows its media id, its file name and size, its asset id (the id get_project reports as a clip's sourceId) and its resolved URL inline, so you can reference it directly (for example, add it to a timeline with update_timeline). Call get_media to SEE an item (image blocks / video keyframes).",
+        "List the library's files: every file the account keeps, or one part of the library with `source`, each item naming the part it is in. Filter by contentType, kind, favorited or archived; order with sort and order; page with limit and cursor. Each item shows its media id, its file name and size, its asset id (the id get_project reports as a clip's sourceId) and its resolved URL inline, so you can reference it directly. Call get_media to SEE an item (image blocks / video keyframes).",
       inputSchema: {
         source: z
           .enum(MEDIA_LIST_SOURCES)
