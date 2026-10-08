@@ -28,6 +28,7 @@ const ROW = {
   id: 'r1', shortId: 'R1short1', mediaId: 'R1short1', type: 'media', kind: 'image', title: 'Row', name: 'Row', status: 'completed',
   isFavorited: false, model: 'm', prompt: null, fileName: null, summary: null, relevance: 0.5, scenes: [], platform: 'youtube',
   sourceType: 'text', createdAt: null, category: 'shapes', scope: 'system', version: 1, coverage: 'full', orientation: '16:9',
+  input_urls: [], input_video_url: null, voiceId: 'v1', sortOrder: 0, created_at: 't', label: null, revision: 1,
 }
 
 before(async () => {
@@ -37,7 +38,9 @@ before(async () => {
     const nextCursor = query.get('cursor') === 'last' ? null : 'next-9'
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify({
-      media: [ROW], results: [ROW], folder: null, items: [ROW], cards: [ROW], outliers: [ROW], templates: [ROW], projects: [ROW],
+      media: [ROW], results: [ROW], folder: null, items: [ROW], cards: [ROW], content: [ROW], templates: [ROW], projects: [ROW],
+      tags: [ROW], avatars: [ROW], voices: [ROW], brandKits: [ROW], klingElements: [ROW], connectedAccounts: [ROW],
+      trackedAccounts: [ROW], stages: [ROW], spaces: [ROW], folders: [ROW], derived: [], versions: [ROW],
       total: 1, space: { id: 's1', name: 'Main' }, nextCursor,
     }))
   })
@@ -55,6 +58,18 @@ const PAGED = [
   ['brand-kit', 'knowledge', 'list', 'k1'],
   ['template', 'list'],
   ['project', 'list'],
+  // Paged in 9.9: every growable list pages.
+  ['tag', 'list'],
+  ['avatar', 'list'],
+  ['voice', 'list'],
+  ['brand-kit', 'list'],
+  ['kling-element', 'list'],
+  ['connected-account', 'list'],
+  ['tracked-account', 'list'],
+  ['stage', 'list'],
+  ['space', 'list'],
+  ['folder', 'list'],
+  ['project', 'version', 'list', 'p1'],
 ]
 
 /** Run a command in process, returning the query the server received. Its `--json` output joins the report, harmlessly. */
@@ -110,4 +125,40 @@ test('a paged list ends with the next page\'s flag only when there is one, and -
       assert.doesNotMatch(last, /More:/, `${command.join(' ')} says nothing on the last page`)
     }),
   )
+})
+
+/**
+ * 9.9: ONE sort mechanism for every sortable list. Each takes `--sort` (a field the API declares for that list, from
+ * `LIST_SORTS`) and `--order`, sends them as `sort` and `order`, and refuses a field the list does not have.
+ */
+const SORTED: Array<[string[], string]> = [
+  [['card', 'list'], 'scheduledAt'],
+  [['project', 'list'], 'title'],
+  [['space', 'list'], 'cardCount'],
+  [['content', 'list'], 'engagementRate'],
+]
+
+test('every sortable list sends --sort and --order as sort and order', async () => {
+  for (const [command, field] of SORTED) {
+    const sent = await query([...command, '--sort', field, '--order', 'asc'])
+    assert.equal(sent.get('sort'), field, `${command.join(' ')} sends sort`)
+    assert.equal(sent.get('order'), 'asc', `${command.join(' ')} sends order`)
+  }
+})
+
+test('every sortable list refuses a sort field or an order it does not have', async () => {
+  for (const [command] of SORTED) {
+    for (const bad of [['--sort', 'nope'], ['--order', 'up']]) {
+      const write = process.stderr.write
+      process.stderr.write = (() => true) as typeof process.stderr.write
+      try {
+        await assert.rejects(
+          buildProgram().exitOverride().parseAsync(['--api-key', 'k', '--base-url', baseUrl, ...command, ...bad], { from: 'user' }),
+          `${command.join(' ')} refuses ${bad.join(' ')}`,
+        )
+      } finally {
+        process.stderr.write = write
+      }
+    }
+  }
 })

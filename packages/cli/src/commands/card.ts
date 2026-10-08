@@ -20,6 +20,8 @@ import type {
   CardDetail,
   Post,
   CardListResult,
+  CardSort,
+  SortOrder,
   PostPlatform,
   CardSummary,
   PublishResult,
@@ -29,7 +31,8 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, isClear, toInt, toJson, toList, withPageFlags } from '../args.js'
+import { collect, isClear, toInt, toJson, toList, withPageFlags, withSortFlags } from '../args.js'
+import { LIST_SORTS } from '@contenthero/sdk'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -121,16 +124,20 @@ function parsePlatformSettings(json: string | undefined): Record<string, unknown
 export function registerCard(program: Command): void {
   const card = program.command('card').description('Planner cards: the unit of work on a space board')
 
-  withPageFlags(
-    card
-      .command('list')
-      .description("List one space's cards (newest-updated first; defaults to the default space)")
-      .option('--space <id>', "which space's board (from `contenthero space list`); default space if omitted")
-      .option('--archived', 'only ARCHIVED cards (excluded by default)')
-      .option('--platform <platform>', 'filter by platform')
-      .option('--stage <stage>', 'filter by stage (id, slug, or name)')
-      .option('--search <text>', 'case-insensitive title search')
-      .option('--favorite', 'only favorited posts'),
+  withSortFlags(
+    withPageFlags(
+      card
+        .command('list')
+        .description("List one space's cards (newest-updated first; defaults to the default space)")
+        .option('--space <id>', "which space's board (from `contenthero space list`), or all for every space; default space if omitted")
+        .option('--archived', 'only ARCHIVED cards (excluded by default)')
+        .option('--platform <platform>', 'filter by platform')
+        .option('--stage <stage>', 'filter by stage (id, slug, or name)')
+        .option('--tag <tag>', 'only cards with this tag')
+        .option('--search <text>', 'case-insensitive title search')
+        .option('--favorite', 'only favorited posts'),
+    ),
+    LIST_SORTS.cards,
   )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
@@ -142,6 +149,9 @@ export function registerCard(program: Command): void {
         stage: opts.stage as string | undefined,
         search: opts.search as string | undefined,
         isFavorite: opts.favorite === true ? true : undefined,
+        tag: opts.tag as string | undefined,
+        sort: opts.sort as CardSort | undefined,
+        order: opts.order as SortOrder | undefined,
         limit: opts.limit as number | undefined,
         cursor: opts.cursor as string | undefined,
       })
@@ -157,7 +167,7 @@ export function registerCard(program: Command): void {
          * ⚠️ WORDED IDENTICALLY TO `cardListResult` IN THE MCP. Two surfaces over one API should not
          * describe the same fact two ways; a user moving between them should recognize the sentence.
          */
-        const where = r.space ? ` in ${r.space.name}` : ''
+        const where = r.space ? ` in ${r.space.name}` : ' in every space'
         if (!r.cards.length) return `No cards found${where}.`
         const t = table(
           ['ID', 'PLATFORM', 'TITLE'],

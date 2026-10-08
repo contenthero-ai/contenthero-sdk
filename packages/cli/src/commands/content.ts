@@ -32,12 +32,14 @@ import type {
   ContentScope,
   TrackedAccount,
   ContentSort,
+  SortOrder,
+  TrackedAccountListResult,
 } from '@contenthero/sdk'
-import { CONTENT_SORTS } from '@contenthero/sdk'
+import { LIST_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toFloat, toInt, toList, withPageFlags } from '../args.js'
+import { toFloat, toInt, toList, withPageFlags, withSortFlags } from '../args.js'
 
 /** A table of tracked accounts. KIND is present because the list spans both tiers by default. */
 export function trackedAccountsTable(rows: TrackedAccount[]): string {
@@ -97,11 +99,13 @@ export function registerTrackedAccount(program: Command): void {
     .command('tracked-account')
     .description('The social accounts this account tracks (its own, and the creators it watches)')
 
-  account
-    .command('list')
-    .description('List tracked accounts (both kinds by default)')
-    .option('--kind <kind>', `narrow to one kind: ${['inspiration', 'brand'].join(', ')}`)
-    .option('--brand-kit <id>', 'scope to the accounts linked to this brand kit')
+  withPageFlags(
+    account
+      .command('list')
+      .description('List tracked accounts (both kinds by default)')
+      .option('--kind <kind>', `narrow to one kind: ${['inspiration', 'brand'].join(', ')}`)
+      .option('--brand-kit <id>', 'scope to the accounts linked to this brand kit'),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const kind = opts.kind as string | undefined
       if (kind && kind !== 'inspiration' && kind !== 'brand') {
@@ -112,9 +116,11 @@ export function registerTrackedAccount(program: Command): void {
         await client.listTrackedAccounts({
           accountType: kind as 'inspiration' | 'brand' | undefined,
           brandKitId: opts.brandKit as string | undefined,
+          limit: opts.limit as number | undefined,
+          cursor: opts.cursor as string | undefined,
         }),
         ctx,
-        trackedAccountsTable,
+        (p: TrackedAccountListResult) => withMore(trackedAccountsTable(p.trackedAccounts), p.nextCursor),
       )
     })
 
@@ -133,7 +139,7 @@ export function registerContent(program: Command): void {
     .command('content')
     .description('Tracked social content: what is working, for the creators watched and for this account')
 
-  withPageFlags(
+  withSortFlags(withPageFlags(
     content
       .command('list')
       .description('List tracked content, ranked by outlier score, or by relevance when you pass --search')
@@ -155,17 +161,12 @@ export function registerContent(program: Command): void {
         '--search <text>',
         'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance; returns only the posts judged relevant, so no rows means nothing matched',
       )
-      .option('--sort <sort>', `sort field: ${CONTENT_SORTS.join(', ')} (default relevance with --search, otherwise score)`)
-      .option('--asc', 'sort ascending (default descending)')
       .option('--account <id>', 'limit to this tracked account; repeatable', collectAccount)
       .option('--added-by-you', 'only the one-off posts saved by url')
       .option('--brand-kit <id>', 'scope to the accounts linked to this brand kit')
       .option('--favorite', 'only content the account has favorited'),
-  )
+  ), LIST_SORTS.content)
     .action(async (opts: Record<string, unknown>, command: Command) => {
-      if (opts.sort && !(CONTENT_SORTS as readonly string[]).includes(opts.sort as string)) {
-        throw new CliError(`Invalid --sort "${opts.sort}". Expected one of: ${CONTENT_SORTS.join(', ')}.`, EXIT.USAGE)
-      }
       if (opts.scope && !(SCOPES as readonly string[]).includes(opts.scope as string)) {
         throw new CliError(`Invalid --scope "${opts.scope}". Expected one of: ${SCOPES.join(', ')}.`, EXIT.USAGE)
       }
@@ -189,8 +190,8 @@ export function registerContent(program: Command): void {
         publishedAfter: opts.publishedAfter as string | undefined,
         publishedBefore: opts.publishedBefore as string | undefined,
         search: opts.search as string | undefined,
-        sortBy: opts.sort as ContentSort | undefined,
-        sortOrder: opts.asc ? 'asc' : undefined,
+        sort: opts.sort as ContentSort | undefined,
+        order: opts.order as SortOrder | undefined,
         accountIds: opts.account as string[] | undefined,
         addedByYou: opts.addedByYou ? true : undefined,
         brandKitId: opts.brandKit as string | undefined,
@@ -199,8 +200,8 @@ export function registerContent(program: Command): void {
         cursor: opts.cursor as string | undefined,
       })
       emit(result, ctx, (r: ContentListResult) => {
-        const t = outliersTable(r.outliers)
-        return withMore(`${t}\n\n${r.outliers.length} of ${r.total}`, r.nextCursor)
+        const t = outliersTable(r.content)
+        return withMore(`${t}\n\n${r.content.length} of ${r.total}`, r.nextCursor)
       })
     })
 

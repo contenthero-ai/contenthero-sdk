@@ -158,3 +158,68 @@ test('generate video help describes --keep-input-length in the approved words', 
   const flag = video.options.find((o) => o.long === '--keep-input-length')
   assert.equal(flag?.description, "keep the input video's full length (video edit only)")
 })
+
+// 9.9: every list, setting and project action reaches the API. Each case asserts the wire, not just the flag.
+test('card list sends spaceId, isFavorite and tag under the names the API reads', async () => {
+  const r = await run('card', 'list', '--space', 'all', '--favorite', '--tag', 'launch')
+  assert.equal(r.query.get('spaceId'), 'all')
+  assert.equal(r.query.get('isFavorite'), 'true')
+  assert.equal(r.query.get('tag'), 'launch')
+  assert.equal(r.query.has('space_id') || r.query.has('is_favorite'), false)
+})
+
+test('space list sends archived, favorited and search', async () => {
+  const r = await run('space', 'list', '--archived', '--favorite', '--search', 'client')
+  assert.equal(r.query.get('archived'), 'true')
+  assert.equal(r.query.get('favorited'), 'true')
+  assert.equal(r.query.get('search'), 'client')
+})
+
+test('tracked-account list sends accountType and brandKitId', async () => {
+  const r = await run('tracked-account', 'list', '--kind', 'brand', '--brand-kit', 'bk1')
+  assert.equal(r.query.get('accountType'), 'brand')
+  assert.equal(r.query.get('brandKitId'), 'bk1')
+})
+
+test('project update sends its fields, and none clears the brand kit and the cover framing', async () => {
+  const set = await run('project', 'update', 'p1', '--title', 'T', '--width', '1080', '--brand-kit', 'bk1', '--cover', 'frame:12', '--cover-position', '50,40')
+  assert.equal(set.method, 'PATCH')
+  assert.equal(set.path, '/api/v1/projects/p1')
+  assert.deepEqual(set.body, { title: 'T', width: 1080, brandKitId: 'bk1', cover: { frame: 12 }, coverPosition: { x: 50, y: 40 } })
+  const cleared = await run('project', 'update', 'p1', '--brand-kit', 'none', '--cover-position', 'none', '--cover', 'media:m1')
+  assert.deepEqual(cleared.body, { brandKitId: null, cover: { mediaId: 'm1' }, coverPosition: null })
+})
+
+test('project duplicate, undo and redo reach their routes', async () => {
+  const dup = await run('project', 'duplicate', 'p1')
+  assert.equal(`${dup.method} ${dup.path}`, 'POST /api/v1/projects/p1/duplicate')
+  const undo = await run('project', 'undo', 'p1', '--expected-revision', '9', '--revision', '7')
+  assert.equal(`${undo.method} ${undo.path}`, 'POST /api/v1/projects/p1/undo')
+  assert.deepEqual(undo.body, { expectedRevision: 9, revision: 7 })
+  const redo = await run('project', 'redo', 'p1', '--expected-revision', '10')
+  assert.equal(`${redo.method} ${redo.path}`, 'POST /api/v1/projects/p1/redo')
+  assert.deepEqual(redo.body, { expectedRevision: 10 })
+})
+
+test('project settings update sends only the settings named, on and off', async () => {
+  const r = await run('project', 'settings', 'update', 'p1', '--snapping', '--no-magnetic-track', '--linked-tracks', '{"audio":false}')
+  assert.equal(`${r.method} ${r.path}`, 'PATCH /api/v1/projects/p1/settings')
+  assert.deepEqual(r.body, { magneticTrack: false, snapping: true, linkedTracks: { audio: false } })
+  const read = await run('project', 'settings', 'get', 'p1')
+  assert.equal(`${read.method} ${read.path}`, 'GET /api/v1/projects/p1/settings')
+})
+
+test('project version commands reach the version routes with the bodies the API reads', async () => {
+  const cases: Array<[string[], string, unknown]> = [
+    [['project', 'version', 'save', 'p1', '--label', 'Before'], 'POST /api/v1/projects/p1/versions', { label: 'Before' }],
+    [['project', 'version', 'restore', 'p1', 'v1'], 'POST /api/v1/projects/p1/versions/v1', { action: 'restore' }],
+    [['project', 'version', 'copy', 'p1', 'v1'], 'POST /api/v1/projects/p1/versions/v1', { action: 'copy' }],
+    [['project', 'version', 'rename', 'p1', 'v1', 'Final'], 'PATCH /api/v1/projects/p1/versions/v1', { label: 'Final' }],
+    [['project', 'version', 'delete', 'p1', 'v1'], 'DELETE /api/v1/projects/p1/versions/v1', null],
+  ]
+  for (const [args, route, body] of cases) {
+    const r = await run(...args)
+    assert.equal(`${r.method} ${r.path}`, route, args.join(' '))
+    assert.deepEqual(r.body, body, args.join(' '))
+  }
+})

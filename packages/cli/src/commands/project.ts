@@ -1,9 +1,14 @@
 /**
  * `contenthero project` - manage projects (canvas slides or editor timeline) and edit them via ops.
  *
- *   project list  [--filter <state>] [--type <t>] [--search <text>]      (requires editor:read)
+ *   project list  [--filter <state>] [--type <t>] [--search <text>] [--sort <f>] [--order <o>]   (requires editor:read)
  *   project get   <projectId>                                            (requires editor:read)
  *   project create [--type <t>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
+ *   project update <projectId> [--title] [--orientation] [--width] [--height] [--brand-kit] [--cover] [--cover-position]
+ *   project duplicate <projectId>                                        (requires editor:write)
+ *   project settings get|update <projectId>                              a video project's timeline settings
+ *   project version list|save|restore|copy|rename|delete <projectId>     its version history (premium)
+ *   project undo|redo <projectId> [--expected-revision <n>]              the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--wait]
@@ -22,11 +27,28 @@
  */
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
-import { describeEditorOps, describeScope, withCodeWarnings, type EditorOp, type ImportProjectSource, type ProjectListResult } from '@contenthero/sdk'
+import {
+  LIST_SORTS,
+  describeEditorOps,
+  describeScope,
+  withCodeWarnings,
+  type EditorOp,
+  type ImportProjectSource,
+  type ProjectCoverChoice,
+  type ProjectListResult,
+  type ProjectSort,
+  type ProjectSummary,
+  type ProjectVersionListResult,
+  type SortOrder,
+  type TimelineSettings,
+  type TimelineSettingsChange,
+  type UndoResult,
+  type UpdateProjectInput,
+} from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, withMore } from '../output.js'
+import { emit, keyValues, table, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toInt, withPageFlags } from '../args.js'
+import { isClear, toFloat, toInt, toJson, withPageFlags, withSortFlags } from '../args.js'
 
 /** `--surface`, the project type's name before cli 0.3.12, still accepted and hidden from help. `--type` wins. */
 function deprecatedTypeAlias(): Option {
@@ -54,14 +76,17 @@ export function registerProject(program: Command): void {
     .command('project')
     .description("Read + edit a project's composition (canvas or timeline) via ops")
 
-  withPageFlags(
-    project
-      .command('list')
-      .description('List projects, both editor + canvas (requires editor:read)')
-      .option('--filter <state>', 'archived | favorited (omitted = active)')
-      .option('--type <type>', 'editor | canvas (omitted = both)')
-      .addOption(deprecatedTypeAlias())
-      .option('--search <text>', 'case-insensitive title search'),
+  withSortFlags(
+    withPageFlags(
+      project
+        .command('list')
+        .description('List projects, both editor + canvas (requires editor:read)')
+        .option('--filter <state>', 'archived | favorited (omitted = active)')
+        .option('--type <type>', 'editor | canvas (omitted = both)')
+        .addOption(deprecatedTypeAlias())
+        .option('--search <text>', 'case-insensitive title search'),
+    ),
+    LIST_SORTS.projects,
   )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -69,6 +94,8 @@ export function registerProject(program: Command): void {
         filter: opts.filter as 'archived' | 'favorited' | undefined,
         type: (opts.type ?? opts.surface) as 'editor' | 'canvas' | undefined,
         search: opts.search as string | undefined,
+        sort: opts.sort as ProjectSort | undefined,
+        order: opts.order as SortOrder | undefined,
         limit: opts.limit as number | undefined,
         cursor: opts.cursor as string | undefined,
       })
@@ -190,6 +217,68 @@ export function registerProject(program: Command): void {
         (opts.card ? `, linked to card ${opts.card}` : ''),
       )
     })
+
+  project
+    .command('update')
+    .description("Change a project's own fields: rename, resize, brand kit, cover (requires editor:write)")
+    .argument('<projectId>', 'the project id')
+    .option('--title <text>', 'a new title')
+    .option('--orientation <ratio>', 'a new aspect ratio')
+    .option('--width <n>', 'a new pixel width', toInt)
+    .option('--height <n>', 'a new pixel height', toInt)
+    .option('--brand-kit <id>', 'the brand kit to associate, or none to clear it')
+    .option('--cover <choice>', 'the cover: auto (follows the composition), frame:<n> (a chosen frame or slide index), or media:<id> (a library image)', toCoverChoice)
+    .option('--cover-position <x,y>', 'where the cover is framed, as percentages of its width and height, or none for the default framing')
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const input: UpdateProjectInput = {}
+      if (opts.title !== undefined) input.title = opts.title as string
+      if (opts.orientation !== undefined) input.orientation = opts.orientation as string
+      if (opts.width !== undefined) input.width = opts.width as number
+      if (opts.height !== undefined) input.height = opts.height as number
+      if (opts.brandKit !== undefined) input.brandKitId = isClear(opts.brandKit) ? null : (opts.brandKit as string)
+      if (opts.cover !== undefined) input.cover = opts.cover as ProjectCoverChoice
+      // Parsed here, not by commander: an option parser that returns null is read as no value.
+      if (opts.coverPosition !== undefined) input.coverPosition = toCoverPosition(opts.coverPosition as string)
+      if (Object.keys(input).length === 0) throw new CliError('Nothing to change: pass at least one field flag.', EXIT.USAGE)
+      const { client, ctx } = makeClient(command)
+      const p = await client.updateProject(projectId, input)
+      emit(p, ctx, (r: ProjectSummary) => `Updated ${r.type} project ${r.id} "${r.title}" (${r.orientation} ${r.width}x${r.height})`)
+    })
+
+  project
+    .command('duplicate')
+    .description('Copy a project: the same type, size, composition and brand kit (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .action(async (projectId: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const p = await client.duplicateProject(projectId)
+      emit(p, ctx, (r: ProjectSummary) => `Created ${r.type} project ${r.id} "${r.title}", a copy of ${projectId}`)
+    })
+
+  registerTimelineSettings(project)
+  registerVersions(project)
+
+  for (const direction of ['undo', 'redo'] as const) {
+    const cmd = project
+      .command(direction)
+      .description(
+        direction === 'undo'
+          ? "Reverse the project's most recent edit, the editor's own undo (requires editor:write)"
+          : 'Re-apply the edit most recently undone, the editor\'s own redo (requires editor:write)',
+      )
+      .argument('<projectId>', 'the project id')
+      .option('--expected-revision <n>', 'the revision you last saw; refused if the project has moved since', toInt)
+    if (direction === 'undo') cmd.option('--revision <n>', 'a specific revision to reverse (default: the most recent edit)', toInt)
+    cmd.action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const expectedRevision = opts.expectedRevision as number | undefined
+      const r =
+        direction === 'undo'
+          ? await client.undo(projectId, { expectedRevision, revision: opts.revision as number | undefined })
+          : await client.redo(projectId, { expectedRevision })
+      emit(r, ctx, (d: UndoResult) => `${d.label}. The project is at revision ${d.revision}.`)
+    })
+  }
 
   project
     .command('delete')
@@ -318,5 +407,151 @@ export function registerProject(program: Command): void {
       })
       emit(result, ctx, () => describeEditorOps(result))
       if (result.results.some((r) => !r.ok)) process.exitCode = EXIT.GENERAL
+    })
+}
+
+/** `--cover`: auto, frame:<n> or media:<id>. */
+function toCoverChoice(value: string): ProjectCoverChoice {
+  if (value === 'auto') return 'auto'
+  const frame = /^frame:(\d+)$/.exec(value)
+  if (frame) return { frame: Number(frame[1]) }
+  const media = /^media:(.+)$/.exec(value)
+  if (media) return { mediaId: media[1]! }
+  throw new CliError(`Invalid --cover "${value}". Expected auto, frame:<n> or media:<id>.`, EXIT.USAGE)
+}
+
+/** `--cover-position`: x,y percentages, or a clear word for the default framing. */
+function toCoverPosition(value: string): { x: number; y: number } | null {
+  if (isClear(value)) return null
+  const parts = value.split(',').map((p) => toFloat(p.trim()))
+  if (parts.length !== 2) throw new CliError(`Invalid --cover-position "${value}". Expected x,y.`, EXIT.USAGE)
+  return { x: parts[0]!, y: parts[1]! }
+}
+
+/** The timeline settings flags, each a setting's name with a `--no-` form to turn it off. */
+const SETTING_FLAGS: Array<[keyof Omit<TimelineSettings, 'linkedTracks'>, string]> = [
+  ['magneticTrack', 'magnetic-track'],
+  ['snapping', 'snapping'],
+  ['linkage', 'linkage'],
+  ['followPlayhead', 'follow-playhead'],
+  ['skimming', 'skimming'],
+  ['skipDisabledClips', 'skip-disabled-clips'],
+]
+
+function settingsHuman(s: TimelineSettings): string {
+  const onOff = (b: boolean) => (b ? 'on' : 'off')
+  return keyValues([
+    ...SETTING_FLAGS.map(([key, flag]): [string, string] => [flag, onOff(s[key])]),
+    ['linked tracks', Object.entries(s.linkedTracks).filter(([, on]) => on).map(([kind]) => kind).join(', ') || 'none'],
+  ])
+}
+
+function registerTimelineSettings(project: Command): void {
+  const settings = project.command('settings').description("A video project's timeline settings, as the editor's timeline settings menu holds them")
+
+  settings
+    .command('get')
+    .description("Read a video project's timeline settings (requires editor:read)")
+    .argument('<projectId>', 'the project id')
+    .action(async (projectId: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      emit(await client.getTimelineSettings(projectId), ctx, settingsHuman)
+    })
+
+  const update = settings
+    .command('update')
+    .description('Change some timeline settings; a setting left out is left alone (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+  for (const [, flag] of SETTING_FLAGS) update.option(`--${flag}`, `turn ${flag.replace(/-/g, ' ')} on`).option(`--no-${flag}`, `turn ${flag.replace(/-/g, ' ')} off`)
+  update
+    .option('--linked-tracks <json>', 'which kinds of track a linked edit reaches, as JSON with media, audio and text booleans', toJson)
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const change: TimelineSettingsChange = {}
+      for (const [key] of SETTING_FLAGS) if (typeof opts[key] === 'boolean') change[key] = opts[key] as boolean
+      if (opts.linkedTracks !== undefined) change.linkedTracks = opts.linkedTracks as TimelineSettingsChange['linkedTracks']
+      if (Object.keys(change).length === 0) throw new CliError('Nothing to change: pass at least one setting flag.', EXIT.USAGE)
+      const { client, ctx } = makeClient(command)
+      emit(await client.updateTimelineSettings(projectId, change), ctx, settingsHuman)
+    })
+}
+
+function registerVersions(project: Command): void {
+  const version = project.command('version').description("A project's version history (premium, as in the editor)")
+
+  withPageFlags(
+    version
+      .command('list')
+      .description("List a project's saved versions, newest first (requires editor:read)")
+      .argument('<projectId>', 'the project id'),
+  ).action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+    const { client, ctx } = makeClient(command)
+    const page = await client.listProjectVersions(projectId, { limit: opts.limit as number | undefined, cursor: opts.cursor as string | undefined })
+    emit(page, ctx, (p: ProjectVersionListResult) =>
+      p.versions.length === 0
+        ? 'No saved versions.'
+        : withMore(
+            table(
+              ['ID', 'SAVED', 'LABEL', 'BY', 'REVISION'],
+              p.versions.map((v) => [v.id, v.created_at, v.label ?? '', v.author_name ?? '', v.revision ?? '']),
+            ),
+            p.nextCursor,
+          ),
+    )
+  })
+
+  version
+    .command('save')
+    .description("Save the project's current state as a version (requires editor:write)")
+    .argument('<projectId>', 'the project id')
+    .option('--label <text>', 'a name for the version')
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const v = await client.saveProjectVersion(projectId, { label: opts.label as string | undefined })
+      emit(v, ctx, () => `Saved version ${v.id}${v.label ? ` "${v.label}"` : ''}.`)
+    })
+
+  version
+    .command('restore')
+    .description('Put a version back into its project; the current state is saved as a version first (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .argument('<versionId>', 'the version id (from `project version list`)')
+    .action(async (projectId: string, versionId: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const r = await client.restoreProjectVersion(projectId, versionId)
+      emit(r, ctx, () => `Restored version ${versionId}. The project is at revision ${r.revision}.`)
+    })
+
+  version
+    .command('copy')
+    .description('Make a new project from a version (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .argument('<versionId>', 'the version id (from `project version list`)')
+    .action(async (projectId: string, versionId: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const p = await client.copyProjectVersion(projectId, versionId)
+      emit(p, ctx, (r: ProjectSummary) => `Created ${r.type} project ${r.id} "${r.title}" from version ${versionId}`)
+    })
+
+  version
+    .command('rename')
+    .description('Name a version; an empty label clears its name (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .argument('<versionId>', 'the version id (from `project version list`)')
+    .argument('<label>', 'the new name')
+    .action(async (projectId: string, versionId: string, label: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const v = await client.renameProjectVersion(projectId, versionId, label)
+      emit(v, ctx, () => (v.label ? `Version ${v.id} is now "${v.label}".` : `Version ${v.id} has no name.`))
+    })
+
+  version
+    .command('delete')
+    .description('Remove a version (requires editor:write)')
+    .argument('<projectId>', 'the project id')
+    .argument('<versionId>', 'the version id (from `project version list`)')
+    .action(async (projectId: string, versionId: string, _opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      await client.deleteProjectVersion(projectId, versionId)
+      emit({ deleted: true, versionId }, ctx, () => `Deleted version ${versionId}.`)
     })
 }

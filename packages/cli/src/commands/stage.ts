@@ -19,7 +19,8 @@
 import type { Command } from 'commander'
 import type { Stage, StageListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, table } from '../output.js'
+import { emit, table, withMore } from '../output.js'
+import { withPageFlags } from '../args.js'
 
 /** One stage, printed the same way by create and update. */
 function line(s: Stage): string {
@@ -29,13 +30,19 @@ function line(s: Stage): string {
 export function registerStage(program: Command): void {
   const stage = program.command('stage').description("Manage a space's stages (the board's columns)")
 
-  stage
-    .command('list')
-    .description("List a space's stages, in order (defaults to the default space)")
-    .option('--space <id>', "which space's stages (from `contenthero space list`); default space if omitted")
+  withPageFlags(
+    stage
+      .command('list')
+      .description("List a space's stages, in order (defaults to the default space)")
+      .option('--space <id>', "which space's stages (from `contenthero space list`); default space if omitted"),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const result = await client.listStages({ spaceId: opts.space as string | undefined })
+      const result = await client.listStages({
+        spaceId: opts.space as string | undefined,
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
+      })
       emit(result, ctx, (r: StageListResult) => {
         // ⭐ NAME THE SCOPE, matching `card list` and the MCP. Stages are per-space and this falls back to
         // the default space, so an unfamiliar set of columns should say whose it is rather than look wrong.
@@ -45,7 +52,7 @@ export function registerStage(program: Command): void {
           ['ORDER', 'NAME', 'SLUG', 'ID'],
           r.stages.map((s) => [s.sortOrder, s.name, s.slug ?? '', s.id]),
         )
-        return `${t}\n\n${r.stages.length} stage(s)${where}`
+        return withMore(`${t}\n\n${r.stages.length} stage(s)${where}`, r.nextCursor)
       })
     })
 

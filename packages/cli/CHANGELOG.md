@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: every sortable list (`card list`, `project list`, `space list`, `content list`) takes `--sort` (a field the
+  API declares for that list) and `--order` (`asc` | `desc`); a field the list does not have is a usage error.
+  `content list` loses `--asc`, and its sort fields are the API's: `relevance` (with `--search` only), `outlierScore`,
+  `publishedAt`, `viewCount` and `engagementRate` (were `score`, `date`, `views`, `engagement`).
+- Breaking: every growable list pages. `tag list`, `avatar list`, `voice list`, `brand-kit list`, `kling-element list`,
+  `connected-account list`, `tracked-account list`, `stage list`, `space list` and `folder list` take `--limit` and
+  `--cursor`, end their `--human` output with `More: --cursor <cursor>` when a next page exists, and print the whole
+  page under `--json` (items under their own key, and `nextCursor`), where most printed a plain array before.
+- Breaking: `space list --archived` lists only archived spaces (it included them before); `space list` gains
+  `--favorite` and `--search`. A space's card count is `cardCount` in `--json` (was `postCount`).
+- `card list` takes `--tag`, and `--space all` for every space.
+- New: `project update` (title, orientation, size, `--brand-kit`, `--cover`, `--cover-position`), `project duplicate`,
+  `project settings get|update` (a video project's timeline settings), `project version list|save|restore|copy|rename|delete`
+  (the version history), and `project undo` / `project redo`.
+- Requires the unreleased `@contenthero/sdk` (sort and order, the paged lists, the new project methods).
+
 ## 0.3.21
 
 - Breaking: the clip type `graphic` is retired and renamed `code`: a code clip or code layer is a video, audio or image

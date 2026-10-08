@@ -9,7 +9,7 @@
 
 import type { Command } from 'commander'
 import type { FolderItemRef } from '@contenthero/sdk'
-import type { Folder, DerivedFolder, FolderContents } from '@contenthero/sdk'
+import type { Folder, FolderContents, FolderListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, table, displayId, withMore, clip } from '../output.js'
 import { collect, withPageFlags } from '../args.js'
@@ -19,19 +19,20 @@ import { CliError, EXIT } from '../errors.js'
 export function registerFolder(program: Command): void {
   const folder = program.command('folder').description('Organize the library into manual and smart folders')
 
-  folder
-    .command('list')
-    .description('List your folders plus the built-in derived folders')
-    .action(async (_opts: Record<string, unknown>, command: Command) => {
+  withPageFlags(folder.command('list').description('List your folders plus the built-in derived folders'))
+    .action(async (opts: { limit?: number; cursor?: string }, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const data = await client.listFolders()
-      emit(data, ctx, (d: { folders: Folder[]; derived: DerivedFolder[] }) =>
-        table(
-          ['ID', 'NAME', 'TYPE', 'PARENT'],
-          [
-            ...d.folders.map((f) => [displayId(f), f.name, f.type, f.parentId ? displayId(d.folders.find((x) => x.id === f.parentId) ?? { id: f.parentId }) : '']),
-            ...d.derived.map((x) => [x.key, x.name, 'derived', '']),
-          ],
+      const data = await client.listFolders({ limit: opts.limit, cursor: opts.cursor })
+      emit(data, ctx, (d: FolderListResult) =>
+        withMore(
+          table(
+            ['ID', 'NAME', 'TYPE', 'PARENT'],
+            [
+              ...d.folders.map((f) => [displayId(f), f.name, f.type, f.parentId ? displayId(d.folders.find((x) => x.id === f.parentId) ?? { id: f.parentId }) : '']),
+              ...d.derived.map((x) => [x.key, x.name, 'derived', '']),
+            ],
+          ),
+          d.nextCursor,
         ),
       )
     })

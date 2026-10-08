@@ -3,7 +3,8 @@
  * input so the central error boundary reports exit 2 with a clear message.
  */
 
-import type { Command } from 'commander'
+import { Option, type Command } from 'commander'
+import { SORT_ORDERS } from '@contenthero/sdk'
 import { CliError, EXIT } from './errors.js'
 
 /** Parse an integer option value. */
@@ -23,6 +24,16 @@ export function withPageFlags(command: Command): Command {
   return command
     .option('--limit <n>', 'how many to return', toInt)
     .option('--cursor <cursor>', "the previous page's cursor")
+}
+
+/**
+ * The sort flags every sortable list takes (9.9), in one wording: a field of that list (its `LIST_SORTS` entry, so the
+ * choices are the API's) and a direction. The server owns the default; a value outside the choices is a usage error.
+ */
+export function withSortFlags(command: Command, fields: readonly string[]): Command {
+  return command
+    .addOption(new Option('--sort <field>', 'the field to sort by').choices(fields))
+    .addOption(new Option('--order <order>', 'the sort direction').choices(SORT_ORDERS))
 }
 
 /** Parse a numeric option value (integer or decimal). */

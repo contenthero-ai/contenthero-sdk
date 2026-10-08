@@ -1,6 +1,6 @@
 /**
  * `contenthero space` - the planner's top-level container. Space > Stage > Card > Post.
- *   space list [--archived]                          the account's spaces, with card counts
+ *   space list [--archived --favorite --search]      the account's spaces, with card counts
  *   space get <id>                                   one space
  *   space create <name> [--cover --duplicate-from]   a new board, optionally copying another's stages
  *   space update <id> [--name --cover --no-cover]    rename or re-cover (a PATCH: omitted fields stay)
@@ -13,9 +13,10 @@
  */
 
 import type { Command } from 'commander'
-import type { Space } from '@contenthero/sdk'
+import { LIST_SORTS, type Space, type SpaceListResult, type SpaceSort, type SortOrder } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, table, displayId, clip } from '../output.js'
+import { emit, table, displayId, clip, withMore } from '../output.js'
+import { withPageFlags, withSortFlags } from '../args.js'
 
 
 export function registerSpace(program: Command): void {
@@ -23,22 +24,40 @@ export function registerSpace(program: Command): void {
     .command('space')
     .description('Manage planner spaces (each space is a board with its own stages)')
 
-  space
-    .command('list')
-    .description("List the account's spaces, most recently active first")
-    .option('--archived', 'include archived spaces')
-    .action(async (opts: { archived?: boolean }, command: Command) => {
+  withSortFlags(
+    withPageFlags(
+      space
+        .command('list')
+        .description("List the account's spaces, most recently active first")
+        .option('--archived', 'only archived spaces (excluded by default)')
+        .option('--favorite', 'only favorited spaces')
+        .option('--search <text>', 'search space names'),
+    ),
+    LIST_SORTS.spaces,
+  )
+    .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const spaces = await client.listSpaces({ includeArchived: opts.archived })
-      emit(spaces, ctx, (rows: Space[]) =>
-        table(
-          ['ID', 'NAME', 'CARDS', 'FLAGS'],
-          rows.map((s) => [
-            displayId(s),
-            clip(s.name, 40),
-            String(s.postCount ?? 0),
-            [s.isFavorite ? 'favorite' : '', s.archivedAt ? 'archived' : ''].filter(Boolean).join(' '),
-          ]),
+      const page = await client.listSpaces({
+        archived: opts.archived ? true : undefined,
+        favorited: opts.favorite ? true : undefined,
+        search: opts.search as string | undefined,
+        sort: opts.sort as SpaceSort | undefined,
+        order: opts.order as SortOrder | undefined,
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
+      })
+      emit(page, ctx, (p: SpaceListResult) =>
+        withMore(
+          table(
+            ['ID', 'NAME', 'CARDS', 'FLAGS'],
+            p.spaces.map((s) => [
+              displayId(s),
+              clip(s.name, 40),
+              String(s.cardCount ?? 0),
+              [s.isFavorite ? 'favorite' : '', s.archivedAt ? 'archived' : ''].filter(Boolean).join(' '),
+            ]),
+          ),
+          p.nextCursor,
         ),
       )
     })
@@ -56,7 +75,7 @@ export function registerSpace(program: Command): void {
           [
             ['id', d.id],
             ['name', d.name],
-            ['cards', String(d.postCount ?? 0)],
+            ['cards', String(d.cardCount ?? 0)],
             ['favorite', d.isFavorite ? 'yes' : 'no'],
             ['archived', d.archivedAt ?? 'no'],
             ['cover', d.coverUrl ?? ''],

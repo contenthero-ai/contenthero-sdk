@@ -11,32 +11,34 @@
  */
 
 import type { Command } from 'commander'
-import type { ConnectedAccount } from '@contenthero/sdk'
+import type { ConnectedAccount, ConnectedAccountListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow, displayId } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
+import { withPageFlags } from '../args.js'
 
 export function registerConnectedAccount(program: Command): void {
   const connected = program
     .command('connected-account')
     .description('Connected social accounts (publish targets)')
 
-  connected
-    .command('list')
-    .description('List connected accounts (default first)')
-    .action(async (_opts, command: Command) => {
+  withPageFlags(connected.command('list').description('List connected accounts (default first)'))
+    .action(async (opts: { limit?: number; cursor?: string }, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const accounts = await client.listConnectedAccounts()
-      emit(accounts, ctx, (rows: ConnectedAccount[]) =>
-        table(
-          ['ID', 'PLATFORM', 'NAME', 'HANDLE', 'STATUS', 'DEFAULT'],
-          rows.map((a) => [
-            displayId(a),
-            a.platform ?? '',
-            a.accountName ?? '',
-            a.accountHandle ?? '',
-            a.connectionStatus ?? '',
-            a.isDefault ? 'yes' : '',
-          ]),
+      const page = await client.listConnectedAccounts({ limit: opts.limit, cursor: opts.cursor })
+      emit(page, ctx, (p: ConnectedAccountListResult) =>
+        withMore(
+          table(
+            ['ID', 'PLATFORM', 'NAME', 'HANDLE', 'STATUS', 'DEFAULT'],
+            p.connectedAccounts.map((a) => [
+              displayId(a),
+              a.platform ?? '',
+              a.accountName ?? '',
+              a.accountHandle ?? '',
+              a.connectionStatus ?? '',
+              a.isDefault ? 'yes' : '',
+            ]),
+          ),
+          p.nextCursor,
         ),
       )
     })

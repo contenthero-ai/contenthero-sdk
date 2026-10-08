@@ -16,10 +16,10 @@
 
 import type { Command } from 'commander'
 import { makeClient } from '../context.js'
-import { emit, table, keyValues, linkRow, displayId } from '../output.js'
-import { collect } from '../args.js'
+import { emit, table, keyValues, linkRow, displayId, withMore } from '../output.js'
+import { collect, withPageFlags } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
-import type { KlingElement } from '@contenthero/sdk'
+import type { KlingElement, KlingElementListResult } from '@contenthero/sdk'
 
 const CATEGORIES = ['auto', 'character', 'location', 'prop'] as const
 
@@ -41,16 +41,17 @@ export function registerKlingElement(program: Command): void {
 }
 
 function addKlingElementCommands(group: Command): void {
-  group
-    .command('list')
-    .description('List your saved Kling elements')
-    .action(async (_opts, command: Command) => {
+  withPageFlags(group.command('list').description('List your saved Kling elements'))
+    .action(async (opts: { limit?: number; cursor?: string }, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const klingElements = await client.listKlingElements()
-      emit(klingElements, ctx, (rows: KlingElement[]) =>
-        table(
-          ['ID', 'NAME', 'CATEGORY', 'MEDIA'],
-          rows.map((e) => [e.id, e.name, e.category, e.input_video_url ? '1 video' : `${e.input_urls.length} images`]),
+      const page = await client.listKlingElements({ limit: opts.limit, cursor: opts.cursor })
+      emit(page, ctx, (p: KlingElementListResult) =>
+        withMore(
+          table(
+            ['ID', 'NAME', 'CATEGORY', 'MEDIA'],
+            p.klingElements.map((e) => [e.id, e.name, e.category, e.input_video_url ? '1 video' : `${e.input_urls.length} images`]),
+          ),
+          p.nextCursor,
         ),
       )
     })

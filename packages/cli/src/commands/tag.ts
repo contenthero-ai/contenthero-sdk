@@ -11,23 +11,25 @@
  */
 
 import type { Command } from 'commander'
-import type { Tag } from '@contenthero/sdk'
+import type { Tag, TagListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, linkRow, displayId } from '../output.js'
+import { emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
+import { withPageFlags } from '../args.js'
 
 export function registerTag(program: Command): void {
   const tag = program.command('tag').description("Manage the account's tags")
 
-  tag
-    .command('list')
-    .description("List the account's tags")
-    .action(async (_opts, command: Command) => {
+  withPageFlags(tag.command('list').description("List the account's tags"))
+    .action(async (opts: { limit?: number; cursor?: string }, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const tags = await client.listTags()
-      emit(tags, ctx, (rows: Tag[]) =>
-        table(
-          ['NAME', 'ID'],
-          rows.map((t) => [t.name, t.id]),
+      const page = await client.listTags({ limit: opts.limit, cursor: opts.cursor })
+      emit(page, ctx, (p: TagListResult) =>
+        withMore(
+          table(
+            ['NAME', 'ID'],
+            p.tags.map((t) => [t.name, t.id]),
+          ),
+          p.nextCursor,
         ),
       )
     })

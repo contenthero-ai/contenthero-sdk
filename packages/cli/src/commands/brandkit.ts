@@ -17,6 +17,7 @@ import type {
   BrandImportOutcome,
   BrandKit,
   BrandKitSectionsRead,
+  BrandKitListResult,
   BrandKitSummary,
   BrandKitSummaryRead,
   BrandKnowledgeDetail,
@@ -167,26 +168,33 @@ function importRows(started: BrandImportOutcome, kitId: string): [string, string
 export function registerBrandKit(program: Command): void {
   const brandKit = program.command('brand-kit').description('Brand kits (brand identity documents)')
 
-  brandKit
-    .command('list')
-    .description('List the account\'s brand kits (default first; excludes archived unless --archived)')
-    .option('--favorite', 'only favorited brand kits')
-    .option('--archived', 'only archived brand kits (default excludes archived)')
+  withPageFlags(
+    brandKit
+      .command('list')
+      .description('List the account\'s brand kits (default first; excludes archived unless --archived)')
+      .option('--favorite', 'only favorited brand kits')
+      .option('--archived', 'only archived brand kits (default excludes archived)'),
+  )
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const kits = await client.listBrandKits({
+      const page = await client.listBrandKits({
         favorited: opts.favorite ? true : undefined,
         archived: opts.archived ? true : undefined,
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
-      emit(kits, ctx, (rows: BrandKitSummary[]) =>
-        table(
-          ['ID', 'NAME', 'DEFAULT', 'FAV'],
-          rows.map((k) => [
-            displayId(k),
-            k.name,
-            k.isDefault ? 'yes' : '',
-            k.isFavorited ? 'yes' : '',
-          ]),
+      emit(page, ctx, (p: BrandKitListResult) =>
+        withMore(
+          table(
+            ['ID', 'NAME', 'DEFAULT', 'FAV'],
+            p.brandKits.map((k) => [
+              displayId(k),
+              k.name,
+              k.isDefault ? 'yes' : '',
+              k.isFavorited ? 'yes' : '',
+            ]),
+          ),
+          p.nextCursor,
         ),
       )
     })
