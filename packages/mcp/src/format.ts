@@ -29,14 +29,27 @@ const WIDGET_META = {
 import { GENERATION_WIDGET_URI } from './widget-resource.js'
 import type {
   Avatar,
-  AvatarSummary,
+  AvatarListResult,
+  VoiceListResult,
+  BrandKitListResult,
+  FolderListResult,
+  KlingElementListResult,
+  SpaceListResult,
+  TagListResult,
+  TrackedAccountListResult,
+  ConnectedAccountListResult,
+  ProjectSummary,
+  ProjectVersionListResult,
+  SavedProjectVersion,
+  RestoredProjectVersion,
+  TimelineSettings,
+  UndoResult,
   Account,
   Charge,
   BrandKit,
   BrandKitAccount,
   BrandKitSummaryRead,
   BrandKitSectionsRead,
-  BrandKitSummary,
   BrandKnowledgeItem,
   BrandKnowledgeDetail,
   BrandKnowledgeListResult,
@@ -56,8 +69,6 @@ import type {
   SearchMediaPage,
   FolderContents,
   ProjectListResult,
-  Folder,
-  DerivedFolder,
   MediaBatchResult,
   ResolvedMediaBatchItem,
   CreateMediaUploadResult,
@@ -86,7 +97,6 @@ import type {
   TrackedAccountDetail,
   Transcription,
   Voice,
-  VoiceSummary,
   ApplyEditorOpsResult,
   ProjectDetail,
   LiveContextResult,
@@ -852,7 +862,7 @@ function clipped(value: string, max: number): string {
 const LISTING_TEXT_MAX = 80
 
 /** List of avatars, each with the fields an agent needs to drive lip-sync. */
-export function avatarListResult(avatars: AvatarSummary[]): CallToolResult {
+export function avatarListResult({ avatars, nextCursor }: AvatarListResult): CallToolResult {
   if (!avatars.length) {
     return text('No avatars found. Create one in the ContentHero app first.')
   }
@@ -860,7 +870,7 @@ export function avatarListResult(avatars: AvatarSummary[]): CallToolResult {
     (a) =>
       `- ${a.name} (${idOf(a)})${a.isDefault ? ' [default]' : ''} | image: ${a.imageUrl ?? 'none'} | voice: ${a.defaultVoiceId ?? 'none'}`,
   )
-  return text([`${avatars.length} avatar(s):`, ...rows].join('\n'))
+  return text(lines([`${avatars.length} avatar(s):`, ...rows, moreLine(nextCursor)]))
 }
 
 /** One avatar's full detail, including its looks. */
@@ -911,13 +921,13 @@ export function avatarPendingResult(created: CreateAvatarResult): CallToolResult
 }
 
 /** List of saved voices. */
-export function voiceListResult(voices: VoiceSummary[]): CallToolResult {
+export function voiceListResult({ voices, nextCursor }: VoiceListResult): CallToolResult {
   if (!voices.length) return text('No saved voices found.')
   const rows = voices.map(
     (v) =>
       `- ${v.name ?? '(unnamed)'} (${idOf({ id: v.voiceId, appUrl: v.appUrl }, 'voiceId')})${v.isFavorited ? ' [favorite]' : ''}${v.previewUrl ? ` | preview: ${v.previewUrl}` : ''}`,
   )
-  return text([`${voices.length} voice(s):`, ...rows].join('\n'))
+  return text(lines([`${voices.length} voice(s):`, ...rows, moreLine(nextCursor)]))
 }
 
 /** One voice's full detail. */
@@ -936,13 +946,13 @@ export function voiceResult(v: Voice): CallToolResult {
 }
 
 /** List of brand kits. */
-export function brandKitListResult(kits: BrandKitSummary[]): CallToolResult {
+export function brandKitListResult({ brandKits: kits, nextCursor }: BrandKitListResult): CallToolResult {
   if (!kits.length) return text('No brand kits found. Create one in the ContentHero app first.')
   const rows = kits.map(
     (k) =>
       `- ${k.name} (${idOf(k)})${k.isDefault ? ' [default]' : ''}`,
   )
-  return text([`${kits.length} brand kit(s):`, ...rows].join('\n'))
+  return text(lines([`${kits.length} brand kit(s):`, ...rows, moreLine(nextCursor)]))
 }
 
 /**
@@ -1142,12 +1152,14 @@ export function mediaSearchResult(page: SearchMediaPage): CallToolResult {
 }
 
 /** The user's folders (their own + the built-in derived folders). */
-export function folderListResult(data: { folders: Folder[]; derived: DerivedFolder[] }): CallToolResult {
+export function folderListResult(data: FolderListResult): CallToolResult {
   const own = data.folders.map((f) => `- ${f.name} [${f.type}] (${idOf(f)})${f.parentId ? ` | in ${f.parentId}` : ''}`)
   const derived = data.derived.map((d) => `- ${d.name} (key ${d.key})`)
   return text([
     own.length ? `Your folders (${own.length}):` : 'You have no folders yet.',
     ...own,
+    // The next page of the account's own folders; the built-in ones are the same on every page.
+    ...(data.nextCursor ? [moreLine(data.nextCursor) as string] : []),
     '',
     'Built-in folders:',
     ...derived,
@@ -1647,7 +1659,7 @@ export function accountResult(b: Account): CallToolResult {
 // -- Kling elements (Kling 3.0's reusable references) --------------------------
 
 /** List of the account's saved Kling elements. */
-export function klingElementListResult(items: KlingElement[]): CallToolResult {
+export function klingElementListResult({ klingElements: items, nextCursor }: KlingElementListResult): CallToolResult {
   if (!items.length) {
     return text('No Kling elements. Create one with create_kling_element, then reference it in a Kling generation by klingElementId.')
   }
@@ -1655,7 +1667,7 @@ export function klingElementListResult(items: KlingElement[]): CallToolResult {
     const media = e.input_video_url ? '1 video' : `${e.input_urls.length} image(s)`
     return `- ${e.name} (${idOf(e)}) | ${e.category} | ${media}${e.description ? ` | ${e.description.slice(0, 60)}` : ''}`
   })
-  return text([`${items.length} Kling element(s):`, ...rows].join('\n'))
+  return text(lines([`${items.length} Kling element(s):`, ...rows, moreLine(nextCursor)]))
 }
 
 /** Confirmation that a Kling element was deleted. */
@@ -1934,7 +1946,8 @@ export function cardListResult(result: CardListResult): CallToolResult {
    * ⚠️ THE EMPTY CASE IS THE ONE THAT MATTERS MOST. A wrong-scope list of cards at least looks unfamiliar;
    * a wrong-scope EMPTY list looks like the thing you asked for does not exist.
    */
-  const where = result.space ? ` in ${result.space.name}` : ''
+  // A list across every space (spaceId 'all') has no one space, and says so.
+  const where = result.space ? ` in ${result.space.name}` : ' in every space'
   if (!result.cards.length) return text(`No cards found${where}.`)
   const more = result.nextCursor ? ` (showing ${result.cards.length} of ${result.total})` : ''
   return text(lines([`${result.total} card(s)${where}${more}:`, ...result.cards.map(cardLine), moreLine(result.nextCursor)]))
@@ -2033,15 +2046,15 @@ export function cardResult(p: CardDetail): CallToolResult {
  * The card count is stated on every row because "which board has work on it" is the question an agent
  * asks next, and making it call get_space per row to find out is the N+1 the API already avoids.
  */
-export function spaceListResult(spaces: Space[]): CallToolResult {
+export function spaceListResult({ spaces, nextCursor }: SpaceListResult): CallToolResult {
   if (!spaces.length) return text('No spaces found.')
   const rows = spaces.map((s) => {
-    const bits = [idOf(s), `${s.postCount ?? 0} card(s)`]
+    const bits = [idOf(s), `${s.cardCount ?? 0} card(s)`]
     if (s.isFavorite) bits.push('favorite')
     if (s.archivedAt) bits.push('ARCHIVED')
     return `- ${s.name} (${bits.join(', ')})`
   })
-  return text([`${spaces.length} space(s):`, ...rows].join('\n'))
+  return text(lines([`${spaces.length} space(s):`, ...rows, moreLine(nextCursor)]))
 }
 
 /** A deleted space. */
@@ -2053,7 +2066,7 @@ export function spaceDeletedResult(id: string): CallToolResult {
 export function spaceResult(s: Space): CallToolResult {
   const lines = [
     `${s.name} (${idOf(s)})`,
-    `Cards: ${s.postCount ?? 0}`,
+    `Cards: ${s.cardCount ?? 0}`,
     `Favorite: ${s.isFavorite ? 'yes' : 'no'}`,
     s.archivedAt ? `Archived: ${s.archivedAt}` : 'Archived: no',
     s.coverUrl ? `Cover: ${s.coverUrl}` : 'Cover: none',
@@ -2073,7 +2086,7 @@ export function stageListResult(result: StageListResult): CallToolResult {
   const where = result.space ? ` in ${result.space.name}` : ''
   if (!result.stages.length) return text(`No stages found${where}.`)
   const rows = result.stages.map((s) => `- ${s.name} (${idOf(s)}${s.slug ? `, slug ${s.slug}` : ''})`)
-  return text([`${result.stages.length} stage(s)${where} (in order):`, ...rows].join('\n'))
+  return text(lines([`${result.stages.length} stage(s)${where} (in order):`, ...rows, moreLine(result.nextCursor)]))
 }
 
 /** One created or updated stage. */
@@ -2153,11 +2166,9 @@ export function postRemovedResult(r: { id: string }): CallToolResult {
 }
 
 /** The account's tags. */
-export function tagListResult(tags: Tag[]): CallToolResult {
+export function tagListResult({ tags, nextCursor }: TagListResult): CallToolResult {
   if (!tags.length) return text('No tags yet. Create one with create_tag.')
-  return text(
-    [`${tags.length} tag(s):`, ...tags.map((t) => `- ${t.name} (${idOf(t)})`)].join('\n'),
-  )
+  return text(lines([`${tags.length} tag(s):`, ...tags.map((t) => `- ${t.name} (${idOf(t)})`), moreLine(nextCursor)]))
 }
 
 /** A created or renamed tag. */
@@ -2204,9 +2215,9 @@ function accountLine(a: TrackedAccount): string {
 }
 
 /** List of tracked accounts, either kind. */
-export function trackedAccountListResult(accounts: TrackedAccount[], noun = 'tracked account(s)'): CallToolResult {
-  if (!accounts.length) return text(`No ${noun} found. Add one in the ContentHero app first.`)
-  return text([`${accounts.length} ${noun}:`, ...accounts.map(accountLine)].join('\n'))
+export function trackedAccountListResult({ trackedAccounts: accounts, nextCursor }: TrackedAccountListResult): CallToolResult {
+  if (!accounts.length) return text('No tracked account(s) found. Add one in the ContentHero app first.')
+  return text(lines([`${accounts.length} tracked account(s):`, ...accounts.map(accountLine), moreLine(nextCursor)]))
 }
 
 /** One line summarizing an outlier / content item. */
@@ -2218,15 +2229,13 @@ function outlierLine(o: ContentSummary): string {
   return `- [${score}] ${o.title ?? '(untitled)'}${own}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (${idOf(o)})`
 }
 
-/** A page of outliers. */
+/** A page of tracked content, in the order it was asked for. */
 export function outlierListResult(result: ContentListResult): CallToolResult {
-  if (!result.outliers.length) {
+  if (!result.content.length) {
     return text('No content found. Track some creators in the ContentHero app, or widen the filters.')
   }
-  const more = result.nextCursor ? ` (showing ${result.outliers.length} of ${result.total})` : ''
-  return text(
-    lines([`${result.total} outlier(s) by score${more}:`, ...result.outliers.map(outlierLine), moreLine(result.nextCursor)]),
-  )
+  const more = result.nextCursor ? ` (showing ${result.content.length} of ${result.total})` : ''
+  return text(lines([`${result.total} post(s)${more}:`, ...result.content.map(outlierLine), moreLine(result.nextCursor)]))
 }
 
 /**
@@ -2414,13 +2423,11 @@ function connectedAccountLine(a: ConnectedAccount): string {
 }
 
 /** List of connected accounts (publish targets). */
-export function connectedAccountListResult(accounts: ConnectedAccount[]): CallToolResult {
+export function connectedAccountListResult({ connectedAccounts: accounts, nextCursor }: ConnectedAccountListResult): CallToolResult {
   if (!accounts.length) {
     return text('No connected accounts. Connect a social account in the ContentHero app to publish.')
   }
-  return text(
-    [`${accounts.length} connected account(s):`, ...accounts.map(connectedAccountLine)].join('\n'),
-  )
+  return text(lines([`${accounts.length} connected account(s):`, ...accounts.map(connectedAccountLine), moreLine(nextCursor)]))
 }
 
 /** One connected account in detail, including its capabilities. */
@@ -2508,6 +2515,8 @@ const PROJECT_DETAIL_EXPOSURE = {
   // list-view metadata that tells a single-project reader nothing it did not already know by fetching it.
   assetReferences: 'omitted: large payload; the composition state already names what is in use',
   thumbnailUrl: 'omitted: presentation metadata, not an editing input',
+  coverSource: 'omitted: presentation metadata, not an editing input',
+  coverFrame: 'omitted: presentation metadata, not an editing input',
   isArchived: 'omitted: lifecycle state, surfaced by list_projects',
   isFavorited: 'omitted: lifecycle state, surfaced by list_projects',
   archivedAt: 'omitted: lifecycle state, surfaced by list_projects',
@@ -2688,6 +2697,70 @@ export function projectCreatedResult(p: ProjectDetail, linkedCardId?: string): C
 /** Confirmation of a permanent delete. */
 export function projectDeletedResult(projectId: string): CallToolResult {
   return text(`Permanently deleted project ${projectId}. This cannot be undone.`)
+}
+
+/** A project's summary after a change, or a new project made by a copy: what it is now. */
+export function projectSummaryResult(p: ProjectSummary, verb: string): CallToolResult {
+  const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
+  return text(
+    `${verb} ${p.type} project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height})` +
+      `, cover ${p.coverSource}${p.coverFrame != null ? ` at frame ${p.coverFrame}` : ''}${flags ? ` (${flags})` : ''}.`,
+  )
+}
+
+/** A video project's timeline settings, one per line. */
+export function timelineSettingsResult(projectId: string, s: TimelineSettings): CallToolResult {
+  const onOff = (b: boolean) => (b ? 'on' : 'off')
+  const linked = Object.entries(s.linkedTracks).filter(([, on]) => on).map(([kind]) => kind)
+  return text(
+    lines([
+      `Timeline settings for project ${projectId}:`,
+      `- magneticTrack: ${onOff(s.magneticTrack)}`,
+      `- snapping: ${onOff(s.snapping)}`,
+      `- linkage: ${onOff(s.linkage)}`,
+      `- linkedTracks: ${linked.length ? linked.join(', ') : 'none'}`,
+      `- followPlayhead: ${onOff(s.followPlayhead)}`,
+      `- skimming: ${onOff(s.skimming)}`,
+      `- skipDisabledClips: ${onOff(s.skipDisabledClips)}`,
+    ]),
+  )
+}
+
+/** A page of a project's saved versions, newest first. */
+export function projectVersionListResult(projectId: string, { versions, nextCursor }: ProjectVersionListResult): CallToolResult {
+  if (!versions.length) return text(`Project ${projectId} has no saved versions.`)
+  const rows = versions.map(
+    (v) =>
+      `- ${v.id} | ${v.created_at}${v.label ? ` | "${v.label}"` : ''} | ${v.trigger_reason}${v.author_name ? ` | by ${v.author_name}` : ''}${v.revision != null ? ` | revision ${v.revision}` : ''}`,
+  )
+  return text(lines([`${versions.length} version(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
+}
+
+/** A version just saved. */
+export function projectVersionSavedResult(projectId: string, v: SavedProjectVersion): CallToolResult {
+  return text(`Saved version ${v.id}${v.label ? ` "${v.label}"` : ''} of project ${projectId}.`)
+}
+
+/** A version put back into its project. */
+export function projectVersionRestoredResult(projectId: string, versionId: string, r: RestoredProjectVersion): CallToolResult {
+  return text(
+    `Restored version ${versionId} into project ${projectId}; it is at revision ${r.revision}. The state before the restore was saved as a version first.`,
+  )
+}
+
+/** A version renamed (or its name cleared). */
+export function projectVersionRenamedResult(v: { id: string; label: string | null }): CallToolResult {
+  return text(v.label ? `Version ${v.id} is now "${v.label}".` : `Version ${v.id} has no name.`)
+}
+
+/** A version removed. */
+export function projectVersionDeletedResult(versionId: string): CallToolResult {
+  return text(`Deleted version ${versionId}.`)
+}
+
+/** An undo or a redo: the edit it reversed and the revision it made. */
+export function undoResult(projectId: string, r: UndoResult): CallToolResult {
+  return text(`${r.label} on project ${projectId}. The project is at revision ${r.revision}.`)
 }
 
 /** The canvas layer-type catalog (types + editable props) as readable text + the JSON. */

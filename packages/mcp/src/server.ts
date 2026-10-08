@@ -63,7 +63,9 @@ import {
 
   type Generation,
   type GenerateResult,
-  CONTENT_SORTS,
+  LIST_SORTS,
+  SORT_ORDERS,
+  type SortableList,
   withCodeWarnings,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
@@ -164,6 +166,14 @@ import {
   projectListResult,
   projectCreatedResult,
   projectDeletedResult,
+  projectSummaryResult,
+  timelineSettingsResult,
+  projectVersionListResult,
+  projectVersionSavedResult,
+  projectVersionRestoredResult,
+  projectVersionRenamedResult,
+  projectVersionDeletedResult,
+  undoResult,
   layerTypesResult,
   timelineTypesResult,
   editorTranscriptResult,
@@ -296,6 +306,17 @@ function pageInput(max = 100) {
   return {
     limit: z.number().int().min(1).max(max).optional().describe('How many to return.'),
     cursor: z.string().optional().describe("The previous page's cursor."),
+  }
+}
+
+/**
+ * The sort inputs every sortable listing takes (9.9), in one wording: a field of that list, as the API declares it
+ * (`LIST_SORTS`), and a direction. The server owns the default and refuses a field the list does not have.
+ */
+function sortInput<L extends SortableList>(list: L) {
+  return {
+    sort: z.enum(LIST_SORTS[list] as (typeof LIST_SORTS)[L]).optional().describe('The field to sort by.'),
+    order: z.enum(SORT_ORDERS).optional().describe('The sort direction.'),
   }
 }
 
@@ -1913,11 +1934,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       description:
         "List the account's avatars. Each avatar has an imageUrl (its base look) and a defaultVoiceId, which feed generate_lip_sync. Call get_avatar for full detail and the avatar's looks.",
+      inputSchema: { ...pageInput() },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return avatarListResult(await client.listAvatars())
+        return avatarListResult(await client.listAvatars({ limit: args.limit, cursor: args.cursor }))
       } catch (err) {
         return errorResult(err)
       }
@@ -2094,12 +2116,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         "List the account's saved voices (favorites first). Set favorited=true to show only favorites. Each has a voiceId for generate_lip_sync / generate_audio (TTS). Call get_voice for full detail.",
       inputSchema: {
         favorited: z.boolean().optional().describe('Only favorited voices.'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return voiceListResult(await client.listVoices({ favorited: args.favorited }))
+        return voiceListResult(await client.listVoices({ favorited: args.favorited, limit: args.limit, cursor: args.cursor }))
       } catch (err) {
         return errorResult(err)
       }
@@ -2138,13 +2161,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       inputSchema: {
         favorited: z.boolean().optional().describe('Only favorited brand kits.'),
         archived: z.boolean().optional().describe('Only archived brand kits (default excludes archived).'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         return brandKitListResult(
-          await client.listBrandKits({ favorited: args.favorited, archived: args.archived }),
+          await client.listBrandKits({ favorited: args.favorited, archived: args.archived, limit: args.limit, cursor: args.cursor }),
         )
       } catch (err) {
         return errorResult(err)
@@ -2329,7 +2353,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
         // Reorder is the collection-level mode and takes no kit id at all.
         if (orderedIds && !brandKitId) {
-          return brandKitListResult(await client.reorderBrandKits(orderedIds as string[]))
+          // The whole arrangement, in its new order: one page, nothing after it.
+          return brandKitListResult({ brandKits: await client.reorderBrandKits(orderedIds as string[]), nextCursor: null })
         }
         if (!brandKitId) {
           return errorResult(new Error('update_brand_kit needs either brandKitId, or orderedIds to reorder.'))
@@ -2607,10 +2632,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       description:
         "List the account's library folders (their own manual and smart folders, as a flat list with parent links for nesting) together with the built-in derived folders (recents, favorites, edits, canvas, cards). Use this to see how the library is organized before browsing or filing items.",
-      inputSchema: {},
+      inputSchema: { ...pageInput() },
     },
-    async (_args, extra) => {
-      try { return folderListResult(await (await getClient(extra)).listFolders()) } catch (err) { return errorResult(err) }
+    async (args, extra) => {
+      try {
+        return folderListResult(await (await getClient(extra)).listFolders({ limit: args.limit, cursor: args.cursor }))
+      } catch (err) {
+        return errorResult(err)
+      }
     },
   )
 
@@ -3125,12 +3154,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       description:
         "List the account's saved Kling elements. A Kling element is Kling 3.0's saved reference for one character, location or prop: 2-4 images (or one video) of it under a name, so the subject stays consistent across Kling video generations. Use one in generate_video's klingElements by klingElementId, and as @name in the prompt.",
-      inputSchema: {},
+      inputSchema: { ...pageInput() },
     },
-    async (_args, extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return klingElementListResult(await client.listKlingElements())
+        return klingElementListResult(await client.listKlingElements({ limit: args.limit, cursor: args.cursor }))
       } catch (err) {
         return errorResult(err)
       }
@@ -3303,13 +3332,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Cards',
       annotations: READ,
       description:
-        "List one SPACE's cards (newest-updated first). ⚠️ SCOPED, NOT COMPLETE: without spaceId this lists the account's DEFAULT space only, and cards on any other board are absent with nothing in the response saying so (search misses them too). Call list_spaces FIRST and pass spaceId unless you specifically mean the default board. Filter by status, platform, stage (id/slug/name), favorite, or a title search. Call get_card for one card's full detail (posts + assets).",
+        "List one SPACE's cards (newest-updated first). ⚠️ SCOPED, NOT COMPLETE: without spaceId this lists the account's DEFAULT space only, and cards on any other board are absent with nothing in the response saying so (search misses them too). Call list_spaces FIRST and pass spaceId unless you specifically mean the default board. Filter by status, platform, stage (id/slug/name), favorite, tag, or a title search. Call get_card for one card's full detail (posts + assets).",
       inputSchema: {
         spaceId: z
           .string()
           .optional()
           .describe(
-            "Which space's board to list, from list_spaces. Omit ONLY when you mean the account's default space; omitting it does not search every board.",
+            "Which space's board to list, from list_spaces, or 'all' for every space. Omit ONLY when you mean the account's default space; omitting it does not search every board.",
           ),
         archived: z
           .boolean()
@@ -3317,7 +3346,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe('Only ARCHIVED cards. Archived cards are excluded by default, matching the board.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
         stage: z.string().optional().describe('Filter by a stage id, slug, or name. Resolved within the chosen space.'),
+        isFavorite: z.boolean().optional().describe('Only favorited cards.'),
+        tag: z.string().optional().describe('Only cards carrying this tag.'),
         search: z.string().optional().describe('Case-insensitive title search, scoped to the chosen space.'),
+        ...sortInput('cards'),
         ...pageInput(),
       },
     },
@@ -3330,7 +3362,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             archived: args.archived,
             platform: args.platform,
             stage: args.stage,
+            isFavorite: args.isFavorite,
+            tag: args.tag,
             search: args.search,
+            sort: args.sort,
+            order: args.order,
             limit: args.limit,
             cursor: args.cursor,
           }),
@@ -3370,18 +3406,22 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Spaces',
       annotations: READ,
       description:
-        "List the account's SPACES. A space is the planner's top-level container: Space > Stage > Card > Post. Each space has its own stages, so two spaces can both hold a stage called 'Published'. Call this FIRST to discover which board to work in, then pass a space id to list_stages, list_cards or create_card. Archived spaces are excluded unless includeArchived is set.",
+        "List the account's SPACES. A space is the planner's top-level container: Space > Stage > Card > Post. Each space has its own stages, so two spaces can both hold a stage called 'Published'. Call this FIRST to discover which board to work in, then pass a space id to list_stages, list_cards or create_card. Archived spaces are excluded unless archived is set, which lists only them.",
       inputSchema: {
-        includeArchived: z
+        archived: z
           .boolean()
           .optional()
-          .describe('Include archived spaces. Default false, matching the grid in the app.'),
+          .describe('Only archived spaces. Archived spaces are excluded by default, matching the grid in the app.'),
+        favorited: z.boolean().optional().describe('Only favorited spaces.'),
+        search: z.string().optional().describe('Search space names.'),
+        ...sortInput('spaces'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return spaceListResult(await client.listSpaces({ includeArchived: args.includeArchived }))
+        return spaceListResult(await client.listSpaces(args))
       } catch (err) {
         return errorResult(err)
       }
@@ -3505,12 +3545,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .optional()
           .describe("Which space's stages, from list_spaces. Omit only when you mean the account's default space."),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return stageListResult(await client.listStages({ spaceId: args.spaceId }))
+        return stageListResult(await client.listStages({ spaceId: args.spaceId, limit: args.limit, cursor: args.cursor }))
       } catch (err) {
         return errorResult(err)
       }
@@ -3797,12 +3838,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       description:
         "List the account's tags (the organizational tag library). Set a post's tags with the `tags` field on create_card / update_card. A tag is just a lowercase name.",
-      inputSchema: {},
+      inputSchema: { ...pageInput() },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return tagListResult(await client.listTags())
+        return tagListResult(await client.listTags({ limit: args.limit, cursor: args.cursor }))
       } catch (err) {
         return errorResult(err)
       }
@@ -3913,6 +3954,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("Narrow to one kind. Omitted, both come back."),
         brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit (from get_brand_kit).'),
+        ...pageInput(),
       },
     },
     async (args, extra) => {
@@ -3983,11 +4025,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe(
             'Finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance. Returns only the posts judged relevant, so an empty result means nothing matched.',
           ),
-        sortBy: z
-          .enum(CONTENT_SORTS)
-          .optional()
-          .describe("Sort field. Default 'relevance' when search is set, otherwise 'score'. Any other field reorders the same relevant set."),
-        sortOrder: z.enum(['asc', 'desc']).optional().describe("Sort direction (default 'desc')."),
+        ...sortInput('content'),
         accountIds: z.array(z.string()).optional().describe('Limit to these tracked account ids (from list_tracked_accounts).'),
         addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),
         brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit.'),
@@ -4120,11 +4158,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       description:
         "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on a post in update_card, then publish_post. Read-only: connecting an account is done in the ContentHero app.",
+      inputSchema: { ...pageInput() },
     },
-    async (extra) => {
+    async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return connectedAccountListResult(await client.listConnectedAccounts())
+        return connectedAccountListResult(await client.listConnectedAccounts({ limit: args.limit, cursor: args.cursor }))
       } catch (err) {
         return errorResult(err)
       }
@@ -4280,6 +4319,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         surface: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
         kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
         search: z.string().optional().describe('Case-insensitive title search.'),
+        ...sortInput('projects'),
         ...pageInput(),
       },
     },
@@ -4624,6 +4664,295 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         await client.deleteProject(args.projectId)
         return projectDeletedResult(args.projectId)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- the project's own fields, its copies, its timeline settings (9.9) ---------
+  const EXPECTED_REVISION = z
+    .number()
+    .int()
+    .optional()
+    .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.')
+
+  server.registerTool(
+    'update_project',
+    {
+      title: 'Update Project',
+      annotations: WRITE,
+      description:
+        "Change a project's own fields: rename it, resize it, associate a brand kit, or choose and frame its cover. This is a PATCH: a field you omit is left alone. To change what is in the composition, use update_timeline or update_canvas instead. Returns the project as it now stands. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        title: z.string().optional().describe('A new title.'),
+        orientation: z.string().optional().describe('A new aspect ratio.'),
+        width: z.number().optional().describe('A new pixel width.'),
+        height: z.number().optional().describe('A new pixel height.'),
+        brandKitId: z.string().nullable().optional().describe('A brand kit id from list_brand_kits, or null to clear it.'),
+        cover: z
+          .union([
+            z.literal('auto'),
+            z.object({ frame: z.number().int().min(0) }),
+            z.object({ mediaId: z.string() }),
+          ])
+          .optional()
+          .describe("How the cover is chosen: 'auto' follows the composition, { frame } is a chosen moment (for a canvas, a slide's index among its visible slides), { mediaId } is an image from the library."),
+        coverPosition: z
+          .object({ x: z.number(), y: z.number() })
+          .nullable()
+          .optional()
+          .describe('Where the cover is framed, as percentages of its width and height, or null for the default framing.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { projectId, ...input } = args
+        return projectSummaryResult(await client.updateProject(projectId, input), 'Updated')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'duplicate_project',
+    {
+      title: 'Duplicate Project',
+      annotations: WRITE,
+      description:
+        "Copy a project: a new project with the same type, size, composition and brand kit, titled as the editor titles a copy. Returns the new project. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id to copy.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return projectSummaryResult(await client.duplicateProject(args.projectId), 'Created')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_timeline_settings',
+    {
+      title: 'Get Timeline Settings',
+      annotations: READ,
+      description:
+        "Read an editor project's timeline settings for the owner, the settings the editor's timeline settings menu holds: how editing behaves (the magnetic main track, snapping, linkage and which kinds of track it reaches) and how the timeline plays (follow playhead, skimming, skip disabled clips). update_timeline edits by them as the editor does. Requires the editor:read scope.",
+      inputSchema: {
+        projectId: z.string().describe('The editor project id.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return timelineSettingsResult(args.projectId, await client.getTimelineSettings(args.projectId))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'update_timeline_settings',
+    {
+      title: 'Update Timeline Settings',
+      annotations: WRITE,
+      description:
+        "Change some of an editor project's timeline settings; a setting you omit is left alone. The editor shows the change, and later edits ripple by it. Returns all of them. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The editor project id.'),
+        magneticTrack: z.boolean().optional().describe('The magnetic main track, on or off.'),
+        snapping: z.boolean().optional().describe('Snapping, on or off.'),
+        linkage: z.boolean().optional().describe("Linkage, on or off: whether other tracks follow the main track's ripple and delete."),
+        linkedTracks: z
+          .object({ media: z.boolean().optional(), audio: z.boolean().optional(), text: z.boolean().optional() })
+          .optional()
+          .describe('Which kinds of track linkage reaches.'),
+        followPlayhead: z.boolean().optional().describe('Follow playhead, on or off.'),
+        skimming: z.boolean().optional().describe('Skimming, on or off.'),
+        skipDisabledClips: z.boolean().optional().describe('Skip disabled clips during playback, on or off.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { projectId, ...change } = args
+        return timelineSettingsResult(projectId, await client.updateTimelineSettings(projectId, change))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- version history (premium, as in the editor) -----------------------------
+  server.registerTool(
+    'list_project_versions',
+    {
+      title: 'List Project Versions',
+      annotations: READ,
+      description:
+        "List a project's saved versions, newest first: each with its id, when and why it was saved, its name and who saved it. Bring one back with restore_project_version. Version history is a premium feature, as in the editor. Requires the editor:read scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        ...pageInput(),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return projectVersionListResult(
+          args.projectId,
+          await client.listProjectVersions(args.projectId, { limit: args.limit, cursor: args.cursor }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'save_project_version',
+    {
+      title: 'Save Project Version',
+      annotations: WRITE,
+      description:
+        "Save the project's current state as a version, optionally named, so it can be brought back later. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        label: z.string().optional().describe('A name for the version.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return projectVersionSavedResult(args.projectId, await client.saveProjectVersion(args.projectId, { label: args.label }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'restore_project_version',
+    {
+      title: 'Restore Project Version',
+      annotations: WRITE,
+      description:
+        "Bring back a saved version. action 'restore' (the default) puts it back into the project, saving the current state as a version first so the restore can itself be undone by restoring that; action 'copy' makes a new project from it and leaves this one as it is. Version history is a premium feature. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        versionId: z.string().describe('The version id, from list_project_versions.'),
+        action: z.enum(['restore', 'copy']).optional().describe("'restore' (the default) puts it back into this project; 'copy' makes a new project from it."),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        if (args.action === 'copy') {
+          return projectSummaryResult(await client.copyProjectVersion(args.projectId, args.versionId), 'Created')
+        }
+        return projectVersionRestoredResult(
+          args.projectId,
+          args.versionId,
+          await client.restoreProjectVersion(args.projectId, args.versionId),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'update_project_version',
+    {
+      title: 'Update Project Version',
+      annotations: WRITE,
+      description: 'Name a saved version, or clear its name with an empty label. Requires the editor:write scope.',
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        versionId: z.string().describe('The version id, from list_project_versions.'),
+        label: z.string().describe('The new name; empty clears it.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return projectVersionRenamedResult(await client.renameProjectVersion(args.projectId, args.versionId, args.label))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'delete_project_version',
+    {
+      title: 'Delete Project Version',
+      annotations: WRITE,
+      description: 'Permanently remove a saved version. The project itself is not changed. Requires the editor:write scope.',
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        versionId: z.string().describe('The version id, from list_project_versions.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        await client.deleteProjectVersion(args.projectId, args.versionId)
+        return projectVersionDeletedResult(args.versionId)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- undo and redo (the editor's own) ----------------------------------------
+  server.registerTool(
+    'undo_project_edit',
+    {
+      title: 'Undo Project Edit',
+      annotations: WRITE,
+      description:
+        "Reverse the project's most recent edit, as the editor's Undo does, whoever made it. The undo is itself an edit with its own revision, and redo_project_edit re-applies what it reversed. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        expectedRevision: EXPECTED_REVISION,
+        revision: z.number().int().min(0).optional().describe('A specific revision to reverse. Omit for the most recent edit.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return undoResult(args.projectId, await client.undo(args.projectId, { expectedRevision: args.expectedRevision, revision: args.revision }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  server.registerTool(
+    'redo_project_edit',
+    {
+      title: 'Redo Project Edit',
+      annotations: WRITE,
+      description:
+        "Re-apply the edit most recently undone, as the editor's Redo does. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        expectedRevision: EXPECTED_REVISION,
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return undoResult(args.projectId, await client.redo(args.projectId, { expectedRevision: args.expectedRevision }))
       } catch (err) {
         return errorResult(err)
       }

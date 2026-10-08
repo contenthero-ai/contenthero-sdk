@@ -121,6 +121,17 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   get_export: ['project export-status'],
   delete_project: ['project delete'],
   get_transcript: ['project transcript'],
+  update_project: ['project update'],
+  duplicate_project: ['project duplicate'],
+  get_timeline_settings: ['project settings get'],
+  update_timeline_settings: ['project settings update'],
+  list_project_versions: ['project version list'],
+  save_project_version: ['project version save'],
+  restore_project_version: ['project version restore', 'project version copy'],
+  update_project_version: ['project version rename'],
+  delete_project_version: ['project version delete'],
+  undo_project_edit: ['project undo'],
+  redo_project_edit: ['project redo'],
   update_timeline: ['project apply'],
   update_canvas: ['project apply'],
   get_context: ['context', 'preview'],
@@ -174,7 +185,6 @@ const CONVENTIONS: Record<string, string> = {
   playheadFrame: '--playhead',
   contentType: '--type',
   favorited: '--favorite',
-  includeArchived: '--archived',
 }
 const NAMING_RULES: Array<(input: string, tool: string) => string[]> = [
   // Same name, kebab-cased, as a flag or a positional.
@@ -214,6 +224,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   delete_stage: { targetStageId: '--target' },
   update_card: { cardIds: '--also', scheduledAt: '--schedule' },
   publish_post: { cardId: '<id>' },
+  list_cards: { isFavorite: '--favorite' },
   list_tracked_accounts: { accountType: '--kind' },
   get_tracked_account: { accountId: '<id>' },
   get_connected_account: { accountId: '<id>' },
@@ -227,8 +238,6 @@ const ALIASES: Record<string, Record<string, string>> = {
     subscribersMin: '--min-followers',
     subscribersMax: '--max-followers',
     publicationDate: '--since',
-    sortBy: '--sort',
-    sortOrder: '--asc',
   },
   favorite: { mediaId: '<id>', favorited: '--off' },
   archive: { mediaId: '<id>', archived: '--off' },
@@ -257,6 +266,7 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
     bucketName: '`preview` starts the render and polls it in one command',
   },
   list_projects: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
+  restore_project_version: { action: 'the subcommand names it: `project version restore` or `project version copy`' },
   create_project: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
 }
 

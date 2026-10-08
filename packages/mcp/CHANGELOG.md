@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: every sortable list tool (`list_cards`, `list_projects`, `list_spaces`, `list_content`) takes `sort` (the
+  fields the API declares for that list, from the SDK's `LIST_SORTS`) and `order` (`asc` | `desc`). `list_content`'s
+  `sortBy` and `sortOrder` are gone; its fields are `relevance` (with a search only), `outlierScore`, `publishedAt`,
+  `viewCount` and `engagementRate`.
+- Breaking: every growable list tool pages. `list_tags`, `list_avatars`, `list_voices`, `list_brand_kits`,
+  `list_tracked_accounts`, `list_connected_accounts`, `list_kling_elements`, `list_stages`, `list_spaces` and
+  `list_folders` take `limit` and `cursor`, and end with the next page's cursor when there is one.
+- Breaking: `list_spaces` takes `archived` (only archived spaces; was `includeArchived`), `favorited` and `search`.
+- `list_cards` takes `isFavorite` and `tag`, and `spaceId` `all` for every space; a list across every space says so.
+- `list_content` names its page as posts, in the order asked for (it said outliers by score whatever the sort).
+- New tools: `update_project` (title, size, brand kit, cover and its framing), `duplicate_project`,
+  `get_timeline_settings` / `update_timeline_settings`, the version history (`list_project_versions`,
+  `save_project_version`, `restore_project_version` with `action` restore or copy, `update_project_version`,
+  `delete_project_version`), and `undo_project_edit` / `redo_project_edit`.
+- Requires the unreleased `@contenthero/sdk` (sort and order, the paged lists, the new project methods).
+
 ## 0.4.31
 
 - Breaking: the clip type `graphic` is retired and renamed `code`: a code clip or code layer is a video, audio or image

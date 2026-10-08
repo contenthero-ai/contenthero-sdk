@@ -635,7 +635,7 @@ test('a poll reports and never displays', () => {
 test('an item is named by its id and then its appUrl', () => {
   assert.equal(idOf({ id: 'c1', appUrl: 'https://app.contenthero.ai/cards/c1' }), 'id c1, appUrl https://app.contenthero.ai/cards/c1')
   assert.equal(idOf({ id: 'c1' }), 'id c1')
-  const out = tagListResult([{ id: 't1', name: 'long-form', appUrl: 'https://app.contenthero.ai/tags/t1' } as never])
+  const out = tagListResult({ tags: [{ id: 't1', name: 'long-form', appUrl: 'https://app.contenthero.ai/tags/t1' } as never], nextCursor: null })
   assert.match((out.content[0] as { text: string }).text, /- long-form \(id t1, appUrl https:\/\/app\.contenthero\.ai\/tags\/t1\)/)
 })
 

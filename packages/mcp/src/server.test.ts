@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { GenerationTimeoutError, InsufficientCreditsError } from '@contenthero/sdk'
+import { GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, SORT_ORDERS } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -79,9 +79,10 @@ function fakeClient(overrides = {}) {
       wordCount: 2,
       durationSeconds: 1.5,
     }),
-    listAvatars: async () => [
-      { id: 'av1', name: 'Taylan Test', imageUrl: 'https://cdn/face.png', defaultVoiceId: 'v1', isDefault: true, status: 'completed' },
-    ],
+    listAvatars: async () => ({
+      avatars: [{ id: 'av1', name: 'Taylan Test', imageUrl: 'https://cdn/face.png', defaultVoiceId: 'v1', isDefault: true, status: 'completed' }],
+      nextCursor: null,
+    }),
     getAvatar: async (id) => ({
       id,
       name: 'Taylan Test',
@@ -97,9 +98,10 @@ function fakeClient(overrides = {}) {
       createdAt: 't',
       looks: [{ id: 'lk1', name: 'Default', imageUrl: 'https://cdn/look.png', lookType: 'default', isDefault: true }],
     }),
-    listVoices: async () => [
-      { voiceId: 'v1', name: "Taylan's Voice", provider: 'elevenlabs', isFavorited: true, previewUrl: 'https://cdn/p.mp3', lastUsedAt: 't' },
-    ],
+    listVoices: async () => ({
+      voices: [{ voiceId: 'v1', name: "Taylan's Voice", provider: 'elevenlabs', isFavorited: true, previewUrl: 'https://cdn/p.mp3', lastUsedAt: 't' }],
+      nextCursor: null,
+    }),
     getVoice: async (voiceId) => ({
       voiceId,
       name: "Taylan's Voice",
@@ -168,9 +170,10 @@ function fakeClient(overrides = {}) {
         }
       }),
     }),
-    listBrandKits: async () => [
-      { id: 'bk1', name: 'ContentHero', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' },
-    ],
+    listBrandKits: async () => ({
+      brandKits: [{ id: 'bk1', name: 'ContentHero', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' }],
+      nextCursor: null,
+    }),
     getBrandKit: async (id) => ({
       id,
       name: 'ContentHero',
@@ -366,7 +369,7 @@ function fakeClient(overrides = {}) {
         { id: 'ia1', platform: 'youtube', accountId: 'UC123', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 300_000_000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'inspiration' },
         { id: 'ba1', platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
       ]
-      return options?.accountType ? all.filter((a) => a.accountType === options.accountType) : all
+      return { trackedAccounts: options?.accountType ? all.filter((a) => a.accountType === options.accountType) : all, nextCursor: null }
     },
     getTrackedAccount: async (id) => ({
       account: { id, platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
@@ -377,7 +380,7 @@ function fakeClient(overrides = {}) {
       recentContent: [],
     }),
     listContent: async () => ({
-      outliers: [{ id: 'c1', platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast' }],
+      content: [{ id: 'c1', platform: 'youtube', contentType: 'video', title: 'I gave away an island', url: 'https://yt/c1', thumbnailUrl: null, viewCount: 120_000_000, likeCount: 4_000_000, commentCount: 90_000, shareCount: null, durationSeconds: 600, outlierScore: 3.4, engagementRate: 0.05, viewsPerFollower: 0.4, publishedAt: 't', sourceCreator: 'MrBeast', accountHandle: 'mrbeast' }],
       total: 1,
       nextCursor: null,
     }),
@@ -399,14 +402,18 @@ function fakeClient(overrides = {}) {
     searchBrandKnowledge: async (_id, query) => [{ knowledgeId: 'kn1', title: 'Launch playbook', content: `match for ${query}`, similarity: 0.82, sourceUrl: null, chunkIndex: 0 }],
     addBrandKnowledge: async (_id, input) => ({ id: 'kn-new', title: input.title ?? 'Untitled Resource', sourceType: input.sourceType, sourceUrl: input.url ?? null, createdAt: 't', updatedAt: 't' }),
     removeBrandKnowledge: async (_id, knowledgeId) => ({ id: knowledgeId }),
-    listConnectedAccounts: async () => [
-      { id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' },
-    ],
+    listConnectedAccounts: async () => ({
+      connectedAccounts: [{ id: 'ca1', platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: true }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' }],
+      nextCursor: null,
+    }),
     getConnectedAccount: async (id) => ({ id, platform: 'instagram', accountId: '178414', accountName: 'ContentHero', accountHandle: 'contenthero', accountUrl: 'https://instagram.com/contenthero', connectionStatus: 'connected', connectionType: 'oauth', capabilities: { publish: true, analytics: false }, isDefault: true, lastSyncedAt: 't', lastValidatedAt: 't', createdAt: 't' }),
-    listTags: async () => [
-      { id: 't1', name: 'contenthero', isDefault: false, isSystem: false },
-      { id: 't2', name: 'feature', isDefault: false, isSystem: false },
-    ],
+    listTags: async () => ({
+      tags: [
+        { id: 't1', name: 'contenthero', isDefault: false, isSystem: false },
+        { id: 't2', name: 'feature', isDefault: false, isSystem: false },
+      ],
+      nextCursor: null,
+    }),
     createTag: async (name) => ({ id: 't-new', name: name.toLowerCase(), isDefault: false, isSystem: false }),
     updateTag: async (id, name) => ({ id, name: name.toLowerCase(), isDefault: false, isSystem: false }),
     deleteTag: async (id) => ({ id }),
@@ -2079,11 +2086,11 @@ test('list filters forward favorited/archived to the client', async () => {
       },
       listBrandKits: async (opts) => {
         kitOpts = opts
-        return []
+        return { brandKits: [], nextCursor: null }
       },
       listVoices: async (opts) => {
         voiceOpts = opts
-        return []
+        return { voices: [], nextCursor: null }
       },
     }),
   )
@@ -2347,16 +2354,17 @@ test('list_content passes filters through to the client', async () => {
     fakeClient({
       listContent: async (options) => {
         captured = options
-        return { outliers: [], total: 0, nextCursor: null }
+        return { content: [], total: 0, nextCursor: null }
       },
     }),
   )
   await mcp.callTool({
     name: 'list_content',
-    arguments: { platform: 'youtube', sortBy: 'views', limit: 5, scope: 'brand', publicationDate: 'month' },
+    arguments: { platform: 'youtube', sort: 'viewCount', order: 'asc', limit: 5, scope: 'brand', publicationDate: 'month' },
   })
   assert.equal(captured.platform, 'youtube')
-  assert.equal(captured.sortBy, 'views')
+  assert.equal(captured.sort, 'viewCount')
+  assert.equal(captured.order, 'asc')
   assert.equal(captured.limit, 5)
   // scope and the published window are the two things the API could not express at all before.
   assert.equal(captured.scope, 'brand')
@@ -2797,7 +2805,7 @@ test('list_content forwards brandKitId for brand-scoped reads', async () => {
     fakeClient({
       listContent: async (options) => {
         captured = options
-        return { outliers: [], total: 0, nextCursor: null }
+        return { content: [], total: 0, nextCursor: null }
       },
     }),
   )
@@ -4035,7 +4043,7 @@ test('the Kling element tools reach the Kling element SDK methods, by klingEleme
   const calls = []
   const mcp = await connect(
     fakeClient({
-      listKlingElements: async () => (calls.push('list'), [row]),
+      listKlingElements: async () => (calls.push('list'), { klingElements: [row], nextCursor: null }),
       getKlingElement: async (id) => (calls.push(`get ${id}`), row),
       createKlingElement: async (req) => (calls.push(`create ${JSON.stringify(req)}`), row),
       updateKlingElement: async (id, patch) => (calls.push(`update ${id} ${JSON.stringify(patch)}`), row),
@@ -4388,4 +4396,106 @@ test('inline bytes stop at the call deadline instead of fetching past it', async
   } finally {
     globalThis.fetch = realFetch
   }
+})
+
+/**
+ * 9.9: every sortable list tool takes `sort` (the fields the API declares for that list, from `LIST_SORTS`) and
+ * `order`, every growable list tool pages, and neither is dropped on the way to the SDK.
+ */
+test('every sortable list tool offers exactly its list\'s sort fields and the two orders', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const props = (name: string) => (tools.find((t) => t.name === name)?.inputSchema as { properties: Record<string, { enum?: string[] }> }).properties
+  for (const [tool, list] of [['list_cards', 'cards'], ['list_projects', 'projects'], ['list_spaces', 'spaces'], ['list_content', 'content']] as const) {
+    assert.deepEqual(props(tool).sort?.enum, [...LIST_SORTS[list]], `${tool} sort`)
+    assert.deepEqual(props(tool).order?.enum, [...SORT_ORDERS], `${tool} order`)
+  }
+  for (const tool of [
+    'list_tags', 'list_avatars', 'list_voices', 'list_brand_kits', 'list_tracked_accounts', 'list_connected_accounts',
+    'list_kling_elements', 'list_stages', 'list_spaces', 'list_folders', 'list_project_versions',
+  ]) {
+    assert.ok(props(tool).limit && props(tool).cursor, `${tool} pages`)
+  }
+  // The retired spellings are gone, not kept beside the new ones.
+  assert.equal(props('list_content').sortBy, undefined)
+  assert.equal(props('list_spaces').includeArchived, undefined)
+})
+
+test('list tools forward their sort, page and new filters, and a page ends with its cursor', async () => {
+  const seen: Record<string, unknown> = {}
+  const mcp = await connect(
+    fakeClient({
+      listCards: async (o) => ((seen.cards = o), { cards: [], total: 0, nextCursor: null, space: null }),
+      listSpaces: async (o) => ((seen.spaces = o), { spaces: [{ id: 's1', name: 'Client', cardCount: 4, isFavorite: false, archivedAt: null }], nextCursor: 'n2' }),
+      listProjects: async (o) => ((seen.projects = o), { projects: [], nextCursor: null }),
+      listTags: async (o) => ((seen.tags = o), { tags: [{ id: 't1', name: 'launch' }], nextCursor: 'n1' }),
+    }),
+  )
+  const cards = await mcp.callTool({ name: 'list_cards', arguments: { spaceId: 'all', isFavorite: true, tag: 'launch', sort: 'scheduledAt', order: 'asc' } })
+  assert.deepEqual(JSON.parse(JSON.stringify(seen.cards)), { spaceId: 'all', isFavorite: true, tag: 'launch', sort: 'scheduledAt', order: 'asc' })
+  // Every space was asked for, so no one space answered, and the empty answer says so.
+  assert.equal(cards.content[0].text, 'No cards found in every space.')
+  const spaces = await mcp.callTool({ name: 'list_spaces', arguments: { archived: true, favorited: true, search: 'cli', sort: 'cardCount', order: 'desc' } })
+  assert.deepEqual(seen.spaces, { archived: true, favorited: true, search: 'cli', sort: 'cardCount', order: 'desc' })
+  assert.match(spaces.content[0].text, /4 card\(s\)/)
+  assert.match(spaces.content[0].text, /More: pass cursor "n2"\.$/)
+  await mcp.callTool({ name: 'list_projects', arguments: { sort: 'title', order: 'asc' } })
+  assert.deepEqual(seen.projects, { sort: 'title', order: 'asc' })
+  const tags = await mcp.callTool({ name: 'list_tags', arguments: { limit: 5, cursor: 'c1' } })
+  assert.deepEqual(JSON.parse(JSON.stringify(seen.tags)), { limit: 5, cursor: 'c1' })
+  assert.match(tags.content[0].text, /More: pass cursor "n1"\.$/)
+})
+
+test('the project tools reach their SDK methods: fields, copy, settings, versions, undo and redo', async () => {
+  const calls: string[] = []
+  const summary = { id: 'p2', type: 'editor', title: 'Launch (copy)', orientation: '16:9', width: 1920, height: 1080, coverSource: 'auto', coverFrame: null, isArchived: false, isFavorited: false }
+  const settings = { magneticTrack: true, snapping: false, linkage: true, linkedTracks: { media: true, audio: false, text: true }, followPlayhead: true, skimming: false, skipDisabledClips: true }
+  const mcp = await connect(
+    fakeClient({
+      updateProject: async (id, input) => (calls.push(`update ${id} ${JSON.stringify(input)}`), summary),
+      duplicateProject: async (id) => (calls.push(`duplicate ${id}`), summary),
+      getTimelineSettings: async (id) => (calls.push(`settings ${id}`), settings),
+      updateTimelineSettings: async (id, change) => (calls.push(`settings ${id} ${JSON.stringify(change)}`), settings),
+      listProjectVersions: async (id, page) => (calls.push(`versions ${id} ${JSON.stringify(page)}`), { versions: [{ id: 'v1', created_at: 't', label: 'Final', trigger_reason: 'manual', author_name: 'Taylan', revision: 4, kind: 'tracks', created_by: 'u', size_bytes: 1 }], nextCursor: null }),
+      saveProjectVersion: async (id, o) => (calls.push(`save ${id} ${JSON.stringify(o)}`), { id: 'v2', label: o.label }),
+      restoreProjectVersion: async (id, v) => (calls.push(`restore ${id} ${v}`), { revision: 9, kind: 'tracks' }),
+      copyProjectVersion: async (id, v) => (calls.push(`copy ${id} ${v}`), summary),
+      renameProjectVersion: async (id, v, label) => (calls.push(`rename ${id} ${v} ${label}`), { id: v, label }),
+      deleteProjectVersion: async (id, v) => void calls.push(`delete ${id} ${v}`),
+      undo: async (id, o) => (calls.push(`undo ${id} ${JSON.stringify(o)}`), { revision: 10, undidRevision: 8, label: 'Undid revision 8' }),
+      redo: async (id, o) => (calls.push(`redo ${id} ${JSON.stringify(o)}`), { revision: 11, undidRevision: 10, label: 'Undid revision 10' }),
+    }),
+  )
+  const call = (name: string, args: Record<string, unknown>) => mcp.callTool({ name, arguments: args })
+  const updated = await call('update_project', { projectId: 'p1', title: 'Launch', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
+  assert.match(updated.content[0].text, /^Updated editor project p2/)
+  await call('duplicate_project', { projectId: 'p1' })
+  const read = await call('get_timeline_settings', { projectId: 'p1' })
+  assert.match(read.content[0].text, /linkedTracks: media, text/)
+  await call('update_timeline_settings', { projectId: 'p1', snapping: false, linkedTracks: { audio: false } })
+  const listed = await call('list_project_versions', { projectId: 'p1', limit: 10 })
+  assert.match(listed.content[0].text, /v1 \| t \| "Final" \| manual \| by Taylan \| revision 4/)
+  await call('save_project_version', { projectId: 'p1', label: 'Before' })
+  const restored = await call('restore_project_version', { projectId: 'p1', versionId: 'v1' })
+  assert.match(restored.content[0].text, /revision 9/)
+  await call('restore_project_version', { projectId: 'p1', versionId: 'v1', action: 'copy' })
+  await call('update_project_version', { projectId: 'p1', versionId: 'v1', label: 'Final' })
+  await call('delete_project_version', { projectId: 'p1', versionId: 'v1' })
+  const undone = await call('undo_project_edit', { projectId: 'p1', expectedRevision: 9 })
+  assert.equal(undone.content[0].text, 'Undid revision 8 on project p1. The project is at revision 10.')
+  await call('redo_project_edit', { projectId: 'p1', expectedRevision: 10 })
+  assert.deepEqual(calls, [
+    'update p1 {"title":"Launch","brandKitId":null,"cover":{"frame":12},"coverPosition":{"x":50,"y":40}}',
+    'duplicate p1',
+    'settings p1',
+    'settings p1 {"snapping":false,"linkedTracks":{"audio":false}}',
+    'versions p1 {"limit":10}',
+    'save p1 {"label":"Before"}',
+    'restore p1 v1',
+    'copy p1 v1',
+    'rename p1 v1 Final',
+    'delete p1 v1',
+    'undo p1 {"expectedRevision":9}',
+    'redo p1 {"expectedRevision":10}',
+  ])
 })
