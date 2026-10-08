@@ -2675,6 +2675,7 @@ test('every declared field on update_brand_kit actually reaches the client', asy
     assets: [{ url: 'https://x/2.png' }], sections: [{ key: 'about', body: 'b' }],
     brandAccounts: ['https://youtube.com/@a'], inspirationAccounts: ['https://youtube.com/@b'],
     brandColors: [{ hex: '#1A2B3C', role: 'primary' }], typography: { titleFont: 'Manrope' },
+    afterId: 'bk2', beforeId: 'bk3', position: 'top',
   }
   let captured
   const mcp = await connect(
@@ -2688,7 +2689,7 @@ test('every declared field on update_brand_kit actually reaches the client', asy
   const { tools } = await mcp.listTools()
   const declared = Object.keys(tools.find((t) => t.name === 'update_brand_kit').inputSchema.properties)
   // These are handled by the tool itself rather than passed through, by design.
-  const NOT_FORWARDED = new Set(['brandKitId', 'orderedIds', 'extract', 'isDefault'])
+  const NOT_FORWARDED = new Set(['brandKitId', 'extract', 'isDefault'])
   for (const field of declared) {
     if (NOT_FORWARDED.has(field)) continue
     assert.ok(field in SAMPLES, `add a sample value for update_brand_kit.${field} to this test`)
@@ -4528,8 +4529,8 @@ test('update_stage answers with the stage and no position, since the API carries
       updateStage: async (id, input) => ((sent = { id, input }), { id, shortId: 'Stage001', name: 'Done', slug: 'done', color: '#10B981' }),
     }),
   )
-  const res = await mcp.callTool({ name: 'update_stage', arguments: { stageId: 'st1', spaceId: 'sp1', afterId: '' } })
-  assert.equal(JSON.parse(JSON.stringify(sent)).input.afterId, null)
+  const res = await mcp.callTool({ name: 'update_stage', arguments: { stageId: 'st1', spaceId: 'sp1', position: 'top' } })
+  assert.equal(JSON.parse(JSON.stringify(sent)).input.position, 'top')
   assert.doesNotMatch(res.content[0].text, /Position|renumbered/)
   assert.match(res.content[0].text, /^Stage Done/)
 })
@@ -4557,4 +4558,51 @@ test('a brand kit logo can be marked isDisplay, on create and update alike', asy
   }
   await mcp.callTool({ name: 'update_brand_kit', arguments: { brandKitId: 'bk1', logos: [{ url: 'https://x/icon.png', isDisplay: true }] } })
   assert.deepEqual((sent.update as { logos: unknown }).logos, [{ url: 'https://x/icon.png', isDisplay: true }])
+})
+
+/** 9.9, the ordering contract: every hand-arranged list's tool takes one placement wording, and forwards it. */
+test('every hand-arranged list tool takes afterId, beforeId and position, and forwards them', async () => {
+  const seen: Record<string, unknown> = {}
+  const card = { id: 'c1', title: 'T', platform: 'youtube', stageId: 'st1' }
+  const mcp = await connect(
+    fakeClient({
+      createCard: async (input) => ((seen.create_card = input), card),
+      updateCard: async (_id, input) => ((seen.update_card = input), card),
+      createStage: async (input) => ((seen.create_stage = input), { id: 'st1', name: 'S' }),
+      updateAvatar: async (_id, input) => ((seen.update_avatar = input), { avatar: { id: 'av1', name: 'A', looks: [], niche: [] }, applied: [] }),
+      updateTrackedAccount: async (_id, input) => (
+        (seen.update_tracked_account = input),
+        { account: { id: 'ta1', platform: 'youtube', handle: 'h' }, contentCount: 0, totals: { views: 0, likes: 0, comments: 0 }, averages: { views: null, engagementRate: null, outlierScore: null }, topContent: [], recentContent: [] }
+      ),
+      createTemplate: async (input) => ((seen.create_template = input), { template: { id: 't1', name: 'N', kind: 'shape', category: 'c', scope: 'user', version: 1, coverage: 'full' }, warnings: [] }),
+      updateTemplate: async (_id, input) => ((seen.update_template = input), { template: { id: 't1', name: 'N', kind: 'shape', category: 'c', scope: 'user', version: 1, coverage: 'full' }, warnings: [] }),
+      updateFolder: async (_id, patch) => ((seen.update_folder = patch), { id: 'f1', name: 'F' }),
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  for (const name of ['create_card', 'update_card', 'create_stage', 'update_stage', 'update_brand_kit', 'update_avatar', 'update_tracked_account', 'create_template', 'update_template']) {
+    const props = (tools.find((t) => t.name === name)?.inputSchema as { properties: Record<string, { enum?: string[] }> }).properties
+    assert.ok(props.afterId && props.beforeId, `${name} takes neighbors`)
+    assert.deepEqual(props.position?.enum, ['top', 'bottom'], `${name} takes an end`)
+  }
+  await mcp.callTool({ name: 'create_card', arguments: { title: 'T', platform: 'youtube', position: 'top' } })
+  await mcp.callTool({ name: 'update_card', arguments: { cardId: 'c1', stage: 'Review', afterId: 'c2' } })
+  await mcp.callTool({ name: 'create_stage', arguments: { name: 'S', beforeId: 'st2' } })
+  await mcp.callTool({ name: 'update_avatar', arguments: { avatarId: 'av1', position: 'bottom' } })
+  await mcp.callTool({ name: 'update_tracked_account', arguments: { accountId: 'ta1', afterId: 'ta2' } })
+  await mcp.callTool({ name: 'create_template', arguments: { name: 'N', category: 'c', shape: 'circle', position: 'top' } })
+  await mcp.callTool({ name: 'update_template', arguments: { templateId: 't1', beforeId: 't2' } })
+  await mcp.callTool({ name: 'update_folder', arguments: { folderId: 'f1', moveItem: { item: { mediaId: 'm1' }, before: { cardId: 'c1' } } } })
+  const json = (v: unknown) => JSON.parse(JSON.stringify(v))
+  assert.equal(json(seen.create_card).position, 'top')
+  assert.equal(json(seen.update_card).afterId, 'c2')
+  assert.equal(json(seen.create_stage).beforeId, 'st2')
+  assert.equal(json(seen.update_avatar).position, 'bottom')
+  assert.deepEqual(json(seen.update_tracked_account), { afterId: 'ta2' })
+  assert.equal(json(seen.create_template).position, 'top')
+  assert.equal(json(seen.update_template).beforeId, 't2')
+  assert.deepEqual(json(seen.update_folder).moveItem, { item: { mediaId: 'm1' }, before: { cardId: 'c1' } })
+  // The whole-list reorder is retired.
+  const kit = (tools.find((t) => t.name === 'update_brand_kit')?.inputSchema as { properties: Record<string, unknown> }).properties
+  assert.equal(kit.orderedIds, undefined)
 })

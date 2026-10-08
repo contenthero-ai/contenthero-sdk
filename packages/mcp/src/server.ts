@@ -67,6 +67,7 @@ import {
   SORT_ORDERS,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
+  PLACEMENT_ENDS,
   type SortableList,
   withCodeWarnings,
 } from '@contenthero/sdk'
@@ -319,6 +320,19 @@ function sortInput<L extends SortableList>(list: L) {
   return {
     sort: z.enum(LIST_SORTS[list] as (typeof LIST_SORTS)[L]).optional().describe('The field to sort by.'),
     order: z.enum(SORT_ORDERS).optional().describe('The sort direction.'),
+  }
+}
+
+/**
+ * The placement inputs every hand-arranged list takes (9.9, the ordering contract), in one wording: the item it lands
+ * after or before, or an end. Never a number: the server places it from the neighbors as they are, and refuses
+ * neighbors and an end together.
+ */
+function placementInput() {
+  return {
+    afterId: z.string().optional().describe('Place it immediately after this item of the same list.'),
+    beforeId: z.string().optional().describe('Place it immediately before this item of the same list.'),
+    position: z.enum(PLACEMENT_ENDS).optional().describe('Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.'),
   }
 }
 
@@ -1235,6 +1249,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     tab: z.enum(['overview', 'voice', 'visual']).optional().describe('Required for a new section; a section never moves tabs.'),
     width: z.enum(['full', 'half']).optional().describe("How wide the section's card is on the brand page."),
     expectedVersion: z.number().int().min(1).optional().describe('The version you read. Pass it whenever you edit a section.'),
+    ...placementInput(),
   })
 
   /** An existing tracked-account id, OR a profile to add by handle/url. */
@@ -2045,6 +2060,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("A look id from get_avatar. Becomes the avatar's default look AND its profile photo."),
         defaultVoiceId: z.string().nullable().optional().describe('A voiceId from list_voices, or null to clear it.'),
+        ...placementInput(),
         ops: z
           .array(
             z.union([
@@ -2295,13 +2311,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Brand Kit',
       annotations: WRITE,
       description:
-        "Update a brand kit: its section content, colors and fonts, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). Requires the brandkit:write scope. THREE MODES, chosen by what you pass: (1) pass brandKitId to patch one kit; (2) pass orderedIds ALONE to reorder the whole set, which is collection-level because ordering is a property of the set and a per-kit position would let two kits claim one slot, so pass every id in the order you want; (3) pass brandKitId + extract:true to RE-RUN the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
+        "Update a brand kit: its section content, colors and fonts, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). A section entry's afterId, beforeId or position moves that section within its tab; its neighbors are section ids. Requires the brandkit:write scope. afterId, beforeId or position moves the kit itself among the caller's kits. extract:true RE-RUNS the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the account owner's OWN profiles (performance), inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER a tracked-account id you already have, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
       inputSchema: {
-        brandKitId: z.string().optional().describe('The brand kit id. Omit ONLY when reordering with orderedIds.'),
-        orderedIds: z
-          .array(z.string())
-          .optional()
-          .describe('Reorder mode: every brand kit id, in the order you want them. Pass this alone.'),
+        brandKitId: z.string().describe('The brand kit id.'),
+        ...placementInput(),
         extract: z
           .boolean()
           .optional()
@@ -2339,7 +2352,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { brandKitId, orderedIds, extract, logos, assets, sections, brandAccounts, inspirationAccounts, ...rest } = args
+        const { brandKitId, extract, logos, assets, sections, brandAccounts, inspirationAccounts, ...rest } = args
         // The declarative arrays are `unknown[]` in the schema (their entries are free-form objects the
         // server validates), so they are cast at this one boundary rather than restating the shape in zod.
         const input = {
@@ -2354,27 +2367,18 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           ...(inspirationAccounts !== undefined ? { inspirationAccounts: inspirationAccounts as BrandKitAccountInput[] } : {}),
         }
 
-        // Reorder is the collection-level mode and takes no kit id at all.
-        if (orderedIds && !brandKitId) {
-          // The whole arrangement, in its new order: one page, nothing after it.
-          return brandKitListResult({ brandKits: await client.reorderBrandKits(orderedIds as string[]), nextCursor: null })
-        }
-        if (!brandKitId) {
-          return errorResult(new Error('update_brand_kit needs either brandKitId, or orderedIds to reorder.'))
-        }
-
         // A patch and an extract compose: correct the websites and re-import in one call. The patch lands first so
         // the import reads the websites the caller just set, not the ones they replaced.
         const patched =
           Object.keys(input).length > 0
-            ? await client.updateBrandKit(brandKitId as string, input)
+            ? await client.updateBrandKit(brandKitId, input)
             : null
         if (extract) {
-          const started = await client.extractBrandKit(brandKitId as string)
-          return brandKitResult(patched ?? (await client.getBrandKit(brandKitId as string)), started)
+          const started = await client.extractBrandKit(brandKitId)
+          return brandKitResult(patched ?? (await client.getBrandKit(brandKitId)), started)
         }
         if (!patched) {
-          return errorResult(new Error('update_brand_kit: nothing to change. Pass sections, another field, extract, or orderedIds.'))
+          return errorResult(new Error('update_brand_kit: nothing to change. Pass sections, another field, a placement, or extract.'))
         }
         return brandKitResult(patched)
       } catch (err) {
@@ -2728,6 +2732,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(itemRefBodySchema)
           .optional()
           .describe('Unfile these items. Only the pointer goes; the asset is never deleted.'),
+        moveItem: z
+          .object({
+            item: itemRefBodySchema,
+            after: itemRefBodySchema.optional(),
+            before: itemRefBodySchema.optional(),
+            position: z.enum(PLACEMENT_ENDS).optional(),
+          })
+          .optional()
+          .describe("Move one item within this manual folder: after or before another of its items, or to an end (position). Each item is named as addItems names one. Name neighbors or a position, not both."),
       },
     },
     async (args, extra) => {
@@ -2739,6 +2752,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           query: args.query,
           addItems: args.addItems,
           removeItems: args.removeItems,
+          moveItem: args.moveItem,
         }
         const targets: string[] = args.folderIds?.length ? args.folderIds : [args.folderId]
         const folders = targets.length > 1
@@ -3349,7 +3363,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Only ARCHIVED cards. Archived cards are excluded by default, matching the board.'),
         platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
-        stage: z.string().optional().describe('Filter by a stage id, slug, or name. Resolved within the chosen space.'),
+        stage: z.string().optional().describe("Filter by a stage id, slug, or name. Resolved within the chosen space. Needed for sort position, which reads that stage's own order."),
         isFavorite: z.boolean().optional().describe('Only favorited cards.'),
         tag: z.string().optional().describe('Only cards carrying this tag.'),
         search: z.string().optional().describe('Case-insensitive title search, scoped to the chosen space.'),
@@ -3569,7 +3583,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Stage',
       annotations: WRITE,
       description:
-        "Create a stage (a column on one board). ⚠️ STAGES ARE PER-SPACE: without spaceId this creates on the account's DEFAULT board, which is rarely what you want once more than one space exists, so call list_spaces first. The slug is DERIVED from the name and is not settable; a board cannot hold two columns whose names produce the same slug and the server refuses the second rather than renaming it for you. Place the column with afterId/beforeId, or omit both to put it at the end. Requires the planner:write scope.",
+        "Create a stage (a column on one board). ⚠️ STAGES ARE PER-SPACE: without spaceId this creates on the account's DEFAULT board, which is rarely what you want once more than one space exists, so call list_spaces first. The slug is DERIVED from the name and is not settable; a board cannot hold two columns whose names produce the same slug and the server refuses the second rather than renaming it for you. Place the column with afterId, beforeId or position (top is the first column), or name none to put it at the end. Requires the planner:write scope.",
       inputSchema: {
         name: z.string().describe('The column name, for example "In Review". Must contain a letter or number.'),
         spaceId: z
@@ -3577,8 +3591,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("Which board, from list_spaces. Omit only when you mean the account's default space."),
         color: z.string().optional().describe('A hex color such as "#3B82F6".'),
-        afterId: z.string().optional().describe('Put the new column immediately after this stage id.'),
-        beforeId: z.string().optional().describe('Put the new column immediately before this stage id.'),
+        ...placementInput(),
       },
     },
     async (args, extra) => {
@@ -3591,6 +3604,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             color: args.color,
             afterId: args.afterId,
             beforeId: args.beforeId,
+            position: args.position,
           }),
         )
       } catch (err) {
@@ -3606,38 +3620,26 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Stage',
       annotations: WRITE,
       description:
-        "Rename, recolor or move one stage. This is a PATCH: a field you omit is left alone. ⚠️ spaceId is REQUIRED, because a stage id alone does not tell the server which board you mean and guessing the wrong one silently changes nothing. Renaming re-derives the slug, so renaming a column away from 'Published' also stops publishing auto-moving cards into it; a rename that collides with another column on the same board is refused. Moving names NEIGHBORS, not a position: pass afterId or beforeId. Requires the planner:write scope.",
+        "Rename, recolor or move one stage. This is a PATCH: a field you omit is left alone. ⚠️ spaceId is REQUIRED, because a stage id alone does not tell the server which board you mean and guessing the wrong one silently changes nothing. Renaming re-derives the slug, so renaming a column away from 'Published' also stops publishing auto-moving cards into it; a rename that collides with another column on the same board is refused. Moving names NEIGHBORS or an end, never a number: pass afterId, beforeId, or position (top is the first column). Requires the planner:write scope.",
       inputSchema: {
         stageId: z.string().describe('The stage id to update, from list_stages.'),
         spaceId: z.string().describe('The board this stage is on, from list_stages or list_spaces.'),
         name: z.string().optional().describe('A new name. The slug follows it automatically.'),
         color: z.string().optional().describe('A new hex color such as "#3B82F6".'),
-        afterId: z
-          .string()
-          .optional()
-          .describe('Move it immediately after this stage id. Use the empty string to move it to the far left.'),
-        beforeId: z
-          .string()
-          .optional()
-          .describe('Move it immediately before this stage id. Use the empty string to move it to the far right.'),
+        ...placementInput(),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        /*
-          An empty string is how a tool caller says "the edge": JSON Schema cannot distinguish an
-          omitted string from an explicit null in a plain string field, and the two mean opposite
-          things here. Omitted means "do not move it"; null means "move it to the end of the board".
-          `update_space` resolves the same ambiguity the same way for coverUrl.
-        */
-        const edge = (v: string | undefined) => (v === undefined ? undefined : v === '' ? null : v)
+        // A move names a neighbor or an end (`position`); naming none leaves the column where it is.
         const stage = await client.updateStage(args.stageId, {
           spaceId: args.spaceId,
           name: args.name,
           color: args.color,
-          afterId: edge(args.afterId),
-          beforeId: edge(args.beforeId),
+          afterId: args.afterId,
+          beforeId: args.beforeId,
+          position: args.position,
         })
         return stageResult(stage)
       } catch (err) {
@@ -3704,6 +3706,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(z.string())
           .optional()
           .describe('Tag names to set on the post (must already exist; see list_tags / create_tag). Replaces the set.'),
+        ...placementInput(),
       },
     },
     async (args, extra) => {
@@ -3718,6 +3721,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             coverUrl: args.coverUrl,
             coverOutputId: args.coverOutputId,
             tags: args.tags,
+            afterId: args.afterId,
+            beforeId: args.beforeId,
+            position: args.position,
           }),
           'Created',
         )
@@ -3805,6 +3811,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .array(postAssetSchema)
           .optional()
           .describe("The post's assets IN ORDER, each { id } to keep an existing one or ONE of { outputId } | { assetUrl, assetType? } | { contentId } | { projectId } to add. REPLACES the list; [] clears it."),
+        ...placementInput(),
       },
     },
     async (args, extra) => {
@@ -3988,6 +3995,30 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const detail = await client.getTrackedAccount(args.accountId)
         return trackedAccountDetailResult(detail)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_tracked_account -----------------------------------------------
+  server.registerTool(
+    'update_tracked_account',
+    {
+      title: 'Update Tracked Account',
+      annotations: WRITE,
+      description:
+        "Move a tracked account within its list (its kind's: the creators they watch, or their own profiles), after or before another of the same kind, or to an end. Returns the account with its performance, as get_tracked_account does. Requires the brandkit:write scope.",
+      inputSchema: {
+        accountId: z.string().describe('The account id from list_tracked_accounts.'),
+        ...placementInput(),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { accountId, ...placement } = args
+        return trackedAccountDetailResult(await client.updateTrackedAccount(accountId, placement))
       } catch (err) {
         return errorResult(err)
       }
@@ -5106,6 +5137,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         fromItem: z.object({ projectId: z.string(), itemId: z.string() }).optional().describe('A placed code clip, code layer or shape to save: the project id and the clip or layer id.'),
         fromTemplateId: z.string().optional().describe('A template to copy, from list_templates.'),
         ...templateFieldsInput,
+        ...placementInput(),
       },
     },
     async (args, extra) => {
@@ -5133,6 +5165,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         templateId: z.string().describe('The template id.'),
         expectedVersion: z.number().int().optional().describe('The version you read; the write is refused if the template changed since.'),
         ...templateFieldsInput,
+        ...placementInput(),
       },
     },
     async (args, extra) => {

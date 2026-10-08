@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Breaking: every hand-arranged list moves by neighbor or end, one wording from `placementInput()`: `afterId`, `beforeId`,
+  or `position` (`top` | `bottom`). `create_card` and `update_card`, `create_stage` and `update_stage`,
+  `update_brand_kit` (the kit among the caller's) and its section entries (within their tab), `update_avatar`,
+  `create_template` and `update_template` take it. `update_stage` no longer reads an empty string as an edge: an end is
+  `position`.
+- Breaking: `update_brand_kit` drops `orderedIds` (the whole-list reorder is retired); `brandKitId` is required.
+- New: `update_tracked_account` moves a tracked account within its list. `update_folder` takes `moveItem` to move one
+  item within a manual folder.
+- `list_cards` takes `sort` `position`: one stage's own order, which needs `stage`.
+
 - `create_brand_kit` and `update_brand_kit` logo entries take `isDisplay`: the logo for the kit's compact places, at most
   one per kit.
 - Breaking: the brand kit tools' logo entries take `isPrimary` (was `is_primary`), the name the API reads.
