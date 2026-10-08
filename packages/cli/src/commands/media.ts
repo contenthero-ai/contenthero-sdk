@@ -12,12 +12,31 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
-import { pendingOutputId, type ImportStarted, type ImportedMedia, type MediaBatchItem, type MediaItem, type MediaKind, type MediaSource, type MediaListResult, type MediaType, type SearchMediaPage, type UploadedMedia } from '@contenthero/sdk'
+import {
+  LIST_SORTS,
+  MEDIA_LIST_SOURCES,
+  MEDIA_LIST_TYPES,
+  describeFileSize,
+  pendingOutputId,
+  type ImportStarted,
+  type ImportedMedia,
+  type MediaBatchItem,
+  type MediaItem,
+  type MediaKind,
+  type MediaListSource,
+  type MediaListType,
+  type MediaSort,
+  type MediaSource,
+  type MediaListResult,
+  type SearchMediaPage,
+  type SortOrder,
+  type UploadedMedia,
+} from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, withMore, clip } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toInt, toList, withPageFlags } from '../args.js'
+import { toInt, toList, withPageFlags, withSortFlags } from '../args.js'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: string): Buffer | null {
@@ -26,11 +45,9 @@ function bufferFromDataUrl(dataUrl: string): Buffer | null {
   return b64 ? Buffer.from(b64, 'base64') : null
 }
 
-const MEDIA_TYPES: MediaType[] = ['image', 'video', 'audio', 'transcript']
-const KINDS = ['creation', 'board', 'look', 'upload'] as const
+const KINDS = ['creation', 'board', 'look'] as const
 type Kind = (typeof KINDS)[number]
-// `list` can read every library (incl. the 'all' union); a single-item `get` needs a specific source.
-const LIST_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock', 'all']
+// `list` reads the library's files, all or one partition (`MEDIA_LIST_SOURCES`); a single-item `get` names its library.
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
 const SEARCH_KINDS: MediaKind[] = ['image', 'video', 'audio']
 
@@ -131,30 +148,28 @@ export function importedHuman(m: ImportedMedia): string {
 export function registerMedia(program: Command): void {
   const media = program.command('media').description("Browse the account's studio outputs")
 
-  withPageFlags(
+  withSortFlags(withPageFlags(
     media
       .command('list')
-      .description("List recent media (newest first). --source uploads|stock|all beyond creations.")
-      .option('--source <source>', `which library: ${LIST_SOURCES.join(', ')} (default creations)`)
-      .option('--type <type>', `filter by media type: ${MEDIA_TYPES.join(', ')}`)
+      .description("List the library's files: every file, or one part of the library with --source")
+      .option('--source <source>', `which part of the library: ${MEDIA_LIST_SOURCES.join(', ')} (default all)`)
+      .option('--type <types>', `filter by media type (comma-separated): ${MEDIA_LIST_TYPES.join(', ')}`, toList)
       .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
-      .option('--status <status>', "status filter (defaults to 'completed')")
-      .option('--favorite', 'creations only: only outputs with a favorited variation')
-      .option('--archived', 'creations only: only outputs with an archived variation'),
-  )
+      .option('--favorite', 'only favorited files')
+      .option('--archived', 'only archived files'),
+  ), LIST_SORTS.media)
     .option('--small-copies', 'give each image its small copy, where the library keeps one: for drawing images small, never for downloading, delivering or showing large')
     .action(async (opts: Record<string, unknown>, command: Command) => {
-      if (opts.source && !LIST_SOURCES.includes(opts.source as MediaSource)) {
+      if (opts.source && !(MEDIA_LIST_SOURCES as readonly string[]).includes(opts.source as string)) {
         throw new CliError(
-          `Invalid --source "${opts.source}". Expected one of: ${LIST_SOURCES.join(', ')}.`,
+          `Invalid --source "${opts.source}". Expected one of: ${MEDIA_LIST_SOURCES.join(', ')}.`,
           EXIT.USAGE,
         )
       }
-      if (opts.type && !MEDIA_TYPES.includes(opts.type as MediaType)) {
-        throw new CliError(
-          `Invalid --type "${opts.type}". Expected one of: ${MEDIA_TYPES.join(', ')}.`,
-          EXIT.USAGE,
-        )
+      for (const t of (opts.type as string[] | undefined) ?? []) {
+        if (!(MEDIA_LIST_TYPES as readonly string[]).includes(t)) {
+          throw new CliError(`Invalid --type "${t}". Expected: ${MEDIA_LIST_TYPES.join(', ')}.`, EXIT.USAGE)
+        }
       }
       if (opts.kind && !KINDS.includes(opts.kind as Kind)) {
         throw new CliError(
@@ -164,28 +179,30 @@ export function registerMedia(program: Command): void {
       }
       const { client, ctx } = makeClient(command)
       const page = await client.listMedia({
-        source: opts.source as MediaSource | undefined,
-        contentType: opts.type as MediaType | undefined,
+        source: opts.source as MediaListSource | undefined,
+        contentType: opts.type as MediaListType[] | undefined,
         kind: opts.kind as Kind | undefined,
-        status: opts.status as string | undefined,
+        sort: opts.sort as MediaSort | undefined,
+        order: opts.order as SortOrder | undefined,
         favorited: opts.favorite ? true : undefined,
         archived: opts.archived ? true : undefined,
         limit: opts.limit as number | undefined,
         cursor: opts.cursor as string | undefined,
         smallCopies: opts.smallCopies ? true : undefined,
       })
-      // One row per output (the atomic grain), each named by its own media id.
+      // One row per file, each named by its own media id.
       emit(page, ctx, (p: MediaListResult) =>
         withMore(
           table(
-            ['ID', 'FAV', 'TYPE', 'KIND', 'NAME/MODEL', 'STATUS', 'PROMPT'],
+            ['ID', 'FAV', 'TYPE', 'SOURCE', 'KIND', 'NAME/MODEL', 'SIZE', 'PROMPT'],
             p.media.map((m) => [
               m.mediaId,
               m.isFavorited ? '★' : '',
               m.type,
+              m.source,
               m.kind ?? '',
               clip(m.fileName ?? m.model, 48),
-              m.status,
+              m.sizeBytes != null ? describeFileSize(m.sizeBytes) : '',
               clip(m.prompt, 48),
             ]),
           ),

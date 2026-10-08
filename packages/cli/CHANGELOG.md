@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking: `media list` follows the library-file contract. `--source` is `all` (the default), `creations`, `uploads`
+  or `exports` (`stock` is refused); `--type` takes `image`, `video`, `audio`, `doc` and `other`, comma-separated
+  (`transcript` is refused); `--kind` is `creation`, `board` or `look` (no `upload`: use `--source uploads`); `--status`
+  is gone (a listed file is always completed). It takes `--sort` (`createdAt`, `fileName`, `sizeBytes`) and `--order`.
+  `--favorite` and `--archived` apply to every file. `--human` shows each file's source and size.
 - Breaking: every sortable list (`card list`, `project list`, `space list`, `content list`) takes `--sort` (a field the
   API declares for that list) and `--order` (`asc` | `desc`); a field the list does not have is a usage error.
   `content list` loses `--asc`, and its sort fields are the API's: `relevance` (with `--search` only), `outlierScore`,

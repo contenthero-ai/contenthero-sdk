@@ -136,6 +136,7 @@ const SORTED: Array<[string[], string]> = [
   [['project', 'list'], 'title'],
   [['space', 'list'], 'cardCount'],
   [['content', 'list'], 'engagementRate'],
+  [['media', 'list'], 'sizeBytes'],
 ]
 
 test('every sortable list sends --sort and --order as sort and order', async () => {
