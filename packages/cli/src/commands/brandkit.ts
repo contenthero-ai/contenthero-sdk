@@ -1,6 +1,6 @@
 /**
  * `contenthero brand-kit` - brand kits (the brand identity documents).
- *   brand-kit list | get | create | extract | reorder | update
+ *   brand-kit list | get | create | extract | update
  *   brand-kit knowledge list | get | search | add | remove
  *
  * Reads are open; writes need brandkit:write. A kit's content is its sections, each one Markdown document,
@@ -18,7 +18,6 @@ import type {
   BrandKit,
   BrandKitSectionsRead,
   BrandKitListResult,
-  BrandKitSummary,
   BrandKitSummaryRead,
   BrandKnowledgeDetail,
   BrandKnowledgeItem,
@@ -32,7 +31,7 @@ import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, isClear, toInt, toJson, toList, withPageFlags } from '../args.js'
+import { collect, isClear, placementFrom, toInt, toJson, toList, withPageFlags, withPlacementFlags } from '../args.js'
 
 /**
  * Turn repeated `--logo` / `--asset` refs into the declarative media list the API takes.
@@ -328,22 +327,10 @@ export function registerBrandKit(program: Command): void {
       emit(started, ctx, () => keyValues([['Brand kit', id], ...importRows(started, id)]))
     })
 
-  brandKit
-    .command('reorder')
-    .description('Reorder every brand kit. Pass ALL ids, in the order you want them')
-    .argument('<ids...>', 'brand kit ids, in order')
-    .action(async (ids: string[], _opts, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const kits = await client.reorderBrandKits(ids)
-      emit(kits, ctx, (rows: BrandKitSummary[]) =>
-        table(['#', 'ID', 'NAME'], rows.map((k, i) => [String(i + 1), displayId(k), k.name])),
-      )
-    })
-
-  identityOptions(
+  withPlacementFlags(identityOptions(
     brandKit
       .command('update')
-      .description('Update a brand kit: section content, colors and fonts, media and accounts (requires brandkit:write)')
+      .description('Update a brand kit: section content, colors and fonts, media and accounts, and its place among your kits (requires brandkit:write)')
       .argument('<id>', 'the brand kit id')
       .option('--name <text>')
       .option('--website-url <url>', "one of the brand's websites. Repeatable; the first is the primary site. Replaces the list", collect)
@@ -351,11 +338,11 @@ export function registerBrandKit(program: Command): void {
       .option(
         '--sections <json>',
         'section writes as JSON, only the sections you change, all or nothing: [{ key, body, expectedVersion }] edits one ' +
-          '(or revertTo, sectionName, width); [{ sectionName, tab, body? }] adds one',
+          '(or revertTo, sectionName, width; afterId, beforeId or position moves it in its tab); [{ sectionName, tab, body? }] adds one',
         toJson,
       ),
     'update',
-  )
+  ))
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const input = compact<UpdateBrandKitInput>({
         name: opts.name as string | undefined,
@@ -363,6 +350,7 @@ export function registerBrandKit(program: Command): void {
         ...identityInput(opts),
         isDefault: opts.default ? true : undefined,
         sections: opts.sections as UpdateBrandKitInput['sections'],
+        ...placementFrom(opts),
       })
       if (Object.keys(input).length === 0) {
         throw new CliError('Nothing to update. Pass at least one field to change.', EXIT.USAGE)

@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import type { Command } from 'commander'
 import { makeClient } from '../context.js'
 import { emit, table, keyValues, withMore } from '../output.js'
-import { collect, toFloat, toInt, toJson, withPageFlags } from '../args.js'
+import { collect, placementFrom, toFloat, toInt, toJson, withPageFlags, withPlacementFlags } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 import type { Template, TemplateFields, TemplateListResult, TemplateSummary, TemplateWriteResult } from '@contenthero/sdk'
 
@@ -155,21 +155,21 @@ export function registerTemplate(program: Command): void {
       emit(await client.getTemplate(id), ctx, detail)
     })
 
-  withFieldFlags(
+  withPlacementFlags(withFieldFlags(
     group
       .command('create')
       .description('Save a template of your own: from a placed code clip, code layer or shape, as a copy of a template, or from its fields')
       .option('--from-item <itemId>', 'a code clip, code layer or shape placed on a project (with --from-project)')
       .option('--from-project <projectId>', 'the project --from-item is on')
       .option('--from-template <templateId>', 'a template to copy, keeping its lineage'),
-  ).action(async (opts: Record<string, unknown>, command: Command) => {
+  )).action(async (opts: Record<string, unknown>, command: Command) => {
     if ((opts.fromItem === undefined) !== (opts.fromProject === undefined)) {
       throw new CliError('--from-item and --from-project go together.', EXIT.USAGE)
     }
     if (opts.fromItem !== undefined && opts.fromTemplate !== undefined) {
       throw new CliError('Give one source: --from-item, --from-template, or the fields alone.', EXIT.USAGE)
     }
-    const fields = fieldsFrom(opts)
+    const fields = { ...fieldsFrom(opts), ...placementFrom(opts) }
     const { client, ctx } = makeClient(command)
     const result = await client.createTemplate(
       opts.fromItem !== undefined
@@ -181,15 +181,15 @@ export function registerTemplate(program: Command): void {
     emit(result, ctx, written('Saved'))
   })
 
-  withFieldFlags(
+  withPlacementFlags(withFieldFlags(
     group
       .command('update')
-      .description('Change one of your own templates: only the flags given')
+      .description('Change one of your own templates, or move it among them: only the flags given')
       .argument('<id>', 'template id')
       .option('--expected-version <n>', 'the version you read; refused if it changed since', toInt),
-  ).action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+  )).action(async (id: string, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
-    const result = await client.updateTemplate(id, fieldsFrom(opts), { expectedVersion: opts.expectedVersion as number | undefined })
+    const result = await client.updateTemplate(id, { ...fieldsFrom(opts), ...placementFrom(opts) }, { expectedVersion: opts.expectedVersion as number | undefined })
     emit(result, ctx, written('Updated'))
   })
 

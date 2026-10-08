@@ -31,7 +31,7 @@ import { makeClient } from '../context.js'
 import { emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, isClear, toInt, toJson, toList, withPageFlags, withSortFlags } from '../args.js'
+import { collect, isClear, placementFrom, toInt, toJson, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
 import { LIST_SORTS } from '@contenthero/sdk'
 
 const PLATFORMS: PostPlatform[] = [
@@ -223,7 +223,7 @@ export function registerCard(program: Command): void {
       })
     })
 
-  card
+  withPlacementFlags(card
     .command('create')
     .description('Create a post (requires planner:write)')
     .argument('<title>', 'post title')
@@ -232,7 +232,7 @@ export function registerCard(program: Command): void {
     .option('--stage <stage>', 'stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
     .option('--cover-output-id <id>', 'media token (short id, output id or first 8 characters, optionally with "-N") for the cover')
-    .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)', toList)
+    .option('--tags <list>', 'comma-separated tag names (must exist; see `tag list`)', toList))
     .action(async (title: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string)
       const { client, ctx } = makeClient(command)
@@ -244,13 +244,14 @@ export function registerCard(program: Command): void {
         coverUrl: opts.coverUrl as string | undefined,
         coverOutputId: opts.coverOutputId as string | undefined,
         tags: opts.tags as string[] | undefined,
+        ...placementFrom(opts),
       })
       emit(await client.createCard(input), ctx, (p: CardSummary) => summaryHuman(p, 'Created'))
     })
 
-  card
+  withPlacementFlags(card
     .command('update')
-    .description("Update a post's fields, including its stage (requires planner:write)")
+    .description("Update a post's fields, including its stage and its place in its column (requires planner:write)")
     .argument('<id>', 'the post id')
     .option('--title <text>')
     .option('--platform <platform>')
@@ -277,7 +278,7 @@ export function registerCard(program: Command): void {
       '--assets <json>',
       'the card\'s assets as JSON, IN ORDER: [{"id":...}] keeps one; add one with exactly one of {"outputId"} (media: generated, uploaded or imported), {"assetUrl"} (a link), {"contentId"} (an inspiration post) or {"projectId"} (an editor or canvas project). REPLACES the list; [] clears it',
       toJson,
-    )
+    ))
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       assertPlatform(opts.platform as string | undefined)
       assertNotesCarryRevision(id, opts.notes, opts.expectedRevision)
@@ -303,6 +304,7 @@ export function registerCard(program: Command): void {
               : (opts.schedule as string),
         posts: opts.posts as UpdateCardInput['posts'],
         assets: opts.assets as UpdateCardInput['assets'],
+        ...placementFrom(opts),
       })
       /**
        * `--also` widens the positional id into a SET, matching `update_card`'s cardIds and the folder

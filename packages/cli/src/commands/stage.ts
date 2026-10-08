@@ -20,7 +20,7 @@ import type { Command } from 'commander'
 import type { Stage, StageListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, table, withMore } from '../output.js'
-import { withPageFlags } from '../args.js'
+import { placementFrom, withPageFlags, withPlacementFlags } from '../args.js'
 
 /** One stage, printed the same way by create and update. */
 function line(s: Stage): string {
@@ -57,72 +57,45 @@ export function registerStage(program: Command): void {
       })
     })
 
-  stage
-    .command('create')
-    .description('Create a column. The slug is derived from the name and is not settable')
-    .argument('<name>', 'column name, for example "In Review"')
-    .option('--space <id>', "which board (from `contenthero space list`); default space if omitted")
-    .option('--color <hex>', 'a hex color such as "#3B82F6"')
-    .option('--after <id>', 'place it immediately after this stage')
-    .option('--before <id>', 'place it immediately before this stage')
+  withPlacementFlags(
+    stage
+      .command('create')
+      .description('Create a column. The slug is derived from the name and is not settable')
+      .argument('<name>', 'column name, for example "In Review"')
+      .option('--space <id>', "which board (from `contenthero space list`); default space if omitted")
+      .option('--color <hex>', 'a hex color such as "#3B82F6"'),
+  )
     .action(
-      async (
-        name: string,
-        opts: { space?: string; color?: string; after?: string; before?: string },
-        command: Command,
-      ) => {
+      async (name: string, opts: Record<string, unknown>, command: Command) => {
         const { client, ctx } = makeClient(command)
         const s = await client.createStage({
           name,
-          spaceId: opts.space,
-          color: opts.color,
-          afterId: opts.after,
-          beforeId: opts.before,
+          spaceId: opts.space as string | undefined,
+          color: opts.color as string | undefined,
+          ...placementFrom(opts),
         })
         emit(s, ctx, (d: Stage) => `Created stage ${line(d)}`)
       },
     )
 
-  stage
-    .command('update')
-    .description('Rename, recolor or move a column. A PATCH: a flag you omit leaves that field alone')
-    .argument('<id>', 'stage id')
-    .requiredOption('--space <id>', 'the board this stage is on (required: an id alone does not name a board)')
-    .option('--name <text>', 'a new name; the slug follows it')
-    .option('--color <hex>', 'a new hex color')
-    .option('--after <id>', 'move it immediately after this stage')
-    .option('--before <id>', 'move it immediately before this stage')
-    /*
-      ⚠️ SEPARATE FLAGS FOR THE EDGES, for the reason `space update --no-cover` exists: "--after with no
-      value" cannot be told apart from "--after omitted", and the two mean opposite things. Omitting
-      both anchors means "do not move it"; the far edges are a real intent and need their own spelling.
-    */
-    .option('--to-start', 'move it to the far left of the board')
-    .option('--to-end', 'move it to the far right of the board')
+  withPlacementFlags(
+    stage
+      .command('update')
+      .description('Rename, recolor or move a column. A PATCH: a flag you omit leaves that field alone')
+      .argument('<id>', 'stage id')
+      .requiredOption('--space <id>', 'the board this stage is on (required: an id alone does not name a board)')
+      .option('--name <text>', 'a new name; the slug follows it')
+      .option('--color <hex>', 'a new hex color'),
+  )
     .action(
-      async (
-        id: string,
-        opts: {
-          space: string
-          name?: string
-          color?: string
-          after?: string
-          before?: string
-          toStart?: boolean
-          toEnd?: boolean
-        },
-        command: Command,
-      ) => {
+      async (id: string, opts: Record<string, unknown>, command: Command) => {
         const { client, ctx } = makeClient(command)
-        // `null` is the API's word for an edge; `undefined` is "leave it where it is".
-        const afterId = opts.toStart ? null : opts.after
-        const beforeId = opts.toEnd ? null : opts.before
+        // A move names a neighbor or an end (`--position top` is the first column); naming none leaves it in place.
         const s = await client.updateStage(id, {
-          spaceId: opts.space,
-          name: opts.name,
-          color: opts.color,
-          afterId,
-          beforeId,
+          spaceId: opts.space as string,
+          name: opts.name as string | undefined,
+          color: opts.color as string | undefined,
+          ...placementFrom(opts),
         })
         emit(s, ctx, (d: Stage) => `Updated stage ${line(d)}`)
       },

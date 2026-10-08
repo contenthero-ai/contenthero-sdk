@@ -16,7 +16,7 @@ import type { Command } from 'commander'
 import type { Avatar, AvatarListResult, Voice, VoiceListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
-import { collect, toJson, withPageFlags } from '../args.js'
+import { collect, placementFrom, toJson, withPageFlags, withPlacementFlags } from '../args.js'
 
 export function registerIdentity(program: Command): void {
   const avatar = program.command('avatar').description("Manage the account's avatars")
@@ -123,13 +123,15 @@ export function registerIdentity(program: Command): void {
       )
     })
 
-  avatar
-    .command('update')
-    .description("Rename an avatar, or set its default look or voice")
-    .argument('<id>', 'the avatar id')
-    .option('--name <name>', 'new name, at least 3 characters')
-    .option('--default-look <lookId>', "look to make the default (also becomes the profile photo)")
-    .option('--voice <voiceId>', 'default voice id, or "none" to clear it')
+  withPlacementFlags(
+    avatar
+      .command('update')
+      .description("Rename an avatar, set its default look or voice, or move it among your avatars")
+      .argument('<id>', 'the avatar id')
+      .option('--name <name>', 'new name, at least 3 characters')
+      .option('--default-look <lookId>', "look to make the default (also becomes the profile photo)")
+      .option('--voice <voiceId>', 'default voice id, or "none" to clear it'),
+  )
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const result = await client.updateAvatar(id, {
@@ -140,6 +142,7 @@ export function registerIdentity(program: Command): void {
         ...(opts.voice !== undefined
           ? { defaultVoiceId: opts.voice === 'none' ? null : (opts.voice as string) }
           : {}),
+        ...placementFrom(opts),
       })
       emit(result, ctx, () => `Updated ${result.avatar.name} (${result.avatar.id}).`)
     })

@@ -86,9 +86,11 @@ test('card exposes its verbs, with posts and assets folded into update', () => {
 
 test('brand-kit exposes its verbs, with sections folded into update', () => {
   const subs = subcommands('brand-kit')
-  for (const n of ['list', 'get', 'create', 'extract', 'reorder', 'update']) {
+  for (const n of ['list', 'get', 'create', 'extract', 'update']) {
     assert.ok(subs.includes(n), `brand-kit is missing: ${n}`)
   }
+  // The whole-list reorder is retired (9.9, the ordering contract): a kit moves by itself on `update`.
+  assert.ok(!subs.includes('reorder'), 'brand-kit reorder was retired; a kit moves with update --after/--before/--position')
   // Sections are a declarative field on create/update now, keyed by (tab, sectionName).
   assert.ok(!subs.includes('section'), 'brand-kit should no longer have a section subcommand')
   // Knowledge STAYS its own group: an ingest-and-embed corpus read by similarity is not a property of
@@ -279,13 +281,13 @@ test('stage update and delete require a board, and create does not', () => {
  * and the two mean opposite things: omitting both anchors leaves the column where it is, while moving
  * to the far left is an explicit null on the wire. `space update --no-cover` exists for the same reason.
  */
-test('stage update can say "move it to an edge" separately from "do not move it"', () => {
+test('stage update says "move it to an end" with --position, separately from "do not move it"', () => {
   const update = buildProgram()
     .commands.find((c) => c.name() === 'stage')!
     .commands.find((c) => c.name() === 'update')!
   const longs = update.options.map((o) => o.long)
-  assert.ok(longs.includes('--to-start'), 'the far left needs a way to be said')
-  assert.ok(longs.includes('--to-end'), 'the far right needs a way to be said')
+  assert.ok(longs.includes('--position'), 'an end needs a way to be said')
+  assert.ok(!longs.includes('--to-start') && !longs.includes('--to-end'), 'one placement wording: --position, not edge flags')
 })
 
 // A flag a kind does not take is refused, not ignored, like --platform and --format.

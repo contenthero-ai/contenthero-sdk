@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Breaking: every hand-arranged list moves by `--after <id>`, `--before <id>` or `--position top|bottom`, one wording
+  from `withPlacementFlags`: `card create` and `card update`, `stage create` and `stage update`, `brand-kit update`
+  (the kit among yours), `avatar update`, `template create` and `template update`. `stage update` loses `--to-start` and
+  `--to-end` (use `--position top` or `bottom`).
+- Breaking: `brand-kit reorder` is removed (the API refuses the whole-list reorder); move one kit with `brand-kit update`.
+- New: `tracked-account update <id>` moves a tracked account within its list.
+- New: `folder update --move-item <ref>` with `--move-after`, `--move-before` or `--move-position` moves one item in a
+  manual folder. `brand-kit update --sections` entries may carry `afterId`, `beforeId` or `position`.
+- `card list --sort position` reads one stage's own order (with `--stage`).
+
 - `brand-kit create` and `brand-kit update` take `--display-logo <ref>`: one of the `--logo` refs, sent as that logo's
   `isDisplay`, the logo for the kit's compact places.
 - Breaking: `--json` output follows the API's camelCase response fields (templates, Kling elements, brand kit media,

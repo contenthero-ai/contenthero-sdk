@@ -250,10 +250,36 @@ test('brand-kit create sends logos camelCase, the first one primary, and assets 
   assert.deepEqual(r.body?.assets, [{ url: 'https://x/a.png' }])
 })
 
-test('stage update moves by naming a neighbor or an edge, never a position', async () => {
-  const r = await run('stage', 'update', 'st1', '--space', 'sp1', '--to-start')
+test('stage update moves by naming a neighbor or an end, never a number', async () => {
+  const r = await run('stage', 'update', 'st1', '--space', 'sp1', '--position', 'top')
   assert.equal(r.method, 'PATCH')
-  assert.deepEqual(r.body, { spaceId: 'sp1', afterId: null })
+  assert.deepEqual(r.body, { spaceId: 'sp1', position: 'top' })
+})
+
+// 9.9, the ordering contract: every hand-arranged list moves by --after, --before or --position, sent as the API reads.
+test('every hand-arranged list sends its placement as afterId, beforeId and position', async () => {
+  const cases: Array<[string[], string, Record<string, unknown>]> = [
+    [['card', 'create', 'T', '--platform', 'youtube', '--position', 'top'], 'POST /api/v1/cards', { position: 'top' }],
+    [['card', 'update', 'c1', '--stage', 'Review', '--after', 'c2'], 'PATCH /api/v1/cards/c1', { afterId: 'c2' }],
+    [['stage', 'create', 'S', '--before', 'st2'], 'POST /api/v1/stages', { beforeId: 'st2' }],
+    [['brand-kit', 'update', 'bk1', '--after', 'bk2'], 'PATCH /api/v1/brand-kits/bk1', { afterId: 'bk2' }],
+    [['avatar', 'update', 'av1', '--position', 'bottom'], 'PATCH /api/v1/avatars/av1', { position: 'bottom' }],
+    [['tracked-account', 'update', 'ta1', '--before', 'ta2'], 'PATCH /api/v1/accounts/ta1', { beforeId: 'ta2' }],
+    [['template', 'create', '--name', 'N', '--category', 'c', '--shape', 'circle', '--position', 'top'], 'POST /api/v1/templates', { position: 'top' }],
+    [['template', 'update', 't1', '--after', 't2'], 'PATCH /api/v1/templates/t1', { afterId: 't2' }],
+  ]
+  for (const [args, route, placement] of cases) {
+    const r = await run(...args)
+    assert.equal(`${r.method} ${r.path}`, route, args.join(' '))
+    for (const [k, v] of Object.entries(placement)) assert.equal(r.body?.[k], v, `${args.join(' ')} sends ${k}`)
+  }
+})
+
+test('folder update --move-item sends moveItem, each item named as --add names one', async () => {
+  const r = await run('folder', 'update', 'f1', '--move-item', 'a1B2c3D4-2', '--move-after', 'card:c1')
+  assert.deepEqual(r.body?.moveItem, { item: { mediaId: 'a1B2c3D4-2' }, after: { cardId: 'c1' } })
+  const end = await run('folder', 'update', 'f1', '--move-item', 'project:p1', '--move-position', 'top')
+  assert.deepEqual(end.body?.moveItem, { item: { projectId: 'p1' }, position: 'top' })
 })
 
 test('brand-kit --display-logo marks the named logo isDisplay, and must name one of the --logo refs', async () => {

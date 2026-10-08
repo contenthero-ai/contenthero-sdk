@@ -39,7 +39,7 @@ import { LIST_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table, displayId, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toFloat, toInt, toList, withPageFlags, withSortFlags } from '../args.js'
+import { placementFrom, toFloat, toInt, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
 
 /** A table of tracked accounts. KIND is present because the list spans both tiers by default. */
 export function trackedAccountsTable(rows: TrackedAccount[]): string {
@@ -123,6 +123,18 @@ export function registerTrackedAccount(program: Command): void {
         (p: TrackedAccountListResult) => withMore(trackedAccountsTable(p.trackedAccounts), p.nextCursor),
       )
     })
+
+  withPlacementFlags(
+    account
+      .command('update')
+      .description('Move a tracked account within its list (requires brandkit:write)')
+      .argument('<id>', 'the tracked account id'),
+  ).action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+    const placement = placementFrom(opts)
+    if (Object.keys(placement).length === 0) throw new CliError('Name where it goes: --after, --before or --position.', EXIT.USAGE)
+    const { client, ctx } = makeClient(command)
+    emit(await client.updateTrackedAccount(id, placement), ctx, accountDetailHuman)
+  })
 
   account
     .command('get')

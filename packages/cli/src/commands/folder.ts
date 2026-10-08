@@ -12,6 +12,8 @@ import type { FolderItemRef } from '@contenthero/sdk'
 import type { Folder, FolderContents, FolderListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, table, displayId, withMore, clip } from '../output.js'
+import { PLACEMENT_ENDS, type FolderItemMove, type PlacementEnd } from '@contenthero/sdk'
+import { Option } from 'commander'
 import { collect, withPageFlags } from '../args.js'
 import { CliError, EXIT } from '../errors.js'
 
@@ -104,6 +106,10 @@ export function registerFolder(program: Command): void {
     .option('--also <id>', 'apply to this folder too; repeatable. Name and query still need exactly one', collect)
     .option('--add <ref>', 'file an item: a media id (a1B2c3D4-2), project:<id> or card:<id>. Repeatable', collect)
     .option('--remove <ref>', 'unfile an item: a media id, project:<id> or card:<id>. Repeatable', collect)
+    .option('--move-item <ref>', 'move an item within this manual folder, named as --add names one; with --move-after, --move-before or --move-position')
+    .option('--move-after <ref>', 'the item it lands immediately after')
+    .option('--move-before <ref>', 'the item it lands immediately before')
+    .addOption(new Option('--move-position <end>', 'an end of the folder instead of beside an item').choices(PLACEMENT_ENDS))
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const patch = {
@@ -113,6 +119,7 @@ export function registerFolder(program: Command): void {
         query: opts.text === undefined ? undefined : { text: opts.text as string },
         addItems: parseRefs(opts.add as string[] | undefined),
         removeItems: parseRefs(opts.remove as string[] | undefined),
+        moveItem: moveFrom(opts),
       }
       const also = (opts.also as string[] | undefined) ?? []
       const targets = [id, ...also]
@@ -124,6 +131,22 @@ export function registerFolder(program: Command): void {
         return `Updated ${list.length} folder(s)${what ? `: ${what} item(s)` : '.'}`
       })
     })
+}
+
+/** `--move-item` and where it lands, as the API's `moveItem`; each item named as `--add` names one. */
+function moveFrom(opts: Record<string, unknown>): FolderItemMove | undefined {
+  const named = ['moveAfter', 'moveBefore', 'movePosition'].some((k) => opts[k] !== undefined)
+  if (opts.moveItem === undefined) {
+    if (named) throw new CliError('--move-after, --move-before and --move-position go with --move-item.', EXIT.USAGE)
+    return undefined
+  }
+  const one = (ref: unknown) => (ref === undefined ? undefined : parseRefs([ref as string])![0])
+  return {
+    item: one(opts.moveItem)!,
+    ...(opts.moveAfter !== undefined ? { after: one(opts.moveAfter) } : {}),
+    ...(opts.moveBefore !== undefined ? { before: one(opts.moveBefore) } : {}),
+    ...(opts.movePosition !== undefined ? { position: opts.movePosition as PlacementEnd } : {}),
+  }
 }
 
 /** "none" clears a parent, which is how you move a folder to the top level. */

@@ -4,7 +4,7 @@
  */
 
 import { Option, type Command } from 'commander'
-import { SORT_ORDERS } from '@contenthero/sdk'
+import { PLACEMENT_ENDS, SORT_ORDERS, type Placement, type PlacementEnd } from '@contenthero/sdk'
 import { CliError, EXIT } from './errors.js'
 
 /** Parse an integer option value. */
@@ -34,6 +34,26 @@ export function withSortFlags(command: Command, fields: readonly string[]): Comm
   return command
     .addOption(new Option('--sort <field>', 'the field to sort by').choices(fields))
     .addOption(new Option('--order <order>', 'the sort direction').choices(SORT_ORDERS))
+}
+
+/**
+ * The placement flags every hand-arranged list takes (9.9, the ordering contract), in one wording: the item it lands
+ * after or before, or an end. Neighbors and an end together are refused by the server. Read back with `placementFrom`.
+ */
+export function withPlacementFlags(command: Command): Command {
+  return command
+    .option('--after <id>', 'place it immediately after this item of the same list')
+    .option('--before <id>', 'place it immediately before this item of the same list')
+    .addOption(new Option('--position <end>', 'place it at an end of the list instead of beside an item').choices(PLACEMENT_ENDS))
+}
+
+/** The placement `withPlacementFlags` read, with only the flags given. */
+export function placementFrom(opts: Record<string, unknown>): Placement {
+  return {
+    ...(opts.after !== undefined ? { afterId: opts.after as string } : {}),
+    ...(opts.before !== undefined ? { beforeId: opts.before as string } : {}),
+    ...(opts.position !== undefined ? { position: opts.position as PlacementEnd } : {}),
+  }
 }
 
 /** Parse a numeric option value (integer or decimal). */
