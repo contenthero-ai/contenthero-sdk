@@ -1298,9 +1298,8 @@ export class ContentHero {
    * `afterId: null` to move it to the far left, `beforeId: null` for the far
    * right. Omit both to leave it where it is.
    *
-   * `respaced` is true when the move renumbered the WHOLE board, which happens
-   * when two columns have no room between them. Re-list the stages when you see
-   * it: every other `sortOrder` you are holding is stale.
+   * No position comes back: `listStages` returns the board in its order, so a
+   * caller never holds a number a move could make stale.
    */
   async updateStage(
     stageId: string,
@@ -1311,18 +1310,19 @@ export class ContentHero {
       afterId?: string | null
       beforeId?: string | null
     },
-  ): Promise<{ stage: Stage; respaced: boolean }> {
+  ): Promise<Stage> {
     const body: Record<string, unknown> = { spaceId: input.spaceId }
     if (input.name !== undefined) body.name = input.name
     if (input.color !== undefined) body.color = input.color
     if (input.afterId !== undefined) body.afterId = input.afterId
     if (input.beforeId !== undefined) body.beforeId = input.beforeId
 
-    return this.request<{ stage: Stage; respaced: boolean }>(
+    const data = await this.request<{ stage: Stage }>(
       'PATCH',
       `/api/v1/stages/${encodeURIComponent(stageId)}`,
       body,
     )
+    return data.stage
   }
 
   /**
@@ -1339,12 +1339,12 @@ export class ContentHero {
     stageId: string,
     input: { spaceId: string; targetStageId?: string | null },
   ): Promise<{ id: string; movedCards: number; stages: Stage[] }> {
-    const data = await this.request<{ id: string; moved_cards: number; stages: Stage[] }>(
+    const data = await this.request<{ id: string; movedCards: number; stages: Stage[] }>(
       'DELETE',
       `/api/v1/stages/${encodeURIComponent(stageId)}`,
       { spaceId: input.spaceId, targetStageId: input.targetStageId ?? null },
     )
-    return { id: data.id, movedCards: data.moved_cards, stages: data.stages }
+    return { id: data.id, movedCards: data.movedCards, stages: data.stages }
   }
 
   // -------------------------------------------------------------------------
@@ -1917,14 +1917,14 @@ export class ContentHero {
    * a concurrent edit landed, instead of clobbering it. Returns the new revision and the per-op results (a
    * bad op is reported, never throws).
    *
-   * Each op is given a client-generated `op_id` (uuid) here if it does not already have one, so the op has a
+   * Each op is given a client-generated `opId` (uuid) here if it does not already have one, so the op has a
    * stable identity from the point of intent: resending the same batch is idempotent (the server dedupes by
-   * op_id), and a live editor sees the edit as an attributed collaborator change keyed by that id. The
+   * opId), and a live editor sees the edit as an attributed collaborator change keyed by that id. The
    * assigned id is echoed back on each result's `opId`.
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
     const ops = input.ops.map((op) =>
-      typeof op.op_id === 'string' && op.op_id ? op : { ...op, op_id: globalThis.crypto.randomUUID() },
+      typeof op.opId === 'string' && op.opId ? op : { ...op, opId: globalThis.crypto.randomUUID() },
     )
     return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', { ...input, ops })
   }

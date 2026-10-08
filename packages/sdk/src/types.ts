@@ -76,12 +76,13 @@ export interface KlingElement {
   category: string
   description: string | null
   /** The Kling element's supporting image URLs. */
-  input_urls: string[]
+  inputUrls: string[]
   /** A single supporting video URL (alternative to images), if any. */
-  input_video_url: string | null
+  inputVideoUrl: string | null
   /** A representative image/video URL for previews. */
-  preview_url: string
-  created_at: string
+  previewUrl: string
+  createdAt: string
+  updatedAt?: string
 }
 
 /** @deprecated Use `KlingElement`. */
@@ -191,55 +192,55 @@ export type TemplateScope = 'system' | 'user' | 'all'
 export interface TemplateSummary {
   id: string
   scope: 'system' | 'user'
-  /** The owner of one of the caller's templates; null for ContentHero's. */
-  user_id: string | null
   kind: TemplateKind
-  name: string
   category: string
+  name: string
   description: string | null
-  tags: string[] | null
-  /** Its props as placed, before the brand kit's values fill the props it binds. */
-  props: Record<string, unknown>
-  /** Each prop's control (`control`, `label`, `default`, and `brand`, the brand value it takes when placed). */
-  props_schema: Record<string, unknown> | null
-  duration_frames: number
   /** What it makes: a video, or a shape (with the shape's name); an animated emoji's video names its emoji. */
   skeleton: { type: 'video' | 'shape'; shape?: string; emoji?: string } | null
   /** Its default box: the whole frame, or a fraction of the canvas on each axis. */
   coverage: 'full' | 'partial'
-  width_fraction: number | null
-  height_fraction: number | null
   /** `scale` keeps its proportions in any box; `reflow` lays out again in the box it is given. */
   resize: 'scale' | 'reflow'
+  widthFraction: number | null
+  heightFraction: number | null
   /** Its own width over height, for `resize: 'scale'`. */
   aspect: number | null
-  /** The coordinate space its artwork is drawn in, and the rectangle of it that is the element. */
-  artboard_width: number | null
-  artboard_height: number | null
-  content_x: number | null
-  content_y: number | null
-  content_width: number | null
-  content_height: number | null
-  thumbnail_url: string | null
-  preview_url: string | null
+  /**
+   * The coordinate space its artwork is drawn in, and the rectangle of it (`content`) that is the element; null when
+   * the artwork draws to its box. Nested the way a write sends it.
+   */
+  artboard: TemplateArtboard | null
   /** Moves when its code, props or controls change; a rename leaves it. Pass it back as `expectedVersion`. */
   version: number
-  /** Its code's md5: equal codes, equal fingerprints. Null for a template with no code. */
-  code_md5: string | null
+  /** Its props as placed, before the brand kit's values fill the props it binds. */
+  props: Record<string, unknown>
+  /** Each prop's control (`control`, `label`, `default`, and `brand`, the brand value it takes when placed). */
+  propsSchema: Record<string, unknown> | null
+  thumbnailUrl: string | null
+  previewUrl: string | null
+  durationFrames: number
+  tags: string[] | null
+  groupKey: string | null
+  subgroupKey: string | null
+  archivedAt: string | null
   /** Lineage: the template it was saved from, and that template's version then. */
-  source_template_id: string | null
-  source_template_version: number | null
-  /** Who made it, and how: `person` or `agent`, through `app`, `api`, `mcp` or `cli`. */
-  created_by: string | null
-  actor: string | null
+  sourceTemplateId: string | null
+  sourceTemplateVersion: number | null
+  /** How it was made: through `app`, `api`, `mcp` or `cli`, by a `person` or an `agent`. */
   channel: string | null
-  archived_at: string | null
-  order_key: number | null
-  featured_rank: number | null
-  group_key: string | null
-  subgroup_key: string | null
-  created_at: string
-  updated_at: string
+  actor: string | null
+  /** Its code's md5: equal codes, equal fingerprints. Null for a template with no code. */
+  codeMd5: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** A template's artboard: its size, and the rectangle of it that is the element. */
+export interface TemplateArtboard {
+  width: number
+  height: number
+  content: { x: number; y: number; width: number; height: number }
 }
 
 /** One template, whole: with its code (null for a shape, which draws without one). */
@@ -1040,7 +1041,6 @@ export interface BrandKitSection {
   tab: string
   /** The display name. The user's to rename. */
   sectionName: string
-  sortOrder: number
   /** 'full' or 'half': how wide the section's card is on the brand page. */
   width: string
   /** Increments on every body change. Send it back as `expectedVersion` to write safely. */
@@ -1219,16 +1219,99 @@ export interface BrandKit extends BrandKitSummary {
   /** The user-facing reason the last extraction failed, when it did. */
   extractionError?: string | null
   sourceType: string | null
-  logos: unknown[]
+  /** The kit's logos, in the kit's order. */
+  logos: BrandKitLogo[]
   brandColors: BrandColor[]
   /** The kit's fonts; null when none is set. */
   typography: BrandTypography | null
-  socialAccounts: unknown[]
-  assets: unknown[]
+  socialAccounts: BrandKitSocialAccount[]
+  /** The kit's other brand media, in the kit's order. */
+  assets: BrandKitAsset[]
   sections: BrandKitSection[]
   brandAccounts: BrandKitAccount[]
   inspirationAccounts: BrandKitAccount[]
   knowledge: BrandKitKnowledge[]
+}
+
+/** How a logo is laid out, and the colors it is drawn in. */
+export type LogoLayout = 'horizontal' | 'stacked' | 'icon' | 'wordmark'
+export type LogoColorMode = 'full_color' | 'light' | 'dark' | 'grayscale'
+
+/** A kit's logo, as a full read carries it. Its place among the others is the list's order. */
+export interface BrandKitLogo {
+  id?: string
+  url: string
+  name?: string
+  /** The kit's cover: exactly one logo is primary. */
+  isPrimary: boolean
+  /** The logo chosen for compact places (the kit's header, tiles); at most one per kit. */
+  isDisplay?: boolean
+  /** @deprecated Use `layout` and `colorMode`. */
+  type?: 'full' | 'icon' | 'wordmark'
+  layout?: LogoLayout
+  colorMode?: LogoColorMode
+  width?: number
+  height?: number
+  aspectRatio?: string
+  isFavorited?: boolean
+  /** Where the artwork sits inside the file, in file pixels, when the file has empty margins. Read only. */
+  contentBox?: { x: number; y: number; width: number; height: number; fileWidth: number; fileHeight: number }
+}
+
+/** A kit's other brand media, as a full read carries it. */
+export interface BrandKitAsset {
+  id?: string
+  /** The stored file's short id; absent for an asset with no stored file (an outside url). */
+  shortId?: string
+  url: string
+  name?: string
+  type?: string
+  width?: number
+  height?: number
+  aspectRatio?: string
+  /** A video's poster frame. */
+  thumbnailUrl?: string
+  isFavorited?: boolean
+}
+
+/** A social account the kit names. */
+export interface BrandKitSocialAccount {
+  platform: string
+  handle?: string
+  url?: string
+  accountId?: string
+  accountName?: string
+  /** The account's current picture. */
+  avatarUrl?: string
+  followerCount?: number
+}
+
+/**
+ * A logo as written: its media by `url`, or by `outputId` to bring in something not in the kit yet (the server copies
+ * its bytes into the kit's storage). One of the two is required.
+ */
+export interface BrandKitLogoInput {
+  url?: string
+  outputId?: string
+  name?: string
+  isPrimary?: boolean
+  isDisplay?: boolean
+  layout?: LogoLayout
+  colorMode?: LogoColorMode
+  width?: number
+  height?: number
+  aspectRatio?: string
+}
+
+/** An asset as written, by `url` or `outputId` as a logo is. */
+export interface BrandKitAssetInput {
+  url?: string
+  outputId?: string
+  name?: string
+  type?: string
+  width?: number
+  height?: number
+  aspectRatio?: string
 }
 
 /** The roles a palette names. A color without one is an extra swatch. */
@@ -1269,11 +1352,11 @@ export interface UpdateBrandKitInput {
    * kit. An `outputId` entry is not idempotent (it means "bring this in"), which does not bite in the
    * read-modify-write flow this contract implies, because reads hand back stored urls.
    *
-   * Logos also carry `name`, `is_primary`, `layout` and `colorMode`. Exactly one logo ends up primary: it is
-   * the kit's cover, so if a list names none, the first wins.
+   * Logos also carry `name`, `isPrimary`, `isDisplay`, `layout` and `colorMode`. Exactly one logo ends up primary: it
+   * is the kit's cover, so if a list names none, the first wins. The list's order is the kit's order.
    */
-  logos?: unknown[]
-  assets?: unknown[]
+  logos?: BrandKitLogoInput[]
+  assets?: BrandKitAssetInput[]
   /**
    * Section content: the sections you name, and only those. ALL OR NOTHING and written before anything else in the
    * patch, so a stale `expectedVersion` refuses the whole patch. Read the keys and versions with
@@ -1702,7 +1785,6 @@ export interface Folder {
   parentId: string | null
   icon: string | null
   color: string | null
-  position: number
   createdAt: string
   updatedAt: string
 }
@@ -1768,7 +1850,6 @@ export interface UpdateFolderInput {
   query?: SmartFolderQuery | null
   icon?: string | null
   color?: string | null
-  position?: number
   /**
    * File these items. A DELTA, not a list to replace: folder membership is many-to-many, so a declarative
    * list would silently unfile everything absent from it.
@@ -1776,7 +1857,7 @@ export interface UpdateFolderInput {
   addItems?: FolderItemRef[]
   /** Unfile these items. Only the pointer goes; the asset is never touched. */
   removeItems?: FolderItemRef[]
-  /** Apply this patch to several folders. Attribute fields (name, query, icon, color, position) need one. */
+  /** Apply this patch to several folders. Attribute fields (name, query, icon, color) need one. */
   folderIds?: string[]
 }
 
@@ -2045,7 +2126,6 @@ export interface Stage {
   name: string
   slug: string | null
   color: string | null
-  sortOrder: number
 }
 
 /**
@@ -2057,7 +2137,7 @@ export interface Stage {
  * constraint, so nothing ever stopped them all being true.
  *
  * Nothing branched on it in either repository. The rule it appeared to describe, which stage a card lands
- * in when none is named, is answered by ORDER: the server returns the first stage by `sortOrder`.
+ * in when none is named, is answered by ORDER: the server returns the first stage in board order.
  */
 
 /** A post as returned by `listCards` (the list projection). */
@@ -2111,7 +2191,6 @@ export interface CardAsset {
    */
   appUrl?: string | null
   displayName: string | null
-  sortOrder: number
   /**
    * For an `inspiration` asset: every scalar triage fact the tracked post carries, so ten linked
    * outliers can be ranked without a `getContent` per link. Null for every other asset kind.
@@ -2839,7 +2918,7 @@ export interface EditorOp {
    * unique-per-project constraint makes a retried op idempotent, and a live editor client uses it to ignore
    * the broadcast echo of its own edit.
    */
-  op_id?: string
+  opId?: string
   [key: string]: unknown
 }
 
@@ -3271,24 +3350,21 @@ export type TimelineSettingsChange = Partial<Omit<TimelineSettings, 'linkedTrack
   linkedTracks?: Partial<LinkedTracks>
 }
 
-/**
- * A saved version of a project, as the version history lists it. Field names are the API's own (snake_case on this
- * response).
- */
+/** A saved version of a project, as the version history lists it and a save returns it. */
 export interface ProjectVersion {
   id: string
   /** The document shape the version holds. */
-  kind: string
-  created_by: string | null
+  kind: 'tracks' | 'slides'
+  createdBy: string | null
   /** The display name of whoever saved it. */
-  author_name: string | null
+  authorName: string | null
   label: string | null
   /** What saved it (`manual` for a save someone asked for). */
-  trigger_reason: string
-  size_bytes: number | null
+  triggerReason: string
+  sizeBytes: number | null
   /** The project revision the version was taken at. */
   revision: number | null
-  created_at: string
+  createdAt: string
 }
 
 /** Result of `listProjectVersions`: a page of a project's saved versions, newest first. */
@@ -3296,8 +3372,8 @@ export interface ProjectVersionListResult extends Paged {
   versions: ProjectVersion[]
 }
 
-/** The version `saveProjectVersion` stored: its row as the API returns it. */
-export type SavedProjectVersion = Omit<ProjectVersion, 'author_name'> & Record<string, unknown>
+/** The version `saveProjectVersion` stored, in the shape a list gives it. */
+export type SavedProjectVersion = ProjectVersion
 
 /** Result of `restoreProjectVersion`: the project's new revision, and the document shape restored. */
 export interface RestoredProjectVersion {

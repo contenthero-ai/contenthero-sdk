@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Breaking: every response field is camelCase, as the API now declares it.
+  - `TemplateSummary`/`Template`: `propsSchema`, `durationFrames`, `widthFraction`, `heightFraction`, `thumbnailUrl`,
+    `previewUrl`, `codeMd5`, `sourceTemplateId`, `sourceTemplateVersion`, `archivedAt`, `groupKey`, `subgroupKey`,
+    `createdAt`, `updatedAt`; the six artboard columns are one `artboard: { width, height, content: { x, y, width,
+    height } } | null` (`TemplateArtboard`). `user_id`, `created_by`, `order_key` and `featured_rank` are gone.
+  - `KlingElement`: `inputUrls`, `inputVideoUrl`, `previewUrl`, `createdAt`, and `updatedAt`.
+  - `BrandKit.logos`, `assets` and `socialAccounts` are typed (`BrandKitLogo`, `BrandKitAsset`, `BrandKitSocialAccount`)
+    with `isPrimary`, `isDisplay`, `aspectRatio`, `isFavorited` and `avatarUrl` (was `profile_image_url`). Logo and
+    asset inputs are typed too (`BrandKitLogoInput`, `BrandKitAssetInput`) and send `isPrimary`, `isDisplay` and
+    `aspectRatio`; the API refuses the snake spellings.
+  - `ProjectVersion`: `createdBy`, `authorName`, `triggerReason`, `sizeBytes`, `createdAt`; a save returns the same
+    shape (`SavedProjectVersion`).
+  - `deleteStage` reads `movedCards`.
+- Breaking: a manual position is never on the API, since a list comes back in its order and a move names neighbors.
+  `sortOrder` is gone from `Stage`, `CardAsset` and `BrandKitSection`; `Folder.position` and the folder inputs'
+  `position` are gone. `updateStage` returns the `Stage` (no `respaced`).
+- Breaking: an editor op's id is `opId` (was `op_id`), which `applyEditorOps` mints when an op has none.
+
 - Breaking: `listMedia` follows the library-file contract. `source` is `all` (the default when none is named),
   `creations`, `uploads` or `exports` (`MEDIA_LIST_SOURCES`); `stock` and `files` are for a single read only.
   `contentType` takes `image`, `video`, `audio`, `doc` and `other` (`MEDIA_LIST_TYPES`), not `transcript`. `kind` is
