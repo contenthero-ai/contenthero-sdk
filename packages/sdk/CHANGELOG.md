@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: every sortable listing sorts by `sort` (a field of that list) and `order` (`asc` | `desc`), declared once in
+  `LIST_SORTS` (`cards`, `projects`, `spaces`, `content`) with `SORT_ORDERS`; `CardSort`, `ProjectSort`, `SpaceSort` and
+  `ContentSort` are typed from it. `listCards`, `listProjects`, `listSpaces` and `listContent` take them (`SortOptions`).
+  `CONTENT_SORTS` is gone, and `listContent`'s `sortBy` / `sortOrder` are gone: the content fields are `relevance`
+  (with a search only), `outlierScore`, `publishedAt`, `viewCount` and `engagementRate`.
+- Breaking: every growable listing pages by cursor. `listAvatars`, `listVoices`, `listBrandKits`, `listTags`,
+  `listTrackedAccounts`, `listConnectedAccounts`, `listKlingElements`, `listStages`, `listSpaces`, `listFolders` and
+  `listTemplateCategories` take `limit` and `cursor` and return their items under their own key with `nextCursor`
+  (`AvatarListResult`, `VoiceListResult`, `BrandKitListResult`, `TagListResult`, `TrackedAccountListResult`,
+  `ConnectedAccountListResult`, `KlingElementListResult`, `StageListResult`, `SpaceListResult`, `FolderListResult`,
+  `TemplateCategoryListResult`), where most returned a plain array before.
+- Breaking: `ContentListResult` holds its items under `content` (was `outliers`). Tracked accounts arrive under
+  `trackedAccounts` and connected accounts under `connectedAccounts`, as the API now sends them.
+- Breaking: `Space.postCount` is `cardCount`. `listSpaces` takes `archived` (only archived spaces; was
+  `includeArchived`), `favorited` and `search`.
+- `listCards` takes `tag`, and `spaceId: 'all'` for every space; `CardListResult.space` is then null.
+- Every wire name is camelCase, as the API now requires (an old name is refused with a 400): `listCards` sends
+  `spaceId` and `isFavorite`, `listStages` `spaceId`, `listTrackedAccounts` `accountType` and `brandKitId`, `listContent`
+  its filters (`contentType`, `outlierScoreMin`, `publishedAfter`, `accountIds` and the rest), `getContent` `startMs`,
+  `endMs` and `transcriptSearch`; stage and space writes send `spaceId`, `afterId`, `beforeId`, `targetStageId`,
+  `coverUrl`, `coverPosition` and `duplicateFrom`.
+- New: `updateProject` (title, orientation, width, height, `brandKitId`, `coverPosition`, `cover`), `duplicateProject`,
+  `getTimelineSettings` / `updateTimelineSettings`, the version history (`listProjectVersions`, `saveProjectVersion`,
+  `restoreProjectVersion`, `copyProjectVersion`, `renameProjectVersion`, `deleteProjectVersion`), and `undo` / `redo`.
+  `ProjectSummary` carries `coverSource` and `coverFrame`, as the API sends them.
+
 ## 0.4.24
 
 - Breaking: the clip type `graphic` is retired and renamed `code`: a code clip or code layer is a video, audio or image

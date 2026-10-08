@@ -15,7 +15,6 @@ import {
 } from './errors.js'
 import type {
   Folder,
-  DerivedFolder,
   FolderContents,
   GetFolderOptions,
   MediaListResult,
@@ -28,7 +27,6 @@ import type {
   AddBrandKnowledgeInput,
   AddBrandKnowledgeResult,
   Avatar,
-  AvatarSummary,
   CreateAvatarRequest,
   CreateAvatarResult,
   UpdateAvatarRequest,
@@ -61,7 +59,6 @@ import type {
   UpdateBrandKitInput,
   CreateBrandKitInput,
   BrandImportOutcome,
-  TrackedAccount,
   GenerateBoardRequest,
   GenerateRequest,
   GenerateResult,
@@ -114,7 +111,6 @@ import type {
   KlingElement,
   CreateKlingElementRequest,
   Template,
-  TemplateScope,
   ListTemplatesOptions,
   TemplateListResult,
   TemplateFields,
@@ -137,8 +133,30 @@ import type {
   PostInput,
   CardAssetInput,
   Voice,
-  VoiceSummary,
   WaitOptions,
+  KlingElementListResult,
+  ListTemplateCategoriesOptions,
+  TemplateCategoryListResult,
+  AvatarListResult,
+  VoiceListResult,
+  BrandKitListResult,
+  FolderListResult,
+  TagListResult,
+  ListSpacesOptions,
+  SpaceListResult,
+  TrackedAccountListResult,
+  ConnectedAccountListResult,
+  UpdateProjectInput,
+  TimelineSettings,
+  TimelineSettingsChange,
+  ProjectVersionListResult,
+  SavedProjectVersion,
+  RestoredProjectVersion,
+  UndoInput,
+  RedoInput,
+  UndoResult,
+  SortOptions,
+  ProjectSummary,
 } from './types.js'
 
 /** Minimal fetch signature, so a custom implementation can be injected. */
@@ -479,10 +497,11 @@ export class ContentHero {
     return this.request<CostEstimate>('POST', '/api/v1/studio/audio/edit', { ...request, getCost: true })
   }
 
-  /** List the account's avatars (the list half of the list+get pair). */
-  async listAvatars(): Promise<AvatarSummary[]> {
-    const data = await this.request<{ avatars: AvatarSummary[] }>('GET', '/api/v1/avatars')
-    return data.avatars
+  /** List the account's avatars (the list half of the list+get pair), a page at a time. */
+  async listAvatars(options: PageOptions = {}): Promise<AvatarListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<AvatarListResult>('GET', `/api/v1/avatars${queryOf(q)}`)
   }
 
   /** Get one avatar with its looks (the get half). Throws NotFoundError if absent. */
@@ -568,16 +587,12 @@ export class ContentHero {
     )
   }
 
-  /** List the account's saved voices (the list half of the list+get pair). */
-  async listVoices(options: ListVoicesOptions = {}): Promise<VoiceSummary[]> {
+  /** List the account's saved voices (the list half of the list+get pair), a page at a time. */
+  async listVoices(options: ListVoicesOptions = {}): Promise<VoiceListResult> {
     const q = new URLSearchParams()
     if (options.favorited) q.set('favorited', 'true')
-    const qs = q.toString()
-    const data = await this.request<{ voices: VoiceSummary[] }>(
-      'GET',
-      `/api/v1/voices${qs ? `?${qs}` : ''}`,
-    )
-    return data.voices
+    setPage(q, options)
+    return this.request<VoiceListResult>('GET', `/api/v1/voices${queryOf(q)}`)
   }
 
   /** Get one voice's detail (the get half). Throws NotFoundError if absent. */
@@ -585,17 +600,13 @@ export class ContentHero {
     return this.request<Voice>('GET', `/api/v1/voices/${encodeURIComponent(voiceId)}`)
   }
 
-  /** List the account's brand kits (the list half of the list+get pair). */
-  async listBrandKits(options: ListBrandKitsOptions = {}): Promise<BrandKitSummary[]> {
+  /** List the account's brand kits (the list half of the list+get pair), a page at a time. */
+  async listBrandKits(options: ListBrandKitsOptions = {}): Promise<BrandKitListResult> {
     const q = new URLSearchParams()
     if (options.favorited) q.set('favorited', 'true')
     if (options.archived) q.set('archived', 'true')
-    const qs = q.toString()
-    const data = await this.request<{ brandKits: BrandKitSummary[] }>(
-      'GET',
-      `/api/v1/brand-kits${qs ? `?${qs}` : ''}`,
-    )
-    return data.brandKits
+    setPage(q, options)
+    return this.request<BrandKitListResult>('GET', `/api/v1/brand-kits${queryOf(q)}`)
   }
 
   /**
@@ -807,9 +818,14 @@ export class ContentHero {
 
   // ─── Library folders (Unified Content Library, Phase D) ────────────────────
 
-  /** List the account's folders (manual + smart, with parent links) plus the built-in derived folders. */
-  async listFolders(): Promise<{ folders: Folder[]; derived: DerivedFolder[] }> {
-    return this.request<{ folders: Folder[]; derived: DerivedFolder[] }>('GET', '/api/v1/library/folders')
+  /**
+   * List the account's folders (manual + smart, with parent links), a page at a time, plus the built-in derived
+   * folders (the same on every page).
+   */
+  async listFolders(options: PageOptions = {}): Promise<FolderListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<FolderListResult>('GET', `/api/v1/library/folders${queryOf(q)}`)
   }
 
   /**
@@ -1030,10 +1046,11 @@ export class ContentHero {
   // Kling elements (Kling 3.0's reusable references)
   // -------------------------------------------------------------------------
 
-  /** List the account's saved Kling elements (newest first). */
-  async listKlingElements(): Promise<KlingElement[]> {
-    const data = await this.request<{ klingElements: KlingElement[] }>('GET', '/api/v1/kling-elements')
-    return data.klingElements
+  /** List the account's saved Kling elements (newest first), a page at a time. */
+  async listKlingElements(options: PageOptions = {}): Promise<KlingElementListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<KlingElementListResult>('GET', `/api/v1/kling-elements${queryOf(q)}`)
   }
 
   /** Get one saved Kling element by id. */
@@ -1067,8 +1084,8 @@ export class ContentHero {
   // implementation; remove them when the window closes.
 
   /** @deprecated Use `listKlingElements`. */
-  async listElements(): Promise<KlingElement[]> {
-    return this.listKlingElements()
+  async listElements(options: PageOptions = {}): Promise<KlingElementListResult> {
+    return this.listKlingElements(options)
   }
 
   /** @deprecated Use `getKlingElement`. */
@@ -1114,11 +1131,12 @@ export class ContentHero {
     return this.request<TemplateListResult>('GET', `/api/v1/templates${qs ? `?${qs}` : ''}`)
   }
 
-  /** The categories in use among the templates the caller can see, with how many each holds. */
-  async listTemplateCategories(options: { scope?: TemplateScope } = {}): Promise<Array<{ category: string; count: number }>> {
-    const qs = options.scope ? `?scope=${encodeURIComponent(options.scope)}` : ''
-    const data = await this.request<{ categories: Array<{ category: string; count: number }> }>('GET', `/api/v1/templates/categories${qs}`)
-    return data.categories
+  /** The categories in use among the templates the caller can see, with how many each holds, a page at a time. */
+  async listTemplateCategories(options: ListTemplateCategoriesOptions = {}): Promise<TemplateCategoryListResult> {
+    const q = new URLSearchParams()
+    if (options.scope) q.set('scope', options.scope)
+    setPage(q, options)
+    return this.request<TemplateCategoryListResult>('GET', `/api/v1/templates/categories${queryOf(q)}`)
   }
 
   /** One template, with its code. Someone else's is not found, the same as a missing one. */
@@ -1154,24 +1172,26 @@ export class ContentHero {
   // -------------------------------------------------------------------------
 
   /**
-   * List the account's cards (most recently updated first), with optional filters.
+   * List the account's cards, with optional filters, sorted by `sort` and `order`, a page at a time.
    *
    * ⚠️ SCOPED TO ONE SPACE. Without `spaceId` this is the account's DEFAULT
    * space, not every card you own, and the response says nothing about the ones
    * it excluded. `search` is scoped the same way, so a title that exists on
-   * another board returns no results. Call `listSpaces()` first.
+   * another board returns no results. Call `listSpaces()` first, or pass
+   * `spaceId: 'all'` for every space.
    */
   async listCards(options: ListCardsOptions = {}): Promise<CardListResult> {
     const q = new URLSearchParams()
+    if (options.spaceId) q.set('spaceId', options.spaceId)
     if (options.archived) q.set('archived', 'true')
     if (options.platform) q.set('platform', options.platform)
     if (options.stage) q.set('stage', options.stage)
-    if (options.isFavorite) q.set('is_favorite', 'true')
+    if (options.isFavorite) q.set('isFavorite', 'true')
+    if (options.tag) q.set('tag', options.tag)
     if (options.search) q.set('search', options.search)
+    setSort(q, options)
     setPage(q, options)
-    if (options.spaceId) q.set('space_id', options.spaceId)
-    const qs = q.toString()
-    return this.request<CardListResult>('GET', `/api/v1/cards${qs ? `?${qs}` : ''}`)
+    return this.request<CardListResult>('GET', `/api/v1/cards${queryOf(q)}`)
   }
 
   /** Get one post with its assets and posts. Throws NotFoundError if absent. */
@@ -1227,11 +1247,13 @@ export class ContentHero {
    * per-account customizable.
    */
   async listStages(options: ListStagesOptions = {}): Promise<StageListResult> {
-    const qs = options.spaceId ? `?space_id=${encodeURIComponent(options.spaceId)}` : ''
+    const q = new URLSearchParams()
+    if (options.spaceId) q.set('spaceId', options.spaceId)
+    setPage(q, options)
     // ⭐ RETURNS `{ stages, space }` RATHER THAN A BARE ARRAY. Unwrapping to `data.stages` threw away the
     // only thing that says WHOSE stages these are, and this read falls back to the default space when none
     // is named. See `StageListResult`.
-    return this.request<StageListResult>('GET', `/api/v1/stages${qs}`)
+    return this.request<StageListResult>('GET', `/api/v1/stages${queryOf(q)}`)
   }
 
   /**
@@ -1257,10 +1279,10 @@ export class ContentHero {
   }): Promise<Stage> {
     const data = await this.request<{ stage: Stage }>('POST', '/api/v1/stages', {
       name: input.name,
-      space_id: input.spaceId,
+      spaceId: input.spaceId,
       color: input.color,
-      after_id: input.afterId,
-      before_id: input.beforeId,
+      afterId: input.afterId,
+      beforeId: input.beforeId,
     })
     return data.stage
   }
@@ -1291,11 +1313,11 @@ export class ContentHero {
       beforeId?: string | null
     },
   ): Promise<{ stage: Stage; respaced: boolean }> {
-    const body: Record<string, unknown> = { space_id: input.spaceId }
+    const body: Record<string, unknown> = { spaceId: input.spaceId }
     if (input.name !== undefined) body.name = input.name
     if (input.color !== undefined) body.color = input.color
-    if (input.afterId !== undefined) body.after_id = input.afterId
-    if (input.beforeId !== undefined) body.before_id = input.beforeId
+    if (input.afterId !== undefined) body.afterId = input.afterId
+    if (input.beforeId !== undefined) body.beforeId = input.beforeId
 
     return this.request<{ stage: Stage; respaced: boolean }>(
       'PATCH',
@@ -1321,7 +1343,7 @@ export class ContentHero {
     const data = await this.request<{ id: string; moved_cards: number; stages: Stage[] }>(
       'DELETE',
       `/api/v1/stages/${encodeURIComponent(stageId)}`,
-      { space_id: input.spaceId, target_stage_id: input.targetStageId ?? null },
+      { spaceId: input.spaceId, targetStageId: input.targetStageId ?? null },
     )
     return { id: data.id, movedCards: data.moved_cards, stages: data.stages }
   }
@@ -1335,15 +1357,19 @@ export class ContentHero {
   // -------------------------------------------------------------------------
 
   /**
-   * List the account's spaces, most recently active first.
+   * List the account's spaces, sorted by `sort` and `order`, a page at a time.
    *
-   * Archived spaces are excluded unless `includeArchived` is set, matching the
-   * grid in the app. Each space carries `postCount`, its live card total.
+   * Archived spaces are excluded by default, matching the grid in the app; `archived` lists only them. Each space
+   * carries `cardCount`, its live card total.
    */
-  async listSpaces(options: { includeArchived?: boolean } = {}): Promise<Space[]> {
-    const query = options.includeArchived ? '?include_archived=true' : ''
-    const data = await this.request<{ spaces: Space[] }>('GET', `/api/v1/spaces${query}`)
-    return data.spaces
+  async listSpaces(options: ListSpacesOptions = {}): Promise<SpaceListResult> {
+    const q = new URLSearchParams()
+    if (options.archived) q.set('archived', 'true')
+    if (options.favorited) q.set('favorited', 'true')
+    if (options.search) q.set('search', options.search)
+    setSort(q, options)
+    setPage(q, options)
+    return this.request<SpaceListResult>('GET', `/api/v1/spaces${queryOf(q)}`)
   }
 
   /** One space, with its live card count. Throws 404 for a space in another account. */
@@ -1369,9 +1395,9 @@ export class ContentHero {
   }): Promise<Space> {
     const data = await this.request<{ space: Space }>('POST', '/api/v1/spaces', {
       name: input.name,
-      cover_url: input.coverUrl,
-      cover_position: input.coverPosition,
-      duplicate_from: input.duplicateFrom,
+      coverUrl: input.coverUrl,
+      coverPosition: input.coverPosition,
+      duplicateFrom: input.duplicateFrom,
     })
     return data.space
   }
@@ -1393,8 +1419,8 @@ export class ContentHero {
   ): Promise<Space> {
     const body: Record<string, unknown> = {}
     if (input.name !== undefined) body.name = input.name
-    if (input.coverUrl !== undefined) body.cover_url = input.coverUrl
-    if (input.coverPosition !== undefined) body.cover_position = input.coverPosition
+    if (input.coverUrl !== undefined) body.coverUrl = input.coverUrl
+    if (input.coverPosition !== undefined) body.coverPosition = input.coverPosition
 
     const data = await this.request<{ space: Space }>(
       'PATCH',
@@ -1421,10 +1447,11 @@ export class ContentHero {
   // field on createCard / updateCard)
   // -------------------------------------------------------------------------
 
-  /** List the account's tags. */
-  async listTags(): Promise<Tag[]> {
-    const data = await this.request<{ tags: Tag[] }>('GET', '/api/v1/tags')
-    return data.tags
+  /** List the account's tags, by name, a page at a time. */
+  async listTags(options: PageOptions = {}): Promise<TagListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<TagListResult>('GET', `/api/v1/tags${queryOf(q)}`)
   }
 
   /** Create a tag (the name is lowercased). Throws if it already exists. */
@@ -1474,13 +1501,12 @@ export class ContentHero {
    * profiles). Every row reports its own `accountType`, so one list answers both questions. This replaces
    * `listInspirationAccounts` and `listBrandAccounts`, which were one query with a different literal.
    */
-  async listTrackedAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccount[]> {
+  async listTrackedAccounts(options: ListTrackedAccountsOptions = {}): Promise<TrackedAccountListResult> {
     const q = new URLSearchParams()
-    if (options.accountType) q.set('account_type', options.accountType)
-    if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
-    const qs = q.toString()
-    const data = await this.request<{ accounts: TrackedAccount[] }>('GET', `/api/v1/accounts${qs ? `?${qs}` : ''}`)
-    return data.accounts
+    if (options.accountType) q.set('accountType', options.accountType)
+    if (options.brandKitId) q.set('brandKitId', options.brandKitId)
+    setPage(q, options)
+    return this.request<TrackedAccountListResult>('GET', `/api/v1/accounts${queryOf(q)}`)
   }
 
   /**
@@ -1502,28 +1528,26 @@ export class ContentHero {
     const q = new URLSearchParams()
     if (options.scope) q.set('scope', options.scope)
     if (options.platform) q.set('platform', options.platform)
-    if (options.contentType) q.set('content_type', options.contentType)
-    if (options.outlierScoreMin != null) q.set('outlier_score_min', String(options.outlierScoreMin))
-    if (options.outlierScoreMax != null) q.set('outlier_score_max', String(options.outlierScoreMax))
-    if (options.viewsMin != null) q.set('views_min', String(options.viewsMin))
-    if (options.viewsMax != null) q.set('views_max', String(options.viewsMax))
-    if (options.durationMin != null) q.set('duration_min', String(options.durationMin))
-    if (options.durationMax != null) q.set('duration_max', String(options.durationMax))
-    if (options.subscribersMin != null) q.set('subscribers_min', String(options.subscribersMin))
-    if (options.subscribersMax != null) q.set('subscribers_max', String(options.subscribersMax))
-    if (options.publishedAfter) q.set('published_after', options.publishedAfter)
-    if (options.publishedBefore) q.set('published_before', options.publishedBefore)
-    if (options.publicationDate) q.set('publication_date', options.publicationDate)
+    if (options.contentType) q.set('contentType', options.contentType)
+    if (options.outlierScoreMin != null) q.set('outlierScoreMin', String(options.outlierScoreMin))
+    if (options.outlierScoreMax != null) q.set('outlierScoreMax', String(options.outlierScoreMax))
+    if (options.viewsMin != null) q.set('viewsMin', String(options.viewsMin))
+    if (options.viewsMax != null) q.set('viewsMax', String(options.viewsMax))
+    if (options.durationMin != null) q.set('durationMin', String(options.durationMin))
+    if (options.durationMax != null) q.set('durationMax', String(options.durationMax))
+    if (options.subscribersMin != null) q.set('subscribersMin', String(options.subscribersMin))
+    if (options.subscribersMax != null) q.set('subscribersMax', String(options.subscribersMax))
+    if (options.publishedAfter) q.set('publishedAfter', options.publishedAfter)
+    if (options.publishedBefore) q.set('publishedBefore', options.publishedBefore)
+    if (options.publicationDate) q.set('publicationDate', options.publicationDate)
     if (options.search) q.set('search', options.search)
-    if (options.sortBy) q.set('sort_by', options.sortBy)
-    if (options.sortOrder) q.set('sort_order', options.sortOrder)
-    if (options.accountIds?.length) q.set('account_ids', options.accountIds.join(','))
-    if (options.addedByYou) q.set('added_by_you', 'true')
-    if (options.brandKitId) q.set('brand_kit_id', options.brandKitId)
+    if (options.accountIds?.length) q.set('accountIds', options.accountIds.join(','))
+    if (options.addedByYou) q.set('addedByYou', 'true')
+    if (options.brandKitId) q.set('brandKitId', options.brandKitId)
     if (options.favorited) q.set('favorited', 'true')
+    setSort(q, options)
     setPage(q, options)
-    const qs = q.toString()
-    return this.request<ContentListResult>('GET', `/api/v1/content${qs ? `?${qs}` : ''}`)
+    return this.request<ContentListResult>('GET', `/api/v1/content${queryOf(q)}`)
   }
 
   /**
@@ -1536,9 +1560,9 @@ export class ContentHero {
   async getContent(contentId: string, options: GetContentOptions = {}): Promise<ContentDetail> {
     const q = new URLSearchParams()
     if (options.transcript) q.set('transcript', options.transcript)
-    if (options.startMs != null) q.set('start_ms', String(options.startMs))
-    if (options.endMs != null) q.set('end_ms', String(options.endMs))
-    if (options.transcriptSearch) q.set('transcript_search', options.transcriptSearch)
+    if (options.startMs != null) q.set('startMs', String(options.startMs))
+    if (options.endMs != null) q.set('endMs', String(options.endMs))
+    if (options.transcriptSearch) q.set('transcriptSearch', options.transcriptSearch)
     if (options.analysis && options.analysis !== 'none') q.set('analysis', options.analysis)
     // camelCase on the wire, like the option. 0.4.11 and 0.4.12 sent `analysis_sections`, which the API now
     // refuses with a 400 naming this spelling (the app's check-wire-vocabulary rule).
@@ -1582,10 +1606,11 @@ export class ContentHero {
   // Connected accounts (publish targets)
   // -------------------------------------------------------------------------
 
-  /** List the account's connected social accounts (publish targets), default first. */
-  async listConnectedAccounts(): Promise<ConnectedAccount[]> {
-    const data = await this.request<{ accounts: ConnectedAccount[] }>('GET', '/api/v1/connected-accounts')
-    return data.accounts
+  /** List the account's connected social accounts (publish targets), default first, a page at a time. */
+  async listConnectedAccounts(options: PageOptions = {}): Promise<ConnectedAccountListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<ConnectedAccountListResult>('GET', `/api/v1/connected-accounts${queryOf(q)}`)
   }
 
   /** Get one connected account by id. Throws NotFoundError if absent. */
@@ -1635,7 +1660,8 @@ export class ContentHero {
 
   /**
    * List the caller's projects (both editor + canvas) as lightweight summaries. Filter by archived /
-   * favorited state, by `kind`, or by a title search, a page at a time. Requires the `editor:read` scope.
+   * favorited state, by `type`, or by a title search, sorted by `sort` and `order`, a page at a time. Requires the
+   * `editor:read` scope.
    */
   async listProjects(input: ListProjectsInput = {}): Promise<ProjectListResult> {
     const q = new URLSearchParams()
@@ -1645,9 +1671,9 @@ export class ContentHero {
     const type = input.type ?? input.surface ?? input.kind
     if (type) q.set('type', type)
     if (input.search) q.set('search', input.search)
+    setSort(q, input)
     setPage(q, input)
-    const qs = q.toString()
-    return this.request<ProjectListResult>('GET', `/api/v1/projects${qs ? `?${qs}` : ''}`)
+    return this.request<ProjectListResult>('GET', `/api/v1/projects${queryOf(q)}`)
   }
 
   /**
@@ -1767,6 +1793,120 @@ export class ContentHero {
       'DELETE',
       `/api/v1/projects/${encodeURIComponent(projectId)}?confirm=true`,
     )
+  }
+
+  /**
+   * Change a project's own fields: rename it, resize it, choose its brand kit, choose or frame its cover. A PATCH: a
+   * field left out is left alone, and `brandKitId` / `coverPosition` take `null` to clear them. Returns the project's
+   * summary as it now stands. Requires the `editor:write` scope.
+   */
+  async updateProject(projectId: string, input: UpdateProjectInput): Promise<ProjectSummary> {
+    const { project } = await this.request<{ project: ProjectSummary }>(
+      'PATCH',
+      `/api/v1/projects/${encodeURIComponent(projectId)}`,
+      input,
+    )
+    return project
+  }
+
+  /**
+   * Copy a project: the same type, size, composition and brand kit, titled as the editor titles a copy. Returns the
+   * new project. Requires the `editor:write` scope.
+   */
+  async duplicateProject(projectId: string): Promise<ProjectSummary> {
+    const { project } = await this.request<{ project: ProjectSummary }>(
+      'POST',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/duplicate`,
+    )
+    return project
+  }
+
+  /** A video project's timeline settings for the caller, as the editor's timeline settings menu holds them. Requires `editor:read`. */
+  async getTimelineSettings(projectId: string): Promise<TimelineSettings> {
+    const { settings } = await this.request<{ settings: TimelineSettings }>(
+      'GET',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/settings`,
+    )
+    return settings
+  }
+
+  /** Change some of a video project's timeline settings; returns all of them. Requires `editor:write`. */
+  async updateTimelineSettings(projectId: string, change: TimelineSettingsChange): Promise<TimelineSettings> {
+    const { settings } = await this.request<{ settings: TimelineSettings }>(
+      'PATCH',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/settings`,
+      change,
+    )
+    return settings
+  }
+
+  // ─── Version history (premium, as in the editor) ───────────────────────────
+
+  /** A project's saved versions, newest first, a page at a time. Requires `editor:read`. */
+  async listProjectVersions(projectId: string, options: PageOptions = {}): Promise<ProjectVersionListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<ProjectVersionListResult>(
+      'GET',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/versions${queryOf(q)}`,
+    )
+  }
+
+  /** Save the project's current state as a version, optionally named. Requires `editor:write`. */
+  async saveProjectVersion(projectId: string, options: { label?: string } = {}): Promise<SavedProjectVersion> {
+    const { version } = await this.request<{ version: SavedProjectVersion }>(
+      'POST',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/versions`,
+      options.label !== undefined ? { label: options.label } : {},
+    )
+    return version
+  }
+
+  /**
+   * Put a version back into its project. The current state is saved as a version first, so the restore can itself be
+   * restored. Returns the project's new revision. Requires `editor:write`.
+   */
+  async restoreProjectVersion(projectId: string, versionId: string): Promise<RestoredProjectVersion> {
+    return this.request<RestoredProjectVersion>('POST', versionPath(projectId, versionId), { action: 'restore' })
+  }
+
+  /** Make a new project from a version. Returns the new project. Requires `editor:write`. */
+  async copyProjectVersion(projectId: string, versionId: string): Promise<ProjectSummary> {
+    const { project } = await this.request<{ project: ProjectSummary }>('POST', versionPath(projectId, versionId), {
+      action: 'copy',
+    })
+    return project
+  }
+
+  /** Name a version; an empty label clears its name. Requires `editor:write`. */
+  async renameProjectVersion(projectId: string, versionId: string, label: string): Promise<{ id: string; label: string | null }> {
+    const { version } = await this.request<{ version: { id: string; label: string | null } }>(
+      'PATCH',
+      versionPath(projectId, versionId),
+      { label },
+    )
+    return version
+  }
+
+  /** Remove a version. Requires `editor:write`. */
+  async deleteProjectVersion(projectId: string, versionId: string): Promise<void> {
+    await this.request<{ deleted: boolean }>('DELETE', versionPath(projectId, versionId))
+  }
+
+  // ─── Undo and redo (the editor's own) ──────────────────────────────────────
+
+  /**
+   * Reverse the project's most recent edit, or `revision`. An undo is itself an edit with its own revision; pass
+   * `expectedRevision` to be refused with a 409 ConflictError when the project has moved since. Requires
+   * `editor:write`.
+   */
+  async undo(projectId: string, input: UndoInput = {}): Promise<UndoResult> {
+    return this.request<UndoResult>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/undo`, input)
+  }
+
+  /** Re-apply the edit most recently undone. Same concurrency check as `undo`. Requires `editor:write`. */
+  async redo(projectId: string, input: RedoInput = {}): Promise<UndoResult> {
+    return this.request<UndoResult>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/redo`, input)
   }
 
   /**
@@ -1968,6 +2108,23 @@ export class ContentHero {
 function setPage(q: URLSearchParams, page: PageOptions): void {
   if (page.limit != null) q.set('limit', String(page.limit))
   if (page.cursor) q.set('cursor', page.cursor)
+}
+
+/** A sort's two parameters on a listing's query: the ONE place every sortable listing writes them. */
+function setSort(q: URLSearchParams, sort: SortOptions<string>): void {
+  if (sort.sort) q.set('sort', sort.sort)
+  if (sort.order) q.set('order', sort.order)
+}
+
+/** One saved version's path. */
+function versionPath(projectId: string, versionId: string): string {
+  return `/api/v1/projects/${encodeURIComponent(projectId)}/versions/${encodeURIComponent(versionId)}`
+}
+
+/** A listing's query string, with its `?`, or nothing when it has no parameters. */
+function queryOf(q: URLSearchParams): string {
+  const qs = q.toString()
+  return qs ? `?${qs}` : ''
 }
 
 function readEnv(name: string): string | undefined {

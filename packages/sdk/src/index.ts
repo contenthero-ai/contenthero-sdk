@@ -6,8 +6,17 @@
  */
 
 export { ContentHero, importedMediaFrom } from './client.js'
-export { CONTENT_SORTS } from './types.js'
-export type { ContentSort } from './types.js'
+export { LIST_SORTS, SORT_ORDERS } from './types.js'
+export type {
+  SortableList,
+  SortFieldOf,
+  SortOptions,
+  SortOrder,
+  CardSort,
+  ProjectSort,
+  SpaceSort,
+  ContentSort,
+} from './types.js'
 export type { ContentHeroOptions, FetchLike } from './client.js'
 export type {
   References,
@@ -46,6 +55,30 @@ export type {
   ListTemplatesOptions,
   TemplateListResult,
   PageOptions,
+  KlingElementListResult,
+  ListTemplateCategoriesOptions,
+  TemplateCategoryListResult,
+  AvatarListResult,
+  VoiceListResult,
+  BrandKitListResult,
+  FolderListResult,
+  TagListResult,
+  ListSpacesOptions,
+  SpaceListResult,
+  TrackedAccountListResult,
+  ConnectedAccountListResult,
+  ProjectCoverChoice,
+  UpdateProjectInput,
+  LinkedTracks,
+  TimelineSettings,
+  TimelineSettingsChange,
+  ProjectVersion,
+  ProjectVersionListResult,
+  SavedProjectVersion,
+  RestoredProjectVersion,
+  UndoInput,
+  RedoInput,
+  UndoResult,
   Paged,
   TemplateFields,
   CreateTemplateRequest,

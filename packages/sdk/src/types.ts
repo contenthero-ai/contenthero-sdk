@@ -87,6 +87,11 @@ export interface KlingElement {
 /** @deprecated Use `KlingElement`. */
 export type Element = KlingElement
 
+/** Result of `listKlingElements`: a page of the account's saved Kling elements, newest first. */
+export interface KlingElementListResult extends Paged {
+  klingElements: KlingElement[]
+}
+
 /** Create a Kling element from 2-4 images (or 1 video). Inputs may be URLs or output-id tokens. */
 export interface CreateKlingElementRequest {
   name: string
@@ -121,6 +126,49 @@ export interface PageOptions {
 export interface Paged {
   /** Pass as `cursor` for the next page; null on the last. */
   nextCursor: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Sorting: the one shape every sortable listing takes
+// ---------------------------------------------------------------------------
+
+/**
+ * Every field each sortable listing orders by, as the API declares them (the app's `LIST_SORTS`). A sort value is the
+ * name of the response field it orders by. ONE declaration: the SDK's option types, the MCP tool schemas and the CLI's
+ * `--sort` choices all read from here, so a field cannot reach one surface and not the others.
+ *
+ * `relevance` orders a search's results, and the server refuses it without a search.
+ */
+export const LIST_SORTS = {
+  cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title'],
+  projects: ['updatedAt', 'createdAt', 'title'],
+  spaces: ['updatedAt', 'name', 'cardCount'],
+  content: ['relevance', 'outlierScore', 'publishedAt', 'viewCount', 'engagementRate'],
+} as const
+
+/** A listing that sorts. */
+export type SortableList = keyof typeof LIST_SORTS
+
+/** The fields one listing sorts by. */
+export type SortFieldOf<L extends SortableList> = (typeof LIST_SORTS)[L][number]
+
+export type CardSort = SortFieldOf<'cards'>
+export type ProjectSort = SortFieldOf<'projects'>
+export type SpaceSort = SortFieldOf<'spaces'>
+export type ContentSort = SortFieldOf<'content'>
+
+/** The direction of every sort: one word, two values. */
+export const SORT_ORDERS = ['asc', 'desc'] as const
+export type SortOrder = (typeof SORT_ORDERS)[number]
+
+/**
+ * How a sortable listing is ordered: a field of that listing and a direction. Either may be omitted and the server
+ * fills in its default; an order named alone applies to the default field. A value the listing does not have is
+ * refused, never ignored.
+ */
+export interface SortOptions<F extends string> {
+  sort?: F
+  order?: SortOrder
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +258,16 @@ export interface ListTemplatesOptions extends PageOptions {
 
 export interface TemplateListResult extends Paged {
   templates: TemplateSummary[]
+}
+
+/** Options for `listTemplateCategories`. */
+export interface ListTemplateCategoriesOptions extends PageOptions {
+  scope?: TemplateScope
+}
+
+/** Result of `listTemplateCategories`: a page of the categories in use, with how many templates each holds. */
+export interface TemplateCategoryListResult extends Paged {
+  categories: Array<{ category: string; count: number }>
 }
 
 /**
@@ -770,6 +828,11 @@ export interface AvatarSummary {
   status: string
 }
 
+/** Result of `listAvatars`: a page of the account's avatars. */
+export interface AvatarListResult extends Paged {
+  avatars: AvatarSummary[]
+}
+
 /** An outfit/look variation of an avatar. */
 export interface AvatarLook {
   id: string
@@ -908,9 +971,14 @@ export interface Voice extends VoiceSummary {
 }
 
 /** Options for `listVoices`. */
-export interface ListVoicesOptions {
+export interface ListVoicesOptions extends PageOptions {
   /** When true, return only favorited voices. */
   favorited?: boolean
+}
+
+/** Result of `listVoices`: a page of the account's saved voices. */
+export interface VoiceListResult extends Paged {
+  voices: VoiceSummary[]
 }
 
 /** A brand kit as returned by `listBrandKits` (the list projection). */
@@ -929,11 +997,16 @@ export interface BrandKitSummary {
 }
 
 /** Options for `listBrandKits`. */
-export interface ListBrandKitsOptions {
+export interface ListBrandKitsOptions extends PageOptions {
   /** When true, return only favorited brand kits. */
   favorited?: boolean
   /** When true, return only archived brand kits (default excludes archived). */
   archived?: boolean
+}
+
+/** Result of `listBrandKits`: a page of the account's brand kits, default first. */
+export interface BrandKitListResult extends Paged {
+  brandKits: BrandKitSummary[]
 }
 
 /** A brand/inspiration account linked to a brand kit. */
@@ -1624,6 +1697,15 @@ export interface DerivedFolder {
   name: string
 }
 
+/**
+ * Result of `listFolders`: a page of the account's own folders, and the built-in derived folders beside it (a fixed
+ * set, the same on every page).
+ */
+export interface FolderListResult extends Paged {
+  folders: Folder[]
+  derived: DerivedFolder[]
+}
+
 /** One item inside a folder: media (variation-atomic) or an entity (project/post, manual folders only). */
 export type FolderItem =
   | {
@@ -1920,7 +2002,22 @@ export interface Space {
    * two agree by construction: they ask the same question so an agent never sees two numbers for one
    * board.
    */
-  postCount?: number
+  cardCount?: number
+}
+
+/** Options for `listSpaces`. */
+export interface ListSpacesOptions extends PageOptions, SortOptions<SpaceSort> {
+  /** `true` lists ONLY archived spaces. Archived spaces are excluded by default, matching the grid. */
+  archived?: boolean
+  /** Only favorited spaces. */
+  favorited?: boolean
+  /** A space name search. */
+  search?: string
+}
+
+/** Result of `listSpaces`: a page of the account's spaces, each with its live card count. */
+export interface SpaceListResult extends Paged {
+  spaces: Space[]
 }
 
 export interface Stage {
@@ -2087,7 +2184,12 @@ export interface Tag {
   isSystem: boolean
 }
 
-/** The space a scoped read resolved to. Always present, so a caller never has to infer it. */
+/** Result of `listTags`: a page of the account's tags, by name. */
+export interface TagListResult extends Paged {
+  tags: Tag[]
+}
+
+/** The space a scoped read resolved to. */
 export interface ResolvedSpace {
   id: string
   name: string
@@ -2104,8 +2206,10 @@ export interface CardListResult extends Paged {
    * account's default when none is named, so without this a list of the wrong board is indistinguishable
    * from a list of the right one. Measured 2026-09-14: a caller passing `space_id` where the parameter is
    * `spaceId` got a complete-looking list of a different board and concluded the filter was ignored.
+   *
+   * Null when every space was asked for (`spaceId: 'all'`).
    */
-  space: ResolvedSpace
+  space: ResolvedSpace | null
 }
 
 /**
@@ -2119,13 +2223,13 @@ export interface CardListResult extends Paged {
  * have been labeled from its first row. An EMPTY list carries nothing, and the empty case is the one that
  * misleads, so the scope is returned alongside rather than inferred from them.
  */
-export interface StageListResult {
+export interface StageListResult extends Paged {
   stages: Stage[]
   space: ResolvedSpace
 }
 
 /** Options for `listCards`. */
-export interface ListCardsOptions extends PageOptions {
+export interface ListCardsOptions extends PageOptions, SortOptions<CardSort> {
   /**
    * `true` lists ARCHIVED cards instead of live ones. Archived are excluded by default.
    *
@@ -2137,21 +2241,21 @@ export interface ListCardsOptions extends PageOptions {
   /** A stage id, slug, or name; resolved against your stages server-side. */
   stage?: string
   isFavorite?: boolean
+  /** Only cards carrying this tag. */
+  tag?: string
   search?: string
   /**
-   * Which SPACE's board to list. Omitted means the account's DEFAULT space, not
+   * Which SPACE's board to list, or `'all'` for every space. Omitted means the account's DEFAULT space, not
    * every space.
    *
-   * ⚠️ A LIST WITHOUT THIS IS SCOPED, NOT COMPLETE. `listCards` is always
-   * `.eq('space_id', ...)` server-side, so cards on any other board are absent
-   * with nothing in the response saying so, and `search` misses them too. Get an
-   * id from `listSpaces()`.
+   * ⚠️ A LIST WITHOUT THIS IS SCOPED, NOT COMPLETE. Cards on any other board are absent with nothing in the
+   * response saying so, and `search` misses them too. Get an id from `listSpaces()`.
    */
   spaceId?: string
 }
 
 /** Options for {@link ContentHeroClient.listStages}. */
-export interface ListStagesOptions {
+export interface ListStagesOptions extends PageOptions {
   /**
    * Which SPACE's stages. Omitted means the account's default space. Stages are
    * per-space, so two spaces can each have a stage called "Published" with
@@ -2349,6 +2453,11 @@ export interface TrackedAccount {
   accountType: string | null
 }
 
+/** Result of `listTrackedAccounts`: a page of the accounts the caller tracks. */
+export interface TrackedAccountListResult extends Paged {
+  trackedAccounts: TrackedAccount[]
+}
+
 /** A piece of tracked content: the list projection. */
 export interface ContentSummary {
   id: string
@@ -2513,14 +2622,7 @@ export interface TrackedAccountDetail {
 export type ContentScope = 'all' | 'inspiration' | 'brand'
 
 /** Options for `listContent`. */
-/**
- * Every way content can be ordered. ONE list: the MCP tool schema and the CLI flag both import it, so a new sort
- * cannot reach one surface and not the others (the CLI and MCP each held their own copy before 'relevance').
- */
-export const CONTENT_SORTS = ['relevance', 'score', 'date', 'views', 'engagement'] as const
-export type ContentSort = (typeof CONTENT_SORTS)[number]
-
-export interface ListContentOptions extends PageOptions {
+export interface ListContentOptions extends PageOptions, SortOptions<ContentSort> {
   /**
    * `inspiration` = creators they watch, `brand` = their own accounts, `all` = both (the default).
    * Each row carries `isOwn`, so one list can answer both questions.
@@ -2542,11 +2644,11 @@ export interface ListContentOptions extends PageOptions {
   publishedBefore?: string
   /** A window keyword: week, month, 3months, 6months, year, 2years. */
   publicationDate?: string
-  /** Finds posts by meaning and keyword; results are only the posts judged relevant, ranked by relevance. */
+  /**
+   * Finds posts by meaning and keyword; results are only the posts judged relevant, ranked by relevance. Any other
+   * `sort` reorders the same relevant set.
+   */
   search?: string
-  /** Default 'relevance' when `search` is set, otherwise 'score'. Any other field reorders the same relevant set. */
-  sortBy?: ContentSort
-  sortOrder?: 'asc' | 'desc'
   /** Tracked-account ids. Ids the caller does not own resolve to nothing rather than widening the query. */
   accountIds?: string[]
   /** Only the one-off posts the caller saved by url. */
@@ -2578,7 +2680,7 @@ export interface GetContentOptions {
 }
 
 /** Options for `listTrackedAccounts`. */
-export interface ListTrackedAccountsOptions {
+export interface ListTrackedAccountsOptions extends PageOptions {
   /** Narrow to one tier. Omitted, both come back. */
   accountType?: 'inspiration' | 'brand'
   /** Scope to the accounts linked to this brand kit. */
@@ -2587,7 +2689,7 @@ export interface ListTrackedAccountsOptions {
 
 /** Result of `listContent`: a page of content, how many there are in all, and the next page's cursor. */
 export interface ContentListResult extends Paged {
-  outliers: ContentSummary[]
+  content: ContentSummary[]
   total: number
 }
 
@@ -2618,6 +2720,11 @@ export interface ConnectedAccount {
   lastSyncedAt: string | null
   lastValidatedAt: string | null
   createdAt: string | null
+}
+
+/** Result of `listConnectedAccounts`: a page of the account's connected social accounts, default first. */
+export interface ConnectedAccountListResult extends Paged {
+  connectedAccounts: ConnectedAccount[]
 }
 
 // ---------------------------------------------------------------------------
@@ -2813,6 +2920,10 @@ export interface ProjectSummary {
   width: number
   height: number
   thumbnailUrl: string | null
+  /** How the cover is chosen: 'auto' follows the composition, 'frame' is a chosen moment, 'upload' an image. */
+  coverSource: 'auto' | 'frame' | 'upload'
+  /** The chosen frame when `coverSource` is 'frame' (a canvas slide's index among its visible slides); else null. */
+  coverFrame: number | null
   isArchived: boolean
   isFavorited: boolean
   createdAt: string | null
@@ -3042,7 +3153,7 @@ export interface EditorSelectedItem {
  */
 
 /** Filters for `listProjects`. */
-export interface ListProjectsInput extends PageOptions {
+export interface ListProjectsInput extends PageOptions, SortOptions<ProjectSort> {
   /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */
   filter?: 'archived' | 'favorited'
   /** Restrict to one type. Omitted returns both. */
@@ -3097,6 +3208,108 @@ export interface ImportProjectInput {
   pageCount?: number
   /** The card this project is for: linked to it in the same call (needs `planner:write` too). */
   cardId?: string
+}
+
+/**
+ * How a project's cover is chosen: `'auto'` follows the composition, `{ frame }` is a chosen moment (a canvas
+ * slide's index among its visible slides), `{ mediaId }` an image from the library.
+ */
+export type ProjectCoverChoice = 'auto' | { frame: number } | { mediaId: string }
+
+/**
+ * A change to a project's own fields, for `updateProject`. A PATCH: a field left out is left alone. `brandKitId` and
+ * `coverPosition` take `null` to clear them.
+ */
+export interface UpdateProjectInput {
+  title?: string
+  orientation?: string
+  width?: number
+  height?: number
+  /** The caller's own brand kit to associate, or null for none. */
+  brandKitId?: string | null
+  /** Where the cover is framed, as percentages of its width and height, or null for the default framing. */
+  coverPosition?: { x: number; y: number } | null
+  cover?: ProjectCoverChoice
+}
+
+/** Which kinds of track a linked edit reaches. */
+export interface LinkedTracks {
+  media: boolean
+  audio: boolean
+  text: boolean
+}
+
+/** A video project's timeline settings for the caller: the same settings the editor's timeline settings menu holds. */
+export interface TimelineSettings {
+  magneticTrack: boolean
+  snapping: boolean
+  linkage: boolean
+  linkedTracks: LinkedTracks
+  followPlayhead: boolean
+  skimming: boolean
+  skipDisabledClips: boolean
+}
+
+/** A change to some timeline settings, for `updateTimelineSettings`; a setting left out is left alone. */
+export type TimelineSettingsChange = Partial<Omit<TimelineSettings, 'linkedTracks'>> & {
+  linkedTracks?: Partial<LinkedTracks>
+}
+
+/**
+ * A saved version of a project, as the version history lists it. Field names are the API's own (snake_case on this
+ * response).
+ */
+export interface ProjectVersion {
+  id: string
+  /** The document shape the version holds. */
+  kind: string
+  created_by: string | null
+  /** The display name of whoever saved it. */
+  author_name: string | null
+  label: string | null
+  /** What saved it (`manual` for a save someone asked for). */
+  trigger_reason: string
+  size_bytes: number | null
+  /** The project revision the version was taken at. */
+  revision: number | null
+  created_at: string
+}
+
+/** Result of `listProjectVersions`: a page of a project's saved versions, newest first. */
+export interface ProjectVersionListResult extends Paged {
+  versions: ProjectVersion[]
+}
+
+/** The version `saveProjectVersion` stored: its row as the API returns it. */
+export type SavedProjectVersion = Omit<ProjectVersion, 'author_name'> & Record<string, unknown>
+
+/** Result of `restoreProjectVersion`: the project's new revision, and the document shape restored. */
+export interface RestoredProjectVersion {
+  revision: number
+  kind: string
+}
+
+/** Input to `undo`. Both optional. */
+export interface UndoInput {
+  /** The revision the caller last saw: the undo is refused with a 409 when the project has moved since. */
+  expectedRevision?: number
+  /** A specific revision to reverse. Omitted, the most recent edit. */
+  revision?: number
+}
+
+/** Input to `redo`. */
+export interface RedoInput {
+  /** The revision the caller last saw: the redo is refused with a 409 when the project has moved since. */
+  expectedRevision?: number
+}
+
+/** Result of `undo` or `redo`: an undo is itself an edit, with its own revision. */
+export interface UndoResult {
+  /** The revision the undo or redo created. */
+  revision: number
+  /** The revision it reversed. */
+  undidRevision: number
+  label: string
 }
 
 /** Options for starting a project export. All optional; defaults: format 'mp4', 720p, watermark on. */

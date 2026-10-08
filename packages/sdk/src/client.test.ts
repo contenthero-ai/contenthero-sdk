@@ -19,6 +19,7 @@ import {
 } from './errors.js'
 import type { FetchLike } from './client.js'
 import type { ListProjectsInput } from './types.js'
+import { LIST_SORTS } from './types.js'
 
 /** Build a fetch stub that replays a queue of [status, body] responses and records calls. */
 function stubFetch(
@@ -196,12 +197,12 @@ test('transcribe posts the audio URL and returns the transcript', async () => {
   assert.equal(calls[0]?.init?.method, 'POST')
 })
 
-test('listAvatars unwraps the { avatars } envelope', async () => {
+test('listAvatars returns the { avatars, nextCursor } page', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { avatars: [{ id: 'av1', name: 'A', imageUrl: null, defaultVoiceId: 'v1', isDefault: true, status: 'completed' }] } },
+    { status: 200, body: { avatars: [{ id: 'av1', name: 'A', imageUrl: null, defaultVoiceId: 'v1', isDefault: true, status: 'completed' }], nextCursor: null } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const avatars = await client.listAvatars()
+  const { avatars } = await client.listAvatars()
   assert.equal(avatars.length, 1)
   assert.equal(avatars[0].id, 'av1')
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/avatars')
@@ -217,11 +218,11 @@ test('getVoice requests the voice path and returns detail', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/voices/v1')
 })
 
-test('listBrandKits unwraps { brandKits } and getBrandKit hits the id path', async () => {
-  const list = stubFetch([{ status: 200, body: { brandKits: [{ id: 'bk1', name: 'CH', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' }] } }])
+test('listBrandKits returns the { brandKits, nextCursor } page and getBrandKit hits the id path', async () => {
+  const list = stubFetch([{ status: 200, body: { brandKits: [{ id: 'bk1', name: 'CH', isDefault: true, isActive: true, isFavorited: false, isArchived: false, createdAt: 't' }], nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: list.fetch, baseUrl: 'https://example.test' })
-  const kits = await c1.listBrandKits()
-  assert.equal(kits[0].id, 'bk1')
+  const { brandKits } = await c1.listBrandKits()
+  assert.equal(brandKits[0].id, 'bk1')
   assert.equal(list.calls[0]?.url, 'https://example.test/api/v1/brand-kits')
 
   const get = stubFetch([{ status: 200, body: { id: 'bk1', name: 'CH', sections: [], brandAccounts: [], inspirationAccounts: [], knowledge: [] } }])
@@ -454,20 +455,33 @@ test('list filters append favorited and archived query params', async () => {
  * Asserting the URL is the only thing that catches this class, because a response
  * shape test passes whether or not the param was ever sent.
  */
-test('space_id reaches the wire for cards and stages', async () => {
+test('spaceId reaches the wire for cards and stages, under its camelCase name', async () => {
   const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: cards.fetch, baseUrl: 'https://example.test' })
   await c1.listCards({ spaceId: 'sp1', search: 'lesson' })
-  assert.ok(cards.calls[0]?.url.includes('space_id=sp1'), 'listCards must send space_id')
-  assert.ok(cards.calls[0]?.url.includes('search=lesson'), 'listCards must keep its other filters')
+  const sent = new URL(cards.calls[0]!.url).searchParams
+  assert.equal(sent.get('spaceId'), 'sp1', 'listCards must send spaceId')
+  // The API refuses the old spelling with a 400, so it must never go out.
+  assert.equal(sent.has('space_id'), false)
+  assert.equal(sent.get('search'), 'lesson', 'listCards must keep its other filters')
 
   const stages = stubFetch([{ status: 200, body: { stages: [] } }])
   const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: stages.fetch, baseUrl: 'https://example.test' })
   await c2.listStages({ spaceId: 'sp 2' })
-  assert.equal(stages.calls[0]?.url, 'https://example.test/api/v1/stages?space_id=sp%202')
+  assert.equal(stages.calls[0]?.url, 'https://example.test/api/v1/stages?spaceId=sp+2')
 })
 
-test('omitting spaceId sends no space_id, so the server picks the default space', async () => {
+test('listCards sends every filter under the name the API reads, and its sort', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { cards: [], total: 0, nextCursor: null, space: null } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const result = await client.listCards({ spaceId: 'all', isFavorite: true, tag: 'launch', archived: true, sort: 'scheduledAt', order: 'asc' })
+  const sent = new URL(calls[0]!.url).searchParams
+  assert.deepEqual(Object.fromEntries(sent), { spaceId: 'all', archived: 'true', isFavorite: 'true', tag: 'launch', sort: 'scheduledAt', order: 'asc' })
+  // Every space was asked for, so no one space answered.
+  assert.equal(result.space, null)
+})
+
+test('omitting spaceId sends no spaceId, so the server picks the default space', async () => {
   const cards = stubFetch([{ status: 200, body: { cards: [], total: 0, nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: cards.fetch, baseUrl: 'https://example.test' })
   await c1.listCards()
@@ -799,10 +813,23 @@ test('every paged listing sends limit and cursor, never offset, and returns next
     { name: 'searchMedia', path: '/api/v1/media/search', body: { results: [] }, call: (c) => c.searchMedia('q', page) },
     { name: 'getFolder', path: '/api/v1/library/folders/f1', body: { folder: null, items: [] }, call: (c) => c.getFolder('f1', page) },
     { name: 'listCards', path: '/api/v1/cards', body: { cards: [], total: 0, space: { id: 's', name: 'S' } }, call: (c) => c.listCards(page) },
-    { name: 'listContent', path: '/api/v1/content', body: { outliers: [], total: 0 }, call: (c) => c.listContent(page) },
+    { name: 'listContent', path: '/api/v1/content', body: { content: [], total: 0 }, call: (c) => c.listContent(page) },
     { name: 'listBrandKnowledge', path: '/api/v1/brand-kits/k1/knowledge', body: { items: [], total: 0 }, call: (c) => c.listBrandKnowledge('k1', page) },
     { name: 'listTemplates', path: '/api/v1/templates', body: { templates: [] }, call: (c) => c.listTemplates(page) },
     { name: 'listProjects', path: '/api/v1/projects', body: { projects: [] }, call: (c) => c.listProjects(page) },
+    // Paged in 9.9 (every growable list pages).
+    { name: 'listTags', path: '/api/v1/tags', body: { tags: [] }, call: (c) => c.listTags(page) },
+    { name: 'listAvatars', path: '/api/v1/avatars', body: { avatars: [] }, call: (c) => c.listAvatars(page) },
+    { name: 'listVoices', path: '/api/v1/voices', body: { voices: [] }, call: (c) => c.listVoices(page) },
+    { name: 'listBrandKits', path: '/api/v1/brand-kits', body: { brandKits: [] }, call: (c) => c.listBrandKits(page) },
+    { name: 'listTrackedAccounts', path: '/api/v1/accounts', body: { trackedAccounts: [] }, call: (c) => c.listTrackedAccounts(page) },
+    { name: 'listConnectedAccounts', path: '/api/v1/connected-accounts', body: { connectedAccounts: [] }, call: (c) => c.listConnectedAccounts(page) },
+    { name: 'listKlingElements', path: '/api/v1/kling-elements', body: { klingElements: [] }, call: (c) => c.listKlingElements(page) },
+    { name: 'listStages', path: '/api/v1/stages', body: { stages: [], space: { id: 's', name: 'S' } }, call: (c) => c.listStages(page) },
+    { name: 'listSpaces', path: '/api/v1/spaces', body: { spaces: [] }, call: (c) => c.listSpaces(page) },
+    { name: 'listFolders', path: '/api/v1/library/folders', body: { folders: [], derived: [] }, call: (c) => c.listFolders(page) },
+    { name: 'listTemplateCategories', path: '/api/v1/templates/categories', body: { categories: [] }, call: (c) => c.listTemplateCategories(page) },
+    { name: 'listProjectVersions', path: '/api/v1/projects/p1/versions', body: { versions: [] }, call: (c) => c.listProjectVersions('p1', page) },
   ]
   for (const l of listings) {
     const { fetch, calls } = stubFetch([{ status: 200, body: { ...l.body, nextCursor: 'next-1' } }])
@@ -931,7 +958,7 @@ test('uploadMedia falls back to Content-Type when the API omits uploadHeaders', 
  * Stage WRITES. `/api/v1/stages` was read-only until now: an agent could see a board's columns and
  * never change them, so it could file a card into Review but could not create Review.
  */
-test('createStage posts the snake_case body the v1 route reads', async () => {
+test('createStage posts the camelCase body the v1 route reads', async () => {
   const { fetch, calls } = stubFetch([
     { status: 201, body: { stage: { id: 'st1', name: 'In Review', slug: 'in-review', color: null, sortOrder: 3, isDefault: false } } },
   ])
@@ -942,10 +969,10 @@ test('createStage posts the snake_case body the v1 route reads', async () => {
   assert.equal(calls[0]?.init?.method, 'POST')
   const body = JSON.parse(String(calls[0]?.init?.body))
   assert.equal(body.name, 'In Review')
-  assert.equal(body.space_id, 'sp1')
-  // ⚠️ THE WIRE IS snake_case AND THE SDK IS camelCase. A mismatch here is silent: the route reads
-  // `after_id`, so sending `afterId` would place nothing and still return 201.
-  assert.equal(body.after_id, 'st0')
+  assert.equal(body.spaceId, 'sp1')
+  // The route refuses the old snake_case names with a 400, so only the camelCase ones may go out.
+  assert.equal(body.afterId, 'st0')
+  assert.equal('after_id' in body || 'space_id' in body, false)
   assert.equal(stage.slug, 'in-review')
 })
 
@@ -954,7 +981,7 @@ test('createStage may omit the space, and every other stage write may not', asyn
   const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   await c.createStage({ name: 'X' })
   const body = JSON.parse(String(calls[0]?.init?.body))
-  assert.equal(body.space_id, undefined, 'an absent space means the account default, deliberately')
+  assert.equal(body.spaceId, undefined, 'an absent space means the account default, deliberately')
 })
 
 /**
@@ -973,15 +1000,15 @@ test('updateStage sends only the fields given, and distinguishes null from absen
   assert.equal(calls[0]?.init?.method, 'PATCH')
   const body = JSON.parse(String(calls[0]?.init?.body))
   assert.equal(body.name, 'Done')
-  assert.equal(body.space_id, 'sp1')
-  assert.ok(!('after_id' in body), 'omitting the anchors must not move the column')
+  assert.equal(body.spaceId, 'sp1')
+  assert.ok(!('afterId' in body), 'omitting the anchors must not move the column')
   assert.ok(!('color' in body), 'a PATCH leaves an omitted field alone')
 
   const edge = stubFetch([{ status: 200, body: { stage: { id: 'st1', name: 'Done', slug: 'done', color: null, sortOrder: 0, isDefault: false }, respaced: true } }])
   const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: edge.fetch, baseUrl: 'https://example.test' })
   const moved = await c2.updateStage('st1', { spaceId: 'sp1', afterId: null })
   const edgeBody = JSON.parse(String(edge.calls[0]?.init?.body))
-  assert.equal(edgeBody.after_id, null, 'an explicit null must reach the wire as null')
+  assert.equal(edgeBody.afterId, null, 'an explicit null must reach the wire as null')
   // The one answer a caller cannot derive: a renumber invalidates every other sortOrder it holds.
   assert.equal(moved.respaced, true)
 })
@@ -1002,8 +1029,8 @@ test('deleteStage sends the board and the target in its body, and unwraps moved_
 
   assert.equal(calls[0]?.init?.method, 'DELETE')
   const body = JSON.parse(String(calls[0]?.init?.body))
-  assert.equal(body.space_id, 'sp1')
-  assert.equal(body.target_stage_id, 'st2')
+  assert.equal(body.spaceId, 'sp1')
+  assert.equal(body.targetStageId, 'st2')
   // The response field is snake_case on the wire and camelCase in the SDK; unwrapped once, here.
   assert.equal(result.movedCards, 4)
   assert.equal(result.stages.length, 1)
@@ -1014,7 +1041,7 @@ test('deleteStage sends an explicit null target, so the server can refuse a non-
   const c = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   await c.deleteStage('st1', { spaceId: 'sp1' })
   const body = JSON.parse(String(calls[0]?.init?.body))
-  assert.equal(body.target_stage_id, null)
+  assert.equal(body.targetStageId, null)
 })
 
 test('getContent sends analysisSections camelCase, the one spelling the API accepts', async () => {
@@ -1061,7 +1088,7 @@ test('getContent asks for scenes on the wire only when a grain is named', async 
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   await client.getContent('c1', { scenes: 'frames', startMs: 2000 })
   await client.getContent('c1', { scenes: 'none' })
-  assert.equal(new URL(calls[0]!.url).search, '?start_ms=2000&scenes=frames')
+  assert.equal(new URL(calls[0]!.url).search, '?startMs=2000&scenes=frames')
   assert.equal(new URL(calls[1]!.url).search, '')
 })
 
@@ -1069,7 +1096,7 @@ test('every listProjects filter reaches the request, aliases included', async ()
   // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
   // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both
   // project types back (found by a Cowork test, 2026-09-27).
-  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', surface: 'canvas', kind: 'canvas', search: 'deck', limit: 10, cursor: 'c9' }
+  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', surface: 'canvas', kind: 'canvas', search: 'deck', sort: 'title', order: 'asc', limit: 10, cursor: 'c9' }
   for (const key of Object.keys(every) as Array<keyof ListProjectsInput>) {
     const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [] } }])
     const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
@@ -1104,16 +1131,15 @@ const KLING_ELEMENT = {
 }
 
 test('Kling elements live at /api/v1/kling-elements, and the list reads klingElements', async () => {
-  // The server also sends the list under `elements` for SDKs that predate the rename; only `klingElements` is read.
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { klingElements: [KLING_ELEMENT], elements: [] } },
+    { status: 200, body: { klingElements: [KLING_ELEMENT], nextCursor: null } },
     { status: 200, body: KLING_ELEMENT },
     { status: 201, body: KLING_ELEMENT },
     { status: 200, body: KLING_ELEMENT },
     { status: 200, body: { deleted: true, id: KLING_ELEMENT.id } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  assert.deepEqual(await client.listKlingElements(), [KLING_ELEMENT])
+  assert.deepEqual(await client.listKlingElements(), { klingElements: [KLING_ELEMENT], nextCursor: null })
   assert.deepEqual(await client.getKlingElement('Kling 001'), KLING_ELEMENT)
   await client.createKlingElement({ name: 'hero', description: 'the subject', images: KLING_ELEMENT.input_urls })
   await client.updateKlingElement('Kling001', { name: 'villain' })
@@ -1147,7 +1173,7 @@ test('the pre-rename element methods call their Kling twins, so there is one imp
   assert.equal(await client.updateElement('k1', { category: 'prop' }), 'updateKlingElement')
   assert.equal(await client.deleteElement('k1'), 'deleteKlingElement')
   assert.deepEqual(seen, [
-    'listKlingElements []',
+    'listKlingElements [{}]',
     'getKlingElement ["k1"]',
     'createKlingElement [{"name":"n","description":"d","video":"v"}]',
     'updateKlingElement ["k1",{"category":"prop"}]',
@@ -1159,7 +1185,7 @@ test('templates live at /api/v1/templates: a list pages with a cursor, reads unw
   const TEMPLATE = { id: '22222222-2222-4222-8222-222222222222', name: 'Lower third', version: 3, code: 'export default () => null' }
   const { fetch, calls } = stubFetch([
     { status: 200, body: { templates: [TEMPLATE], nextCursor: 'eyJvZmZzZXQiOjF9' } },
-    { status: 200, body: { categories: [{ category: 'lower-thirds', count: 4 }] } },
+    { status: 200, body: { categories: [{ category: 'lower-thirds', count: 4 }], nextCursor: null } },
     { status: 200, body: { template: TEMPLATE } },
     { status: 201, body: { template: TEMPLATE, warnings: ['interpolate needs two different keyframes'] } },
     { status: 200, body: { template: TEMPLATE, warnings: [] } },
@@ -1168,7 +1194,7 @@ test('templates live at /api/v1/templates: a list pages with a cursor, reads unw
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const page = await client.listTemplates({ scope: 'user', kind: 'code', category: ['lower-thirds', 'cta'], search: '100% sale', cursor: 'c1', limit: 50 })
   assert.deepEqual(page, { templates: [TEMPLATE], nextCursor: 'eyJvZmZzZXQiOjF9' })
-  assert.deepEqual(await client.listTemplateCategories({ scope: 'all' }), [{ category: 'lower-thirds', count: 4 }])
+  assert.deepEqual(await client.listTemplateCategories({ scope: 'all' }), { categories: [{ category: 'lower-thirds', count: 4 }], nextCursor: null })
   assert.deepEqual(await client.getTemplate(TEMPLATE.id), TEMPLATE)
   const created = await client.createTemplate({ fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' })
   assert.deepEqual(created.warnings, ['interpolate needs two different keyframes'])
@@ -1194,4 +1220,137 @@ test('templates live at /api/v1/templates: a list pages with a cursor, reads unw
   assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' })
   // The version read rides the body, where the route reads it.
   assert.deepEqual(JSON.parse(String(calls[4]?.init?.body)), { props: { title: 'Hi' }, expectedVersion: 3 })
+})
+
+/**
+ * ONE sort shape for every sortable listing (9.9, the app's "API Lists"): `sort` names a field of that list and `order`
+ * is asc or desc. Table-driven over `LIST_SORTS`, so a listing that drifts to its own spelling (content's retired
+ * `sort_by` / `sort_order`) fails here by name.
+ */
+test('every sortable listing sends sort and order, and only those names', async () => {
+  const listings: Array<{ name: string; path: string; body: Record<string, unknown>; call: (c: ContentHero) => Promise<unknown> }> = [
+    { name: 'listCards', path: '/api/v1/cards', body: { cards: [], total: 0, space: null }, call: (c) => c.listCards({ sort: LIST_SORTS.cards[3], order: 'asc' }) },
+    { name: 'listProjects', path: '/api/v1/projects', body: { projects: [] }, call: (c) => c.listProjects({ sort: LIST_SORTS.projects[2], order: 'asc' }) },
+    { name: 'listSpaces', path: '/api/v1/spaces', body: { spaces: [] }, call: (c) => c.listSpaces({ sort: LIST_SORTS.spaces[2], order: 'asc' }) },
+    { name: 'listContent', path: '/api/v1/content', body: { content: [], total: 0 }, call: (c) => c.listContent({ sort: LIST_SORTS.content[2], order: 'asc' }) },
+  ]
+  const expected: Record<string, string> = { listCards: 'title', listProjects: 'title', listSpaces: 'cardCount', listContent: 'publishedAt' }
+  for (const l of listings) {
+    const { fetch, calls } = stubFetch([{ status: 200, body: { ...l.body, nextCursor: null } }])
+    await l.call(new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' }))
+    const url = new URL(calls[0]!.url)
+    assert.equal(url.pathname, l.path, l.name)
+    assert.equal(url.searchParams.get('sort'), expected[l.name], `${l.name} must send sort`)
+    assert.equal(url.searchParams.get('order'), 'asc', `${l.name} must send order`)
+    for (const old of ['sort_by', 'sort_order', 'sortBy', 'sortOrder']) assert.equal(url.searchParams.has(old), false, `${l.name} sent ${old}`)
+  }
+})
+
+test('listContent sends every filter camelCase and reads its items under content', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { content: [{ id: 'c1' }], total: 1, nextCursor: null } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const result = await client.listContent({
+    contentType: 'short', outlierScoreMin: 1, outlierScoreMax: 2, viewsMin: 3, viewsMax: 4, durationMin: 5, durationMax: 6,
+    subscribersMin: 7, subscribersMax: 8, publishedAfter: 'a', publishedBefore: 'b', publicationDate: 'month',
+    accountIds: ['x', 'y'], addedByYou: true, brandKitId: 'bk', favorited: true, search: 'hooks', sort: 'relevance',
+  })
+  assert.deepEqual(Object.fromEntries(new URL(calls[0]!.url).searchParams), {
+    contentType: 'short', outlierScoreMin: '1', outlierScoreMax: '2', viewsMin: '3', viewsMax: '4', durationMin: '5', durationMax: '6',
+    subscribersMin: '7', subscribersMax: '8', publishedAfter: 'a', publishedBefore: 'b', publicationDate: 'month', search: 'hooks',
+    accountIds: 'x,y', addedByYou: 'true', brandKitId: 'bk', favorited: 'true', sort: 'relevance',
+  })
+  assert.equal(result.content[0]?.id, 'c1')
+})
+
+test('getContent sends the transcript window and search camelCase', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { id: 'c1' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContent('c1', { startMs: 1, endMs: 2, transcriptSearch: 'hook' })
+  assert.deepEqual(Object.fromEntries(new URL(calls[0]!.url).searchParams), { startMs: '1', endMs: '2', transcriptSearch: 'hook' })
+})
+
+test('listSpaces sends its filters, and spaces carry cardCount', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { spaces: [{ id: 's1', cardCount: 3 }], nextCursor: null } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const { spaces } = await client.listSpaces({ archived: true, favorited: true, search: 'client', sort: 'name', order: 'asc' })
+  assert.deepEqual(Object.fromEntries(new URL(calls[0]!.url).searchParams), { archived: 'true', favorited: 'true', search: 'client', sort: 'name', order: 'asc' })
+  assert.equal(spaces[0]?.cardCount, 3)
+})
+
+test('space writes send camelCase bodies', async () => {
+  const { fetch, calls } = stubFetch([{ status: 201, body: { space: { id: 's1' } } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.createSpace({ name: 'N', coverUrl: 'u', coverPosition: { x: 1, y: 2 }, duplicateFrom: 's0' })
+  await client.updateSpace('s1', { coverUrl: null, coverPosition: null })
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { name: 'N', coverUrl: 'u', coverPosition: { x: 1, y: 2 }, duplicateFrom: 's0' })
+  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), { coverUrl: null, coverPosition: null })
+})
+
+test('listTrackedAccounts sends camelCase filters and reads trackedAccounts; listConnectedAccounts reads connectedAccounts', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { trackedAccounts: [{ id: 't1' }], nextCursor: null } },
+    { status: 200, body: { connectedAccounts: [{ id: 'c1' }], nextCursor: null } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const tracked = await client.listTrackedAccounts({ accountType: 'brand', brandKitId: 'bk' })
+  assert.deepEqual(Object.fromEntries(new URL(calls[0]!.url).searchParams), { accountType: 'brand', brandKitId: 'bk' })
+  assert.equal(tracked.trackedAccounts[0]?.id, 't1')
+  const connected = await client.listConnectedAccounts()
+  assert.equal(connected.connectedAccounts[0]?.id, 'c1')
+})
+
+test('project fields, copies and timeline settings reach their routes', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { project: { id: 'p1', title: 'T' } } },
+    { status: 201, body: { project: { id: 'p2' } } },
+    { status: 200, body: { settings: { snapping: true } } },
+    { status: 200, body: { settings: { snapping: false } } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const updated = await client.updateProject('p1', { title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
+  assert.equal(updated.id, 'p1')
+  assert.equal((await client.duplicateProject('p1')).id, 'p2')
+  assert.equal((await client.getTimelineSettings('p1')).snapping, true)
+  assert.equal((await client.updateTimelineSettings('p1', { snapping: false, linkedTracks: { audio: false } })).snapping, false)
+  assert.deepEqual(
+    calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
+    ['PATCH /api/v1/projects/p1', 'POST /api/v1/projects/p1/duplicate', 'GET /api/v1/projects/p1/settings', 'PATCH /api/v1/projects/p1/settings'],
+  )
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
+  assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { snapping: false, linkedTracks: { audio: false } })
+})
+
+test('version history, undo and redo reach their routes with the bodies the API reads', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { versions: [{ id: 'v1' }], nextCursor: null } },
+    { status: 201, body: { version: { id: 'v2', label: 'Before' } } },
+    { status: 200, body: { revision: 9, kind: 'tracks' } },
+    { status: 201, body: { project: { id: 'p2' } } },
+    { status: 200, body: { version: { id: 'v1', label: 'Final' } } },
+    { status: 200, body: { deleted: true } },
+    { status: 200, body: { revision: 10, undidRevision: 8, label: 'Undid revision 8' } },
+    { status: 200, body: { revision: 11, undidRevision: 10, label: 'Undid revision 10' } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  assert.equal((await client.listProjectVersions('p1')).versions[0]?.id, 'v1')
+  assert.equal((await client.saveProjectVersion('p1', { label: 'Before' })).id, 'v2')
+  assert.deepEqual(await client.restoreProjectVersion('p1', 'v1'), { revision: 9, kind: 'tracks' })
+  assert.equal((await client.copyProjectVersion('p1', 'v1')).id, 'p2')
+  assert.deepEqual(await client.renameProjectVersion('p1', 'v1', 'Final'), { id: 'v1', label: 'Final' })
+  await client.deleteProjectVersion('p1', 'v1')
+  assert.equal((await client.undo('p1', { expectedRevision: 9 })).undidRevision, 8)
+  assert.equal((await client.redo('p1', { expectedRevision: 10 })).revision, 11)
+  assert.deepEqual(
+    calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname} ${c.init?.body ?? ''}`.trim()),
+    [
+      'GET /api/v1/projects/p1/versions',
+      'POST /api/v1/projects/p1/versions {"label":"Before"}',
+      'POST /api/v1/projects/p1/versions/v1 {"action":"restore"}',
+      'POST /api/v1/projects/p1/versions/v1 {"action":"copy"}',
+      'PATCH /api/v1/projects/p1/versions/v1 {"label":"Final"}',
+      'DELETE /api/v1/projects/p1/versions/v1',
+      'POST /api/v1/projects/p1/undo {"expectedRevision":9}',
+      'POST /api/v1/projects/p1/redo {"expectedRevision":10}',
+    ],
+  )
 })
