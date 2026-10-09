@@ -97,9 +97,10 @@ export function registerSchema(program: Command): void {
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
     .option('--platform <platform>', 'kind platform only: the platform to read; omit to list every platform')
     .option('--format <format>', 'kind platform with --platform only: narrow to one format (e.g. reel, short, story)')
-    .option('--json-schema', "kinds timeline and layer only: also return each type's full JSON Schema (large)")
-    .option('--name <name>', 'kind effect only: the effect to read in full. Omit to list the effects.')
-    .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string; jsonSchema?: boolean; name?: string }, command: Command) => {
+    .option('--json-schema', "kinds timeline (with a clip type's --name, or --detail full) and layer only: also return each type's full JSON Schema (large)")
+    .option('--name <name>', 'kind effect: the effect to read in full; omit to list the effects. kind timeline: one op or clip type to read in full, or animations for the presets; omit for the index.')
+    .option('--detail <detail>', 'kind timeline only: full reads the whole schema at once (large)')
+    .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string; jsonSchema?: boolean; name?: string; detail?: string }, command: Command) => {
       if (!(KINDS as readonly string[]).includes(kind)) {
         throw new CliError(`Unknown kind "${kind}". Use one of: ${KINDS.join(', ')}.`, EXIT.USAGE)
       }
@@ -110,7 +111,11 @@ export function registerSchema(program: Command): void {
         throw new CliError(`kind ${k} takes no --platform or --format; those belong to kind platform.`, EXIT.USAGE)
       }
       if (opts.format && !opts.platform) throw new CliError('--format narrows one platform: pass --platform with it.', EXIT.USAGE)
-      if (opts.name !== undefined && k !== 'effect') throw new CliError(`kind ${k} takes no --name; it belongs to kind effect.`, EXIT.USAGE)
+      if (opts.name !== undefined && k !== 'effect' && k !== 'timeline') {
+        throw new CliError(`kind ${k} takes no --name; it belongs to kinds effect and timeline.`, EXIT.USAGE)
+      }
+      if (opts.detail !== undefined && k !== 'timeline') throw new CliError(`kind ${k} takes no --detail; it belongs to kind timeline.`, EXIT.USAGE)
+      if (opts.detail !== undefined && opts.detail !== 'full') throw new CliError(`Unknown --detail "${opts.detail}". The only value is full.`, EXIT.USAGE)
       if (opts.jsonSchema && k !== 'timeline' && k !== 'layer') {
         throw new CliError(`kind ${k} takes no --json-schema; it belongs to kinds timeline and layer.`, EXIT.USAGE)
       }
@@ -192,8 +197,29 @@ export function registerSchema(program: Command): void {
         })
         return
       }
+      if (k === 'timeline' && opts.name !== undefined) {
+        const entry = await client.getTimelineTypes({ jsonSchema: opts.jsonSchema, name: opts.name })
+        emit(entry, ctx, () => {
+          if (entry.entry === 'op') return `${entry.shape}\n${entry.description}`
+          if (entry.entry === 'clipType') {
+            return `${entry.clipType.type}: ${entry.clipType.props.map((p) => p.name).join(', ')}\nShared groups: ${Object.keys(entry.sharedProps).join(', ') || 'none'}`
+          }
+          return (['in', 'out', 'transition', 'combo'] as const).map((use) => `${use}: ${entry[use].map((p) => p.presetKey).join(', ')}`).join('\n')
+        })
+        return
+      }
+      if (k === 'timeline' && opts.detail === undefined) {
+        const index = await client.getTimelineTypes({ jsonSchema: opts.jsonSchema })
+        emit(index, ctx, () => {
+          const ops = (use: 'create' | 'edit') => index.ops.filter((o) => o.use === use).map((o) => `${o.op}: ${o.shape}`).join('\n')
+          const clips = index.clipTypes.map((t) => `${t.type}: ${t.description}`).join('\n')
+          const tracks = index.trackTypes.map((t) => `${t.trackType} holds ${t.holds.join(', ')}`).join('\n')
+          return `Create ops:\n${ops('create')}\n\nEdit ops:\n${ops('edit')}\n\nClips:\n${clips}\n\nTracks:\n${tracks}\n(read one in full with --name)`
+        })
+        return
+      }
       if (k === 'timeline') {
-        const cat = await client.getTimelineTypes({ jsonSchema: opts.jsonSchema })
+        const cat = await client.getTimelineTypes({ jsonSchema: opts.jsonSchema, detail: 'full' })
         emit(cat, ctx, () => {
           const clips = cat.clipTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n')
           const tracks = cat.trackTypes.map((t) => `${t.trackType} holds ${t.holds.join(', ')}`).join('\n')

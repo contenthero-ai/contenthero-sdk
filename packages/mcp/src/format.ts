@@ -105,6 +105,8 @@ import type {
   LiveContextResult,
   LayerTypeCatalog,
   TimelineTypeCatalog,
+  TimelineSchemaIndex,
+  TimelineSchemaEntry,
   TranscriptResult,
   ExportJob,
   ExportFormatCatalog,
@@ -2990,6 +2992,39 @@ export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
       `${lines.join('\n')}\n\n` +
       JSON.stringify(r, null, 2),
   )
+}
+
+/**
+ * A timeline schema read, in whichever of its three shapes it came: the index (the default), one entry by name, or the
+ * whole schema (`detail: 'full'`). Each is a text summary, then the read itself as JSON.
+ */
+export function timelineSchemaResult(read: TimelineSchemaIndex | TimelineSchemaEntry | TimelineTypeCatalog): CallToolResult {
+  if ('entry' in read) return timelineEntryResult(read)
+  if ('ops' in read) return timelineIndexResult(read)
+  return timelineTypesResult(read)
+}
+
+function timelineIndexResult(index: TimelineSchemaIndex): CallToolResult {
+  const ops = (use: 'create' | 'edit') => index.ops.filter((o) => o.use === use).map((o) => `- ${o.shape}`)
+  const clips = index.clipTypes.map((t) => `- ${t.type}: ${t.description} (shared groups: ${t.supports.join(', ') || 'none'})`)
+  const tracks = index.trackTypes.map((t) => `- ${t.trackType}: holds ${t.holds.join(', ')}`)
+  return text(
+    `${index.description}\n\nCreate ops:\n${ops('create').join('\n')}\n\nEdit ops:\n${ops('edit').join('\n')}\n\n` +
+      `Clip types:\n${clips.join('\n')}\n\nTrack types:\n${tracks.join('\n')}\n\n` +
+      JSON.stringify(index),
+  )
+}
+
+function timelineEntryResult(entry: TimelineSchemaEntry): CallToolResult {
+  if (entry.entry === 'op') return text(`${entry.shape}\n${entry.description}\n\n${JSON.stringify(entry)}`)
+  if (entry.entry === 'clipType') {
+    const t = entry.clipType
+    return text(
+      `${t.type}: ${t.description}\nFields: ${t.props.map((p) => p.name).join(', ')}\n` +
+        `Shared groups: ${Object.keys(entry.sharedProps).join(', ') || 'none'}\n\n${JSON.stringify(entry)}`,
+    )
+  }
+  return text(`${entry.description}\n\n${JSON.stringify(entry)}`)
 }
 
 export function timelineTypesResult(cat: TimelineTypeCatalog): CallToolResult {

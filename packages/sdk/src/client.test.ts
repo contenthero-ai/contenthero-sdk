@@ -709,6 +709,22 @@ test('listEffects and getEffect read the effect catalog, one effect by its name'
   assert.equal(list.effects[0]?.name, 'glow')
 })
 
+// The timeline schema reads in two steps (2026-10-09): the index by default, one entry by name, or the whole on request.
+test('getTimelineTypes reads the index, one entry by name, or the whole schema', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: {} }, { status: 200, body: {} }, { status: 200, body: {} }, { status: 200, body: {} }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getTimelineTypes()
+  await client.getTimelineTypes({ name: 'update_clip' })
+  await client.getTimelineTypes({ name: 'video', jsonSchema: true })
+  await client.getTimelineTypes({ detail: 'full' })
+  assert.deepEqual(calls.map((c) => c.url), [
+    'https://example.test/api/v1/editor/timeline-types',
+    'https://example.test/api/v1/editor/timeline-types?name=update_clip',
+    'https://example.test/api/v1/editor/timeline-types?include=jsonSchema&name=video',
+    'https://example.test/api/v1/editor/timeline-types?detail=full',
+  ])
+})
+
 // The JSON Schema is opt-in on the server (most of the catalog's size), so the SDK asks for it only when told to.
 test('a type catalog asks for the JSON Schema only when told to', async () => {
   const body = { surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [], layerTypes: [] }
