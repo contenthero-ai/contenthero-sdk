@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, MediaShare, ProjectReadScope, ProjectShare } from './types.js'
+import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, GenerationReference, MediaShare, ProjectReadScope, ProjectShare } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -25,6 +25,14 @@ export function describeCharge(charge: Charge | null | undefined): { label: 'Cos
   if (charge.state === 'free') return { label: 'Cost', text: 'Nothing was charged.' }
   const after = charge.balanceAfter != null ? ` Balance after: ${credits(charge.balanceAfter)}.` : ''
   return { label: 'Cost', text: `${credits(charge.credits)} charged.${after}` }
+}
+
+/**
+ * What a generation was made FROM, one line per input ("Reference 1 (image): <url>"), so the MCP and the CLI list a
+ * generation's inputs in the same words Studio labels them with. Empty when it had none or the server did not say.
+ */
+export function describeReferences(references: readonly GenerationReference[] | null | undefined): string[] {
+  return (references ?? []).map((r) => `${r.label} (${r.type}): ${r.url}`)
 }
 
 /** The same, as one line ("Cost: 7 credits charged. ..."). */

@@ -151,6 +151,7 @@ export type {
   MediaVariation,
   MediaSummary,
   MediaItem,
+  GenerationReference,
   SearchMediaResult,
   SearchMediaScene,
   SearchMediaOptions,
@@ -291,4 +292,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'
+export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'

@@ -114,7 +114,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -461,6 +461,8 @@ export function completedResult(
   // Each output by its media id, the name to pass back, so no reader numbers anything; one that produced nothing is
   // listed by its status, so the others keep their own numbers.
   const lines = [header, ...outputLines(gen)]
+  const madeFrom = describeReferences(gen.references)
+  if (madeFrom.length > 0) lines.push('Made from:', ...madeFrom.map((r) => `  ${r}`))
   const p = gen.placement
   if (p) {
     if (p.projectType === 'canvas') {
@@ -1231,7 +1233,10 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
       : ''
   // A failure says what failed. Reported as "no still available" until 2026-10-06, which read as expected behavior.
   const keyframes = it.keyframeError ? `\n    keyframes not shown: ${it.keyframeError}` : ''
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${keyframes}${prompt}${note}`
+  // What it was made FROM, labeled as Studio labels it, so "make another like this" can pass the same inputs back.
+  const refs = describeReferences(it.references)
+  const madeFrom = refs.length > 0 ? `\n    made from:${refs.map((r) => `\n      ${r}`).join('')}` : ''
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${keyframes}${prompt}${madeFrom}${note}`
 }
 
 /**

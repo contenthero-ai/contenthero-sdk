@@ -19,6 +19,7 @@ import {
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
   describeFileSize,
+  describeReferences,
   pendingOutputId,
   type ImportStarted,
   type ImportedMedia,
@@ -329,7 +330,10 @@ export function registerMedia(program: Command): void {
         const savedBlock = saved.length
           ? `\n\nSaved ${saved.length} file(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
           : ''
-        return `${head}\n\n${variations}${savedBlock}`
+        // What it was made FROM, in the words the MCP and Studio use.
+        const refs = describeReferences(m.references)
+        const madeFrom = refs.length ? `\n\nMade from:\n${refs.map((r) => `  ${r}`).join('\n')}` : ''
+        return `${head}\n\n${variations}${madeFrom}${savedBlock}`
       })
     })
 

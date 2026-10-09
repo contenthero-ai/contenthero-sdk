@@ -12,6 +12,7 @@
 import {
   ContentHero,
   GenerationFailedError,
+  describeReferences,
   type CostEstimate,
   type EditAudioRequest,
   type EditAudioResult,
@@ -84,6 +85,8 @@ function generationHuman(g: Generation): string {
     pairs.push(['URL', g.alreadyExisted.url])
   }
   for (const o of g.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
+  // What it was made FROM, in the words the MCP and Studio use.
+  for (const r of describeReferences(g.references)) pairs.push(['Made from', r])
   pairs.push(...costRows(g.charge))
   if (g.status === 'processing' || g.status === 'pending') {
     pairs.push(['Next', `contenthero generation status ${g.outputId}`])

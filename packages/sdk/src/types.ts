@@ -737,6 +737,8 @@ export interface Generation {
   outputs: GenerationOutput[]
   /** Error detail when `status` is 'failed', otherwise null. */
   error: string | null
+  /** What it was made FROM (its input references). Absent on the submit response and on an older server. */
+  references?: GenerationReference[]
   /** What it cost: held while it runs, charged per output that landed. Absent on an older server. */
   charge?: Charge
   /** Present when an import ended `abandoned` because the account already held these exact bytes: where they are. */
@@ -1547,6 +1549,20 @@ export interface MediaSummary {
   smallUrl?: string | null
 }
 
+/**
+ * One input a generation was made FROM: what Studio lists under "References" for it, read by the same rule. Pass
+ * `url` back as a reference to make another like it.
+ */
+export interface GenerationReference {
+  /** What the input was to the generation, in the app's words: "Reference 1", "Start frame", "Audio", an element's name. */
+  label: string
+  type: 'image' | 'video' | 'audio'
+  /** Its role (`reference`, `subject`, `first_frame`, `last_frame`, `motion`, `audio`, ...); null on an older row. */
+  role: string | null
+  /** The file, as a url you can fetch. */
+  url: string
+}
+
 /** Full studio output detail as returned by `getMedia`. */
 export interface MediaItem extends MediaSummary {
   script: string | null
@@ -1559,6 +1575,8 @@ export interface MediaItem extends MediaSummary {
   variations: MediaVariation[]
   /** Output-level representative still (video poster / optimized image preview), or null. */
   thumbnailUrl: string | null
+  /** What it was made FROM (its input references). Present on a creation; absent on an upload, stock, or an older server. */
+  references?: GenerationReference[]
 }
 
 /**
@@ -1666,6 +1684,8 @@ export interface ResolvedMediaBatchItem {
   mediaId: string | null
   /** The references of the generation's other outputs, when a bare id resolved to its primary. */
   otherMediaIds: string[]
+  /** What the generation was made FROM (its input references), when the item is a creation. */
+  references?: GenerationReference[]
   /**
    * VIDEO keyframes (present only when the item requested a window on a video): low-res frames across the
    * source-time window, each an inline `data:image/jpeg;base64,...`. The MCP turns each into an image block.

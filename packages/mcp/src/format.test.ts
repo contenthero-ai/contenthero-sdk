@@ -745,3 +745,45 @@ test("an export result says what the code warned about, in the op result's words
   const quiet = exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.mp4' })
   assert.doesNotMatch((quiet.content[0] as { text: string }).text, /Code warnings/)
 })
+
+test('a finished generation says what it was made from, so "another like this" can pass the same inputs back', () => {
+  const out = body(
+    generationStatusResult(
+      gen({
+        status: 'completed',
+        outputs: outs(['https://a/1.png']),
+        references: [{ label: 'Reference 1', type: 'image', role: 'reference', url: 'https://media.contenthero.ai/ref/original.png?t=x' }],
+      }),
+    ),
+  )
+  assert.match(out, /Made from:\n  Reference 1 \(image\): https:\/\/media\.contenthero\.ai\/ref\/original\.png\?t=x/)
+})
+
+test('a generation with no references says nothing about them', () => {
+  const out = body(generationStatusResult(gen({ status: 'completed', outputs: outs(['https://a/1.png']) })))
+  assert.doesNotMatch(out, /Made from/)
+})
+
+test('get_media says what a creation was made from, under its own line', async () => {
+  const { mediaBatchResult } = await import('./format.js')
+  const item = {
+    ok: true,
+    input: { mediaId: 'Gen12345' },
+    url: 'https://media.contenthero.ai/out/original.jpg?t=a',
+    imageUrl: null,
+    previewUrl: null,
+    visionUrl: null,
+    source: 'creations',
+    modelName: 'Nano Banana 2.1',
+    modelBrandColor: null,
+    modelIconKey: null,
+    type: 'image',
+    model: 'nano-banana-2.1',
+    prompt: 'the bottle on slate',
+    mediaId: 'Gen12345',
+    otherMediaIds: [],
+    references: [{ label: 'Reference 1', type: 'image', role: 'reference', url: 'https://media.contenthero.ai/ref/original.png?t=x' }],
+  }
+  const out = body(mediaBatchResult({ items: [item] } as never, [null] as never, 1_000_000))
+  assert.match(out, /made from:\n      Reference 1 \(image\): https:\/\/media\.contenthero\.ai\/ref\/original\.png\?t=x/)
+})

@@ -60,3 +60,15 @@ test('an edit batch lists its warnings without doubling their periods', () => {
   assert.match(text, /Warnings: Set slide property "durationInSeconds" to 180, its largest value, instead of 240; A second warning\.$/m)
   assert.doesNotMatch(text, /\.\./)
 })
+
+test('a generation lists what it was made from, one line per input, as Studio labels them', async () => {
+  const { describeReferences } = await import('./describe.js')
+  assert.deepEqual(
+    describeReferences([
+      { label: 'Reference 1', type: 'image', role: 'reference', url: 'https://media.contenthero.ai/a/original.png?t=x' },
+      { label: 'Start frame', type: 'image', role: 'first_frame', url: 'https://media.contenthero.ai/b/original.png?t=y' },
+    ]),
+    ['Reference 1 (image): https://media.contenthero.ai/a/original.png?t=x', 'Start frame (image): https://media.contenthero.ai/b/original.png?t=y'],
+  )
+  assert.deepEqual(describeReferences(undefined), [])
+})
