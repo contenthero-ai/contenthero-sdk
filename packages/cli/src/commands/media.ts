@@ -438,7 +438,6 @@ export function registerMedia(program: Command): void {
       emit(m, ctx, uploadedHuman)
     })
 
-  // TODO(wording, 9.8 E): --off, --link, and the argument's stop-sharing clause.
   media
     .command('share')
     .description(

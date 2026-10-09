@@ -3037,7 +3037,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- share_media ----------------------------------------------------------
-  // TODO(wording, 9.8 E): the stop-sharing sentence, the export sentence (its "only" claim removed), and the shared and
   // shareUrl inputs.
   server.registerTool(
     'share_media',
@@ -4628,7 +4627,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // TODO(wording, 9.8 E): list_project_exports's description.
   server.registerTool(
     'list_project_exports',
     {

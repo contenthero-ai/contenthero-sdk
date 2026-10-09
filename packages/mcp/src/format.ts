@@ -2733,7 +2733,6 @@ export function projectVersionListResult(projectId: string, { versions, nextCurs
   return text(lines([`${versions.length} version(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
 }
 
-// TODO(wording, 9.8 E): the two lines below.
 /** A page of a project's exports, newest first: one row each, with its download and share page once finished. */
 export function projectExportListResult(projectId: string, { exports, nextCursor }: ProjectExportListResult): CallToolResult {
   if (!exports.length) return text(`Project ${projectId} has no exports.`)

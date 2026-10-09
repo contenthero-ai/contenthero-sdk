@@ -400,7 +400,6 @@ export function registerProject(program: Command): void {
       )
     })
 
-  // TODO(wording, 9.8 E): the exports command's description and empty line.
   withPageFlags(
     project
       .command('exports')
