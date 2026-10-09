@@ -583,6 +583,23 @@ test('getContext forwards an explicit render width', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&slideIndex=1&width=273')
 })
 
+// A render is a job with an id (the review loop). Break-verified: dropping any of the new params from getContext turns
+// this red.
+test('getContext sends the frames, the rate, the layout, a sound, a render to read and how long to wait', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContext({ projectId: 'p1', render: true, frames: [30, 5, 90], layout: 'sheets', wait: 20 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&frames=30%2C5%2C90&layout=sheets&wait=20')
+  await client.getContext({ projectId: 'p1', sound: true, fromFrame: 0, toFrame: 300, perSecond: 4 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/context?projectId=p1&fromFrame=0&toFrame=300&perSecond=4&sound=true')
+  await client.getContext({ renderId: 'r1', page: 3 })
+  assert.equal(calls[2]?.url, 'https://example.test/api/v1/context?renderId=r1&page=3')
+})
+
 // Break-verified: dropping the region block from getContext turns this red.
 test('getContext sends a region as x,y,width,height', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { context: null, participant: null, participants: [] } }])

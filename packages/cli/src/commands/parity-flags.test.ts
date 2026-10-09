@@ -124,6 +124,24 @@ test('context --region asks for a crop in composition units', async () => {
   assert.equal(r.query.get('region'), '480,270,240,135')
 })
 
+// A render is a job with an id (the review loop). Break-verified: dropping any of these from the getContext call turns
+// its assertion red.
+test('context asks for exact frames, a rate, a layout, a sound, a render by its id and a wait', async () => {
+  const frames = await run('context', '--project', 'p1', '--frames', '30,5,90', '--layout', 'sheets', '--wait', '20')
+  assert.equal(frames.query.get('render'), 'true')
+  assert.equal(frames.query.get('frames'), '30,5,90')
+  assert.equal(frames.query.get('layout'), 'sheets')
+  assert.equal(frames.query.get('wait'), '20')
+  const rate = await run('context', '--project', 'p1', '--from-frame', '0', '--to-frame', '90', '--per-second', '6')
+  assert.equal(rate.query.get('perSecond'), '6')
+  const sound = await run('context', '--project', 'p1', '--sound', '--from-frame', '0', '--to-frame', '300')
+  assert.equal(sound.query.get('sound'), 'true')
+  const read = await run('context', '--render-id', 'r1', '--page', '2')
+  assert.equal(read.query.get('renderId'), 'r1')
+  assert.equal(read.query.get('page'), '2')
+  assert.equal(read.query.get('render'), null)
+})
+
 test('media watch --frame-width asks for wider keyframes', async () => {
   // The stub answers with no `items`, so the command fails AFTER sending; the request it sent is what this checks.
   seen.length = 0

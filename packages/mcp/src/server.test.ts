@@ -2928,6 +2928,86 @@ test('get_context returns one image block per frame across a range', async () =>
 })
 
 /**
+ * A render is a job with an id, and its answer reads the way it came back (the review loop): contact sheets are
+ * attached as images with each frame's number in the text, a render still going says how to read the rest, and a
+ * sound attaches its picture with its measurement in words. Break-verified: dropping the sheets from the image list
+ * turns the first red; dropping `describeRenderProgress`, the second; dropping the sound picture or its summary, the
+ * third; sending a wait on a structured read, or none on a render, the fourth.
+ */
+function noTabFirst(rendered) {
+  return fakeClient({ getContext: async () => ({ context: { rendered }, participant: null, participants: [] }) })
+}
+
+test('get_context attaches contact sheets as images and keeps their frames in the text', async () => {
+  const rendered = {
+    renderId: 'r1',
+    state: 'done',
+    kind: 'picture',
+    layout: 'sheets',
+    page: 1,
+    pages: 2,
+    readyPages: [1, 2],
+    sheets: [
+      { frames: [0, 10, 20], columns: 3, rows: 1, dataUrl: 'data:image/webp;base64,U0hFRVQx' },
+      { frames: [30, 40], columns: 2, rows: 1, dataUrl: 'data:image/webp;base64,U0hFRVQy' },
+    ],
+  }
+  const mcp = await connect(noTabFirst(rendered))
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, fromFrame: 0, toFrame: 90, perSecond: 3 } })
+  assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['U0hFRVQx', 'U0hFRVQy'])
+  assert.match(res.content[0].text, /2 contact sheets are attached below, in order\. Each frame's number is written under its tile/)
+  assert.match(res.content[0].text, /Page 1 of 2\. Read another page with renderId r1 and its page number\./)
+  assert.match(res.content[0].text, /"frames": \[\s*30,\s*40\s*\]/)
+  assert.doesNotMatch(res.content[0].text, /U0hFRVQ/)
+})
+
+test('get_context says a render still going is read with its id, and shows what is ready', async () => {
+  const rendered = { renderId: 'r2', state: 'rendering', kind: 'picture', layout: 'sheets', page: 1, pages: 6, readyPages: [], frameCount: 600, renderedFrameCount: 0 }
+  const mcp = await connect(noTabFirst(rendered))
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, count: 600 } })
+  assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
+  assert.match(res.content[0].text, /Still rendering: 0 of 600 frames are drawn\. Read the rest with renderId r2 and a page number\./)
+  assert.doesNotMatch(res.content[0].text, /The render produced no image/)
+})
+
+test("get_context attaches a sound's picture and says what it measured", async () => {
+  const rendered = {
+    renderId: 'r3',
+    state: 'done',
+    kind: 'sound',
+    fromFrame: 0,
+    toFrame: 299,
+    loudness: { integratedLufs: -14, truePeakDbtp: -1, loudnessRangeLu: 5, samplePeakDbfs: -1.2 },
+    onsets: [{ frame: 15, seconds: 0.5 }],
+    stereo: { sideToMid: 0.2, correlation: 0.9 },
+    picture: { width: 1240, height: 402, dataUrl: 'data:image/webp;base64,V0FWRQ==' },
+    audioUrl: 'https://media.contenthero.ai/a/original.wav?t=x',
+  }
+  const mcp = await connect(noTabFirst(rendered))
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', sound: true, fromFrame: 0, toFrame: 299 } })
+  assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['V0FWRQ=='])
+  assert.match(res.content[0].text, /A picture of the sound is attached below/)
+  assert.match(res.content[0].text, /Integrated loudness -14 LUFS, true peak -1 dBTP/)
+  assert.match(res.content[0].text, /"audioUrl": "https:\/\/media\.contenthero\.ai\/a\/original\.wav\?t=x"/)
+  assert.doesNotMatch(res.content[0].text, /V0FWRQ==/)
+})
+
+test('get_context forwards the new render inputs, and waits only when it renders', async () => {
+  const seen = []
+  const mcp = await connect(fakeClient({ getContext: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, frames: [4, 2], layout: 'frames' } })
+  await mcp.callTool({ name: 'get_context', arguments: { renderId: 'r1', page: 2 } })
+  await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1' } })
+  assert.deepEqual(seen[0].frames, [4, 2])
+  assert.equal(seen[0].layout, 'frames')
+  assert.ok(seen[0].wait > 0 && seen[0].wait < 45, 'a render waits inside the call deadline')
+  assert.equal(seen[1].renderId, 'r1')
+  assert.equal(seen[1].page, 2)
+  assert.ok(seen[1].wait > 0)
+  assert.equal(seen[2].wait, undefined)
+})
+
+/**
  * ⭐ A RENDER REACHES THE AGENT WITH OR WITHOUT A LIVE TAB, AND A FAILED ONE SAYS WHY.
  *
  * The API returns a render with `participant: null` when no one is viewing (render works from the saved project).

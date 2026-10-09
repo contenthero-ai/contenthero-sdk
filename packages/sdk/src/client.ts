@@ -1714,10 +1714,10 @@ export class ContentHero {
    * selection, so an agent can operate on "what the user is looking at" like the internal assistant does. Fast
    * and structured by default. Pass `capture: true` to also ping the live tab for a fresh viewport screenshot
    * (returned as a short-lived `snapshotUrl`) when you need the user's screen as shown. To see the COMPOSED
-   * OUTPUT itself (the rendered editor frame or canvas slide), pass `render: true` (optionally `frame` for an
-   * editor project, or `slideId` / `slideIndex` for canvas); the render returns inline as a data URL, is
-   * ephemeral, and does not need a live tab. Returns the most-recent-active session's context plus the full live
-   * participant set. Optionally scope to one project. Requires the `context:read` scope.
+   * OUTPUT itself, pass `render: true` with the frames to draw, or `sound: true` to measure a range's mix
+   * (`GetContextInput`); the render is a job whose answer carries its images inline as data URLs and a `renderId`
+   * to read the rest with. It is ephemeral and does not need a live tab. Returns the most-recent-active session's
+   * context plus the full live participant set. Optionally scope to one project. Requires the `context:read` scope.
    */
   async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
     const params = new URLSearchParams()
@@ -1730,6 +1730,13 @@ export class ContentHero {
     if (typeof input.fromFrame === 'number') params.set('fromFrame', String(input.fromFrame))
     if (typeof input.toFrame === 'number') params.set('toFrame', String(input.toFrame))
     if (typeof input.count === 'number') params.set('count', String(input.count))
+    if (input.frames?.length) params.set('frames', input.frames.join(','))
+    if (typeof input.perSecond === 'number') params.set('perSecond', String(input.perSecond))
+    if (input.layout) params.set('layout', input.layout)
+    if (input.sound) params.set('sound', 'true')
+    if (input.renderId) params.set('renderId', input.renderId)
+    if (typeof input.page === 'number') params.set('page', String(input.page))
+    if (typeof input.wait === 'number') params.set('wait', String(input.wait))
     if (typeof input.width === 'number') params.set('width', String(input.width))
     if (input.region) {
       const { x, y, width, height } = input.region

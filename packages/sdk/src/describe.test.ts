@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeEditorOps, describeRenderFailure, describeScope } from './describe.js'
+import { describeEditorOps, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -71,4 +71,40 @@ test('a generation lists what it was made from, one line per input, as Studio la
     ['Reference 1 (image): https://media.contenthero.ai/a/original.png?t=x', 'Start frame (image): https://media.contenthero.ai/b/original.png?t=y'],
   )
   assert.deepEqual(describeReferences(undefined), [])
+})
+
+// A render that outlasted its wait, or has more pages, says how to read the rest; a sound says what it measured
+// (the review loop). Break-verified: returning null while rendering turns the first red; dropping the page line, the
+// second; printing a missing measure as a number, the third.
+test('describeRenderProgress names the id to read a render with, and how much is ready', () => {
+  assert.equal(
+    describeRenderProgress({ renderId: 'r1', state: 'rendering', kind: 'picture', frameCount: 400, renderedFrameCount: 120, readyPages: [1, 2], pages: 8, page: 1 }),
+    'Still rendering: 120 of 400 frames are drawn; ready: pages 1, 2 of 8. Read the rest with renderId r1 and a page number.',
+  )
+  assert.equal(describeRenderProgress({ renderId: 'r2', state: 'rendering', kind: 'sound' }), 'The sound is still rendering. Read it with renderId r2.')
+})
+
+test('describeRenderProgress says which page a finished render is on, and nothing for one page', () => {
+  assert.equal(describeRenderProgress({ renderId: 'r1', state: 'done', pages: 3, page: 2 }), 'Page 2 of 3. Read another page with renderId r1 and its page number.')
+  assert.equal(describeRenderProgress({ renderId: 'r1', state: 'done', pages: 1, page: 1 }), null)
+  assert.equal(describeRenderProgress({ dataUrl: 'x' }), null)
+})
+
+test('describeSoundMeasurement reads a finished sound, and says when a measure has nothing to measure', () => {
+  assert.equal(
+    describeSoundMeasurement({
+      kind: 'sound',
+      state: 'done',
+      loudness: { integratedLufs: -14.2, truePeakDbtp: -1.1, loudnessRangeLu: 6.3, samplePeakDbfs: -1.4 },
+      onsets: [{ frame: 3, seconds: 0.1 }],
+      stereo: { sideToMid: 0.31, correlation: 0.85 },
+    }),
+    'Integrated loudness -14.2 LUFS, true peak -1.1 dBTP, loudness range 6.3 LU, sample peak -1.4 dBFS. 1 sound starts in it. Stereo: side to mid 0.31, correlation 0.85.',
+  )
+  assert.match(
+    describeSoundMeasurement({ kind: 'sound', state: 'done', loudness: { integratedLufs: null }, onsets: [], stereo: null }) ?? '',
+    /^Integrated loudness nothing measurable, true peak nothing measurable, .* 0 sounds start in it\. Mono\.$/,
+  )
+  assert.equal(describeSoundMeasurement({ kind: 'sound', state: 'rendering' }), null)
+  assert.equal(describeRenderFailure({ kind: 'sound', error: { code: 'render_failed', message: 'boom' } }), 'The sound could not be rendered. render_failed: boom')
 })
