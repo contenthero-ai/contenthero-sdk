@@ -151,7 +151,8 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
     for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)
   }
   const warnings = r.results.flatMap((x) => x.warnings ?? [])
-  if (warnings.length) lines.push(`Warnings: ${warnings.join('; ')}.`)
+  // Each warning is a sentence of its own; joined, its closing period is the line's, so none is doubled.
+  if (warnings.length) lines.push(`Warnings: ${warnings.map((w) => w.trim().replace(/\.+$/, '')).join('; ')}.`)
   const diagnostics = r.results.flatMap((x) => x.diagnostics ?? [])
   if (diagnostics.length) {
     lines.push('Code:')

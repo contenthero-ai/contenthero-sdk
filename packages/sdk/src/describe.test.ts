@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeRenderFailure, describeScope } from './describe.js'
+import { describeEditorOps, describeRenderFailure, describeScope } from './describe.js'
+import type { ApplyEditorOpsResult } from './types.js'
 
 /**
  * The words the MCP and the CLI share for a read's scope and a render's failure. One copy each, so the two surfaces
@@ -41,4 +42,21 @@ test('describeFileSize reads as the app shows a size', async () => {
   assert.equal(describeFileSize(2048), '2.0 KB')
   assert.equal(describeFileSize(5 * 1024 * 1024), '5.0 MB')
   assert.equal(describeFileSize(3 * 1024 * 1024 * 1024), '3.0 GB')
+})
+
+/**
+ * A write's warnings are sentences of their own (a value held to a limit, 9.8): listed together they read once, each
+ * without its own closing period, so the line never ends in "..". Break-verified: dropping the trim turns it red.
+ */
+test('an edit batch lists its warnings without doubling their periods', () => {
+  const result = {
+    revision: 7,
+    results: [
+      { ok: true, warnings: ['Set slide property "durationInSeconds" to 180, its largest value, instead of 240.'] },
+      { ok: true, warnings: ['A second warning.'] },
+    ],
+  } as unknown as ApplyEditorOpsResult
+  const text = describeEditorOps(result)
+  assert.match(text, /Warnings: Set slide property "durationInSeconds" to 180, its largest value, instead of 240; A second warning\.$/m)
+  assert.doesNotMatch(text, /\.\./)
 })
