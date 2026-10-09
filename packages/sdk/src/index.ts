@@ -218,6 +218,10 @@ export type {
   FavoriteAssetType,
   ArchiveAssetType,
   FavoriteInput,
+  ShareProjectInput,
+  ProjectShare,
+  ShareMediaInput,
+  MediaShare,
   ArchiveInput,
   EditorSurface,
   EditorOp,
@@ -285,4 +289,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeFileSize, describeLimit, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'
+export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeRenderFailure, describeReserved, describeScope, withCodeWarnings } from './describe.js'

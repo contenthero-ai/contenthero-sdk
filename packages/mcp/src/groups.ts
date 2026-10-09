@@ -43,7 +43,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     title: 'Media',
     blurb: 'The library: browse, search, import and upload the media an account owns.',
     tools: [
-      'list_media', 'get_media', 'show_media', 'search_media', 'import_media',
+      'list_media', 'get_media', 'show_media', 'search_media', 'import_media', 'share_media',
       'create_media_upload', 'complete_media_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
       'favorite', 'archive',
@@ -94,6 +94,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb: 'Projects, their timelines and canvases, the templates you place on them, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'update_project', 'duplicate_project', 'delete_project',
+      'share_project',
       'import_project', 'export_project', 'get_export',
       'get_timeline_settings', 'update_timeline_settings',
       'list_project_versions', 'save_project_version', 'restore_project_version', 'update_project_version',

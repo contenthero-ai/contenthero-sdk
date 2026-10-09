@@ -2935,6 +2935,37 @@ export type FavoriteInput = ({ mediaId: string } | { assetType: FavoriteAssetTyp
   favorited?: boolean
 }
 
+/** Make a project's public live link, or revoke it (`shareProject`). */
+export interface ShareProjectInput {
+  /** Defaults to true. Pass false to revoke the link; a revoked link stays dead. */
+  shared?: boolean
+}
+
+/** A project's public live link as it now stands. */
+export interface ProjectShare {
+  shared: boolean
+  /** The public address, which shows the project as it is now; null when it is not shared. */
+  shareUrl: string | null
+}
+
+/** Share media made in Studio as one public link (`shareMedia`). */
+export interface ShareMediaInput {
+  /**
+   * One or more outputs of the caller's finished generations, by the media ids every media read prints. One output
+   * is its generation's link, opened at that output; several are a new link to them as a set.
+   */
+  mediaIds: string[]
+  /** A title for a set of two or more. */
+  title?: string
+}
+
+/** A public link to media made in Studio. */
+export interface MediaShare {
+  shareUrl: string
+  /** The media the page shows, in order: every one named, less any that could not be shared. */
+  mediaIds: string[]
+}
+
 /**
  * The target of an archive / unarchive call: a generated output by its `mediaId` (`a1B2c3D4-2`), or any other item
  * by its `assetType` and `id`.
@@ -3096,6 +3127,8 @@ export interface ProjectDetail extends ProjectSummary {
   exportedCardId: string | null
   exportedUrl: string | null
   shareId: string | null
+  /** The project's public live link, which shows the project as it is now; null when it is not shared (`shareProject`). */
+  shareUrl: string | null
   favoritedAt: string | null
   archivedAt: string | null
   /**
@@ -3428,6 +3461,8 @@ export interface ExportJob {
   status: string
   /** The final file URL, present when status is 'completed'. */
   outputUrl?: string | null
+  /** The export's public share page, present once status is 'completed'. Every export has one. */
+  shareUrl?: string | null
   errorMessage?: string | null
   /** The item that stopped a failed export, when one did: `errorMessage` names it for a person, without its id. */
   itemId?: string

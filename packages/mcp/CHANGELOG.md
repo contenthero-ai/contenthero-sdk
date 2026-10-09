@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: `share_project` makes a project's public live link, or revokes it with `shared: false`; `share_media` shares
+  outputs of finished generations as one link. `get_project` reports a project's link, and `get_export` a completed
+  export's share page.
+
 - Breaking: the preview video is retired. `get_preview` is removed, and `get_context` takes no `mode`: no agent can
   receive video over MCP, so the render's description says frames across a range are how an agent judges motion.
 - The tool descriptions name the API's renamed scopes: `brand:read`, `brand:write`, `library:write`, and

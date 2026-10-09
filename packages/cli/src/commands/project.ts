@@ -6,6 +6,7 @@
  *   project create [--type <t>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project update <projectId> [--title] [--orientation] [--width] [--height] [--brand-kit] [--cover] [--cover-position]
  *   project duplicate <projectId>                                        (requires editor:write)
+ *   project share <projectId> [--off]                                    its public live link, or revoke it (editor:write)
  *   project settings get|update <projectId>                              a video project's timeline settings
  *   project version list|save|restore|copy|rename|delete <projectId>     its version history (premium)
  *   project undo|redo <projectId> [--expected-revision <n>]              the editor's own undo and redo
@@ -30,6 +31,9 @@ import { Option, type Command } from 'commander'
 import {
   LIST_SORTS,
   describeEditorOps,
+  describeExportShareLink,
+  describeProjectShare,
+  describeProjectShareLink,
   describeScope,
   withCodeWarnings,
   type EditorOp,
@@ -130,6 +134,7 @@ export function registerProject(program: Command): void {
         `Project ${p.id} "${p.title}" (${p.type}), revision ${p.revision}` +
         // A windowed read is part of the document; the same sentence the MCP's get_project gives.
         (p.scope ? `\n${describeScope(p.scope)}` : '') +
+        (describeProjectShareLink(p.shareUrl) ? `\n${describeProjectShareLink(p.shareUrl)}` : '') +
         // Layer geometry is in composition space, NOT the output resolution (a 2168x1152 project has a
         // 960x510 layer space). Anyone about to write ops needs this number, and the human line previously
         // printed no dimensions at all, so there was nowhere to learn it short of reading app source.
@@ -255,6 +260,18 @@ export function registerProject(program: Command): void {
       emit(p, ctx, (r: ProjectSummary) => `Created ${r.type} project ${r.id} "${r.title}", a copy of ${projectId}`)
     })
 
+  // TODO(wording, 9.8 E): the share command's description and flag.
+  project
+    .command('share')
+    .description("Make the project's public live link, or revoke it with --off; anyone with the link sees the project as it is now (requires editor:write)")
+    .argument('<projectId>', 'the project id')
+    .option('--off', 'revoke the link; a revoked link stays dead')
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const share = await client.shareProject(projectId, opts.off ? { shared: false } : {})
+      emit(share, ctx, () => describeProjectShare(share))
+    })
+
   registerTimelineSettings(project)
   registerVersions(project)
 
@@ -360,7 +377,7 @@ export function registerProject(program: Command): void {
       emit(job, ctx, () =>
         withCodeWarnings(
           job.status === 'completed'
-            ? `Export ${job.exportId} completed: ${job.outputUrl}`
+            ? `Export ${job.exportId} completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`
             : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export-status ${job.exportId}`,
           job.warnings,
         ),
@@ -376,7 +393,7 @@ export function registerProject(program: Command): void {
       const job = await client.getExport(exportId)
       emit(job, ctx, () =>
         withCodeWarnings(
-          job.status === 'completed' ? `completed: ${job.outputUrl}` : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''}`,
+          job.status === 'completed' ? `completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}` : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''}`,
           job.warnings,
         ),
       )

@@ -1306,6 +1306,26 @@ test('project fields, copies and timeline settings reach their routes', async ()
   assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { snapping: false, linkedTracks: { audio: false } })
 })
 
+test('share links reach their routes: a project by its id, media by their media ids', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { shared: true, shareUrl: 'https://share.example/p' } },
+    { status: 200, body: { shared: false, shareUrl: null } },
+    { status: 200, body: { shareUrl: 'https://pages.example/s', mediaIds: ['m-1', 'm-2'] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  assert.deepEqual(await client.shareProject('p 1'), { shared: true, shareUrl: 'https://share.example/p' })
+  assert.equal((await client.shareProject('p 1', { shared: false })).shareUrl, null)
+  assert.deepEqual((await client.shareMedia({ mediaIds: ['m-1', 'm-2'], title: 'Set' })).mediaIds, ['m-1', 'm-2'])
+  assert.deepEqual(
+    calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
+    ['POST /api/v1/projects/p%201/share', 'POST /api/v1/projects/p%201/share', 'POST /api/v1/media/share'],
+  )
+  // No `shared` when sharing: the server defaults it to true.
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), {})
+  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), { shared: false })
+  assert.deepEqual(JSON.parse(String(calls[2]!.init?.body)), { mediaIds: ['m-1', 'm-2'], title: 'Set' })
+})
+
 test('version history, undo and redo reach their routes with the bodies the API reads', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { versions: [{ id: 'v1' }], nextCursor: null } },

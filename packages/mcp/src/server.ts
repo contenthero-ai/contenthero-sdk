@@ -180,6 +180,8 @@ import {
   timelineTypesResult,
   editorTranscriptResult,
   exportJobResult,
+  projectShareResult,
+  mediaShareResult,
   completedExportResult,
   exportFormatsResult,
   linkFormatsResult,
@@ -3033,6 +3035,30 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- share_media ----------------------------------------------------------
+  // TODO(wording, 9.8 E): share_media's description and inputs.
+  server.registerTool(
+    'share_media',
+    {
+      title: 'Share Media',
+      annotations: WRITE,
+      description:
+        "A public link to media made in Studio: outputs of your finished generations, by the media ids list_media, search_media and get_folder print. One output gives its generation's link, opened at that output; a generation keeps one link, so sharing it again returns the same page. Several give a new link to them as a set, leaving out any that cannot be shared. Anyone with the link sees the media, with no sign-in. Only a generation's output can be shared: an export's share page comes with get_export. Requires the studio:write scope.",
+      inputSchema: {
+        mediaIds: z.array(z.string()).min(1).describe('One or more media ids of outputs of your finished generations.'),
+        title: z.string().optional().describe('A title for a set of two or more.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return mediaShareResult(await client.shareMedia({ mediaIds: args.mediaIds, ...(args.title !== undefined ? { title: args.title } : {}) }), args.mediaIds)
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // -- list_models ----------------------------------------------------------
   server.registerTool(
     'list_models',
@@ -4699,6 +4725,29 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return projectSummaryResult(await client.duplicateProject(args.projectId), 'Created')
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // TODO(wording, 9.8 E): share_project's description and inputs.
+  server.registerTool(
+    'share_project',
+    {
+      title: 'Share Project',
+      annotations: WRITE,
+      description:
+        "Make a project's public live link, or revoke it with shared:false. Anyone with the link sees the project as it is now, with no sign-in, until it is revoked; a revoked link stays dead, and sharing again makes a new one. A project has one link, so sharing a shared project returns it. get_project reports the link. Requires the editor:write scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        shared: z.boolean().optional().describe('Default true. Pass false to revoke the link.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return projectShareResult(await client.shareProject(args.projectId, args.shared === undefined ? {} : { shared: args.shared }))
       } catch (err) {
         return errorResult(err)
       }

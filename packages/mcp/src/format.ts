@@ -39,6 +39,8 @@ import type {
   TrackedAccountListResult,
   ConnectedAccountListResult,
   ProjectSummary,
+  ProjectShare,
+  MediaShare,
   ProjectVersionListResult,
   SavedProjectVersion,
   RestoredProjectVersion,
@@ -111,7 +113,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeFileSize, describeLimit, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2517,7 +2519,8 @@ const PROJECT_DETAIL_EXPOSURE = {
   updatedAt: 'omitted: superseded by revision, which is the token that actually matters here',
   exportedCardId: 'omitted: publishing workflow, owned by the card tools',
   exportedUrl: 'omitted: publishing workflow, owned by the post tools',
-  shareId: 'omitted: sharing workflow, no editing effect',
+  shareUrl: 'rendered',
+  shareId: 'omitted: shareUrl carries it',
 } satisfies Record<keyof ProjectDetail, string>
 void PROJECT_DETAIL_EXPOSURE
 
@@ -2542,6 +2545,7 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
       // An agent asked to keep a design on-brand otherwise has no way to know WHICH kit this project is
       // linked to: it can list kits, but not resolve the association.
       (p.brandKitId ? `Brand kit: ${p.brandKitId} (read it with get_brand_kit).\n` : '') +
+      (describeProjectShareLink(p.shareUrl) ? `${describeProjectShareLink(p.shareUrl)}\n` : '') +
       (p.groups?.length
         ? `Groups: ${p.groups
             .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)
@@ -2822,7 +2826,8 @@ export function completedExportResult(
 /** `appUrl` and `shortId` are optional here: a timed-out wait knows only the export's id and status. */
 export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
   if (job.status === 'completed') {
-    return text(withCodeWarnings(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}`, job.warnings))
+    const share = describeExportShareLink(job.shareUrl)
+    return text(withCodeWarnings(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}${share ? `\n${share}` : ''}`, job.warnings))
   }
   if (job.status === 'failed') {
     return text(withCodeWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
@@ -2834,6 +2839,16 @@ export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { a
       job.warnings,
     ),
   )
+}
+
+/** A project's live link after share_project, in the SDK's one wording. */
+export function projectShareResult(share: ProjectShare): CallToolResult {
+  return text(describeProjectShare(share))
+}
+
+/** Media shared as one link, in the SDK's one wording. */
+export function mediaShareResult(share: MediaShare, asked: readonly string[]): CallToolResult {
+  return text(describeMediaShare(share, asked))
 }
 
 /** The export-format catalog as readable text + JSON. */

@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ProjectReadScope } from './types.js'
+import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, MediaShare, ProjectReadScope, ProjectShare } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -158,6 +158,33 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
     for (const d of diagnostics) lines.push(...codeDiagnosticLines(d))
   }
   return lines.join('\n')
+}
+
+// TODO(wording, 9.8 E): the four share sentences below.
+
+/** A project's live link after `shareProject`: where anyone sees it, or that its old link is dead. */
+export function describeProjectShare(share: ProjectShare): string {
+  return share.shared && share.shareUrl
+    ? `Shared. Anyone with this link sees the project as it is now: ${share.shareUrl}`
+    : 'Not shared. A link made before no longer opens it.'
+}
+
+/** A project's live link as a read reports it, or null when it is not shared. */
+export function describeProjectShareLink(shareUrl: string | null | undefined): string | null {
+  return shareUrl ? `Shared at ${shareUrl} (anyone with the link sees the project as it is now).` : null
+}
+
+/** An export's public share page, or null before the export completes. */
+export function describeExportShareLink(shareUrl: string | null | undefined): string | null {
+  return shareUrl ? `Share page: ${shareUrl}` : null
+}
+
+/** Media shared as one link: the page, and any media named that it leaves out. */
+export function describeMediaShare(share: MediaShare, asked: readonly string[]): string {
+  const left = asked.filter((id) => !share.mediaIds.includes(id))
+  return left.length
+    ? `Shared ${share.mediaIds.length} of ${asked.length} media: ${share.shareUrl}\nLeft out, as they cannot be shared: ${left.join(', ')}.`
+    : `Shared: ${share.shareUrl}`
 }
 
 /** A file size as the app shows one: binary units, one decimal above KB. */

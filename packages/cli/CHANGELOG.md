@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: `project share <projectId> [--off]` makes or revokes a project's public live link; `media share <mediaIds...>
+  [--title]` shares outputs of finished generations as one link. `project get` prints a project's link, and a completed
+  export prints its share page.
+
 - Breaking: `preview` is removed with the preview video. `context --render` with `--from-frame`, `--to-frame` and
   `--count` renders frames across a range, which is how an agent judges motion.
 - The help names the API's renamed scopes: `brand:write`, `library:write`, and `inspiration:write` for

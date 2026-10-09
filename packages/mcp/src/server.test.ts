@@ -4610,3 +4610,49 @@ test('every hand-arranged list tool takes afterId, beforeId and position, and fo
   const kit = (tools.find((t) => t.name === 'update_brand_kit')?.inputSchema as { properties: Record<string, unknown> }).properties
   assert.equal(kit.orderedIds, undefined)
 })
+
+test('share_project makes or revokes a project link, and get_project reports it', async () => {
+  const calls = []
+  const mcp = await connect(
+    fakeClient({
+      shareProject: async (projectId, input) => {
+        calls.push([projectId, input])
+        return input.shared === false ? { shared: false, shareUrl: null } : { shared: true, shareUrl: 'https://share.example/t' }
+      },
+      getProject: async (projectId) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'T', orientation: '16:9', width: 1920, height: 1080, revision: 1, state: { tracks: [] }, shareUrl: 'https://share.example/t', shareId: 't' }),
+    }),
+  )
+  const made = await mcp.callTool({ name: 'share_project', arguments: { projectId: 'p1' } })
+  assert.match(made.content[0].text, /https:\/\/share\.example\/t/)
+  const revoked = await mcp.callTool({ name: 'share_project', arguments: { projectId: 'p1', shared: false } })
+  assert.doesNotMatch(revoked.content[0].text, /https:/)
+  assert.deepEqual(calls, [['p1', {}], ['p1', { shared: false }]])
+  const read = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
+  assert.match(read.content[0].text, /Shared at https:\/\/share\.example\/t/)
+})
+
+test('share_media shares media ids and names any the link leaves out', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      shareMedia: async (input) => {
+        captured = input
+        return { shareUrl: 'https://pages.example/s', mediaIds: ['m-1'] }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'share_media', arguments: { mediaIds: ['m-1', 'm-2'], title: 'Set' } })
+  assert.deepEqual(captured, { mediaIds: ['m-1', 'm-2'], title: 'Set' })
+  assert.match(res.content[0].text, /https:\/\/pages\.example\/s/)
+  assert.match(res.content[0].text, /m-2/)
+})
+
+test("get_export gives a completed export's share page", async () => {
+  const mcp = await connect(
+    fakeClient({
+      getExport: async (exportId) => ({ exportId, shortId: 'e', appUrl: 'https://app.example/e', status: 'completed', outputUrl: 'https://files.example/e.mp4', shareUrl: 'https://pages.example/e' }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_export', arguments: { exportId: 'e1' } })
+  assert.match(res.content[0].text, /Share page: https:\/\/pages\.example\/e/)
+})

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- New: share links reach the API. `shareProject(projectId, { shared })` makes a project's public live link or revokes
+  it (`editor:write`); `shareMedia({ mediaIds, title })` shares outputs of finished generations, one as its
+  generation's link and several as a new set (`studio:write`). `ProjectDetail.shareUrl` and `ExportJob.shareUrl` (once
+  completed) read the links. One wording for them: `describeProjectShare`, `describeProjectShareLink`,
+  `describeExportShareLink`, `describeMediaShare`.
+
 - Breaking: the preview video is retired. `createPreview`, `getPreview` and their types (`PreviewInput`, `PreviewJob`,
   `PreviewPreparing`, `PreviewStart`, `PreviewStatus`) are removed with `/api/v1/preview`. `GetContextInput.mode` is
   removed: images are the render's only medium, and frames across a range are how an agent judges motion. A render's

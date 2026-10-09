@@ -70,6 +70,10 @@ import type {
   ListCardsOptions,
   ListStagesOptions,
   FavoriteInput,
+  ShareProjectInput,
+  ProjectShare,
+  ShareMediaInput,
+  MediaShare,
   ArchiveInput,
   ApplyEditorOpsInput,
   ApplyEditorOpsResult,
@@ -1626,6 +1630,15 @@ export class ContentHero {
   }
 
   /**
+   * A public link to media made in Studio: outputs of the caller's finished generations, by media id. One output is its
+   * generation's link, opened at that output (a generation keeps one link); several are a new link to them as a set,
+   * leaving out any that cannot be shared (`mediaIds` in the answer says which are in). Requires `studio:write`.
+   */
+  async shareMedia(input: ShareMediaInput): Promise<MediaShare> {
+    return this.request<MediaShare>('POST', '/api/v1/media/share', input)
+  }
+
+  /**
    * Archive an asset. Requires the `favorites:write` scope.
    *
    * Pass `{ assetType, id }` for a top-level asset (post, brand_kit,
@@ -1785,6 +1798,15 @@ export class ContentHero {
       `/api/v1/projects/${encodeURIComponent(projectId)}/duplicate`,
     )
     return project
+  }
+
+  /**
+   * Make a project's public live link, or revoke it with `shared: false` (a revoked link stays dead). The link shows the
+   * project as it is now, and a project has one: sharing a shared project returns its link. Idempotent both ways.
+   * `getProject` reads the link too. Requires `editor:write`.
+   */
+  async shareProject(projectId: string, input: ShareProjectInput = {}): Promise<ProjectShare> {
+    return this.request<ProjectShare>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/share`, input)
   }
 
   /** A video project's timeline settings for the caller, as the editor's timeline settings menu holds them. Requires `editor:read`. */
