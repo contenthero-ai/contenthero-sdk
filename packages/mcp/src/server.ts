@@ -4608,6 +4608,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         maxLinesPerCard: z.number().int().optional().describe('Subtitles (srt, vtt) only: lines per subtitle card, 1 to 4. Defaults 2.'),
         showSpeakers: z.boolean().optional().describe('Subtitles (srt, vtt) only: name who speaks, when the captions hold more than one speaker. Defaults false.'),
         timecodes: z.boolean().optional().describe('Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode.'),
+        normalizeLoudness: z.boolean().optional().describe('Rendered exports (video and sound) only: bring the final mix to the delivery loudness. Defaults true; false keeps the mix exactly as it plays in the editor.'),
       },
     },
     async (args, extra) => {

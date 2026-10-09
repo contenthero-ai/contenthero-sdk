@@ -3505,6 +3505,11 @@ export interface StartExportInput {
   showSpeakers?: boolean
   /** Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode. */
   timecodes?: boolean
+  /**
+   * Rendered exports (video and sound) only: bring the final mix to the delivery loudness. Defaults true; false keeps
+   * the mix exactly as it plays in the editor.
+   */
+  normalizeLoudness?: boolean
 }
 
 /** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */
@@ -3523,8 +3528,10 @@ export interface ExportJob {
   errorMessage?: string | null
   /** The item that stopped a failed export, when one did: `errorMessage` names it for a person, without its id. */
   itemId?: string
-  /** 0..1 render progress. */
+  /** Overall progress, 0 to 1, across every stage of the export. Never lower than an earlier read. */
   progress?: number
+  /** The stage that progress was reached in, a label beside the number. */
+  stage?: string | null
   /**
    * What the code warned about: the compiler's findings before the render, and what the render itself found. A
    * warning stops nothing; the code drew, though perhaps not as its author meant. Absent when nothing did.
