@@ -35,8 +35,19 @@ test('schema effect reads the catalog, and --name reads one effect', async () =>
   assert.deepEqual(seen, ['/api/v1/editor/effects', '/api/v1/editor/effects?name=light%20leak'])
 })
 
+// The timeline schema reads in two steps (2026-10-09), as the MCP's get_schema does.
+test('schema timeline reads the index, --name one entry, and --detail full the whole', async () => {
+  seen.length = 0
+  await run('schema', 'timeline')
+  await run('schema', 'timeline', '--name', 'update_clip')
+  await run('schema', 'timeline', '--detail', 'full')
+  assert.deepEqual(seen, ['/api/v1/editor/timeline-types', '/api/v1/editor/timeline-types?name=update_clip', '/api/v1/editor/timeline-types?detail=full'])
+})
+
 test('--name on another kind is refused, and nothing is asked', async () => {
   seen.length = 0
-  await assert.rejects(() => run('schema', 'timeline', '--name', 'glow'), /kind timeline takes no --name; it belongs to kind effect\./)
+  await assert.rejects(() => run('schema', 'layer', '--name', 'glow'), /kind layer takes no --name; it belongs to kinds effect and timeline\./)
+  await assert.rejects(() => run('schema', 'layer', '--detail', 'full'), /kind layer takes no --detail; it belongs to kind timeline\./)
+  await assert.rejects(() => run('schema', 'timeline', '--detail', 'summary'), /Unknown --detail "summary"\. The only value is full\./)
   assert.deepEqual(seen, [])
 })

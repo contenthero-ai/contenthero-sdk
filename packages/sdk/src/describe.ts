@@ -194,7 +194,13 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   const okCount = r.results.filter((x) => x.ok).length
   const failures = r.results.filter((x) => !x.ok)
   const created = r.results.flatMap((x) => x.createdIds ?? [])
-  const lines = [`Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`]
+  // A batch applies whole or not at all (the server's rule since 2026-10-09), so any failure means nothing was stored.
+  // Draft wording, for Taylan's review.
+  const lines = [
+    failures.length
+      ? `Nothing was applied: a batch applies whole or not at all. Revision ${r.revision}, unchanged.`
+      : `Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`,
+  ]
   if (created.length) lines.push(`Created: ${created.join(', ')}.`)
   // Async effect ops (remove_background) dispatch a job and return its outputId; name it so the reader can poll.
   const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)

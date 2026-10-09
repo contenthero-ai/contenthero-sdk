@@ -61,6 +61,22 @@ test('an edit batch lists its warnings without doubling their periods', () => {
   assert.doesNotMatch(text, /\.\./)
 })
 
+/** A batch applies whole or not at all (2026-10-09): a refused batch says nothing was applied, never "Applied 1/2". */
+test('a refused batch says nothing was applied, and lists every op with its reason', () => {
+  const result = {
+    revision: 7,
+    results: [
+      { op: 'update_clip', ok: false, error: 'Not applied: a batch applies whole or not at all, and op 2 (delete_clip) was refused.' },
+      { op: 'delete_clip', ok: false, error: 'item not found' },
+    ],
+  } as unknown as ApplyEditorOpsResult
+  const text = describeEditorOps(result)
+  assert.match(text, /^Nothing was applied: a batch applies whole or not at all\. Revision 7, unchanged\.$/m)
+  assert.doesNotMatch(text, /Applied \d/)
+  assert.match(text, /- delete_clip: item not found/)
+  assert.match(text, /- update_clip: Not applied: /)
+})
+
 test('a generation lists what it was made from, one line per input, as Studio labels them', async () => {
   const { describeReferences } = await import('./describe.js')
   assert.deepEqual(

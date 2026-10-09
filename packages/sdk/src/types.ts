@@ -3775,7 +3775,7 @@ export interface LayerTypeCatalog {
   ops?: EditorCreationSpec
 }
 
-/** The editor timeline clip + track-type catalog, from `getTimelineTypes`. Makes `update_timeline`
+/** The whole editor timeline schema, from `getTimelineTypes({ detail: 'full' })`. Makes `update_timeline`
  *  self-describing. */
 export interface TimelineTypeCatalog {
   projectType: 'editor'
@@ -3789,6 +3789,77 @@ export interface TimelineTypeCatalog {
   creation?: EditorCreationSpec
   /** The EDIT ops of update_timeline (move_clip, trim_clip, disable_ranges, ...), with each field signature. */
   editOps?: EditorCreationSpec
+  /** The presets add_animation, add_transition and apply_combo accept. */
+  animations?: AnimationCatalog
+}
+
+/** A preset add_animation, add_transition or apply_combo accepts. */
+export interface AnimationPreset {
+  presetKey: string
+  name: string
+  /** How long it runs when applied without a length, in seconds; null for a move that runs to the end of its clips. */
+  defaultDurationSeconds: number | null
+}
+
+/** The presets by where they apply. */
+export interface AnimationCatalog {
+  description: string
+  in: AnimationPreset[]
+  out: AnimationPreset[]
+  transition: AnimationPreset[]
+  combo: AnimationPreset[]
+}
+
+/** One update_timeline op as the schema's index lists it. */
+export interface TimelineOpIndexEntry {
+  op: string
+  shape: string
+  /** Whether the op creates clips and tracks or edits them. */
+  use: 'create' | 'edit'
+}
+
+/**
+ * The INDEX of the editor timeline schema, from `getTimelineTypes()`: every update_timeline op with its shape, and every
+ * clip and track type. Small enough to read whole; read one entry in full with `{ name }`, or everything with
+ * `{ detail: 'full' }`. The whole schema is larger than one MCP tool result carries, which is why it reads in two steps.
+ */
+export interface TimelineSchemaIndex {
+  projectType: 'editor'
+  /** @deprecated Alias for `projectType`, still emitted for one release window. */
+  surface: 'editor'
+  description: string
+  clipTypes: Array<Pick<EditorTypeSpec, 'type' | 'description' | 'supports'>>
+  trackTypes: EditorTrackSpec[]
+  ops: TimelineOpIndexEntry[]
+}
+
+/** One op in full, from `getTimelineTypes({ name })`. */
+export interface TimelineOpEntry extends TimelineOpIndexEntry {
+  entry: 'op'
+  description: string
+}
+
+/** One clip type in full, with the shared field groups it has, from `getTimelineTypes({ name })`. */
+export interface TimelineClipTypeEntry {
+  entry: 'clipType'
+  clipType: EditorTypeSpec
+  sharedProps: Partial<EditorSharedProps>
+}
+
+/** The presets, from `getTimelineTypes({ name: 'animations' })`. */
+export interface TimelineAnimationsEntry extends AnimationCatalog {
+  entry: 'animations'
+}
+
+/** One entry of the timeline schema, by name. */
+export type TimelineSchemaEntry = TimelineOpEntry | TimelineClipTypeEntry | TimelineAnimationsEntry
+
+/** What a timeline schema read asks for: the index (nothing), one entry (`name`), or the whole schema (`detail`). */
+export interface TimelineSchemaOptions extends TypeCatalogOptions {
+  /** One op or clip type to read in full, or `animations` for the presets. */
+  name?: string
+  /** `full`: the whole schema in one read. */
+  detail?: 'full'
 }
 
 /** A spoken word with source-media timing, ABSOLUTE timeline frames, and per-word metadata (granularity 'word'). */

@@ -3179,9 +3179,9 @@ test("get_schema kind 'effect' lists the effects, reads one by name, and refuses
   const one = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'effect', name: 'glow' } })).content[0].text
   assert.match(one, /- radius: number 0\.\.200, default 20 \(Radius\)/)
   assert.match(one, /Keyframeable on a clip \(effects\.<id>\.<param>\): radius/)
-  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline', name: 'glow' } })
+  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', name: 'glow' } })
   assert.ok(refused.isError)
-  assert.match(refused.content[0].text, /kind 'timeline' takes no name; it belongs to kind 'effect'\./)
+  assert.match(refused.content[0].text, /kind 'layer' takes no name; it belongs to kinds 'effect' and 'timeline'\./)
   assert.deepEqual(asked, ['list', 'get glow'])
 })
 
@@ -3208,6 +3208,46 @@ test("get_schema passes jsonSchema through for kinds 'timeline' and 'layer', and
   const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'export', jsonSchema: true } })
   assert.equal(refused.isError, true)
   assert.match((refused.content[0]).text, /takes no jsonSchema/)
+})
+
+// The timeline schema reads in two steps (2026-10-09): the whole is larger than one tool result carries.
+test("get_schema kind 'timeline' reads the index, one entry by name, or the whole on request", async () => {
+  const seen: unknown[] = []
+  const index = { projectType: 'editor', surface: 'editor', description: 'The index.', clipTypes: [{ type: 'video', description: 'A video.', supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'm', holds: ['video'] }], ops: [{ op: 'create_clip', shape: "{ op: 'create_clip', trackId, clip }", use: 'create' }, { op: 'update_clip', shape: "{ op: 'update_clip', clipId, patch?, edits? }", use: 'edit' }] }
+  const op = { entry: 'op', op: 'update_clip', shape: "{ op: 'update_clip', clipId, patch?, edits? }", description: 'Patch one clip.', use: 'edit' }
+  const clipType = { entry: 'clipType', clipType: { type: 'video', description: 'A video.', props: [{ name: 'code', type: 'string' }], supports: ['base'] }, sharedProps: { base: [] } }
+  const mcp = await connect(
+    fakeClient({
+      getTimelineTypes: async (options?: { name?: string; detail?: string }) => {
+        seen.push(options)
+        if (options?.name === 'update_clip') return op
+        if (options?.name === 'video') return clipType
+        return index
+      },
+    } as never),
+  )
+  const read = async (args: Record<string, unknown>) => (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline', ...args } })).content[0].text as string
+  const indexText = await read({})
+  assert.match(indexText, /^The index\./)
+  assert.match(indexText, /Create ops:\n- \{ op: 'create_clip', trackId, clip \}/)
+  assert.match(indexText, /Edit ops:\n- \{ op: 'update_clip', clipId, patch\?, edits\? \}/)
+  assert.match(await read({ name: 'update_clip' }), /^\{ op: 'update_clip', clipId, patch\?, edits\? \}\nPatch one clip\./)
+  assert.match(await read({ name: 'video', jsonSchema: true }), /^video: A video\.\nFields: code\nShared groups: base/)
+  await read({ detail: 'full' })
+  assert.deepEqual(seen, [{}, { name: 'update_clip' }, { jsonSchema: true, name: 'video' }, { detail: 'full' }])
+  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', detail: 'full' } })
+  assert.equal(refused.isError, true)
+  assert.match((refused.content[0]).text, /kind 'layer' takes no detail; it belongs to kind 'timeline'\./)
+})
+
+test('update_timeline and update_canvas say a batch applies whole or not at all; get_project names the main track', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const description = (name: string) => tools.find((t) => t.name === name)!.description ?? ''
+  for (const name of ['update_timeline', 'update_canvas']) {
+    assert.match(description(name), /A batch applies whole or not at all: when any op is refused, nothing is stored/)
+  }
+  assert.match(description('get_project'), /isPrimary: true on the main \(magnetic\) track/)
 })
 
 // F23: `solid` was retired 2026-09-13; the tool description offered it to agents for weeks after.
