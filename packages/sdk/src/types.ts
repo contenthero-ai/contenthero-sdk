@@ -363,7 +363,7 @@ export interface GenerateRequest {
    * the server refuses a model that does other work and names the models that do this work, instead of running
    * whatever the model does.
    */
-  kind?: 'generate' | 'upscale' | 'lip-sync' | 'background-removal'
+  kind?: 'generate' | 'upscale' | 'lip-sync' | 'background-removal' | 'layer-separation'
   /** Model identifier, e.g. 'nano-banana-2'. Required. */
   modelId: string
   /** Text prompt. Required for image/video and for music/sfx audio. */
