@@ -14,6 +14,7 @@
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--wait]
  *   project export-status <exportId>                                     (requires editor:read)
+ *   project exports <projectId> [--limit] [--cursor]                     its exports, newest first (requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
@@ -43,6 +44,7 @@ import {
   type ProjectSort,
   type ProjectSummary,
   type ProjectVersionListResult,
+  type ProjectExportListResult,
   type SortOrder,
   type TimelineSettings,
   type TimelineSettingsChange,
@@ -260,7 +262,6 @@ export function registerProject(program: Command): void {
       emit(p, ctx, (r: ProjectSummary) => `Created ${r.type} project ${r.id} "${r.title}", a copy of ${projectId}`)
     })
 
-  // TODO(wording, 9.8 E): the share command's description and flag.
   project
     .command('share')
     .description("Make the project's public live link, or revoke it with --off; anyone with the link sees the project as it is now (requires editor:write)")
@@ -398,6 +399,28 @@ export function registerProject(program: Command): void {
         ),
       )
     })
+
+  // TODO(wording, 9.8 E): the exports command's description and empty line.
+  withPageFlags(
+    project
+      .command('exports')
+      .description("List a project's exports, newest first: finished ones with their download and share page, running ones with their status (requires editor:read)")
+      .argument('<projectId>', 'the project id'),
+  ).action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+    const { client, ctx } = makeClient(command)
+    const page = await client.listProjectExports(projectId, { limit: opts.limit as number | undefined, cursor: opts.cursor as string | undefined })
+    emit(page, ctx, (p: ProjectExportListResult) =>
+      p.exports.length === 0
+        ? 'No exports.'
+        : withMore(
+            table(
+              ['ID', 'CREATED', 'TYPE', 'STATUS', 'TITLE', 'SHARE PAGE'],
+              p.exports.map((e) => [e.exportId, e.createdAt, e.exportType ?? '', e.status, e.title ?? '', e.shareUrl ?? '']),
+            ),
+            p.nextCursor,
+          ),
+    )
+  })
 
   project
     .command('apply')

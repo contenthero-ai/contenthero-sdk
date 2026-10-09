@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `media share --off` stops sharing: one media id, or the link with `--link`.
+- New: `project exports <projectId>` lists a project's exports, newest first, a page at a time.
 - New: `project share <projectId> [--off]` makes or revokes a project's public live link; `media share <mediaIds...>
   [--title]` shares outputs of finished generations as one link. `project get` prints a project's link, and a completed
   export prints its share page.

@@ -160,8 +160,6 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   return lines.join('\n')
 }
 
-// TODO(wording, 9.8 E): the four share sentences below.
-
 /** A project's live link after `shareProject`: where anyone sees it, or that its old link is dead. */
 export function describeProjectShare(share: ProjectShare): string {
   return share.shared && share.shareUrl
@@ -181,6 +179,8 @@ export function describeExportShareLink(shareUrl: string | null | undefined): st
 
 /** Media shared as one link: the page, and any media named that it leaves out. */
 export function describeMediaShare(share: MediaShare, asked: readonly string[]): string {
+  // TODO(wording, 9.8 E)
+  if (!share.shared) return 'Stopped sharing. The link no longer opens.'
   const left = asked.filter((id) => !share.mediaIds.includes(id))
   return left.length
     ? `Shared ${share.mediaIds.length} of ${asked.length} media: ${share.shareUrl}\nLeft out, as they cannot be shared: ${left.join(', ')}.`

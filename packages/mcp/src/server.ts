@@ -181,6 +181,7 @@ import {
   editorTranscriptResult,
   exportJobResult,
   projectShareResult,
+  projectExportListResult,
   mediaShareResult,
   completedExportResult,
   exportFormatsResult,
@@ -3036,23 +3037,32 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- share_media ----------------------------------------------------------
-  // TODO(wording, 9.8 E): share_media's description and inputs.
+  // TODO(wording, 9.8 E): the stop-sharing sentence, the export sentence (its "only" claim removed), and the shared and
+  // shareUrl inputs.
   server.registerTool(
     'share_media',
     {
       title: 'Share Media',
       annotations: WRITE,
       description:
-        "A public link to media made in Studio: outputs of your finished generations, by the media ids list_media, search_media and get_folder print. One output gives its generation's link, opened at that output; a generation keeps one link, so sharing it again returns the same page. Several give a new link to them as a set, leaving out any that cannot be shared. Anyone with the link sees the media, with no sign-in. Only a generation's output can be shared: an export's share page comes with get_export. Requires the studio:write scope.",
+        "A public link to media made in Studio: outputs of your finished generations, by the media ids list_media, search_media and get_folder print. One output gives its generation's link, opened at that output; a generation keeps one link, so sharing it again returns the same page. Several give a new link to them as a set, leaving out any that cannot be shared. Anyone with the link sees the media, with no sign-in. Pass shared:false to stop sharing, naming a generation by one media id or any media link as shareUrl; a stopped link never opens again, and sharing again makes a new one. An export's share page comes with get_export. Requires the studio:write scope.",
       inputSchema: {
-        mediaIds: z.array(z.string()).min(1).describe('One or more media ids of outputs of your finished generations.'),
+        mediaIds: z.array(z.string()).min(1).optional().describe('One or more media ids of outputs of your finished generations. To stop sharing, one.'),
         title: z.string().optional().describe('A title for a set of two or more.'),
+        shared: z.boolean().optional().describe('Default true. Pass false to stop sharing.'),
+        shareUrl: z.string().optional().describe('With shared:false, the media link to stop.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return mediaShareResult(await client.shareMedia({ mediaIds: args.mediaIds, ...(args.title !== undefined ? { title: args.title } : {}) }), args.mediaIds)
+        const input = {
+          ...(args.mediaIds !== undefined ? { mediaIds: args.mediaIds } : {}),
+          ...(args.title !== undefined ? { title: args.title } : {}),
+          ...(args.shared !== undefined ? { shared: args.shared } : {}),
+          ...(args.shareUrl !== undefined ? { shareUrl: args.shareUrl } : {}),
+        }
+        return mediaShareResult(await client.shareMedia(input), args.mediaIds ?? [])
       } catch (err) {
         return errorResult(err)
       }
@@ -4618,6 +4628,32 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // TODO(wording, 9.8 E): list_project_exports's description.
+  server.registerTool(
+    'list_project_exports',
+    {
+      title: 'List Project Exports',
+      annotations: READ,
+      description:
+        "List a project's exports, newest first, as the editor's Exports tab shows them: each finished one with its download and public share page, and the ones still running with their status (poll one with get_export). A failed export is not listed. Requires the editor:read scope.",
+      inputSchema: {
+        projectId: z.string().describe('The project id.'),
+        ...pageInput(),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return projectExportListResult(
+          args.projectId,
+          await client.listProjectExports(args.projectId, { limit: args.limit, cursor: args.cursor }),
+        )
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   server.registerTool(
     'get_export',
     {
@@ -4731,7 +4767,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // TODO(wording, 9.8 E): share_project's description and inputs.
   server.registerTool(
     'share_project',
     {

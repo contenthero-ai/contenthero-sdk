@@ -88,6 +88,8 @@ export type {
   TimelineSettingsChange,
   ProjectVersion,
   ProjectVersionListResult,
+  ProjectExport,
+  ProjectExportListResult,
   SavedProjectVersion,
   RestoredProjectVersion,
   UndoInput,

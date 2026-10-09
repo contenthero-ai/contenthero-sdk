@@ -150,6 +150,7 @@ import type {
   TimelineSettings,
   TimelineSettingsChange,
   ProjectVersionListResult,
+  ProjectExportListResult,
   SavedProjectVersion,
   RestoredProjectVersion,
   UndoInput,
@@ -1632,7 +1633,8 @@ export class ContentHero {
   /**
    * A public link to media made in Studio: outputs of the caller's finished generations, by media id. One output is its
    * generation's link, opened at that output (a generation keeps one link); several are a new link to them as a set,
-   * leaving out any that cannot be shared (`mediaIds` in the answer says which are in). Requires `studio:write`.
+   * leaving out any that cannot be shared (`mediaIds` in the answer says which are in). `shared: false` stops sharing a
+   * generation's link (one media id) or any media link (`shareUrl`): it never opens again. Requires `studio:write`.
    */
   async shareMedia(input: ShareMediaInput): Promise<MediaShare> {
     return this.request<MediaShare>('POST', '/api/v1/media/share', input)
@@ -1925,6 +1927,20 @@ export class ContentHero {
    */
   async startExport(projectId: string, input: StartExportInput = {}): Promise<ExportJob> {
     return this.request<ExportJob>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/export`, input)
+  }
+
+  /**
+   * A project's exports, newest first, a page at a time: every finished one with its file and share page, and the ones
+   * still running, each with its `status` (poll one with `getExport`). A failed export is not listed. Requires
+   * `editor:read`.
+   */
+  async listProjectExports(projectId: string, options: PageOptions = {}): Promise<ProjectExportListResult> {
+    const q = new URLSearchParams()
+    setPage(q, options)
+    return this.request<ProjectExportListResult>(
+      'GET',
+      `/api/v1/projects/${encodeURIComponent(projectId)}/exports${queryOf(q)}`,
+    )
   }
 
   /** Poll an export job by id. Requires the `editor:read` scope. */

@@ -438,18 +438,26 @@ export function registerMedia(program: Command): void {
       emit(m, ctx, uploadedHuman)
     })
 
-  // TODO(wording, 9.8 E): the share command's description, argument and flag.
+  // TODO(wording, 9.8 E): --off, --link, and the argument's stop-sharing clause.
   media
     .command('share')
     .description(
       "A public link to outputs of your finished generations: one gives its generation's link, opened at that output; several give a new link to them as a set (requires studio:write)",
     )
-    .argument('<mediaIds...>', 'one or more media ids, as these commands print them')
+    .argument('[mediaIds...]', 'one or more media ids, as these commands print them; with --off, one')
     .option('--title <title>', 'a title for a set of two or more')
+    .option('--off', 'stop sharing: one media id, or the link with --link; a stopped link never opens again')
+    .option('--link <shareUrl>', 'with --off, the media link to stop')
     .action(async (mediaIds: string[], opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const title = opts.title as string | undefined
-      const share = await client.shareMedia({ mediaIds, ...(title !== undefined ? { title } : {}) })
+      const link = opts.link as string | undefined
+      const share = await client.shareMedia({
+        ...(mediaIds.length ? { mediaIds } : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(opts.off ? { shared: false } : {}),
+        ...(link !== undefined ? { shareUrl: link } : {}),
+      })
       emit(share, ctx, () => describeMediaShare(share, mediaIds))
     })
 

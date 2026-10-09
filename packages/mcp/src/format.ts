@@ -42,6 +42,7 @@ import type {
   ProjectShare,
   MediaShare,
   ProjectVersionListResult,
+  ProjectExportListResult,
   SavedProjectVersion,
   RestoredProjectVersion,
   TimelineSettings,
@@ -2730,6 +2731,19 @@ export function projectVersionListResult(projectId: string, { versions, nextCurs
       `- ${v.id} | ${v.createdAt}${v.label ? ` | "${v.label}"` : ''} | ${v.triggerReason}${v.authorName ? ` | by ${v.authorName}` : ''}${v.revision != null ? ` | revision ${v.revision}` : ''}`,
   )
   return text(lines([`${versions.length} version(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
+}
+
+// TODO(wording, 9.8 E): the two lines below.
+/** A page of a project's exports, newest first: one row each, with its download and share page once finished. */
+export function projectExportListResult(projectId: string, { exports, nextCursor }: ProjectExportListResult): CallToolResult {
+  if (!exports.length) return text(`Project ${projectId} has no exports.`)
+  const rows = exports.map((e) => {
+    const done = e.status === 'completed'
+    const kind = e.exportType ? ` | ${e.exportType}` : ''
+    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}` : ` | ${e.status} (poll get_export)`
+    return `- ${e.exportId}${linkAfter(e.appUrl)} | ${e.createdAt}${kind}${e.title ? ` | "${e.title}"` : ''}${files}`
+  })
+  return text(lines([`${exports.length} export(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
 }
 
 /** A version just saved. */

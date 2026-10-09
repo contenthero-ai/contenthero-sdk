@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `shareMedia` stops sharing with `shared: false`: a generation's link by one media id, or any media link as
+  `shareUrl`. `MediaShare` gains `shared`, and its `shareUrl` is null once stopped.
+- New: `listProjectExports(projectId, { limit, cursor })` reads a project's exports a page at a time, as the editor's
+  Exports tab lists them (`ProjectExport`, `ProjectExportListResult`), each with `appUrl` and, once finished,
+  `shareUrl`.
 - New: share links reach the API. `shareProject(projectId, { shared })` makes a project's public live link or revokes
   it (`editor:write`); `shareMedia({ mediaIds, title })` shares outputs of finished generations, one as its
   generation's link and several as a new set (`studio:write`). `ProjectDetail.shareUrl` and `ExportJob.shareUrl` (once

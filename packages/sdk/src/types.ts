@@ -2952,17 +2952,24 @@ export interface ProjectShare {
 export interface ShareMediaInput {
   /**
    * One or more outputs of the caller's finished generations, by the media ids every media read prints. One output
-   * is its generation's link, opened at that output; several are a new link to them as a set.
+   * is its generation's link, opened at that output; several are a new link to them as a set. To stop sharing, one id
+   * names its generation's link.
    */
-  mediaIds: string[]
+  mediaIds?: string[]
   /** A title for a set of two or more. */
   title?: string
+  /** Defaults to true. Pass false to stop sharing: one media id, or the link as `shareUrl`. A stopped link never opens again. */
+  shared?: boolean
+  /** With `shared: false`, the media link to stop: a generation's page or a set's. */
+  shareUrl?: string
 }
 
-/** A public link to media made in Studio. */
+/** A public link to media made in Studio, or that it stopped. */
 export interface MediaShare {
-  shareUrl: string
-  /** The media the page shows, in order: every one named, less any that could not be shared. */
+  shared: boolean
+  /** The public page; null once it is no longer shared. */
+  shareUrl: string | null
+  /** The media the page shows, in order: every one named, less any that could not be shared. None once stopped. */
   mediaIds: string[]
 }
 
@@ -3394,6 +3401,36 @@ export interface ProjectVersion {
 /** Result of `listProjectVersions`: a page of a project's saved versions, newest first. */
 export interface ProjectVersionListResult extends Paged {
   versions: ProjectVersion[]
+}
+
+/** One export of a project, as `listProjectExports` gives it. */
+export interface ProjectExport {
+  exportId: string
+  /** The export's 8-character public id; `exportId` stays the UUID. */
+  shortId: string
+  /** This export in the app (it opens its project). */
+  appUrl: string
+  /** 'completed', or a status the server is still working through ('pending' | 'rendering' | 'transferring'). */
+  status: string
+  exportType: string | null
+  title: string | null
+  /** The delivered file; null until the export completes. */
+  outputUrl: string | null
+  /** The export's poster; for a running export, its project's current cover. */
+  thumbnailUrl: string | null
+  fileSizeBytes: number | null
+  durationSeconds: number | null
+  /** Where it is delivered, as it was asked for. */
+  destination: string | null
+  shareId: string | null
+  /** Its public share page, once it has completed. */
+  shareUrl: string | null
+  createdAt: string
+}
+
+/** A page of a project's exports, newest first. */
+export interface ProjectExportListResult extends Paged {
+  exports: ProjectExport[]
 }
 
 /** The version `saveProjectVersion` stored, in the shape a list gives it. */

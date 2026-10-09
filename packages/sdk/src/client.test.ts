@@ -1306,6 +1306,18 @@ test('project fields, copies and timeline settings reach their routes', async ()
   assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { snapping: false, linkedTracks: { audio: false } })
 })
 
+test("a project's exports are read a page at a time", async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { exports: [{ exportId: 'e1', status: 'completed' }], nextCursor: 'n' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const page = await client.listProjectExports('p 1', { limit: 5, cursor: 'c' })
+  assert.equal(page.exports[0]?.exportId, 'e1')
+  assert.equal(page.nextCursor, 'n')
+  const url = new URL(calls[0]!.url)
+  assert.equal(`${calls[0]!.init?.method} ${url.pathname}`, 'GET /api/v1/projects/p%201/exports')
+  assert.equal(url.searchParams.get('limit'), '5')
+  assert.equal(url.searchParams.get('cursor'), 'c')
+})
+
 test('share links reach their routes: a project by its id, media by their media ids', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { shared: true, shareUrl: 'https://share.example/p' } },

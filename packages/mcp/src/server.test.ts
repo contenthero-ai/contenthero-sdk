@@ -4637,7 +4637,7 @@ test('share_media shares media ids and names any the link leaves out', async () 
     fakeClient({
       shareMedia: async (input) => {
         captured = input
-        return { shareUrl: 'https://pages.example/s', mediaIds: ['m-1'] }
+        return { shared: true, shareUrl: 'https://pages.example/s', mediaIds: ['m-1'] }
       },
     }),
   )
@@ -4645,6 +4645,46 @@ test('share_media shares media ids and names any the link leaves out', async () 
   assert.deepEqual(captured, { mediaIds: ['m-1', 'm-2'], title: 'Set' })
   assert.match(res.content[0].text, /https:\/\/pages\.example\/s/)
   assert.match(res.content[0].text, /m-2/)
+})
+
+test('share_media stops a share by a media id or by its link', async () => {
+  const asked = []
+  const mcp = await connect(
+    fakeClient({
+      shareMedia: async (input) => {
+        asked.push(input)
+        return { shared: false, shareUrl: null, mediaIds: [] }
+      },
+    }),
+  )
+  const byId = await mcp.callTool({ name: 'share_media', arguments: { mediaIds: ['m-1'], shared: false } })
+  const byLink = await mcp.callTool({ name: 'share_media', arguments: { shareUrl: 'https://pages.example/s', shared: false } })
+  assert.deepEqual(asked, [{ mediaIds: ['m-1'], shared: false }, { shared: false, shareUrl: 'https://pages.example/s' }])
+  assert.match(byId.content[0].text, /Stopped sharing/)
+  assert.match(byLink.content[0].text, /Stopped sharing/)
+})
+
+test("list_project_exports lists a project's exports with their links and status", async () => {
+  let asked
+  const mcp = await connect(
+    fakeClient({
+      listProjectExports: async (projectId, page) => {
+        asked = [projectId, page]
+        return {
+          exports: [
+            { exportId: 'e2', shortId: 's2', appUrl: 'https://app.example/e2', status: 'rendering', exportType: 'video', title: 'Cut', outputUrl: null, thumbnailUrl: null, fileSizeBytes: null, durationSeconds: null, destination: null, shareId: 'x', shareUrl: null, createdAt: '2026-10-09' },
+            { exportId: 'e1', shortId: 's1', appUrl: 'https://app.example/e1', status: 'completed', exportType: 'video', title: 'Cut', outputUrl: 'https://files.example/e1.mp4', thumbnailUrl: null, fileSizeBytes: 9, durationSeconds: 3, destination: null, shareId: 'y', shareUrl: 'https://pages.example/e1', createdAt: '2026-10-08' },
+          ],
+          nextCursor: 'n',
+        }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'list_project_exports', arguments: { projectId: 'p1', limit: 2 } })
+  assert.deepEqual(asked, ['p1', { limit: 2, cursor: undefined }])
+  assert.match(res.content[0].text, /e2.*rendering/)
+  assert.match(res.content[0].text, /share page: https:\/\/pages\.example\/e1/)
+  assert.match(res.content[0].text, /\bn\b/)
 })
 
 test("get_export gives a completed export's share page", async () => {

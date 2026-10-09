@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `share_media` stops sharing with `shared: false`, naming a generation by one media id or any media link as `shareUrl`.
+- New: `list_project_exports` lists a project's exports, newest first, with each finished one's download and share
+  page and each running one's status.
 - New: `share_project` makes a project's public live link, or revokes it with `shared: false`; `share_media` shares
   outputs of finished generations as one link. `get_project` reports a project's link, and `get_export` a completed
   export's share page.

@@ -12,7 +12,8 @@ import { promisify } from 'node:util'
  *
  * Run as real processes under --human against a local server that records each request.
  * Break-verified: sending `shared: true` for a plain `project share` turns the first red; dropping `--off` turns the
- * second red; sending the media ids as one string turns the third red.
+ * second red; sending the media ids as one string turns the third red; dropping `--off` or `--link` from `media share`
+ * turns the fourth red.
  */
 
 const run = promisify(execFile)
@@ -59,9 +60,18 @@ test('project share --off revokes it', async () => {
 })
 
 test('media share sends every media id and names any left out', async () => {
-  body = { shareUrl: 'https://pages.example/s', mediaIds: ['m-1'] }
+  body = { shared: true, shareUrl: 'https://pages.example/s', mediaIds: ['m-1'] }
   const out = await cli('media', 'share', 'm-1', 'm-2', '--title', 'Set')
   assert.deepEqual(requests, [{ method: 'POST', url: '/api/v1/media/share', body: { mediaIds: ['m-1', 'm-2'], title: 'Set' } }])
   assert.match(out, /https:\/\/pages\.example\/s/)
   assert.match(out, /m-2/)
+})
+
+test('media share --off stops a share by one media id or by its link', async () => {
+  body = { shared: false, shareUrl: null, mediaIds: [] }
+  const byId = await cli('media', 'share', 'm-1', '--off')
+  assert.deepEqual(requests[0]?.body, { mediaIds: ['m-1'], shared: false })
+  assert.match(byId, /Stopped sharing/)
+  await cli('media', 'share', '--off', '--link', 'https://pages.example/s')
+  assert.deepEqual(requests[0]?.body, { shared: false, shareUrl: 'https://pages.example/s' })
 })
