@@ -663,6 +663,12 @@ function isAllowedImageHost(url: string): boolean {
  */
 const MAX_INLINE_BASE64_CHARS = 900_000
 
+/**
+ * How long get_context asks the server to wait for a render before answering: the call's deadline, less the time to
+ * format and return what came back. A render still going then is not lost; its answer carries the id to read it with.
+ */
+const RENDER_WAIT_SECONDS = Math.floor((CALL_DEADLINE_MS - 10_000) / 1000)
+
 /** One fetch's time: 8 seconds, or whatever is left before the call's deadline when that is sooner. */
 function fetchTimeoutMs(deadline?: number): number {
   return deadline === undefined ? 8000 : Math.min(8000, deadline - Date.now())
@@ -4440,17 +4446,23 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Live Context',
       annotations: READ,
       description:
-        "Read the live context of what the user is currently viewing in the open app: the active surface, the focused element, the playhead, and the current selection, so you act on what the user is looking at rather than guessing. Read this first. It is fast, structured, and does not disturb the live page, and structured context alone is enough whenever the task does not depend on the exact pixels; it returns no image by default. Acquire vision only when the task genuinely requires seeing, and pick the path by what you need to see. Set render=true to see the composed output itself: the actual rendered editor frame or canvas slide, reconstructed from saved data, so you can visually verify your own edits while iterating. Pass frame (editor) or slideId/slideIndex (canvas) to inspect a specific point, or render=true alone for the point the user is viewing. The render returns inline as an image, is ephemeral, leaves nothing in the user's storage, and does not need a live tab. Set capture=true instead only when you need the user's actual screen as shown right now, including transient interface state and unsaved edits; capturing renders the current screen on demand, so its latency and brief page interruption grow with how visually heavy that screen is. Do not use export_project to check your work: exports are permanent deliverables that count against the user's storage; use render for previews. Returns the most-recent-active session and the live participant set, or nothing when no one is viewing (render still works with an explicit projectId). Optionally scope to one project. Requires the context:read scope.",
+        "Read the live context of what the user is currently viewing in the open app: the active surface, the focused element, the playhead, and the current selection, so you act on what the user is looking at rather than guessing. Read this first. It is fast, structured, and does not disturb the live page, and structured context alone is enough whenever the task does not depend on the exact pixels; it returns no image by default. Acquire vision only when the task genuinely requires seeing, and pick the path by what you need to see. Set render=true to see the composed output itself: the actual rendered editor frame or canvas slide, reconstructed from saved data, so you can visually verify your own edits while iterating. Pass frame (editor) or slideId/slideIndex (canvas) to inspect a specific point, or render=true alone for the point the user is viewing. For an editor timeline, name several frames as a list (frames), as a rate over a range (perSecond with fromFrame and toFrame), or as a count spread over a range (count); you get exactly the frames you name, one by one when they fit one result, or as contact sheets with each frame's number under its tile, in pages. Set sound=true with fromFrame and toFrame to hear your mix instead: that range is rendered as an export mixes it and measured (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. A render is a job: what finishes within the call comes back with a renderId, and a render that takes longer, or has more pages, is read by calling again with renderId and page. Renders are ephemeral, leave nothing in the user's storage, and do not need a live tab. Set capture=true instead only when you need the user's actual screen as shown right now, including transient interface state and unsaved edits; capturing renders the current screen on demand, so its latency and brief page interruption grow with how visually heavy that screen is. Do not use export_project to check your work: exports are permanent deliverables that count against the user's storage; use render for the picture and sound for the mix. Returns the most-recent-active session and the live participant set, or nothing when no one is viewing (render still works with an explicit projectId). Optionally scope to one project. Requires the context:read scope.",
       inputSchema: {
         projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere. Required for render when no session is live.'),
         capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport (their SCREEN), captured at read time. Default false returns structured context only. Request it only when the task depends on seeing the live, as-shown state including unsaved UI. To see the composed OUTPUT rather than the screen, use render instead."),
-        render: z.boolean().optional().describe('Also render your work so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as one image; add count with fromFrame/toFrame for several across a range. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show. Use this to check your work, not export_project, which produces a file the user KEEPS. To watch a RAW source clip instead of your composition, use get_media with a video item.'),
+        render: z.boolean().optional().describe('Also render your work so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as one image; name several frames with frames, perSecond or count. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show. Use this to check your work, not export_project, which produces a file the user KEEPS. To watch a RAW source clip instead of your composition, use get_media with a video item.'),
         frame: z.number().int().min(0).optional().describe("Editor: which single timeline frame to render. Omit to render the current playhead frame."),
         slideId: z.string().optional().describe("Canvas: the id of the slide to render. Omit to render the focused slide."),
         slideIndex: z.number().int().min(1).optional().describe("Canvas: the 1-based slide index to render (alternative to slideId)."),
-        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames. Omit to start at the beginning.'),
+        frames: z.array(z.number().int().min(0)).min(1).optional().describe('Editor: exactly these timeline frames, in this order.'),
+        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames or for sound. Omit to start at the beginning.'),
         toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
-        count: z.number().int().min(1).optional().describe("How many frames to return across the range. Omit for one frame at the focus point, or a proportional default when a range is given."),
+        count: z.number().int().min(1).optional().describe('How many frames to spread evenly across the range. Omit for one frame at the focus point, or about one a second of a range.'),
+        perSecond: z.number().positive().optional().describe('How many frames to take per second of the range, up to every frame.'),
+        layout: z.enum(['frames', 'sheets']).optional().describe("'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, each frame numbered under its tile. Omit to choose by how many fit one result."),
+        sound: z.boolean().optional().describe("Render the range's sound instead of its picture, mixed as an export mixes it, and measure it. Takes fromFrame and toFrame only."),
+        renderId: z.string().optional().describe('Read a render already started, by the renderId it returned. Pass only page with it.'),
+        page: z.number().int().min(1).optional().describe('Which page of the render to read, starting at 1.'),
         /*
           ⭐ 3840, THE WIDEST NATIVE FRAME (4K landscape). This was 1440, while the server rendered at 960 and
           enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
@@ -4478,9 +4490,17 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           frame: args.frame,
           slideId: args.slideId,
           slideIndex: args.slideIndex,
+          frames: args.frames,
           fromFrame: args.fromFrame,
           toFrame: args.toFrame,
           count: args.count,
+          perSecond: args.perSecond,
+          layout: args.layout,
+          sound: args.sound,
+          renderId: args.renderId,
+          page: args.page,
+          // A render is a job: the server answers with what finished inside this wait, and the rest is read by its id.
+          ...(args.render || args.sound || args.renderId ? { wait: RENDER_WAIT_SECONDS } : {}),
           width: args.width,
           region: args.region,
         })

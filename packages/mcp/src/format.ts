@@ -114,7 +114,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2592,35 +2592,43 @@ export function liveContextResult(
         'The user may not have the editor/studio/content open right now.',
     )
   }
-  // Pull the inline render out as image block(s). A still carries `rendered.dataUrl` (one image); a filmstrip /
-  // clip carries `rendered.frames[].dataUrl` (many). Keep the light `rendered` metadata in the JSON but drop the
-  // bulky dataUrl(s) so the text summary stays readable.
-  const renderImages: Array<{ data: string; mimeType: string; frame?: unknown }> = []
+  // Pull the render's images out as image blocks: a single frame or slide carries `rendered.dataUrl`, frames one by one
+  // `rendered.frames[].dataUrl`, contact sheets `rendered.sheets[].dataUrl`, and a sound its picture's. Keep the light
+  // metadata in the JSON (frame numbers, a sheet's grid) and drop the bulky data URLs so the text stays readable.
+  const renderImages: Array<{ data: string; mimeType: string; frame?: unknown; frames?: unknown[] }> = []
   let contextForJson: unknown = context
   if (rendered) {
     const still = parseDataUrl(rendered.dataUrl)
     const frames = Array.isArray(rendered.frames) ? (rendered.frames as Array<Record<string, unknown>>) : null
+    const sheets = Array.isArray(rendered.sheets) ? (rendered.sheets as Array<Record<string, unknown>>) : null
+    const picture = isPlainRecord(rendered.picture) ? rendered.picture : null
+    const soundPicture = picture ? parseDataUrl(picture.dataUrl) : null
     if (still) renderImages.push(still)
-    if (frames) {
-      for (const f of frames) {
-        const img = parseDataUrl(f.dataUrl)
-        if (img) renderImages.push({ ...img, frame: f.frame })
-      }
+    for (const f of frames ?? []) {
+      const img = parseDataUrl(f.dataUrl)
+      if (img) renderImages.push({ ...img, frame: f.frame })
     }
+    for (const sheet of sheets ?? []) {
+      const img = parseDataUrl(sheet.dataUrl)
+      if (img) renderImages.push({ ...img, frames: Array.isArray(sheet.frames) ? sheet.frames : [] })
+    }
+    if (soundPicture) renderImages.push(soundPicture)
     if (renderImages.length > 0) {
-      // Strip the base64 payloads from the JSON but keep the frame timing (frame / atSec).
-      const strippedFrames = frames
-        ? frames.map((f) => {
-            const { dataUrl: _drop, ...rest } = f
-            return rest
-          })
-        : undefined
+      const withoutData = (items: Array<Record<string, unknown>> | null) =>
+        items
+          ? items.map((item) => {
+              const { dataUrl: _drop, ...rest } = item
+              return rest
+            })
+          : undefined
       contextForJson = {
         ...context,
         rendered: {
           ...rendered,
           ...(still ? { dataUrl: '[attached as an image below]' } : {}),
-          ...(strippedFrames ? { frames: strippedFrames } : {}),
+          ...(frames ? { frames: withoutData(frames) } : {}),
+          ...(sheets ? { sheets: withoutData(sheets) } : {}),
+          ...(picture ? { picture: { ...picture, dataUrl: '[attached as an image below]' } } : {}),
         },
       }
     }
@@ -2639,10 +2647,26 @@ export function liveContextResult(
   }
   if (screen.admitted.length > 0) lines.push('An image of what the user is looking at (their screen) is attached below.')
   if (screen.dropped > 0) lines.push("The screen capture was not attached: it is over this result's size limit.")
-  if (shown.admitted.length === 1) lines.push('A render of your work is attached below.')
-  if (shown.admitted.length > 1) lines.push(`${shown.admitted.length} rendered frames are attached below, in order.`)
+  const isSound = rendered?.kind === 'sound'
+  const isSheets = Array.isArray(rendered?.sheets)
+  if (isSound && shown.admitted.length > 0) {
+    lines.push('A picture of the sound is attached below: its waveform above its spectrogram, on one time axis in seconds from the start of the range.')
+  } else if (isSheets && shown.admitted.length > 0) {
+    lines.push(
+      `${shown.admitted.length} contact ${shown.admitted.length === 1 ? 'sheet is' : 'sheets are'} attached below, in order. ` +
+        "Each frame's number is written under its tile, and the tiles read left to right, top to bottom.",
+    )
+  } else if (shown.admitted.length === 1) lines.push('A render of your work is attached below.')
+  else if (shown.admitted.length > 1) lines.push(`${shown.admitted.length} rendered frames are attached below, in order.`)
+  const sound = describeSoundMeasurement(rendered)
+  if (sound) lines.push(sound)
+  const progress = describeRenderProgress(rendered)
+  if (progress) lines.push(progress)
   if (shown.dropped > 0) {
-    const notShown = renderImages.slice(shown.admitted.length).map((img) => img.frame).filter((f) => f !== undefined)
+    const notShown = renderImages
+      .slice(shown.admitted.length)
+      .flatMap((img) => (img.frames ? img.frames : [img.frame]))
+      .filter((f) => f !== undefined)
     lines.push(
       `${shown.dropped} rendered ${shown.dropped === 1 ? 'image was' : 'images were'} not attached` +
         (notShown.length > 0 ? ` (frames ${notShown.join(', ')})` : '') +

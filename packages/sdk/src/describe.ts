@@ -70,7 +70,54 @@ export function describeRenderFailure(rendered: Record<string, unknown> | null |
   if (missing.length > 0) {
     return `${missing.length} ${missing.length === 1 ? 'frame' : 'frames'} could not be rendered (frames ${missing.join(', ')}). ${why}`
   }
+  if (rendered.kind === 'sound') return `The sound could not be rendered. ${why}`
   return `The render produced no image. ${why}`
+}
+
+/**
+ * Where a get_context render job stands, in words: still rendering (how much is ready, and the id to read the rest
+ * with), or done across several pages (which page this is). Null for a render that came back whole on one page, or
+ * that is not a job. Without it, a render that outlasted its wait reads as a render that returned nothing.
+ */
+export function describeRenderProgress(rendered: Record<string, unknown> | null | undefined): string | null {
+  if (!rendered || typeof rendered.renderId !== 'string') return null
+  const id = rendered.renderId
+  const pages = typeof rendered.pages === 'number' ? rendered.pages : 1
+  const page = typeof rendered.page === 'number' ? rendered.page : 1
+  if (rendered.state === 'rendering') {
+    if (rendered.kind === 'sound') return `The sound is still rendering. Read it with renderId ${id}.`
+    const ready = Array.isArray(rendered.readyPages) ? (rendered.readyPages as unknown[]) : []
+    const drawn = typeof rendered.renderedFrameCount === 'number' ? rendered.renderedFrameCount : 0
+    const total = typeof rendered.frameCount === 'number' ? rendered.frameCount : null
+    const progress = total !== null ? `${drawn} of ${total} frames are drawn` : 'Frames are still drawing'
+    const readyText = ready.length ? `; ready: ${ready.length === 1 ? 'page' : 'pages'} ${ready.join(', ')} of ${pages}` : ''
+    return `Still rendering: ${progress}${readyText}. Read the rest with renderId ${id} and a page number.`
+  }
+  if (pages > 1) return `Page ${page} of ${pages}. Read another page with renderId ${id} and its page number.`
+  return null
+}
+
+/** One measure's value with its unit, or that there was nothing to measure. */
+const measured = (value: unknown, unit: string) => (typeof value === 'number' ? `${value} ${unit}` : 'nothing measurable')
+
+/**
+ * A sound render's measurement in one paragraph, for a person reading a summary: loudness, peaks, range, how many
+ * sounds start in it, and its stereo width. Null for a render that is not a finished sound. Every value is also in the
+ * render's own fields.
+ */
+export function describeSoundMeasurement(rendered: Record<string, unknown> | null | undefined): string | null {
+  if (!rendered || rendered.kind !== 'sound' || rendered.state !== 'done') return null
+  const loudness = (rendered.loudness ?? {}) as Record<string, unknown>
+  const onsets = Array.isArray(rendered.onsets) ? rendered.onsets.length : 0
+  const stereo = rendered.stereo as { sideToMid?: unknown; correlation?: unknown } | null | undefined
+  const width = stereo
+    ? ` Stereo: side to mid ${typeof stereo.sideToMid === 'number' ? stereo.sideToMid : 'not measurable (no mid)'}, correlation ${typeof stereo.correlation === 'number' ? stereo.correlation : 'not measurable'}.`
+    : ' Mono.'
+  return (
+    `Integrated loudness ${measured(loudness.integratedLufs, 'LUFS')}, true peak ${measured(loudness.truePeakDbtp, 'dBTP')}, ` +
+    `loudness range ${measured(loudness.loudnessRangeLu, 'LU')}, sample peak ${measured(loudness.samplePeakDbfs, 'dBFS')}. ` +
+    `${onsets} ${onsets === 1 ? 'sound starts' : 'sounds start'} in it.${width}`
+  )
 }
 
 /**

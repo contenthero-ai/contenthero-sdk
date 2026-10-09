@@ -3225,11 +3225,14 @@ export interface GetContextInput {
    */
   capture?: boolean
   /**
-   * Opt in to an inline render (never persisted) so you can visually verify work while iterating. `true`
-   * renders the current focus point as one image; add `count` with `fromFrame`/`toFrame` for several across a
-   * range. Frames across a range are how you judge motion and pacing: the closer together they are, the finer the
-   * motion they show. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip
-   * use `getMedia` with a video item.
+   * Opt in to a render of your work so you can verify it while iterating, without exporting. `true` renders the
+   * current focus point as one image. For an editor timeline, name several frames as a list (`frames`), as a rate over
+   * a range (`perSecond` with `fromFrame`/`toFrame`), or as a count spread over a range (`count`); you get exactly the
+   * frames you name. Frames that fit one response come back one by one; more come back as contact sheets, each frame
+   * numbered under its tile, split into pages. Set `sound` to render a range's mix and measure it instead. A render is a
+   * job: the answer carries `rendered.renderId`, what finished within the wait, and which pages are ready; read the
+   * rest with `renderId` and `page`. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW
+   * source clip use `getMedia` with a video item.
    */
   render?: boolean
   /** Editor: which single timeline frame. Omit to render the current playhead frame. */
@@ -3242,8 +3245,27 @@ export interface GetContextInput {
   fromFrame?: number
   /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
-  /** How many frames across the range. Omit for one at the focus point, or a proportional default. */
+  /** How many frames to spread evenly across the range. Omit for one at the focus point, or about one a second of a range. */
   count?: number
+  /** Editor: exactly these timeline frames, in this order. */
+  frames?: number[]
+  /** How many frames to take per second of the range, up to every frame. */
+  perSecond?: number
+  /** `frames` returns each frame as its own image; `sheets` tiles them into contact sheets. Omit to choose by how many fit one response. */
+  layout?: 'frames' | 'sheets'
+  /**
+   * Render the range's sound (`fromFrame` to `toFrame`, the whole timeline when neither is named) instead of its
+   * picture, mixed as an export mixes it, and measure it: integrated loudness, true peak, loudness range, sample peak,
+   * where sounds start, stereo width and band balance, with a waveform and spectrogram picture and a link to the audio
+   * that expires with the render.
+   */
+  sound?: boolean
+  /** Read a render already started, by the `rendered.renderId` it returned. Pass only `page` (and `wait`) with it. */
+  renderId?: string
+  /** Which page of a render to read, starting at 1. */
+  page?: number
+  /** How long to wait for results before answering, in seconds. What is not ready by then is read later with `renderId`. */
+  wait?: number
   /**
    * The width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
    */
