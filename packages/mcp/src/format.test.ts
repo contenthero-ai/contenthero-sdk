@@ -628,6 +628,14 @@ test('a poll reports and never displays', () => {
   assert.equal((res as { structuredContent?: unknown }).structuredContent, undefined)
 })
 
+/** An unfinished export reports the server's one progress number and the stage it was reached in, as the app shows them. */
+test('an unfinished export reports its overall progress and its stage', () => {
+  const res = exportJobResult({ exportId: 'exp-1', status: 'transferring', progress: 0.874, stage: 'leveling' })
+  assert.match((res.content[0] as { text: string }).text, /^Export exp-1 is transferring \(87%, leveling\)\. Still working\./)
+  const bare = exportJobResult({ exportId: 'exp-1', status: 'rendering' })
+  assert.match((bare.content[0] as { text: string }).text, /^Export exp-1 is rendering\. Still working\./)
+})
+
 /**
  * ⭐ PROSE NAMES AN ITEM WITH ITS LINK, ONE SPELLING EVERYWHERE, so an agent reading text can hyperlink any item.
  * The link is the server's; with none, the id stands alone rather than a guessed url.

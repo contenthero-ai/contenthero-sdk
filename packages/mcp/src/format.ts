@@ -2886,10 +2886,11 @@ export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { a
   if (job.status === 'failed') {
     return text(withCodeWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
   }
-  const pct = typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%)` : ''
+  const done = typeof job.progress === 'number' ? `${Math.round(job.progress * 100)}%` : null
+  const where = [done, job.stage].filter(Boolean).join(', ')
   return text(
     withCodeWarnings(
-      `Export ${job.exportId} is ${job.status}${pct}. Still rendering. Poll get_export with this exportId for the download URL.`,
+      `Export ${job.exportId} is ${job.status}${where ? ` (${where})` : ''}. Still working. Poll get_export with this exportId for the download URL.`,
       job.warnings,
     ),
   )
