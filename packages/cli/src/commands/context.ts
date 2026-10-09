@@ -66,10 +66,9 @@ export function registerContext(program: Command): void {
     .description('Read what the user is currently viewing in the open app (requires context:read)')
     .option('--project <id>', 'scope to a specific project (editor/canvas)')
     .option('--capture', "also capture a fresh screenshot of the live viewport (the user's screen; slower)")
-    // TODO(wording, 9.8 B): the sentence on frames across a range.
     .option('--render', 'also render your work inline (images); ephemeral. Add --count with a range for several frames. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show.')
-    // ⛔ NO `--mode`. Images are the only medium the context endpoint renders (the preview video was retired in
-    // motion graphics 9.8, pass B, since no agent can receive video over MCP), so a flag with one value says nothing.
+    // ⛔ NO `--mode`. The render takes no mode on any layer: images are its only medium since the preview video was
+    // retired (motion graphics 9.8, pass B, as no agent can receive video over MCP).
     .option('--frame <n>', 'image: which single timeline frame (omit for the current playhead)', (v) => parseInt(v, 10))
     .option('--slide <id>', 'image (canvas): which slide id (omit for the focused slide)')
     .option('--slide-index <n>', 'image (canvas): 1-based slide index (alternative to --slide)', (v) => parseInt(v, 10))

@@ -20,17 +20,17 @@ test('a scoped read names its window and track, or its slide', () => {
 })
 
 test('a render with no error has nothing to say', () => {
-  assert.equal(describeRenderFailure({ mode: 'image', dataUrl: 'data:image/webp;base64,AA' }), null)
+  assert.equal(describeRenderFailure({ dataUrl: 'data:image/webp;base64,AA' }), null)
   assert.equal(describeRenderFailure(null), null)
 })
 
 test('a failed render, and the frames of a range that did not render, are said in words', () => {
   assert.equal(
-    describeRenderFailure({ mode: 'image', error: { code: 'render_unavailable', message: 'Rendering is unavailable right now.' } }),
+    describeRenderFailure({ error: { code: 'render_unavailable', message: 'Rendering is unavailable right now.' } }),
     'The render produced no image. render_unavailable: Rendering is unavailable right now.',
   )
   assert.equal(
-    describeRenderFailure({ mode: 'image', missingFrames: [30], error: { code: 'render_failed', message: 'Lambda timed out' } }),
+    describeRenderFailure({ missingFrames: [30], error: { code: 'render_failed', message: 'Lambda timed out' } }),
     '1 frame could not be rendered (frames 30). render_failed: Lambda timed out',
   )
 })

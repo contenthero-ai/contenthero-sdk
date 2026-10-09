@@ -1709,7 +1709,6 @@ export class ContentHero {
     if (input.projectId) params.set('projectId', input.projectId)
     if (input.capture) params.set('capture', 'true')
     if (input.render) params.set('render', 'true')
-    if (input.mode) params.set('mode', input.mode)
     if (typeof input.frame === 'number') params.set('frame', String(input.frame))
     if (input.slideId) params.set('slideId', input.slideId)
     if (typeof input.slideIndex === 'number') params.set('slideIndex', String(input.slideIndex))

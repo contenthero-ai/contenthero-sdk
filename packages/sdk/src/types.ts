@@ -3170,45 +3170,26 @@ export interface GetContextInput {
    * range. Frames across a range are how you judge motion and pacing: the closer together they are, the finer the
    * motion they show. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip
    * use `getMedia` with a video item.
-   *
-   * TODO(wording, 9.8 B): the sentence on frames across a range.
    */
   render?: boolean
-  /**
-   * What MEDIUM to render. Default `'image'`.
-   *
-   * ⭐⭐⭐ **RENAMED FROM `'still' | 'filmstrip'` ON 2026-09-19, AND THE OLD PAIR MIXED TWO AXES.** "Still"
-   * versus "filmstrip" is a COUNT distinction (one frame versus several) between two things that are both
-   * images, while `count` already existed as a parameter: `'still'` was literally `count: 1`. The medium is
-   * the real axis, so `mode` now names only that and `count` says how many.
-   *
-   * ⚠️ It also removed a vocabulary collision. `filmstrip` means something else entirely in this product:
-   * the strip of thumbnails drawn along a clip in the editor timeline, a stored derivative role with ~244
-   * references. One word, two unrelated meanings, and only one of them was agent-facing.
-   *
-   * `'image'` is the only medium since the preview video was retired: no agent can receive video over MCP, and frames
-   * across a range show motion. The server refuses any other value.
-   */
-  mode?: 'image'
-  /** mode='image' (editor): which single timeline frame. Omit to render the current playhead frame. */
+  /** Editor: which single timeline frame. Omit to render the current playhead frame. */
   frame?: number
-  /** mode='image' (canvas): which slide (id). Omit to render the focused slide. */
+  /** Canvas: which slide (id). Omit to render the focused slide. */
   slideId?: string
-  /** mode='image' (canvas): which slide (1-based index; alternative to `slideId`). */
+  /** Canvas: which slide (1-based index; alternative to `slideId`). */
   slideIndex?: number
   /** Start timeline frame of the range (edit space), for several frames. Omit to start at the beginning. */
   fromFrame?: number
   /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
-  /** mode='image': how many frames across the range. Omit for one at the focus point, or a proportional default. */
+  /** How many frames across the range. Omit for one at the focus point, or a proportional default. */
   count?: number
   /**
-   * mode='image': the width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a
-   * feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
+   * The width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
    */
   width?: number
   /**
-   * mode='image': render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect
+   * Render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect
    * detail at full resolution. Without `width`, it renders at native scale; `rendered` reports
    * `pixelsPerCompositionUnit`.
    */

@@ -2901,7 +2901,6 @@ test('get_context render returns the composed-output as an inline image block', 
 
 test('get_context returns one image block per frame across a range', async () => {
   const rendered = {
-    mode: 'image',
     fromFrame: 0,
     toFrame: 60,
     frames: [
@@ -2919,7 +2918,7 @@ test('get_context returns one image block per frame across a range', async () =>
       }),
     }),
   )
-  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, mode: 'image', count: 3, fromFrame: 0, toFrame: 60 } })
+  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, count: 3, fromFrame: 0, toFrame: 60 } })
   const images = res.content.filter((c) => c.type === 'image')
   assert.equal(images.length, 3, 'expected one image block per frame in the range')
   assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB', 'CCCC'])
@@ -2942,7 +2941,7 @@ const noTab = (rendered) =>
   fakeClient({ getContext: async () => ({ context: { rendered }, participant: null, participants: [] }) })
 
 test('get_context shows a render with no live tab', async () => {
-  const mcp = await connect(noTab({ mode: 'image', surface: 'editor', frame: 12, dataUrl: 'data:image/webp;base64,AQIDBA==' }))
+  const mcp = await connect(noTab({ surface: 'editor', frame: 12, dataUrl: 'data:image/webp;base64,AQIDBA==' }))
   const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, frame: 12 } })
   const image = res.content.find((c) => c.type === 'image')
   assert.ok(image, 'the render must come back even though no one is viewing the project')
@@ -2952,7 +2951,7 @@ test('get_context shows a render with no live tab', async () => {
 })
 
 test('get_context states why a render produced no image, with no live tab', async () => {
-  const mcp = await connect(noTab({ mode: 'image', error: { code: 'render_unavailable', message: 'Rendering is unavailable right now.' } }))
+  const mcp = await connect(noTab({ error: { code: 'render_unavailable', message: 'Rendering is unavailable right now.' } }))
   const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true } })
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
   assert.match(res.content[0].text, /The render produced no image\. render_unavailable: Rendering is unavailable right now\./)
@@ -2960,7 +2959,6 @@ test('get_context states why a render produced no image, with no live tab', asyn
 
 test('get_context names the frames of a range that did not render', async () => {
   const rendered = {
-    mode: 'image',
     fromFrame: 0,
     toFrame: 60,
     frames: [{ frame: 0, dataUrl: 'data:image/webp;base64,AAAA' }, { frame: 60, dataUrl: 'data:image/webp;base64,CCCC' }],
@@ -3008,7 +3006,7 @@ test('get_media forwards a keyframe width', async () => {
 test('get_context frames spend the one result budget and name the frames that did not fit', async () => {
   // 24 frames of 100,000 base64 characters each is 2.4 MB against a 1 MB ceiling for the whole result.
   const frames = Array.from({ length: 24 }, (_, i) => ({ frame: i * 10, dataUrl: `data:image/webp;base64,${'A'.repeat(100_000)}` }))
-  const mcp = await connect(noTab({ mode: 'image', fromFrame: 0, toFrame: 230, frames }))
+  const mcp = await connect(noTab({ fromFrame: 0, toFrame: 230, frames }))
   const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, count: 24 } })
   const images = res.content.filter((c) => c.type === 'image')
   const bytes = images.reduce((n, c) => n + c.data.length, 0)
@@ -3019,16 +3017,21 @@ test('get_context frames spend the one result budget and name the frames that di
 
 /**
  * The preview video is retired (motion graphics 9.8, pass B): no agent can receive video over MCP, so there is no
- * `get_preview` and no `mode: 'video'`, and the render's description says, as a principle, that frames across a range
- * are how an agent judges motion. Break-verified: restoring `get_preview` or `'video'` in the enum turns case 1 red;
- * dropping the sentence, case 2.
+ * `get_preview`, the render takes no `mode` (images are its only medium), and the render's description says, as a
+ * principle, that frames across a range are how an agent judges motion. Break-verified: restoring `get_preview` or a
+ * `mode` turns case 1 red; dropping the sentence, case 2.
  */
-test('get_context renders images only, and get_preview is gone', async () => {
-  const mcp = await connect(fakeClient({ getContext: async () => ({ context: null, participant: null, participants: [] }) }))
+test('get_context renders images only, takes no mode, and get_preview is gone', async () => {
+  let sent
+  const mcp = await connect(fakeClient({ getContext: async (input) => ((sent = input), { context: null, participant: null, participants: [] }) }))
   const { tools } = await mcp.listTools()
   assert.equal(tools.some((t) => t.name === 'get_preview'), false)
+  const schema = tools.find((t) => t.name === 'get_context')?.inputSchema
+  assert.equal('mode' in (schema?.properties ?? {}), false)
+  // The tool's schema is strict, so a caller still sending a medium is refused, never answered with images unasked.
   const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, mode: 'video' } })
   assert.equal(res.isError, true)
+  assert.equal(sent, undefined)
 })
 
 test('get_context says frames across a range are how motion is judged', async () => {
@@ -3036,7 +3039,6 @@ test('get_context says frames across a range are how motion is judged', async ()
   const { tools } = await mcp.listTools()
   const schema = tools.find((t) => t.name === 'get_context')?.inputSchema as { properties: Record<string, { description?: string; enum?: string[] }> }
   assert.match(schema.properties.render?.description ?? '', /Frames across a range are how you judge motion/)
-  assert.deepEqual(schema.properties.mode?.enum, ['image'])
 })
 
 test("get_schema kind 'layer' lists canvas layer types + props", async () => {

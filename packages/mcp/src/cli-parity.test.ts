@@ -243,7 +243,6 @@ const ALIASES: Record<string, Record<string, string>> = {
   favorite: { mediaId: '<id>', favorited: '--off' },
   archive: { mediaId: '<id>', archived: '--off' },
   get_project: { fromFrame: '--from', toFrame: '--to' },
-  get_context: { mode: '--render' },
   export_project: { watermark: '--no-watermark' },
   delete_project: { confirm: '--yes' },
   update_timeline: { userIntent: '--intent' },

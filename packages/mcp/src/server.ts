@@ -4409,21 +4409,19 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       inputSchema: {
         projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere. Required for render when no session is live.'),
         capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport (their SCREEN), captured at read time. Default false returns structured context only. Request it only when the task depends on seeing the live, as-shown state including unsaved UI. To see the composed OUTPUT rather than the screen, use render instead."),
-        // TODO(wording, 9.8 B): render's sentence on frames across a range, and mode's description.
         render: z.boolean().optional().describe('Also render your work so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as one image; add count with fromFrame/toFrame for several across a range. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show. Use this to check your work, not export_project, which produces a file the user KEEPS. To watch a RAW source clip instead of your composition, use get_media with a video item.'),
-        mode: z.enum(['image']).optional().describe("What MEDIUM to render. 'image' (the default) returns composed frames INLINE: one by default, or several across a range when you pass count with fromFrame/toFrame."),
-        frame: z.number().int().min(0).optional().describe("mode='image' (editor): which single timeline frame to render. Omit to render the current playhead frame."),
-        slideId: z.string().optional().describe("mode='image' (canvas): the id of the slide to render. Omit to render the focused slide."),
-        slideIndex: z.number().int().min(1).optional().describe("mode='image' (canvas): the 1-based slide index to render (alternative to slideId)."),
+        frame: z.number().int().min(0).optional().describe("Editor: which single timeline frame to render. Omit to render the current playhead frame."),
+        slideId: z.string().optional().describe("Canvas: the id of the slide to render. Omit to render the focused slide."),
+        slideIndex: z.number().int().min(1).optional().describe("Canvas: the 1-based slide index to render (alternative to slideId)."),
         fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames. Omit to start at the beginning.'),
         toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
-        count: z.number().int().min(1).optional().describe("mode='image': how many frames to return across the range. Omit for one frame at the focus point, or a proportional default when a range is given."),
+        count: z.number().int().min(1).optional().describe("How many frames to return across the range. Omit for one frame at the focus point, or a proportional default when a range is given."),
         /*
           ⭐ 3840, THE WIDEST NATIVE FRAME (4K landscape). This was 1440, while the server rendered at 960 and
           enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
           per project and per plan (native width, the plan's export ceiling), so the schema only bounds the absurd.
         */
-        width: z.number().int().min(48).max(3840).optional().describe("mode='image': the width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in rendered."),
+        width: z.number().int().min(48).max(3840).optional().describe("The width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in rendered."),
         region: z
           .object({
             x: z.number().min(0),
@@ -4432,7 +4430,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             height: z.number().positive(),
           })
           .optional()
-          .describe("mode='image': render only this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without width, it renders at native scale; rendered reports pixelsPerCompositionUnit."),
+          .describe("Render only this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without width, it renders at native scale; rendered reports pixelsPerCompositionUnit."),
       },
     },
     async (args, extra) => {
@@ -4442,7 +4440,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           projectId: args.projectId,
           capture: args.capture,
           render: args.render,
-          mode: args.mode,
           frame: args.frame,
           slideId: args.slideId,
           slideIndex: args.slideIndex,
