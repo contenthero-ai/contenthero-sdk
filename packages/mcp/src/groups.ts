@@ -34,7 +34,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     tools: [
       'generate_image', 'generate_video', 'generate_audio', 'generate_board',
       'generate_lip_sync', 'upscale', 'edit_audio', 'transcribe',
-      'get_generation_status', 'get_preview',
+      'get_generation_status',
       'list_models', 'get_model',
     ],
   },

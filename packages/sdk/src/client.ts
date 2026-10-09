@@ -76,9 +76,6 @@ import type {
   ProjectDetail,
   LiveContextResult,
   GetContextInput,
-  PreviewInput,
-  PreviewStart,
-  PreviewStatus,
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectInput,
@@ -1729,26 +1726,6 @@ export class ContentHero {
     const query = params.toString().replace(/\+/g, '%20')
     const qs = query ? `?${query}` : ''
     return this.request<LiveContextResult>('GET', `/api/v1/context${qs}`)
-  }
-
-  /**
-   * Create an async PREVIEW render (ephemeral, never stored). Currently a short low-res COMPOSED VIDEO of an
-   * editor range, so you can assess motion, cuts, transitions, and pacing a still cannot show. Returns a job
-   * handle (`status: 'rendering'`); poll it with `getPreview`. While a score in the range is still rendering its
-   * audio, returns `status: 'preparing'` instead: nothing started, so call this again after `retryAfter` seconds.
-   * Requires the `context:read` scope.
-   */
-  async createPreview(input: PreviewInput): Promise<PreviewStart> {
-    return this.request<PreviewStart>('POST', '/api/v1/preview', input)
-  }
-
-  /**
-   * Poll a preview started with `createPreview`. While rendering, returns `progress`; on completion, returns a
-   * short-lived signed `url` to the ephemeral output plus the estimated cost.
-   */
-  async getPreview(job: { renderId: string; bucketName: string }): Promise<PreviewStatus> {
-    const params = new URLSearchParams({ renderId: job.renderId, bucketName: job.bucketName })
-    return this.request<PreviewStatus>('GET', `/api/v1/preview?${params.toString()}`)
   }
 
   /**

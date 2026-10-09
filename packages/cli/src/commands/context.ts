@@ -18,7 +18,7 @@ import type { CompositionRegion, LiveContextResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { describeCodeWarnings, describeRenderFailure, withCodeWarnings, type CodeDiagnostic } from '@contenthero/sdk'
+import { describeCodeWarnings, describeRenderFailure, type CodeDiagnostic } from '@contenthero/sdk'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: unknown): Buffer | null {
@@ -66,15 +66,14 @@ export function registerContext(program: Command): void {
     .description('Read what the user is currently viewing in the open app (requires context:read)')
     .option('--project <id>', 'scope to a specific project (editor/canvas)')
     .option('--capture', "also capture a fresh screenshot of the live viewport (the user's screen; slower)")
-    .option('--render', 'also render your work inline (images); ephemeral. Add --count with a range for several frames. For a composed VIDEO use `context preview`')
-    // ⛔ NO `--mode`. It offered image|video, but this command passes straight through to the
-    // context endpoint, which renders INLINE IMAGES ONLY -- so `--mode video` silently returned
-    // images (and now returns a 400). A composed video is an async job with its own polling, which
-    // is exactly what the sibling `context preview` command already does. One way to do one thing.
+    // TODO(wording, 9.8 B): the sentence on frames across a range.
+    .option('--render', 'also render your work inline (images); ephemeral. Add --count with a range for several frames. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show.')
+    // ⛔ NO `--mode`. Images are the only medium the context endpoint renders (the preview video was retired in
+    // motion graphics 9.8, pass B, since no agent can receive video over MCP), so a flag with one value says nothing.
     .option('--frame <n>', 'image: which single timeline frame (omit for the current playhead)', (v) => parseInt(v, 10))
     .option('--slide <id>', 'image (canvas): which slide id (omit for the focused slide)')
     .option('--slide-index <n>', 'image (canvas): 1-based slide index (alternative to --slide)', (v) => parseInt(v, 10))
-    .option('--from-frame <n>', 'start timeline frame of the range (several frames, or a video)', (v) => parseInt(v, 10))
+    .option('--from-frame <n>', 'start timeline frame of the range (several frames)', (v) => parseInt(v, 10))
     .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
     .option('--count <n>', 'how many frames across the range (omit for one at the focus point)', (v) => parseInt(v, 10))
     .option('--width <n>', 'image: the width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in rendered.', (v) => parseInt(v, 10))
@@ -130,57 +129,5 @@ export function registerContext(program: Command): void {
       }
 
       emit(result, ctx, () => contextSummary(result, { count: savedCount, path: String(opts.save) }))
-    })
-
-  program
-    .command('preview')
-    .description('Render a short composed video of an editor range (ephemeral preview), polling until ready')
-    .requiredOption('--project <id>', 'the editor project to preview')
-    .option('--from-frame <n>', 'start timeline frame of the range', (v) => parseInt(v, 10))
-    .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
-    .option('--save <path>', 'download the finished mp4 to this file')
-    .option('--timeout <sec>', 'max seconds to wait for the render (default 120)', (v) => parseInt(v, 10))
-    .action(async (opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const deadline = Date.now() + (Number(opts.timeout) || 120) * 1000
-      const input = {
-        projectId: opts.project as string,
-        fromFrame: opts.fromFrame as number | undefined,
-        toFrame: opts.toFrame as number | undefined,
-      }
-      // While a score in the range is still rendering its audio, nothing starts: wait as long as the API asks, then
-      // ask again, within the same timeout as the render itself.
-      let started = await client.createPreview(input)
-      while (started.status === 'preparing' && Date.now() + started.retryAfter * 1000 < deadline) {
-        const waitMs = started.retryAfter * 1000
-        await new Promise((r) => setTimeout(r, waitMs))
-        started = await client.createPreview(input)
-      }
-      if (started.status === 'preparing') {
-        const preparing = started
-        emit(preparing, ctx, () => preparing.message)
-        return
-      }
-      const job = started
-      let status = await client.getPreview(job)
-      while (status.status === 'rendering' && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 3000))
-        status = await client.getPreview(job)
-      }
-      if (status.status === 'done' && status.url && opts.save) {
-        const res = await fetch(status.url)
-        if (!res.ok) throw new CliError(`Failed to download the preview (HTTP ${res.status}).`, EXIT.GENERAL)
-        writeFileSync(opts.save as string, Buffer.from(await res.arrayBuffer()))
-      }
-      emit(status, ctx, () => {
-        if (status.status === 'done') {
-          return withCodeWarnings(`Preview video ready: ${status.url}${opts.save ? `\nSaved to ${String(opts.save)}` : ''}`, [...(job.warnings ?? []), ...(status.warnings ?? [])])
-        }
-        if (status.status === 'failed') {
-          const errors = status.errors?.length ? status.errors : [status.error ?? 'unknown error']
-          return errors.length === 1 ? `Preview render failed: ${errors[0]}` : `Preview render failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`
-        }
-        return withCodeWarnings(`Still rendering after the timeout; poll again with renderId "${job.renderId}", bucketName "${job.bucketName}".`, job.warnings)
-      })
     })
 }

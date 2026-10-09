@@ -135,8 +135,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   redo_project_edit: ['project redo'],
   update_timeline: ['project apply'],
   update_canvas: ['project apply'],
-  get_context: ['context', 'preview'],
-  get_preview: ['preview'],
+  get_context: ['context'],
 }
 
 /** Tools with no CLI counterpart, BY DESIGN. */
@@ -263,10 +262,6 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   add_brand_knowledge: { sourceType: 'one flag per source type: --text, --url, --youtube, --file, --file-url' },
   create_media_upload: { files: '`media upload` takes one local file per run and reads its name, type and size from it' },
   complete_media_upload: { outputIds: '`media upload` runs both steps, so the ids never reach the caller' },
-  get_preview: {
-    renderId: '`preview` starts the render and polls it in one command',
-    bucketName: '`preview` starts the render and polls it in one command',
-  },
   list_projects: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
   restore_project_version: { action: 'the subcommand names it: `project version restore` or `project version copy`' },
   create_project: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },

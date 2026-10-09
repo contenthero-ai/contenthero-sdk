@@ -3167,8 +3167,11 @@ export interface GetContextInput {
   /**
    * Opt in to an inline render (never persisted) so you can visually verify work while iterating. `true`
    * renders the current focus point as one image; add `count` with `fromFrame`/`toFrame` for several across a
-   * range. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip use
-   * `getMedia` with a video item.
+   * range. Frames across a range are how you judge motion and pacing: the closer together they are, the finer the
+   * motion they show. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW source clip
+   * use `getMedia` with a video item.
+   *
+   * TODO(wording, 9.8 B): the sentence on frames across a range.
    */
   render?: boolean
   /**
@@ -3183,16 +3186,17 @@ export interface GetContextInput {
    * the strip of thumbnails drawn along a clip in the editor timeline, a stored derivative role with ~244
    * references. One word, two unrelated meanings, and only one of them was agent-facing.
    *
-   * `'video'` is a JOB: it returns a render handle to poll, because a clip has to be rendered.
+   * `'image'` is the only medium since the preview video was retired: no agent can receive video over MCP, and frames
+   * across a range show motion. The server refuses any other value.
    */
-  mode?: 'image' | 'video'
+  mode?: 'image'
   /** mode='image' (editor): which single timeline frame. Omit to render the current playhead frame. */
   frame?: number
   /** mode='image' (canvas): which slide (id). Omit to render the focused slide. */
   slideId?: string
   /** mode='image' (canvas): which slide (1-based index; alternative to `slideId`). */
   slideIndex?: number
-  /** Start timeline frame of the range (edit space), for several frames or a video. Omit to start at the beginning. */
+  /** Start timeline frame of the range (edit space), for several frames. Omit to start at the beginning. */
   fromFrame?: number
   /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
@@ -3217,60 +3221,6 @@ export interface CompositionRegion {
   y: number
   width: number
   height: number
-}
-
-/** Input to `createPreview`: currently a short COMPOSED video of an editor range (ephemeral, job-based). */
-export interface PreviewInput {
-  projectId: string
-  /** Start timeline frame of the range (edit space). Omit to start at the beginning. */
-  fromFrame?: number
-  /** End timeline frame. Omit to run to the end (capped to a short preview length). */
-  toFrame?: number
-}
-
-/** A preview that started: its handle. Feed `renderId` + `bucketName` to `getPreview`. */
-export interface PreviewJob {
-  status: 'rendering'
-  renderId: string
-  bucketName: string
-  fromFrame: number
-  toFrame: number
-  durationSeconds: number
-  /** What the compiler warns about in the code this range draws. Absent when nothing. */
-  warnings?: CodeDiagnostic[]
-}
-
-/**
- * A preview that could not start yet: a score in the range is still rendering its audio. Nothing was rendered and
- * nothing was charged; call `createPreview` again after `retryAfter` seconds.
- */
-export interface PreviewPreparing {
-  status: 'preparing'
-  code: 'SOUND_PREPARING'
-  /** What is happening, in words that can be shown to a person. */
-  message: string
-  /** Seconds to wait before asking again. */
-  retryAfter: number
-}
-
-/** What `createPreview` answers: a started preview, or one whose audio is still rendering. Branch on `status`. */
-export type PreviewStart = PreviewJob | PreviewPreparing
-
-/** The poll result for a preview render. */
-export interface PreviewStatus {
-  status: 'rendering' | 'done' | 'failed'
-  /** 0..1 while rendering. */
-  progress?: number
-  /** Short-lived signed URL to the ephemeral preview output (present when status = 'done'). */
-  url?: string
-  /** Estimated Lambda cost for this render (telemetry). */
-  estimatedCostUsd?: number
-  /** The first error, when it failed. */
-  error?: string
-  /** Every distinct error, when it failed; a code clip's names the clip. */
-  errors?: string[]
-  /** What the code warned about while the preview rendered (when done, and only when some did). */
-  warnings?: CodeDiagnostic[]
 }
 
 /** A resolved selected editor timeline clip, threaded so you see the selection without a `getProject` hop. */

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking: the preview video is retired. `createPreview`, `getPreview` and their types (`PreviewInput`, `PreviewJob`,
+  `PreviewPreparing`, `PreviewStart`, `PreviewStatus`) are removed with `/api/v1/preview`. `GetContextInput.mode` is
+  `'image'` only, and the server refuses any other value: frames across a range are how an agent judges motion.
 - Scope names in the docs follow the API's rename: `brand:read` (was `brandkit:read`), `brand:write` (was
   `brandkit:write`), `library:write` (was `assets:write`); `updateTrackedAccount` needs `inspiration:write`.
 - Breaking: every hand-arranged list moves by neighbor or end, with one `Placement` (`afterId`, `beforeId`, or

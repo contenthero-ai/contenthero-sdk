@@ -3018,41 +3018,25 @@ test('get_context frames spend the one result budget and name the frames that di
 })
 
 /**
- * ⭐ THE PREVIEW IS NOW A RUNG ON `get_context`, NOT ITS OWN TOOL. It used to be `create_preview`, split
- * from the render ladder on HOW the result arrives (a job rather than inline images) rather than on what
- * the caller is asking for. Both tools ended their descriptions telling the agent when to use the other,
- * which is routing work the schema should do.
+ * The preview video is retired (motion graphics 9.8, pass B): no agent can receive video over MCP, so there is no
+ * `get_preview` and no `mode: 'video'`, and the render's description says, as a principle, that frames across a range
+ * are how an agent judges motion. Break-verified: restoring `get_preview` or `'video'` in the enum turns case 1 red;
+ * dropping the sentence, case 2.
  */
-test('get_context mode=video returns the renderId handle; get_preview returns the url when done', async () => {
-  const mcp = await connect(
-    fakeClient({
-      createPreview: async (input) => ({ status: 'rendering', renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2, projectId: input.projectId }),
-      getPreview: async () => ({ status: 'done', url: 'https://x/preview.mp4', estimatedCostUsd: 0.01 }),
-    }),
-  )
-  const start = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', mode: 'video' } })
-  assert.match((start.content[0]).text, /renderId="r1"/)
-  assert.match((start.content[0]).text, /bucketName="b1"/)
-  const poll = await mcp.callTool({ name: 'get_preview', arguments: { renderId: 'r1', bucketName: 'b1' } })
-  assert.match((poll.content[0]).text, /https:\/\/x\/preview\.mp4/)
+test('get_context renders images only, and get_preview is gone', async () => {
+  const mcp = await connect(fakeClient({ getContext: async () => ({ context: null, participant: null, participants: [] }) }))
+  const { tools } = await mcp.listTools()
+  assert.equal(tools.some((t) => t.name === 'get_preview'), false)
+  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, mode: 'video' } })
+  assert.equal(res.isError, true)
 })
 
-/**
- * A score whose audio is still rendering (9.8 F): the API accepted the ask but started nothing, so the agent is told in
- * the API's own words and given the wait, never a handle it would poll forever.
- */
-test('get_context mode=video relays a preview whose audio is still rendering, with the wait', async () => {
-  const mcp = await connect(
-    fakeClient({
-      createPreview: async () => ({ status: 'preparing', code: 'SOUND_PREPARING', message: 'The audio is still rendering.', retryAfter: 60 }),
-    }),
-  )
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', mode: 'video' } })
-  const body = (res.content[0]).text
-  assert.match(body, /The audio is still rendering\./)
-  assert.match(body, /\[retry_after_seconds: 60\]/)
-  assert.doesNotMatch(body, /renderId/)
-  assert.notEqual(res.isError, true)
+test('get_context says frames across a range are how motion is judged', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const schema = tools.find((t) => t.name === 'get_context')?.inputSchema as { properties: Record<string, { description?: string; enum?: string[] }> }
+  assert.match(schema.properties.render?.description ?? '', /Frames across a range are how you judge motion/)
+  assert.deepEqual(schema.properties.mode?.enum, ['image'])
 })
 
 test("get_schema kind 'layer' lists canvas layer types + props", async () => {

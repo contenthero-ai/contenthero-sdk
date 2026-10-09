@@ -594,21 +594,6 @@ test('getContext sends a region as x,y,width,height', async () => {
   )
 })
 
-test('createPreview POSTs the range and getPreview GETs the handle', async () => {
-  const { fetch, calls } = stubFetch([
-    { status: 200, body: { renderId: 'r1', bucketName: 'b1', fromFrame: 0, toFrame: 60, durationSeconds: 2 } },
-    { status: 200, body: { status: 'done', url: 'https://x/p.mp4', estimatedCostUsd: 0.01 } },
-  ])
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const job = await client.createPreview({ projectId: 'p1', fromFrame: 0, toFrame: 60 })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/preview')
-  assert.equal(calls[0]?.init?.method, 'POST')
-  assert.equal(job.renderId, 'r1')
-  const status = await client.getPreview({ renderId: 'r1', bucketName: 'b1' })
-  assert.equal(calls[1]?.url, 'https://example.test/api/v1/preview?renderId=r1&bucketName=b1')
-  assert.equal(status.url, 'https://x/p.mp4')
-})
-
 // `includeRenderUrl` was retired (a read must not render and save a cover). A JavaScript caller still passing it
 // must not make the read render. Break-verified: restoring the `params.set('includeRenderUrl', ...)` line turns this red.
 test('getProject never asks the server to render, even when an old caller passes includeRenderUrl', async () => {
@@ -661,16 +646,6 @@ test('startExport POSTs to /api/v1/projects/:id/export', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p%201/export')
   assert.equal(calls[0]?.init?.method, 'POST')
   assert.equal(job.status, 'rendering')
-})
-
-test('createPreview returns a preview whose audio is still rendering as its own state', async () => {
-  const preparing = { status: 'preparing', code: 'SOUND_PREPARING', message: 'm', retryAfter: 60 }
-  const { fetch, calls } = stubFetch([{ status: 202, body: preparing }])
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const start = await client.createPreview({ projectId: 'p1' })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/preview')
-  assert.equal(calls[0]?.init?.method, 'POST')
-  assert.deepEqual(start, preparing)
 })
 
 test('getExport GETs /api/v1/exports/:id', async () => {

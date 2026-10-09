@@ -69,7 +69,6 @@ import {
   MEDIA_LIST_TYPES,
   PLACEMENT_ENDS,
   type SortableList,
-  withCodeWarnings,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 
@@ -4410,12 +4409,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       inputSchema: {
         projectId: z.string().optional().describe('Scope to a specific project (editor/canvas). Omit for the user\'s most-recent-active surface anywhere. Required for render when no session is live.'),
         capture: z.boolean().optional().describe("Also return a screenshot of the user's live viewport (their SCREEN), captured at read time. Default false returns structured context only. Request it only when the task depends on seeing the live, as-shown state including unsaved UI. To see the composed OUTPUT rather than the screen, use render instead."),
-        render: z.boolean().optional().describe('Also render your work so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as one image; add count with fromFrame/toFrame for several across a range; mode=video returns a short playable clip of that range. Use this to check your work, not export_project, which produces a file the user KEEPS. To watch a RAW source clip instead of your composition, use get_media with a video item.'),
-        mode: z.enum(['image', 'video']).optional().describe("What MEDIUM to render (default 'image'). 'image' returns composed frames INLINE: one by default, or several across a range when you pass count with fromFrame/toFrame, to judge motion, flow and cut placement. 'video' returns the range actually playing, as a short low-res composed clip, for timing a cut or a beat that separate frames cannot show; it is a JOB, returning a renderId to poll with get_preview, because it has to be rendered."),
+        // TODO(wording, 9.8 B): render's sentence on frames across a range, and mode's description.
+        render: z.boolean().optional().describe('Also render your work so you can visually verify edits. Ephemeral, stored nowhere, counts against no quota, works without a live tab. render=true alone renders the current focus point as one image; add count with fromFrame/toFrame for several across a range. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show. Use this to check your work, not export_project, which produces a file the user KEEPS. To watch a RAW source clip instead of your composition, use get_media with a video item.'),
+        mode: z.enum(['image']).optional().describe("What MEDIUM to render. 'image' (the default) returns composed frames INLINE: one by default, or several across a range when you pass count with fromFrame/toFrame."),
         frame: z.number().int().min(0).optional().describe("mode='image' (editor): which single timeline frame to render. Omit to render the current playhead frame."),
         slideId: z.string().optional().describe("mode='image' (canvas): the id of the slide to render. Omit to render the focused slide."),
         slideIndex: z.number().int().min(1).optional().describe("mode='image' (canvas): the 1-based slide index to render (alternative to slideId)."),
-        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames or a video. Omit to start at the beginning.'),
+        fromFrame: z.number().int().min(0).optional().describe('Start timeline frame of the range, for several frames. Omit to start at the beginning.'),
         toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
         count: z.number().int().min(1).optional().describe("mode='image': how many frames to return across the range. Omit for one frame at the focus point, or a proportional default when a range is given."),
         /*
@@ -4438,38 +4438,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        /*
-          ⭐⭐⭐ **`video` IS THE THIRD RUNG OF THIS LADDER, NOT A SEPARATE TOOL.** It used to be
-          `create_preview`, and the split was drawn on HOW the render is delivered (a job, not inline)
-          rather than on WHAT the caller is asking for. Both answers to "let me look at my own work,
-          ephemerally, without producing a deliverable" now live behind one question.
-
-          ⛔ THE EVIDENCE THE OLD BOUNDARY WAS WRONG WAS IN THE DESCRIPTIONS. `get_context` ended with
-          "for a composed VIDEO of a range use create_preview" and `create_preview` ended with "to see a
-          single frame or a few frames use get_context render". Two tools each telling the agent when to
-          use the other is routing work the schema should be doing. The CLI had already reached this
-          conclusion: it exposes `context preview`, a sibling of `context`, while export lives under
-          `project`.
-
-          ⚠️ THE TRANSPORT IS UNCHANGED. This is a facade over the same client call the old tool made, so
-          nothing moved server-side and the SDK needed no new field.
-        */
-        if (args.mode === 'video') {
-          const job = await client.createPreview({
-            projectId: args.projectId ?? '',
-            fromFrame: args.fromFrame,
-            toFrame: args.toFrame,
-          })
-          // A score in the range is still rendering its audio: nothing started, so the same call is made again later.
-          if (job.status === 'preparing') return text(`${job.message} [retry_after_seconds: ${job.retryAfter}]`)
-          return text(
-            withCodeWarnings(
-              `Preview render started (frames ${job.fromFrame}-${job.toFrame}, ~${job.durationSeconds}s).\n` +
-                `Poll get_preview with renderId="${job.renderId}" and bucketName="${job.bucketName}" until status is "done", then fetch the returned url.`,
-              job.warnings,
-            ),
-          )
-        }
         const result = await client.getContext({
           projectId: args.projectId,
           capture: args.capture,
@@ -4494,41 +4462,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
-    'get_preview',
-    {
-      title: 'Get Preview',
-      annotations: READ,
-      description:
-        'Poll a preview started by get_context with mode="video". While rendering, returns the progress; when done, returns a short-lived url to the ephemeral preview output (plus the estimated cost). Requires the context:read scope.',
-      inputSchema: {
-        renderId: z.string().describe('The renderId returned by get_context with mode="video".'),
-        bucketName: z.string().describe('The bucketName returned by get_context with mode="video".'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        const s = await client.getPreview({ renderId: args.renderId, bucketName: args.bucketName })
-        if (s.status === 'done') {
-          return text(
-            withCodeWarnings(
-              `Preview ready. url: ${s.url}${typeof s.estimatedCostUsd === 'number' ? ` (est. cost $${s.estimatedCostUsd.toFixed(4)})` : ''}`,
-              s.warnings,
-            ),
-          )
-        }
-        if (s.status === 'failed') {
-          // Every distinct error, so a chunk that failed for its own reason is not hidden behind the first.
-          const errors = s.errors?.length ? s.errors : [s.error ?? 'unknown error']
-          return text(errors.length === 1 ? `Preview render failed: ${errors[0]}` : `Preview render failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`, true)
-        }
-        return text(`Preview still rendering${typeof s.progress === 'number' ? ` (${Math.round(s.progress * 100)}%)` : ''}. Poll again in a few seconds.`)
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
 
 
 

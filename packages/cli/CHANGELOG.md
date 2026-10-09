@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Breaking: `preview` is removed with the preview video. `context --render` with `--from-frame`, `--to-frame` and
+  `--count` renders frames across a range, which is how an agent judges motion.
 - The help names the API's renamed scopes: `brand:write`, `library:write`, and `inspiration:write` for
   `tracked-account update`.
 - Breaking: every hand-arranged list moves by `--after <id>`, `--before <id>` or `--position top|bottom`, one wording

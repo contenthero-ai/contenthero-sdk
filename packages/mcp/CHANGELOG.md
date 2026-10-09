@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Breaking: the preview video is retired. `get_preview` is removed, and `get_context`'s `mode` is `image` only: no agent
+  can receive video over MCP, so the render's description says frames across a range are how an agent judges motion.
 - The tool descriptions name the API's renamed scopes: `brand:read`, `brand:write`, `library:write`, and
   `inspiration:write` for `update_tracked_account`.
 - Breaking: every hand-arranged list moves by neighbor or end, one wording from `placementInput()`: `afterId`, `beforeId`,
