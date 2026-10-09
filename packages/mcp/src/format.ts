@@ -2692,8 +2692,18 @@ export function projectCreatedResult(p: ProjectDetail, linkedCardId?: string): C
     `Created ${p.type} project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       (linkedCardId ? `Linked to card ${linkedCardId}.\n` : '') +
       // The TOOL is still called update_timeline; `kind` is what says which one applies.
-      `Use this id with update_${p.type === 'canvas' ? 'canvas' : 'timeline'} to add content.`,
+      `Use this id with update_${p.type === 'canvas' ? 'canvas' : 'timeline'} to add content.` +
+      // A new editor already has its main track, empty: naming it is what keeps the first clips off an overlay.
+      (mainTrackIdOf(p) ? `\nMain track: ${mainTrackIdOf(p)}. Add the first clips to it.` : ''),
   )
+}
+
+/** The editor project's main (primary) track id, from the full state the create returns; null for a canvas. */
+function mainTrackIdOf(p: ProjectDetail): string | null {
+  if (p.type === 'canvas') return null
+  const tracks = (p.state as { tracks?: Array<{ id?: unknown; isPrimary?: unknown }> } | undefined)?.tracks
+  const main = tracks?.find((t) => t.isPrimary === true)
+  return typeof main?.id === 'string' ? main.id : null
 }
 
 /** Confirmation of a permanent delete. */

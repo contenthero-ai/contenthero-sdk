@@ -3163,6 +3163,17 @@ test('create_project returns the new id + revision', async () => {
   assert.match(body, /update_canvas/)
 })
 
+test('create_project names a new editor project\'s main track, so the first clips go on it', async () => {
+  const { projectCreatedResult } = await import('./format.js')
+  const res = projectCreatedResult({
+    id: 'p1', type: 'editor', title: 'Edit', orientation: '9:16', width: 1080, height: 1920, revision: 0,
+    state: { tracks: [{ id: 'media-1', isPrimary: true, items: [] }] },
+  } as never)
+  assert.match((res.content[0] as { text: string }).text, /Main track: media-1\. Add the first clips to it\./)
+  const canvas = projectCreatedResult({ id: 'c1', type: 'canvas', title: 'Deck', orientation: '1:1', width: 1080, height: 1080, revision: 0, state: { slides: [] } } as never)
+  assert.doesNotMatch((canvas.content[0] as { text: string }).text, /Main track/)
+})
+
 test('import_project (pptx) creates a canvas project from a file URL', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'import_project', arguments: { sourceType: 'pptx', fileUrl: 'https://x/deck.pptx' } })
