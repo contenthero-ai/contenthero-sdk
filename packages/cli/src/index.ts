@@ -71,7 +71,10 @@ async function main(): Promise<void> {
   }
 
   await releaseCliPresence().catch(() => {})
-  await exitAfterFlush(exitCode)
+  // A command reports an outcome through `process.exitCode` (status sets 1 for a failed job, 4 for one still running);
+  // exiting with only the code computed here dropped it, so every such command exited 0.
+  const reported = typeof process.exitCode === 'number' ? process.exitCode : EXIT.OK
+  await exitAfterFlush(exitCode !== EXIT.OK ? exitCode : reported)
 }
 
 void main()
