@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: every tool that starts or finishes a background job names the job by an id `get_status` takes, with its
+  link, finished or still running. `export_project` finished inside the call now names the export (its id, link and
+  share page) beside the file it draws, as `get_export` does. A still-running generation, board, edit, upscale, lip
+  sync, enhancement, import or editor effect names its short id, or its full id with `kind: "output"` (a full id alone
+  was refused), and its link; a running export, Break It Down or scene map names its short id and link. A new avatar
+  or brand kit names `get_status` for its wait.
+- Fixed: the generation card's own poll passes `kind: "output"`, so a card holding an output's full id finishes.
+- `generate_board` and `export_project` wait within the call as the other job tools do.
 - Fixed: `get_status` with several ids answers each one on its own line. An id that names no job of yours reads
   `not found` with the server's reason, naming the id; the others still answer. It is an error only when no id
   answered.

@@ -119,9 +119,11 @@ export function isUnfinished(p: CardPayload | null | undefined): boolean {
  * the status's `detail`), so the poll merges it as is.
  *
  * ⚠️ `ids`, PLURAL, and an array even for one. The singular spelling is a validation error.
+ * ⚠️ `kind: 'output'`, ALWAYS. The card holds the output's full id, and the status route places a full id only with
+ * its kind: without it every poll was refused and the card never finished.
  */
-export function statusPollCall(outputId: string): { name: 'get_status'; arguments: { ids: string[] } } {
-  return { name: 'get_status', arguments: { ids: [outputId] } }
+export function statusPollCall(outputId: string): { name: 'get_status'; arguments: { ids: string[]; kind: 'output' } } {
+  return { name: 'get_status', arguments: { ids: [outputId], kind: 'output' } }
 }
 
 /**

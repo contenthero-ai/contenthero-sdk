@@ -276,23 +276,39 @@ export class GenerationFailedError extends ContentHeroError {
 }
 
 /**
- * Thrown by `generateAndWait` when the generation does not reach a terminal
- * state before the configured timeout. The job may still complete server-side;
- * `outputId` lets the caller keep polling with `getStatus`.
+ * What the call that started a job returned to follow it by, beside its full id: its short id (which `getStatus`
+ * follows with no kind) and its page in the app. Carried by the errors a still-running job ends a wait with, so the
+ * answer to "it is still going" names the job as the start did.
+ */
+export interface SubmittedJob {
+  shortId?: string | null
+  appUrl?: string | null
+}
+
+/**
+ * Thrown by `generateAndWait` (and the other waits) when the job does not reach a terminal state before the
+ * configured timeout. The job may still complete server-side; `outputId` (with `shortId` and `appUrl` when the start
+ * returned them) lets the caller keep waiting with `getStatus`.
  */
 export class GenerationTimeoutError extends ContentHeroError {
   readonly outputId: string
+  /** The job's short id, when the call that started it returned one. */
+  readonly shortId?: string
+  /** The job's page in the app, when known. */
+  readonly appUrl?: string
   /**
    * The generation as last read before the deadline: what has landed so far, so a caller can show progress and
    * hand back without reading it again. Absent when no read finished in time (or for an export).
    */
   readonly lastStatus?: Generation
 
-  constructor(outputId: string, message = 'Timed out waiting for generation to finish', lastStatus?: Generation) {
+  constructor(outputId: string, message = 'Timed out waiting for generation to finish', lastStatus?: Generation, job: SubmittedJob = {}) {
     super(message)
     this.name = 'GenerationTimeoutError'
     this.outputId = outputId
     this.lastStatus = lastStatus
+    this.shortId = job.shortId ?? lastStatus?.shortId ?? undefined
+    this.appUrl = job.appUrl ?? lastStatus?.appUrl ?? undefined
   }
 }
 
@@ -308,18 +324,24 @@ export class GenerationTimeoutError extends ContentHeroError {
  */
 export class GenerationInterruptedError extends ContentHeroError {
   readonly outputId: string
+  /** The job's short id, when the call that started it returned one. */
+  readonly shortId?: string
+  /** The job's page in the app, when known. */
+  readonly appUrl?: string
 
   /** What actually went wrong while polling, kept for diagnosis. */
   readonly reason: unknown
 
-  constructor(outputId: string, reason: unknown, message?: string) {
+  constructor(outputId: string, reason: unknown, message?: string, job: SubmittedJob = {}) {
     super(
       message ??
         `Submitted, but polling was interrupted: ${reason instanceof Error ? reason.message : String(reason)}. ` +
-          `The generation may still be running; poll outputId ${outputId}.`,
+          `The generation may still be running; poll outputId ${job.shortId ?? outputId}.`,
     )
     this.name = 'GenerationInterruptedError'
     this.outputId = outputId
+    this.shortId = job.shortId ?? undefined
+    this.appUrl = job.appUrl ?? undefined
     this.reason = reason
   }
 }
@@ -330,9 +352,18 @@ export class GenerationInterruptedError extends ContentHeroError {
  * genuinely failed) or unrelated to a submitted job.
  */
 export function pendingOutputId(err: unknown): string | undefined {
+  return pendingJob(err)?.outputId
+}
+
+/**
+ * The job that is still RUNNING despite the error, as the call that started it named it: its full id, and its short
+ * id and app link when the start returned them. Undefined exactly when `pendingOutputId` is.
+ */
+export function pendingJob(err: unknown): { outputId: string; shortId?: string; appUrl?: string } | undefined {
   if (err instanceof GenerationFailedError) return undefined
-  if (err instanceof GenerationTimeoutError) return err.outputId
-  if (err instanceof GenerationInterruptedError) return err.outputId
+  if (err instanceof GenerationTimeoutError || err instanceof GenerationInterruptedError) {
+    return { outputId: err.outputId, ...(err.shortId ? { shortId: err.shortId } : {}), ...(err.appUrl ? { appUrl: err.appUrl } : {}) }
+  }
   return undefined
 }
 

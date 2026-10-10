@@ -11,7 +11,7 @@ import { costRows } from '../output.js'
 import type { Command } from 'commander'
 import type { Transcription } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues } from '../output.js'
+import { displayId, emit, keyValues, linkRow } from '../output.js'
 
 export function registerTranscribe(program: Command): void {
   program
@@ -29,7 +29,8 @@ export function registerTranscribe(program: Command): void {
       })
       emit(t, ctx, (r: Transcription) =>
         keyValues([
-          ['Output id', r.outputId],
+          ['Output id', displayId({ id: r.outputId, shortId: r.shortId })],
+          ...linkRow(r),
           ['Language', r.language],
           ['Words', r.wordCount],
           ...(r.durationSeconds != null

@@ -22,7 +22,7 @@ import {
   type Generation,
 } from '@contenthero/sdk'
 import { EXIT } from './errors.js'
-import { costRows, emit, keyValues } from './output.js'
+import { costRows, displayId, emit, keyValues, linkRow, statusCommand } from './output.js'
 import type { Context } from './context.js'
 
 /** Drop undefined values so the request payload stays minimal. */
@@ -58,7 +58,8 @@ function costHuman(est: CostEstimate): string {
 
 function resultHuman(r: GenerateResult): string {
   const pairs: Array<[string, string | number]> = [
-    ['Output id', r.outputId],
+    ['Output id', displayId({ id: r.outputId, shortId: r.shortId })],
+    ...linkRow(r),
     ['Status', r.status],
   ]
   if (r.idempotentReplay) pairs.push(['Idempotent replay', 'yes'])
@@ -66,14 +67,15 @@ function resultHuman(r: GenerateResult): string {
   // Each output by its media id, the name to pass back; nothing is numbered by position (7.44).
   for (const o of r.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
   if (r.status === 'processing') {
-    pairs.push(['Next', `contenthero status ${r.outputId}`])
+    pairs.push(['Next', statusCommand([{ id: r.outputId, shortId: r.shortId, kind: 'output' }])])
   }
   return keyValues(pairs)
 }
 
 function generationHuman(g: Generation): string {
   const pairs: Array<[string, string | number]> = [
-    ['Output id', g.outputId],
+    ['Output id', displayId({ id: g.outputId, shortId: g.shortId })],
+    ...linkRow(g),
     ['Status', g.status],
     ['Model', g.modelId],
     ['Type', g.contentType],
@@ -89,7 +91,7 @@ function generationHuman(g: Generation): string {
   for (const r of describeReferences(g.references)) pairs.push(['Made from', r])
   pairs.push(...costRows(g.charge))
   if (g.status === 'processing' || g.status === 'pending') {
-    pairs.push(['Next', `contenthero status ${g.outputId}`])
+    pairs.push(['Next', statusCommand([{ id: g.outputId, shortId: g.shortId, kind: 'output' }])])
   }
   return keyValues(pairs)
 }
@@ -164,7 +166,7 @@ async function renderSubmission(
     emit(submitted, ctx, resultHuman)
     return
   }
-  await waitAndRender(client, ctx, submitted.outputId, opts.timeoutSec)
+  await waitAndRender(client, ctx, submitted, opts.timeoutSec)
 }
 
 /**
@@ -189,7 +191,7 @@ export async function renderEnhanceClips(
   }
   emit(result, ctx, enhanceClipsHuman)
   for (const job of jobs) {
-    await waitAndRender(client, ctx, job.outputId, opts.timeoutSec)
+    await waitAndRender(client, ctx, job, opts.timeoutSec)
   }
 }
 
@@ -199,8 +201,8 @@ function enhanceClipsHuman(result: EditAudioResult): string {
   if (jobs.length === 0) return result.note ?? 'Nothing to enhance: no audible clips in that selection.'
   const lines = jobs.map(
     (j, i) =>
-      `  ${i + 1}. ${j.outputId}  ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}, ` +
-      `${j.windows} window${j.windows === 1 ? '' : 's'}`,
+      `  ${i + 1}. ${displayId({ id: j.outputId, shortId: j.shortId })}  ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}, ` +
+      `${j.windows} window${j.windows === 1 ? '' : 's'}${j.appUrl ? `  ${j.appUrl}` : ''}`,
   )
   const head =
     jobs.length === 1
@@ -209,16 +211,18 @@ function enhanceClipsHuman(result: EditAudioResult): string {
   const tail = result.silencedClipsExcluded
     ? `\n${result.silencedClipsExcluded} silenced clip${result.silencedClipsExcluded === 1 ? '' : 's'} skipped.`
     : ''
-  return `${head}\n${lines.join('\n')}\nThe enhanced audio is applied to the clips automatically as each job lands.${tail}`
+  const wait = `Wait: ${statusCommand(jobs.map((j) => ({ id: j.outputId, shortId: j.shortId, kind: 'output' as const })))}`
+  return `${head}\n${lines.join('\n')}\nThe enhanced audio is applied to the clips automatically as each job lands.${tail}\n${wait}`
 }
 
-/** Block on one outputId to a terminal state and render it; exit 4 on timeout. */
+/** Block on one submitted job to a terminal state and render it; exit 4 on timeout. */
 export async function waitAndRender(
   client: ContentHero,
   ctx: Context,
-  outputId: string,
+  submitted: { outputId: string; shortId?: string; appUrl?: string },
   timeoutSec: number,
 ): Promise<void> {
+  const { outputId } = submitted
   try {
     const gen = await client.waitForGeneration(outputId, { timeoutMs: timeoutSec * 1000 })
     emit(gen, ctx, generationHuman)
@@ -234,7 +238,7 @@ export async function waitAndRender(
       emit(snapshot, ctx, generationHuman)
     } catch {
       // Even the snapshot failed. Surface the id itself so the run is still resumable.
-      emit({ outputId, status: 'processing' } as unknown as Generation, ctx, generationHuman)
+      emit({ outputId, shortId: submitted.shortId, appUrl: submitted.appUrl, status: 'processing' } as unknown as Generation, ctx, generationHuman)
     }
     process.exitCode = EXIT.TIMEOUT
     return

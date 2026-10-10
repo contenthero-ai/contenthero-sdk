@@ -13,12 +13,13 @@
  *
  * Reading without the deadline's signal turns case 1 red; pausing a full interval turns case 2 red; dropping the last
  * status from the error turns case 3 red; letting one failure throw out of `waitForStatus` turns case 4 red; letting
- * one id's 404 throw out of `getStatuses` or `waitForStatus` turns case 8 red.
+ * one id's 404 throw out of `getStatuses` or `waitForStatus` turns case 8 red; dropping the start's handle from a
+ * timeout turns case 9 red.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ContentHero } from './client.js'
-import { AuthenticationError, GenerationFailedError, GenerationTimeoutError } from './errors.js'
+import { AuthenticationError, GenerationFailedError, GenerationTimeoutError, pendingJob } from './errors.js'
 import type { FetchLike } from './client.js'
 
 const processing = (outputId: string) => ({
@@ -188,4 +189,27 @@ test('8. one id the server cannot answer for is its own answer, and every other 
   const locked = new ContentHero({ apiKey: 'ch_live_test', fetch: refusedKey, baseUrl: 'https://x.test' })
   await assert.rejects(locked.getStatuses(['a', 'b']), AuthenticationError)
   await assert.rejects(locked.waitForStatus(['a', 'b'], { timeoutMs: 200, pollIntervalMs: 40 }), AuthenticationError)
+})
+
+test('9. a wait that ends with the job still running names it as the start did: its short id and link', async () => {
+  const uuid = '5f0c7e1a-1111-4a2b-9c3d-000000000009'
+  const fetch: FetchLike = async (url, init) => {
+    if (init?.method === 'POST' && url.endsWith('/api/v1/studio/generate')) {
+      return json({ outputId: uuid, shortId: 'Gen12345', appUrl: 'https://app/media/Gen12345', status: 'processing' })
+    }
+    if (init?.method === 'POST' && url.endsWith('/export')) {
+      return json({ exportId: uuid, shortId: 'Exp12345', appUrl: 'https://app/exports/Exp12345', status: 'rendering' })
+    }
+    // Every status read hangs until the deadline cuts it, so nothing but the start names the job.
+    return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }))
+  }
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' })
+  const gen = await client.generateAndWait({ contentType: 'image', modelId: 'm', prompt: 'p' }, { timeoutMs: 150, pollIntervalMs: 40 }).then(() => null, (e: unknown) => e)
+  assert.ok(gen instanceof GenerationTimeoutError)
+  assert.deepEqual(pendingJob(gen), { outputId: uuid, shortId: 'Gen12345', appUrl: 'https://app/media/Gen12345' })
+  const exp = await client.exportProjectAndWait('p1', { format: 'mp4' }, { timeoutMs: 150, pollIntervalMs: 40 }).then(() => null, (e: unknown) => e)
+  assert.ok(exp instanceof GenerationTimeoutError)
+  assert.equal(exp.shortId, 'Exp12345')
+  assert.equal(exp.appUrl, 'https://app/exports/Exp12345')
+  assert.match(exp.message, /export Exp12345/)
 })

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: every command that starts or finishes a background job prints its short id and app link, and its `Next` is
+  a `contenthero status` command the server accepts (a full id comes with its `--kind`). `project export --wait` that
+  times out names the export and exits 4 instead of failing; `project export` and `project export get` print the
+  export the same way. A new avatar or brand kit names `contenthero status` for its wait.
 - Fixed: `status` with several ids prints each one's answer. An id that names no job of yours prints its reason
   instead of failing the others; the exit code is 1 when any id failed or could not be answered for.
 

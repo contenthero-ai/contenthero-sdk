@@ -30,6 +30,7 @@
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
 import {
+  GenerationTimeoutError,
   LIST_SORTS,
   describeEditorOps,
   describeExportShareLink,
@@ -46,6 +47,7 @@ import {
   type ProjectSort,
   type ProjectSummary,
   type ProjectVersionListResult,
+  type ExportJob,
   type ExportListResult,
   type SortOrder,
   type ProjectSettings,
@@ -54,7 +56,7 @@ import {
   type UpdateProjectInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, withMore } from '../output.js'
+import { emit, keyValues, statusCommand, statusCommandFor, table, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { isClear, toFloat, toInt, toJson, toLoudness, withPageFlags, withSortFlags } from '../args.js'
 
@@ -390,17 +392,18 @@ export function registerProject(program: Command): void {
         ...(opts.watermark === false ? { watermark: false } : {}),
         ...(opts.loudness !== undefined ? { loudness: opts.loudness as Loudness } : {}),
       }
-      const job = opts.wait
-        ? await client.exportProjectAndWait(projectId, input, { timeoutMs: (opts.timeout as number | undefined) ?? 600000 })
-        : await client.startExport(projectId, input)
-      emit(job, ctx, () =>
-        withCodeWarnings(
-          job.status === 'completed'
-            ? withExportLoudness(`Export ${job.exportId} completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`, job.loudness)
-            : `Export ${job.exportId} is ${job.status}. Wait: contenthero status ${job.exportId} --kind export`,
-          job.warnings,
-        ),
-      )
+      let job: ExportJobView
+      try {
+        job = opts.wait
+          ? await client.exportProjectAndWait(projectId, input, { timeoutMs: (opts.timeout as number | undefined) ?? 600000 })
+          : await client.startExport(projectId, input)
+      } catch (err) {
+        // Still running when the wait ended: the export is not lost, so name it and how to wait, and exit TIMEOUT.
+        if (!(err instanceof GenerationTimeoutError)) throw err
+        job = { exportId: err.outputId, shortId: err.shortId, appUrl: err.appUrl, status: 'rendering' }
+        process.exitCode = EXIT.TIMEOUT
+      }
+      emit(job, ctx, () => exportHuman(job))
     })
 
   /*
@@ -415,12 +418,7 @@ export function registerProject(program: Command): void {
     .action(async (exportId: string, _opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const job = await client.getExport(exportId)
-      emit(job, ctx, () =>
-        withCodeWarnings(
-          job.status === 'completed' ? withExportLoudness(`completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`, job.loudness) : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%${job.stage ? `, ${job.stage}` : ''})` : ''}`,
-          job.warnings,
-        ),
-      )
+      emit(job, ctx, () => exportHuman(job))
     })
 
   withPageFlags(
@@ -437,7 +435,7 @@ export function registerProject(program: Command): void {
         : withMore(
             table(
               ['ID', 'CREATED', 'TYPE', 'STATUS', 'TITLE', 'SHARE PAGE'],
-              p.exports.map((e) => [e.exportId, e.createdAt, e.exportType ?? '', e.status, e.title ?? '', e.shareUrl ?? '']),
+              p.exports.map((e) => [e.shortId || e.exportId, e.createdAt, e.exportType ?? '', e.status, e.title ?? '', e.shareUrl ?? '']),
             ),
             p.nextCursor,
           ),
@@ -467,9 +465,28 @@ export function registerProject(program: Command): void {
         userIntent: opts.intent as string | undefined,
         expectedRevision: opts.expectedRevision as number | undefined,
       })
-      emit(result, ctx, () => describeEditorOps(result))
+      emit(result, ctx, () => describeEditorOps(result, { waitCall: ({ ids, kind }) => statusCommandFor(ids.map((id) => ({ id, kind }))) }))
       if (result.results.some((r) => !r.ok)) process.exitCode = EXIT.GENERAL
     })
+}
+
+/** An export as the CLI names it, from a start, a wait or a read: all an ended wait knows is what the start returned. */
+type ExportJobView = Omit<ExportJob, 'shortId' | 'appUrl'> & { shortId?: string | null; appUrl?: string | null }
+
+/**
+ * One export for a person, the same from `project export` and `project export get`: its id and link, then its file
+ * and share page once finished, its progress and how to wait while it runs, or why it failed.
+ */
+function exportHuman(job: ExportJobView): string {
+  const head = `Export ${job.shortId || job.exportId}${job.appUrl ? ` (${job.appUrl})` : ''}`
+  if (job.status === 'completed') {
+    const share = describeExportShareLink(job.shareUrl)
+    return withCodeWarnings(withExportLoudness(`${head} completed: ${job.outputUrl}${share ? `\n${share}` : ''}`, job.loudness), job.warnings)
+  }
+  if (job.status === 'failed') return withCodeWarnings(`${head} failed: ${job.errorMessage ?? 'unknown error'}`, job.warnings)
+  const progress = typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%${job.stage ? `, ${job.stage}` : ''})` : ''
+  const wait = statusCommand([{ id: job.exportId, shortId: job.shortId, kind: 'export' }])
+  return withCodeWarnings(`${head} is ${job.status}${progress}. Wait: ${wait}`, job.warnings)
 }
 
 /** `--cover`: auto, frame:<n> or media:<id>. */

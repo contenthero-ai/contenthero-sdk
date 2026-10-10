@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed: a wait that ends with the job still running names it as the start did. `GenerationTimeoutError` and
+  `GenerationInterruptedError` carry `shortId` and `appUrl` when the start returned them (`generateAndWait`,
+  `generateBoardAndWait`, `importMedia`, `exportProjectAndWait`, whose timeout now names the export instead of
+  "generation"). `pendingJob(err)` returns `{ outputId, shortId?, appUrl? }`; `pendingOutputId` is derived from it.
+- New: `statusTarget(job)`, the one rule for how `getStatus` follows a job (its short id alone, else its full id with
+  its kind), and `statusTargetOf(status)` for reading a status again. `SubmittedJob` and `WaitCall` are exported.
+- New fields, from the server (absent from an older one): `shortId` on `GenerateResult`, `Generation`,
+  `EnhanceClipsJob` (with `appUrl`) and `Transcription` (with `appUrl`); `shortId` and `appUrl` on
+  `ContentAnalysisResult` and `ContentScenesResult`; `generatingAppUrl` on `EditorOpResult`.
+- Fixed: `describeEditorOps` named an editor effect's job by its full id with no kind, a wait the status route
+  refuses. It names each job with its kind and its link, and takes `{ waitCall }` so each surface prints its own call.
 - Fixed: one id the server cannot answer for no longer fails a read of several. `waitForStatus` hands it back in its
   own place as `state: 'unanswered'` with the server's reason and `httpStatus` (404 when it names no job of yours,
   400 when it needs its kind or is not an id, 403 when the key lacks the scope), and every other id still answers.

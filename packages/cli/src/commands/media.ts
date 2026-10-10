@@ -18,7 +18,7 @@ import {
   MEDIA_LIST_TYPES,
   describeFileSize,
   describeReferences,
-  pendingOutputId,
+  pendingJob,
   type ImportStarted,
   type ImportedMedia,
   type MediaBatchItem,
@@ -35,7 +35,7 @@ import {
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
-import { costRows, emit, keyValues, table, linkRow, displayId, withMore, clip } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, statusCommand, withMore, clip } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt, toList, withPageFlags, withSortFlags } from '../args.js'
 
@@ -84,7 +84,8 @@ function saveExt(url: string, type: string): string {
 
 function uploadedHuman(m: UploadedMedia): string {
   return keyValues([
-    ['Output id', m.outputId],
+    ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
+    ...linkRow(m),
     ['URL', m.url],
   ])
 }
@@ -112,11 +113,12 @@ function uploadedHuman(m: UploadedMedia): string {
  * ⚠️ `--json` is unaffected and still emits the full object. This is the HUMAN rendering only, so a script
  * reading `alreadyExisted` keeps working unchanged.
  */
-export function importStartedHuman(m: Pick<ImportStarted, 'outputId' | 'status'>): string {
+export function importStartedHuman(m: Pick<ImportStarted, 'outputId' | 'status'> & { shortId?: string | null; appUrl?: string | null }): string {
   return keyValues([
-    ['Output id', m.outputId],
+    ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
+    ...linkRow(m),
     ['Status', m.status],
-    ['Next', `contenthero status ${m.outputId}`],
+    ['Next', statusCommand([{ id: m.outputId, shortId: m.shortId, kind: 'output' }])],
   ])
 }
 
@@ -125,14 +127,16 @@ export function importedHuman(m: ImportedMedia): string {
     // Non-null whenever something was created; the fallback exists so a null can never render as a blank
     // value, which is the exact failure this function was written to remove.
     return keyValues([
-      ['Output id', m.outputId ?? 'none'],
+      ['Output id', m.outputId ? displayId({ id: m.outputId, shortId: m.shortId }) : 'none'],
+      ...linkRow(m),
       ['URL', m.url],
     ])
   }
   if (m.outputId) {
     return keyValues([
       ['Status', 'Already in your library. Nothing was imported.'],
-      ['Output id', m.outputId],
+      ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
+      ...linkRow(m),
       ['URL', m.url],
     ])
   }
@@ -408,9 +412,9 @@ export function registerMedia(program: Command): void {
       } catch (err) {
         // Accepted and still running (or the poll dropped): the import is not lost, so hand back its id and exit
         // TIMEOUT, never an error that invites running it again. A refused url is terminal and still throws.
-        const outputId = pendingOutputId(err)
-        if (!outputId) throw err
-        emit({ outputId, status: 'processing' }, ctx, importStartedHuman)
+        const pending = pendingJob(err)
+        if (!pending) throw err
+        emit({ ...pending, status: 'processing' as const }, ctx, importStartedHuman)
         process.exitCode = EXIT.TIMEOUT
       }
     })

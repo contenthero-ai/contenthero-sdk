@@ -1,4 +1,5 @@
-import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
+import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
+import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -186,6 +187,7 @@ const EDITOR_OP_RESULT_EXPOSURE = {
   warnings: 'rendered',
   createdIds: 'rendered',
   generatingOutputId: 'rendered',
+  generatingAppUrl: 'rendered',
   diagnostics: 'rendered',
   opId: 'omitted: the SDK mints it per call, and nothing the reader does next takes it',
 } satisfies Record<keyof EditorOpResult, string>
@@ -229,7 +231,13 @@ export function withCodeWarnings(prose: string, warnings: readonly CodeDiagnosti
  * was created, jobs to poll, each failure with its reason, warnings, and every compiler finding with its line
  * (the error on refused code names only the first, and a warning on code that applied appears nowhere else).
  */
-export function describeEditorOps(r: ApplyEditorOpsResult): string {
+/**
+ * How a surface writes the call that waits on jobs, given their ids and the kind they need: the MCP prints its
+ * `get_status` call, the CLI its `contenthero status` command. Without one, the SDK's own method is named.
+ */
+export type WaitCall = (target: { ids: string[]; kind?: JobKind }) => string
+
+export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?: WaitCall } = {}): string {
   const okCount = r.results.filter((x) => x.ok).length
   const failures = r.results.filter((x) => !x.ok)
   const created = r.results.flatMap((x) => x.createdIds ?? [])
@@ -241,10 +249,16 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
       : `Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`,
   ]
   if (created.length) lines.push(`Created: ${created.join(', ')}.`)
-  // Async effect ops (remove_background) dispatch a job and return its outputId; name it so the reader can poll.
-  const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)
+  // Async effect ops (remove_background, separate_layers) start a job and return its output's id, a UUID until the job
+  // writes its record, so the wait names it with its kind (`statusTarget`), and each job's link beside it.
+  const generating = r.results.filter((x): x is EditorOpResult & { generatingOutputId: string } => !!x.generatingOutputId)
   if (generating.length) {
-    lines.push(`Dispatched ${generating.length} async job(s); get_status on: ${generating.join(', ')}.`)
+    const targets = generating.map((x) => statusTarget({ id: x.generatingOutputId, kind: 'output' }))
+    const kind = targets[0]?.kind
+    const ids = targets.map((t) => t.id)
+    const wait = options.waitCall ? options.waitCall({ ids, kind }) : `getStatus (kind '${kind ?? 'output'}') on each`
+    lines.push(`Started ${generating.length} background job(s); wait with ${wait}:`)
+    for (const x of generating) lines.push(`  - ${x.generatingOutputId}${x.generatingAppUrl ? ` (appUrl ${x.generatingAppUrl})` : ''}`)
   }
   if (failures.length) {
     lines.push('Failed ops:')

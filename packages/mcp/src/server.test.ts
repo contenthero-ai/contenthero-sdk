@@ -1040,7 +1040,7 @@ test('import_media waits within the call, and hands back the outputId as pending
   assert.deepEqual(options, { timeoutMs: 300, pollIntervalMs: 50 })
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /Import im9 is still running/)
-  assert.match(res.content[0].text, /get_status \{ ids: \["im9"\] \}/)
+  assert.match(res.content[0].text, /get_status \{ ids: \["im9"\], kind: "output" \}/)
 })
 
 test('get_status: an abandoned import says where the bytes already are, and never asks to poll again', async () => {
@@ -1185,12 +1185,14 @@ test('get_status refuses a kind it does not know', async () => {
 /**
  * The generation card polls the server by itself. Its call is built by `statusPollCall`, and this runs that exact call
  * against the real tool: the schema must accept it, and the answer must carry the card payload the widget merges.
- * Break-verified: the old tool name, or the old `outputIds` argument, turns this red.
+ * Break-verified: the old tool name, the old `outputIds` argument, or a poll with no kind turns this red.
  */
 test('the widget polls with get_status, and the answer carries the finished card', async () => {
   const mcp = await connect(fakeClient())
   const call = statusPollCall('gen1')
   assert.equal(call.name, 'get_status')
+  // The card holds the output's full id, which the status route places only with its kind.
+  assert.equal(call.arguments.kind, 'output')
   const res = await mcp.callTool(call)
   assert.ok(!res.isError, res.content?.[0]?.text)
   const sc = res.structuredContent
@@ -1462,7 +1464,7 @@ test('create_avatar says the avatar is NOT ready and names the poll call', async
   assert.equal(captured.age, '20s')
   const body = res.content[0].text
   assert.match(body, /NOT READY/, 'the wait must be stated, not implied by a null image')
-  assert.match(body, /get_avatar/, 'the poll call must be named')
+  assert.match(body, /get_status \{ ids: \["av-new"\], kind: "avatar" \}/, 'the wait is get_status, named as a call it accepts')
   assert.match(body, /av-new/, 'the new id must be present so the caller can poll it')
 })
 

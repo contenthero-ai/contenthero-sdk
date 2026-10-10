@@ -6,7 +6,7 @@
  */
 
 export { ContentHero, importedMediaFrom } from './client.js'
-export { LIST_SORTS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS, KINDS_NAMED_BY_KIND } from './types.js'
+export { LIST_SORTS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS, KINDS_NAMED_BY_KIND, statusTarget, statusTargetOf } from './types.js'
 export type {
   SortableList,
   SortFieldOf,
@@ -316,6 +316,8 @@ export {
   GenerationTimeoutError,
   GenerationInterruptedError,
   pendingOutputId,
+  pendingJob,
 } from './errors.js'
-export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
+export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
+export type { WaitCall } from './describe.js'
 export { chargeSentence, describeCharge, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings, withExportLoudness } from './describe.js'

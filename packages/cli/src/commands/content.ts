@@ -37,7 +37,7 @@ import type {
 } from '@contenthero/sdk'
 import { LIST_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, displayId, withMore } from '../output.js'
+import { emit, keyValues, table, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { placementFrom, toFloat, toInt, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
 
@@ -286,8 +286,9 @@ export function registerContent(program: Command): void {
           }
         }
         // Availability always prints: the section names are the vocabulary --analysis-sections accepts.
-        if (c.analysis) out += `\n\n${analysisText(c.id, c.analysis)}`
-        if (c.scenes) out += `\n\n${scenesText(c.scenes)}`
+        const post = { contentId: c.id, shortId: c.shortId ?? undefined }
+        if (c.analysis) out += `\n\n${analysisText(post, c.analysis)}`
+        if (c.scenes) out += `\n\n${scenesText(c.scenes, post)}`
         return out
       })
     })
@@ -322,7 +323,7 @@ export function registerContent(program: Command): void {
           // Finished: ask once more, which starts nothing for a finished post and answers with the final charge.
           if (post.scenes && post.scenes.status !== 'running') scenes = await client.analyzeContent(id, { kind: 'scenes' })
         }
-        emit(scenes, ctx, (r: ContentScenesResult) => `Scenes for post ${r.contentId}\n\n${scenesText(r.scenes)}${costAfter(r.charge)}`)
+        emit(scenes, ctx, (r: ContentScenesResult) => `Scenes for post ${postName(r)}\n\n${scenesText(r.scenes, r)}${costAfter(r.charge)}`)
         return
       }
       let result = await client.analyzeContent(id)
@@ -334,7 +335,7 @@ export function registerContent(program: Command): void {
         // final charge (taking the analysis from the post dropped the charge).
         if (post.analysis.status !== 'running') result = await client.analyzeContent(id)
       }
-      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${r.contentId}\n\n${analysisText(r.contentId, r.analysis)}${costAfter(r.charge)}`)
+      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${postName(r)}\n\n${analysisText(r, r.analysis)}${costAfter(r.charge)}`)
     })
 }
 
@@ -348,8 +349,15 @@ const ANALYZE_TIMEOUT_SEC = 600
 const ANALYZE_POLL_MS = 5_000
 
 /** A post's scenes: whether they exist, and how to read them. */
-function scenesText(sc: ContentScenes): string {
-  if (sc.status === 'running') return 'Scenes: running (run content analyze --kind scenes again for the result)'
+/** A post an analysis answer is about: the id its job is followed by, and its page. */
+function postName(r: { contentId: string; shortId?: string; appUrl?: string }): string {
+  return `${displayId({ id: r.contentId, shortId: r.shortId })}${r.appUrl ? ` (${r.appUrl})` : ''}`
+}
+
+function scenesText(sc: ContentScenes, post: { contentId: string; shortId?: string }): string {
+  if (sc.status === 'running') {
+    return `Scenes: running (wait with ${statusCommand([{ id: post.contentId, shortId: post.shortId, kind: 'scenes' }])}, then content analyze --kind scenes reads them at no charge)`
+  }
   if (sc.status === 'complete' && sc.detail) {
     const d = sc.detail
     const head = `Scenes: ${sc.sceneCount}${d.windowed ? ` (${d.scenes.length} in this window)` : ''}`
@@ -368,9 +376,9 @@ function scenesText(sc: ContentScenes): string {
 }
 
 /** A post's Break It Down: its status always, and the sections when they were returned. */
-function analysisText(contentId: string, an: ContentAnalysis): string {
+function analysisText(post: { contentId: string; shortId?: string }, an: ContentAnalysis): string {
   if (an.status === 'running') {
-    return `Analysis: running (wait with contenthero status ${contentId} --kind content, then content analyze reads it at no charge)`
+    return `Analysis: running (wait with ${statusCommand([{ id: post.contentId, shortId: post.shortId, kind: 'content' }])}, then content analyze reads it at no charge)`
   }
   if (an.status === 'failed') return `Analysis: failed (${an.error ?? 'no reason recorded'}); content analyze tries it again`
   if (an.status !== 'complete') return 'Analysis: absent (content analyze creates one)'

@@ -121,7 +121,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, KINDS_NAMED_BY_KIND, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -464,7 +464,7 @@ export function completedResult(
    * whom `gpt-image-2` is a true and directly useful token. The widget's chip has a human reader, for whom
    * the same string is an unexplained failure wearing a label's clothes, so there it renders as nothing.
    */
-  const header = `Done. ${landed.length} ${noun} from ${gen.modelDisplayName ?? gen.modelId} (outputId ${gen.outputId}):`
+  const header = `Done. ${landed.length} ${noun} from ${gen.modelDisplayName ?? gen.modelId} (outputId ${jobName({ id: gen.outputId, shortId: gen.shortId, appUrl: gen.appUrl })}):`
   // Each output by its media id, the name to pass back, so no reader numbers anything; one that produced nothing is
   // listed by its status, so the others keep their own numbers.
   const lines = [header, ...outputLines(gen)]
@@ -533,6 +533,29 @@ export function getStatusCall(ids: readonly string[], kind?: JobKind): string {
   return `get_status { ids: [${ids.map((id) => `"${id}"`).join(', ')}]${kind ? `, kind: "${kind}"` : ''} }`
 }
 
+/**
+ * A job as the call that started or finished it returned it: its full id, its short id when it has one, its page in the
+ * app, and its kind. Every answer that starts or returns a job names it through this, so each one carries an id
+ * `get_status` takes and the job's link, finished or still running.
+ */
+export interface JobHandle {
+  id: string
+  shortId?: string | null
+  appUrl?: string | null
+  kind: JobKind
+}
+
+/** The call that waits on these jobs, by the SDK's one rule (`statusTarget`). They share a kind. */
+export function statusCallFor(jobs: readonly JobHandle[]): string {
+  const targets = jobs.map(statusTarget)
+  return getStatusCall(targets.map((t) => t.id), targets.find((t) => t.kind)?.kind)
+}
+
+/** A job by the id `get_status` follows it by, with its link when known. */
+export function jobName(job: Omit<JobHandle, 'kind'>): string {
+  return `${job.shortId || job.id}${linkAfter(job.appUrl)}`
+}
+
 /** What a still-running generation already knows about the shape of its own result. */
 export interface PendingShape {
   contentType: 'image' | 'video' | 'audio'
@@ -582,22 +605,25 @@ export interface PendingShape {
  * case. The widget polls `get_status`, and the name arrives with the first response.
  */
 export function pendingResult(
-  outputId: string,
+  job: { outputId: string; shortId?: string | null; appUrl?: string | null },
   pollAfterSeconds = 15,
   shape?: PendingShape,
 ): CallToolResult {
+  const { outputId } = job
+  const handle: JobHandle = { id: outputId, shortId: job.shortId, appUrl: job.appUrl, kind: 'output' }
   /**
    * ⚠️ THE REASSURANCE MUST MATCH THE MEDIUM. This said "This is normal for video" on every pending result,
    * including image jobs, where it reads as the server describing something other than what was asked for.
    * `shape` is present precisely when we know which medium it is.
    */
   const normal = shape?.contentType === 'image' ? '' : ' This is normal for video.'
-  const prose = `Still rendering (outputId ${outputId}).${normal} Call ${getStatusCall([outputId])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`
+  const prose = `Still rendering (outputId ${jobName(handle)}).${normal} Call ${statusCallFor([handle])} in ~${pollAfterSeconds}s [poll_after_seconds: ${pollAfterSeconds}] to get the final URLs.`
   if (!shape) return text(prose)
   return {
     content: [{ type: 'text', text: prose }],
     structuredContent: {
       outputId,
+      appUrl: job.appUrl ?? null,
       status: 'processing',
       contentType: shape.contentType,
       modelId: shape.modelId,
@@ -634,7 +660,7 @@ export function pendingResult(
  */
 export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
   const landed = landedOutputs(result)
-  const header = `Done. Audio generated (outputId ${result.outputId}):`
+  const header = `Done. Audio generated (outputId ${jobName({ id: result.outputId, shortId: result.shortId, appUrl: result.appUrl })}):`
   const prose = [header, ...outputLines(result), chargeLine(result.charge)]
     .filter((l): l is string => !!l)
     .join('\n')
@@ -678,13 +704,14 @@ export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
   if (jobs.length === 0) {
     return text(result.note ?? 'Nothing to enhance: no audible clips in that selection.')
   }
+  const handles = jobs.map((j): JobHandle => ({ id: j.outputId, shortId: j.shortId, appUrl: j.appUrl, kind: 'output' }))
   const lines = jobs.map(
     (j, i) =>
-      `${i + 1}. outputId ${j.outputId} covers ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}` +
+      `${i + 1}. outputId ${jobName(handles[i]!)} covers ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}` +
       ` from one source (${j.windows} window${j.windows === 1 ? '' : 's'})` +
       (chargeLine(j.charge) ? `. ${chargeLine(j.charge)}` : ''),
   )
-  const poll = `Poll with ${getStatusCall(jobs.map((j) => j.outputId))}`
+  const poll = `Poll with ${statusCallFor(handles)}`
   const header =
     jobs.length === 1
       ? `Enhancing 1 source. ${poll}:`
@@ -753,16 +780,17 @@ export function generationStatusResult(
     delete (res as { _meta?: unknown })._meta
     return res
   }
+  const name = jobName({ id: gen.outputId, shortId: gen.shortId, appUrl: gen.appUrl })
   if (gen.status === 'failed') {
-    return text(`Generation ${gen.outputId} failed: ${gen.error ?? 'unknown error'}`, true)
+    return text(`Generation ${name} failed: ${gen.error ?? 'unknown error'}`, true)
   }
   // Terminal and not a failure. Without this branch it read "still abandoned, call again", a poll that never ends.
   if (gen.status === 'abandoned') {
-    if (gen.alreadyExisted) return importedMediaResult(importedMediaFrom(gen, null))
-    return text(`Generation ${gen.outputId} was set aside and produced nothing of its own. It will not change.`)
+    if (gen.alreadyExisted) return importedMediaResult(importedMediaFrom(gen, gen.shortId ?? null))
+    return text(`Generation ${name} was set aside and produced nothing of its own. It will not change.`)
   }
   const secs = pollAfterSecondsFor(gen.contentType)
-  const poll = `Call get_status again in ~${secs}s [poll_after_seconds: ${secs}]`
+  const poll = `Call ${statusCallFor([{ id: gen.outputId, shortId: gen.shortId, kind: 'output' }])} again in ~${secs}s [poll_after_seconds: ${secs}]`
   /**
    * ⭐⭐⭐ **THE OUTPUTS THAT HAVE LANDED, WHICH IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME.**
    *
@@ -776,11 +804,11 @@ export function generationStatusResult(
    * and the partial payload below was unreachable. Nothing is known only when NEITHER source has a url.
    */
   if (landed.length === 0) {
-    return text(`Generation ${gen.outputId} is still ${gen.status}. ${poll}.`)
+    return text(`Generation ${name} is still ${gen.status}. ${poll}.`)
   }
   const noun = landed.length === 1 ? gen.contentType : `${gen.contentType}s`
   const prose = [
-    `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${gen.outputId}), more still ${gen.status}:`,
+    `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${name}), more still ${gen.status}:`,
     ...landed.map((o) => `${o.mediaId}: ${o.url}`),
     `NOT the full set. ${poll} for the rest.`,
   ].join('\n')
@@ -817,12 +845,13 @@ export function generationStatusResult(
 
 /** One generation as a line of a batch answer: its state, the files that have landed, and a re-poll hint while unfinished. */
 function generationRow(gen: Generation): string {
+  const name = jobName({ id: gen.outputId, shortId: gen.shortId, appUrl: gen.appUrl })
   if (gen.status === 'completed') {
     const landed = landedOutputs(gen)
-    return `- ${gen.outputId}: completed | ${landed.map((o) => `${o.mediaId} ${o.url}`).join(', ') || '(no urls)'}`
+    return `- ${name}: completed | ${landed.map((o) => `${o.mediaId} ${o.url}`).join(', ') || '(no urls)'}`
   }
   if (gen.status === 'failed') {
-    return `- ${gen.outputId}: failed | ${gen.error ?? 'unknown error'}`
+    return `- ${name}: failed | ${gen.error ?? 'unknown error'}`
   }
   const secs = pollAfterSecondsFor(gen.contentType)
   // Same rule as the single form: surface the slots that already landed rather than making the
@@ -830,9 +859,9 @@ function generationRow(gen: Generation): string {
   // mistaken for a finished generation.
   const ready = landedOutputs(gen)
   if (ready.length > 0) {
-    return `- ${gen.outputId}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${o.mediaId} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
+    return `- ${name}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${o.mediaId} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
   }
-  return `- ${gen.outputId}: ${gen.status} [poll_after_seconds: ${secs}]`
+  return `- ${name}: ${gen.status} [poll_after_seconds: ${secs}]`
 }
 
 /** One or more generations (snapshot or post-wait). Falls through to the single form for one id. */
@@ -846,7 +875,11 @@ export function generationBatchResult(
   if (gens.length === 1)
     return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
   const rows = gens.map(generationRow)
-  return text([`${gens.length} generation(s):`, ...rows].join('\n'))
+  const unfinished = gens.filter((g) => g.status !== 'completed' && g.status !== 'failed' && g.status !== 'abandoned')
+  const tail = unfinished.length
+    ? `Still running: call ${statusCallFor(unfinished.map((g) => ({ id: g.outputId, shortId: g.shortId, kind: 'output' as const })))} again.`
+    : null
+  return text(lines([`${gens.length} generation(s):`, ...rows, tail]))
 }
 
 /** Seconds to wait before re-reading a job that is not a generation: exports move fast, the rest are slower reads. */
@@ -891,11 +924,12 @@ export function jobStatusesResult(statuses: JobStatusResult[]): CallToolResult {
   )
   const rows = statuses.map(jobStatusRow)
   const head = statuses.length === 1 ? null : `${statuses.length} job(s):`
-  // A kind whose id alone names a different job keeps its kind in the call, one call per such kind.
+  // A job whose id alone does not name it (a kind named by something else's id, or a full id) keeps its kind in the
+  // call, one call per such kind.
   const groups = new Map<JobKind | undefined, string[]>()
   for (const s of unfinished) {
-    const kind = KINDS_NAMED_BY_KIND.includes(s.kind) ? s.kind : undefined
-    groups.set(kind, [...(groups.get(kind) ?? []), s.id])
+    const { id, kind } = statusTargetOf(s)
+    groups.set(kind, [...(groups.get(kind) ?? []), id])
   }
   const calls = [...groups].map(([kind, ids]) => getStatusCall(ids, kind))
   const tail = calls.length ? `Still running: call ${calls.join(' and ')} again.` : null
@@ -906,7 +940,7 @@ export function jobStatusesResult(statuses: JobStatusResult[]): CallToolResult {
 /** A finished transcription: header line plus the transcript body. */
 export function transcriptResult(t: Transcription): CallToolResult {
   const lang = t.language ? ` (${t.language})` : ''
-  const header = `Transcript${lang}, ${t.wordCount} words (outputId ${t.outputId}):`
+  const header = `Transcript${lang}, ${t.wordCount} words (outputId ${jobName({ id: t.outputId, shortId: t.shortId, appUrl: t.appUrl })}):`
   return withCharge(text([header, '', t.transcript].join('\n')), t.charge)
 }
 
@@ -982,7 +1016,7 @@ export function avatarPendingResult(created: CreateAvatarResult): CallToolResult
       '',
       `⚠️ NOT READY YET: status is ${created.status}. The avatar has no image until its first look`,
       'finishes generating, which is also when its default look and profile photo are set.',
-      `Poll with: get_avatar { "avatarId": "${a.id}" } until status is "completed" (usually 1-4 minutes).`,
+      `Wait for it with ${statusCallFor([{ id: a.id, shortId: a.shortId, kind: 'avatar' }])} until it is completed (usually 1-4 minutes).`,
       '',
       'Credits are charged when that look completes, not now, so a failed generation is not charged.',
       chargeLine(created.charge),
@@ -1044,7 +1078,7 @@ export function brandKitResult(kit: BrandKit, started?: BrandImportOutcome): Cal
   const header = `Brand kit "${kit.name}"${kit.isDefault ? ' [default]' : ''} (${idOf(kit)}):`
   // Stated in words, not just left in the JSON, because the caller has to know the kit it just got back is
   // still FILLING IN. Without this line an agent reads an almost-empty kit and concludes the import failed.
-  const note = started ? importNote(started) : null
+  const note = started ? importNote(started, kit) : null
   const forModel = {
     ...kit,
     brandAccounts: kit.brandAccounts.map(accountForModel),
@@ -1053,7 +1087,7 @@ export function brandKitResult(kit: BrandKit, started?: BrandImportOutcome): Cal
   return text([header, ...(note ? ['', note] : []), '', JSON.stringify(forModel, null, 2)].join('\n'))
 }
 
-function importNote(started: BrandImportOutcome): string {
+function importNote(started: BrandImportOutcome, kit: { id: string; shortId?: string | null }): string {
   if (started.error) {
     return `The kit was created, but its import could not be started: ${started.error}. Retry with update_brand_kit and extract:true.`
   }
@@ -1071,7 +1105,7 @@ function importNote(started: BrandImportOutcome): string {
       `The analysis that writes the empty sections ${state(started.synthesis)}; it waits for new accounts' posts and transcripts, so it can take several minutes.`,
     )
   }
-  parts.push('Poll extractionStatus and analysisStatus with get_brand_kit.')
+  parts.push(`Wait for it with ${statusCallFor([{ id: kit.id, shortId: kit.shortId, kind: 'brand_kit' }])}, which reports each step.`)
   return parts.join(' ')
 }
 
@@ -1675,7 +1709,7 @@ function renderableMedia(
 export function importedMediaResult(r: ImportedMedia): CallToolResult {
   if (!r.alreadyExisted) {
     return renderableMedia(
-      `Media ready (${idOf({ id: r.outputId, appUrl: r.appUrl })}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
+      `Media ready (${idOf({ id: r.shortId || r.outputId, appUrl: r.appUrl })}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
       r.outputId,
       r.url,
       r.contentType,
@@ -1684,7 +1718,7 @@ export function importedMediaResult(r: ImportedMedia): CallToolResult {
   }
   if (r.outputId) {
     return text(
-      `Already in your library (${idOf({ id: r.outputId, appUrl: r.appUrl })}): ${r.url}. Nothing was imported: these exact bytes are already there. Reference it by outputId as usual.`,
+      `Already in your library (${idOf({ id: r.shortId || r.outputId, appUrl: r.appUrl })}): ${r.url}. Nothing was imported: these exact bytes are already there. Reference it by outputId as usual.`,
     )
   }
   const what = r.existing?.role ? `a ${r.existing.role}` : 'an existing file'
@@ -1696,8 +1730,9 @@ export function importedMediaResult(r: ImportedMedia): CallToolResult {
 }
 
 /** import_media's answer when the import is still running at the end of the call. */
-export function importPendingResult(outputId: string): CallToolResult {
-  return text(`Import ${outputId} is still running. Check it with ${getStatusCall([outputId])}.`)
+export function importPendingResult(job: { outputId: string; shortId?: string | null; appUrl?: string | null }): CallToolResult {
+  const handle: JobHandle = { id: job.outputId, shortId: job.shortId, appUrl: job.appUrl, kind: 'output' }
+  return text(`Import ${jobName(handle)} is still running. Wait for it with ${statusCallFor([handle])}.`)
 }
 
 export function accountResult(b: Account): CallToolResult {
@@ -2415,7 +2450,7 @@ function seconds(ms: number): string {
  */
 function scenesLines(contentId: string, scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]): Array<string | null> {
   if (!scenes) return []
-  if (scenes.status === 'running') return [`scenes: running (${analysisWait(contentId, 'scenes')})`]
+  if (scenes.status === 'running') return [`scenes: running (${analysisWait({ contentId }, 'scenes')})`]
   if (scenes.status === 'failed') return [`scenes: failed (${scenes.error}); analyze_content with kind scenes tries them again`]
   if (scenes.status === 'unavailable') return [`scenes: unavailable (${scenes.reason})`]
   if (scenes.status !== 'complete') return ['scenes: absent (analyze_content with kind scenes prepares them)']
@@ -2445,7 +2480,7 @@ function scenesLines(contentId: string, scenes: ContentDetail['scenes'], frames:
  * make the surgical pull undiscoverable.
  */
 function analysisLines(contentId: string, analysis: ContentDetail['analysis']): Array<string | null> {
-  if (analysis?.status === 'running') return [`analysis: running (${analysisWait(contentId, 'content')})`]
+  if (analysis?.status === 'running') return [`analysis: running (${analysisWait({ contentId }, 'content')})`]
   if (analysis?.status === 'failed') {
     return [`analysis: failed (${analysis.error ?? 'no reason recorded'}); analyze_content tries it again`]
   }
@@ -2468,8 +2503,8 @@ function analysisLines(contentId: string, analysis: ContentDetail['analysis']): 
  * How to wait for a running Break It Down or scene map: get_status follows it by the post's id with its kind, and
  * analyze_content then reads the finished result at no charge.
  */
-function analysisWait(contentId: string, kind: 'content' | 'scenes'): string {
-  return `wait with ${getStatusCall([contentId], kind)}, then analyze_content reads it at no charge`
+function analysisWait(r: { contentId: string; shortId?: string }, kind: 'content' | 'scenes'): string {
+  return `wait with ${statusCallFor([{ id: r.contentId, shortId: r.shortId, kind }])}, then analyze_content reads it at no charge`
 }
 
 /** analyze_content's price check: nothing ran and nothing was charged. */
@@ -2493,13 +2528,13 @@ export function analysisCostResult(est: CostEstimate, kind: ContentAnalysisKind 
 export function contentScenesResult(r: ContentScenesResult): CallToolResult {
   const running = r.scenes.status === 'running'
   const body = running
-    ? `scenes: pending, still being prepared (${analysisWait(r.contentId, 'scenes')})`
+    ? `scenes: pending, still being prepared (${analysisWait(r, 'scenes')})`
     : r.scenes.status === 'complete'
       ? `${r.scenes.sceneCount} scene${r.scenes.sceneCount === 1 ? '' : 's'} ready. Read them with get_content scenes='map', or scenes='frames' to see them.`
       : `scenes: ${r.scenes.status}`
   return {
-    content: [{ type: 'text', text: lines([`Scenes for post ${r.contentId}`, body, chargeLine(r.charge)]) }],
-    structuredContent: { contentId: r.contentId, status: running ? 'pending' : r.scenes.status, ...chargeData(r.charge) },
+    content: [{ type: 'text', text: lines([`Scenes for post ${jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })}`, body, chargeLine(r.charge)]) }],
+    structuredContent: { contentId: r.contentId, appUrl: r.appUrl ?? null, status: running ? 'pending' : r.scenes.status, ...chargeData(r.charge) },
   }
 }
 
@@ -2508,12 +2543,13 @@ export function contentAnalysisResult(r: ContentAnalysisResult): CallToolResult 
   // "pending" is the word the tool's description uses for a run still going.
   const body =
     r.analysis.status === 'running'
-      ? [`analysis: pending, still running (${analysisWait(r.contentId, 'content')})`]
+      ? [`analysis: pending, still running (${analysisWait(r, 'content')})`]
       : analysisLines(r.contentId, r.analysis)
   return {
-    content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body, chargeLine(r.charge)]) }],
+    content: [{ type: 'text', text: lines([`Break It Down for post ${jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })}`, ...body, chargeLine(r.charge)]) }],
     structuredContent: {
       contentId: r.contentId,
+      appUrl: r.appUrl ?? null,
       status: r.analysis.status === 'running' ? 'pending' : r.analysis.status,
       ...chargeData(r.charge),
     },
@@ -2579,7 +2615,7 @@ export function errorResult(err: unknown): CallToolResult {
  * result, so the agent self-corrects.
  */
 export function editorOpsResult(r: ApplyEditorOpsResult): CallToolResult {
-  return text(describeEditorOps(r), r.results.some((x) => !x.ok))
+  return text(describeEditorOps(r, { waitCall: ({ ids, kind }) => getStatusCall(ids, kind) }), r.results.some((x) => !x.ok))
 }
 
 /**
@@ -2955,8 +2991,9 @@ export function exportListResult(projectId: string, { exports, nextCursor }: Exp
     const done = e.status === 'completed'
     const kind = e.exportType ? ` | ${e.exportType}` : ''
     const loudness = describeExportLoudness(e.loudness)
-    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}${loudness ? ` | ${loudness}` : ''}` : ` | ${e.status} (wait with ${getStatusCall([e.exportId], 'export')})`
-    return `- ${e.exportId}${linkAfter(e.appUrl)} | ${e.createdAt}${kind}${e.title ? ` | "${e.title}"` : ''}${files}`
+    const handle: JobHandle = { id: e.exportId, shortId: e.shortId, appUrl: e.appUrl, kind: 'export' }
+    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}${loudness ? ` | ${loudness}` : ''}` : ` | ${e.status} (wait with ${statusCallFor([handle])})`
+    return `- ${jobName(handle)} | ${e.createdAt}${kind}${e.title ? ` | "${e.title}"` : ''}${files}`
   })
   return text(lines([`${exports.length} export(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
 }
@@ -3053,9 +3090,11 @@ export function completedExportResult(
   job: ExportJob,
   format: string,
 ): CallToolResult {
-  const prose = withCodeWarnings(withExportLoudness(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`, job.loudness), job.warnings)
   const medium = EXPORT_MEDIUM[format]
-  if (job.status !== 'completed' || !job.outputUrl || !medium) return exportJobResult(job)
+  // The same words a read of the export answers with: its id and link, the download and the share page.
+  const reported = exportJobResult(job)
+  if (job.status !== 'completed' || !job.outputUrl || !medium) return reported
+  const prose = (reported.content[0] as { text: string }).text
   {
     /**
      * ## ⛔⛔ AN EXPORT RENDERS, AND IT IS NOT REFERENCEABLE
@@ -3070,30 +3109,38 @@ export function completedExportResult(
      */
     return {
       content: [{ type: 'text', text: prose }],
-      structuredContent: mediaWidgetData({
-        contentType: medium,
-        items: [{ url: job.outputUrl, name: job.exportId, contentType: medium }],
-      }),
+      structuredContent: {
+        ...mediaWidgetData({
+          contentType: medium,
+          items: [{ url: job.outputUrl, name: job.shortId || job.exportId, contentType: medium }],
+        }),
+        // The export itself, beside its file: the id get_status and get_export take, and its link.
+        exportId: job.exportId,
+        shortId: job.shortId ?? null,
+        appUrl: job.appUrl ?? null,
+      },
       _meta: WIDGET_META,
     }
   }
 }
 
 /** An export, REPORTED. No widget: a read by id does not know the format, so it cannot draw the file. */
-/** `appUrl` and `shortId` are optional here: a timed-out wait knows only the export's id and status. */
-export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
+/** `appUrl` and `shortId` are optional here: a wait that ended before any read knows only what the start returned. */
+export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string | null; shortId?: string | null }): CallToolResult {
+  const handle: JobHandle = { id: job.exportId, shortId: job.shortId, appUrl: job.appUrl, kind: 'export' }
+  const name = jobName(handle)
   if (job.status === 'completed') {
     const share = describeExportShareLink(job.shareUrl)
-    return text(withCodeWarnings(withExportLoudness(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}${share ? `\n${share}` : ''}`, job.loudness), job.warnings))
+    return text(withCodeWarnings(withExportLoudness(`Export ${name} completed.\nDownload: ${job.outputUrl}${share ? `\n${share}` : ''}`, job.loudness), job.warnings))
   }
   if (job.status === 'failed') {
-    return text(withCodeWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
+    return text(withCodeWarnings(`Export ${name} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)
   }
   const done = typeof job.progress === 'number' ? `${Math.round(job.progress * 100)}%` : null
   const where = [done, job.stage].filter(Boolean).join(', ')
   return text(
     withCodeWarnings(
-      `Export ${job.exportId} is ${job.status}${where ? ` (${where})` : ''}. Still working. Wait with ${getStatusCall([job.exportId], 'export')}, then get_export reads its download URL.`,
+      `Export ${name} is ${job.status}${where ? ` (${where})` : ''}. Still working. Wait with ${statusCallFor([handle])}, then get_export reads its download URL.`,
       job.warnings,
     ),
   )

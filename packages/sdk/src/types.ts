@@ -546,6 +546,11 @@ export interface GenerationOutput {
  */
 export interface GenerateResult {
   outputId: string
+  /**
+   * Its short id: the id `getStatus` and `get_status` follow it by with no kind (the UUID needs kind `'output'`).
+   * Absent from an older server.
+   */
+  shortId?: string
   /** This generation in the app (its first output, or its pending state while it runs). */
   appUrl: string
   status: 'processing' | 'completed'
@@ -700,6 +705,13 @@ export interface EditAudioRequest {
 /** One in-place enhancement job: the clips of a single source, concatenated and enhanced together. */
 export interface EnhanceClipsJob {
   outputId: string
+  /**
+   * Its short id: the id `getStatus` and `get_status` follow it by with no kind (the UUID needs kind `'output'`).
+   * Absent from an older server.
+   */
+  shortId?: string
+  /** This job's result in the app. Absent from an older server. */
+  appUrl?: string
   /** What this job cost (held while it runs). */
   charge?: Charge
   /** Every clip this job's pieces will be applied to. */
@@ -730,6 +742,11 @@ export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
 /** A generation record as returned by `getGeneration` and `generateAndWait`, and as an output's `JobStatus.detail`. */
 export interface Generation {
   outputId: string
+  /**
+   * Its short id: the id `getStatus` and `get_status` follow it by with no kind (the UUID needs kind `'output'`).
+   * Null while an editor effect's job has not yet written its record; absent from an older server.
+   */
+  shortId?: string | null
   /** This generation in the app (its first output, or its pending state while it runs). */
   appUrl: string
   status: GenerationStatus
@@ -836,6 +853,27 @@ export type JobKind = (typeof JOB_KINDS)[number]
  */
 export const KINDS_NAMED_BY_KIND: readonly JobKind[] = ['scenes', 'transcript']
 
+/**
+ * How `getStatus` follows a job, from the handle the call that started it returned: its short id alone, with its kind
+ * only where the id names something else's job (`KINDS_NAMED_BY_KIND`); otherwise its full id with its kind, since a
+ * UUID alone names no table. The one rule every surface prints its wait from.
+ */
+export function statusTarget(job: { id: string; shortId?: string | null; kind: JobKind }): { id: string; kind?: JobKind } {
+  if (job.shortId) return KINDS_NAMED_BY_KIND.includes(job.kind) ? { id: job.shortId, kind: job.kind } : { id: job.shortId }
+  return { id: job.id, kind: job.kind }
+}
+
+/** A full id: the UUID shape, which names no table alone. */
+const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * How to read a job's status again from a status already read: its `id` is its short id where it has one, and a full
+ * id (a job whose record is not yet written) needs its kind, as in `statusTarget`.
+ */
+export function statusTargetOf(status: { id: string; kind: JobKind }): { id: string; kind?: JobKind } {
+  return statusTarget({ id: status.id, shortId: FULL_ID.test(status.id) ? null : status.id, kind: status.kind })
+}
+
 /** Where a background job is. `completed` and `failed` are terminal; the other two mean it is still going. */
 export type JobState = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -919,6 +957,9 @@ export interface TranscribeRequest {
 /** Result of transcribing audio. Synchronous (no polling). */
 export interface Transcription {
   outputId: string
+  /** Its stored record's short id and app link. Absent when no record was kept (the account's own key paid). */
+  shortId?: string
+  appUrl?: string
   transcript: string
   language: string
   wordCount: number
@@ -2799,6 +2840,12 @@ export type ContentAnalysisKind = 'breakdown' | 'scenes'
 /** Result of `analyzeContent` with `kind: 'scenes'`. The scenes themselves are read with `getContent`. */
 export interface ContentScenesResult {
   contentId: string
+  /**
+   * The post's short id, which `getStatus` follows this job by (with its kind), and its page in the app. Absent from an
+   * older server.
+   */
+  shortId?: string
+  appUrl?: string
   kind: 'scenes'
   scenes: ContentScenes
   /** What it cost: held while the scenes are made, charged once when stored, free when they already existed. */
@@ -2829,6 +2876,12 @@ export interface ContentAnalysis {
 /** Result of `analyzeContent`: the post's analysis with every section, or `status: 'running'` while it is made. */
 export interface ContentAnalysisResult {
   contentId: string
+  /**
+   * The post's short id, which `getStatus` follows this job by (with its kind), and its page in the app. Absent from an
+   * older server.
+   */
+  shortId?: string
+  appUrl?: string
   analysis: ContentAnalysis
   /** What it cost: held while it runs, charged once when stored, free when it already existed. */
   charge?: Charge
@@ -3147,9 +3200,12 @@ export interface EditorOpResult {
   error?: string
   warnings?: string[]
   createdIds?: string[]
-  /** For an async effect op (remove_background): the studio_outputs id of the dispatched job, so the caller can
-   *  wait_for_generation on it. Present only on a successfully-dispatched async op. */
+  /** For an async effect op (remove_background, separate_layers): the studio_outputs id of the dispatched job. Wait
+   *  on it with `getStatus` and kind `'output'` (its record, and so its short id, is written when the job runs).
+   *  Present only on a successfully-dispatched async op. */
   generatingOutputId?: string
+  /** That job's result in the app, beside `generatingOutputId`. Absent from an older server. */
+  generatingAppUrl?: string
   /** The compiler's findings for code this op wrote or carried. An error among them is why `ok` is
    *  false; warnings ride on an op that applied. */
   diagnostics?: CodeDiagnostic[]

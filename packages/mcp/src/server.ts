@@ -49,7 +49,7 @@ import { z } from 'zod'
 import {
   ContentHero,
   GenerationTimeoutError,
-  pendingOutputId,
+  pendingJob,
   type GenerateRequest,
   type GenerateBoardRequest,
   type EditAudioRequest,
@@ -207,7 +207,7 @@ const POST_PLATFORMS = [
 ] as const
 
 /**
- * How long a waiting tool (get_status, generate_board, export_project) waits before handing back what
+ * How long get_status waits before handing back what
  * it has, and the deadline its whole call keeps, inline bytes included.
  *
  * ⚠️ BOTH UNDER THE HOST'S 60 SECOND REQUEST CEILING, WITH ROOM. Claude Desktop cancels a call at 60s and does not
@@ -358,8 +358,9 @@ const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 
 /**
- * How long a tool that starts a background job (analyze_content, import_media) waits for it within one call, and how
- * often it looks. The hosted route allows 60s; past this the tool answers pending and the agent waits with get_status.
+ * How long a tool that starts a background job (analyze_content, import_media, generate_board, export_project) waits
+ * for it within one call, and how often it looks. The hosted route allows 60s; past this the tool answers pending and
+ * the agent waits with get_status.
  */
 const JOB_WAIT_MS = 40_000
 const JOB_POLL_MS = 4_000
@@ -1404,7 +1405,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const submitted = await client.generate(request)
         return withCharge(
           pendingResult(
-            submitted.outputId,
+            submitted,
             pollAfterSecondsFor('image'),
             pendingShapeFrom(args, 'image', submitted),
           ),
@@ -1414,7 +1415,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
-        const pending = pendingOutputId(err)
+        const pending = pendingJob(err)
         if (pending)
           return pendingResult(pending, pollAfterSecondsFor('image'), pendingShapeFrom(args, 'image'))
         return errorResult(err)
@@ -1475,13 +1476,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         })
         if (args.getCost) return costResult(await client.estimateBoardCost(request))
         const deadline = Date.now() + CALL_DEADLINE_MS
-        const gen = await client.generateBoardAndWait(request, { timeoutMs: WAIT_MS })
+        const gen = await client.generateBoardAndWait(request, { timeoutMs: jobWait.waitMs })
         return completedResult(gen, await attachmentsFor(gen, deadline))
       } catch (err) {
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
-        const pending = pendingOutputId(err)
+        const pending = pendingJob(err)
         if (pending)
           return pendingResult(pending, pollAfterSecondsFor('image'), pendingShapeFrom(args, 'image'))
         return errorResult(err)
@@ -1612,7 +1613,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const submitted = await client.generate(request)
         return withCharge(
           pendingResult(
-            submitted.outputId,
+            submitted,
             pollAfterSecondsFor('video'),
             pendingShapeFrom(args, 'video', submitted),
           ),
@@ -1622,7 +1623,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
-        const pending = pendingOutputId(err)
+        const pending = pendingJob(err)
         if (pending)
           return pendingResult(pending, pollAfterSecondsFor('video'), pendingShapeFrom(args, 'video'))
         return errorResult(err)
@@ -1744,7 +1745,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // first: polling only `outputId` would report the whole edit as done when one recording had finished.
         if (result.jobs) return enhanceClipsResult(result)
         // Enhancement is async (status 'processing'); isolation returns URLs inline.
-        if (result.status === 'processing') return withCharge(pendingResult(result.outputId), result.charge)
+        if (result.status === 'processing') return withCharge(pendingResult(result), result.charge)
         return audioResult(result)
       } catch (err) {
         return errorResult(err)
@@ -1811,7 +1812,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const submitted = await client.generate(request)
         return withCharge(
           pendingResult(
-            submitted.outputId,
+            submitted,
             pollAfterSecondsFor('image'),
             pendingShapeFrom(args, 'image', submitted),
           ),
@@ -1821,7 +1822,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
-        const pending = pendingOutputId(err)
+        const pending = pendingJob(err)
         if (pending)
           return pendingResult(pending, pollAfterSecondsFor('image'), pendingShapeFrom(args, 'image'))
         return errorResult(err)
@@ -1906,7 +1907,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const submitted = await client.generate(request)
         return withCharge(
           pendingResult(
-            submitted.outputId,
+            submitted,
             pollAfterSecondsFor('video'),
             pendingShapeFrom(args, 'video', submitted),
           ),
@@ -1916,7 +1917,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // A SUBMITTED generation is running and charged. Whether the wait timed out or a
         // poll hit a transient error, returning the outputId lets the caller resume;
         // dropping it invites a retry that generates and charges a second time.
-        const pending = pendingOutputId(err)
+        const pending = pendingJob(err)
         if (pending)
           return pendingResult(pending, pollAfterSecondsFor('video'), pendingShapeFrom(args, 'video'))
         return errorResult(err)
@@ -3048,7 +3049,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           ),
         )
       } catch (err) {
-        if (err instanceof GenerationTimeoutError) return importPendingResult(err.outputId)
+        if (err instanceof GenerationTimeoutError) return importPendingResult(err)
         return errorResult(err)
       }
     },
@@ -4688,13 +4689,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const { projectId, ...input } = args
-        const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: WAIT_MS })
+        const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: jobWait.waitMs })
         // ⚠️ The FORMAT is what makes an export renderable, and only this handler knows it: `get_export`
         // reads by exportId alone, so a later read legitimately reports rather than displays.
         return completedExportResult(job, input.format ?? 'mp4')
       } catch (err) {
         if (err instanceof GenerationTimeoutError) {
-          return exportJobResult({ exportId: err.outputId, status: 'rendering' })
+          return exportJobResult({ exportId: err.outputId, shortId: err.shortId, appUrl: err.appUrl, status: 'rendering' })
         }
         return errorResult(err)
       }

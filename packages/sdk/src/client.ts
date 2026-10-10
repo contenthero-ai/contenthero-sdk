@@ -13,6 +13,7 @@ import {
   GenerationFailedError,
   GenerationInterruptedError,
   GenerationTimeoutError,
+  type SubmittedJob,
 } from './errors.js'
 import type {
   Folder,
@@ -302,7 +303,7 @@ export class ContentHero {
    */
   async generateAndWait(request: GenerateRequest, options: WaitOptions = {}): Promise<Generation> {
     const submitted = await this.generate(request)
-    const gen = await this.#waitAfterSubmit(submitted.outputId, options)
+    const gen = await this.#waitAfterSubmit(submitted, options)
     // Carry the placement outcome (known at submit time) through to the completed record so the caller learns
     // where the asset landed + its id for chaining, without a separate lookup.
     return submitted.placement ? { ...gen, placement: submitted.placement } : gen
@@ -329,7 +330,7 @@ export class ContentHero {
     options: WaitOptions = {},
   ): Promise<Generation> {
     const submitted = await this.generateBoard(request)
-    return this.#waitAfterSubmit(submitted.outputId, options)
+    return this.#waitAfterSubmit(submitted, options)
   }
 
   /**
@@ -341,12 +342,16 @@ export class ContentHero {
    * that loses it has no way to resume and will almost certainly resubmit. A genuine
    * `GenerationFailedError` is terminal and passes through untouched.
    */
-  async #waitAfterSubmit(outputId: string, options: WaitOptions): Promise<Generation> {
+  async #waitAfterSubmit(submitted: { outputId: string } & SubmittedJob, options: WaitOptions): Promise<Generation> {
+    const { outputId } = submitted
+    const job: SubmittedJob = { shortId: submitted.shortId, appUrl: submitted.appUrl }
     try {
       return await this.waitForGeneration(outputId, options)
     } catch (err) {
-      if (err instanceof GenerationFailedError || err instanceof GenerationTimeoutError) throw err
-      throw new GenerationInterruptedError(outputId, err)
+      if (err instanceof GenerationFailedError) throw err
+      // Still running: the error names the job as the start did, so the caller waits on what it was given.
+      if (err instanceof GenerationTimeoutError) throw new GenerationTimeoutError(outputId, err.message, err.lastStatus, { shortId: job.shortId ?? err.shortId, appUrl: job.appUrl ?? err.appUrl })
+      throw new GenerationInterruptedError(outputId, err, undefined, job)
     }
   }
 
@@ -1045,7 +1050,7 @@ export class ContentHero {
     const started = await this.startImport(input)
     // A server from before imports ran as a job answers with the finished result.
     if ((started as { status?: string }).status !== 'processing') return started as unknown as ImportedMedia
-    const gen = await this.#waitAfterSubmit(started.outputId, options)
+    const gen = await this.#waitAfterSubmit(started, options)
     return importedMediaFrom(gen, started.shortId)
   }
 
@@ -2071,7 +2076,13 @@ export class ContentHero {
       if (job.status === 'failed') throw new GenerationFailedError(job.exportId, job.errorMessage ?? 'Export failed')
       return job
     }
-    return this.waitForExport(job.exportId, options)
+    try {
+      return await this.waitForExport(job.exportId, options)
+    } catch (err) {
+      // Still running: the error names the export as the start did, so the caller waits on its short id.
+      if (err instanceof GenerationTimeoutError) throw exportTimeout(job.exportId, job)
+      throw err
+    }
   }
 
   /**
@@ -2088,7 +2099,7 @@ export class ContentHero {
     try {
       status = await this.#pollStatus(exportId, 'export', options)
     } catch (err) {
-      if (err instanceof StatusDeadline) throw new GenerationTimeoutError(exportId)
+      if (err instanceof StatusDeadline) throw exportTimeout(exportId, err.last?.kind === 'export' ? err.last.detail : {})
       throw err
     }
     const job = exportOf(status)
@@ -2244,6 +2255,11 @@ class StatusDeadline extends Error {
     super(`Timed out waiting for ${id}`)
     this.name = 'StatusDeadline'
   }
+}
+
+/** An export still running when its wait ended, named by what is known of it: its short id and link when read. */
+function exportTimeout(exportId: string, job: SubmittedJob): GenerationTimeoutError {
+  return new GenerationTimeoutError(exportId, `Timed out waiting for export ${job.shortId ?? exportId} to finish; it is still running.`, undefined, job)
 }
 
 /** A job target as its id and the kind it was named with, if any. */

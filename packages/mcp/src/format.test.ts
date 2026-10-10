@@ -124,9 +124,14 @@ test('the status call carries every id in one call', () => {
 })
 
 test('a still-rendering job hands back a callable get_status', () => {
-  const out = body(pendingResult('vid-7', 15))
-  assert.match(out, /get_status \{ ids: \["vid-7"\] \}/)
+  // Only the full id is known: it needs its kind, or the status route refuses it.
+  const out = body(pendingResult({ outputId: 'vid-7' }, 15))
+  assert.match(out, /get_status \{ ids: \["vid-7"\], kind: "output" \}/)
   assert.doesNotMatch(out, /with this outputId/)
+  // The short id is followed alone, and the job's link rides with it.
+  const named = body(pendingResult({ outputId: 'vid-7', shortId: 'Vd7kLm2n', appUrl: 'https://app/media/Vd7kLm2n' }, 15))
+  assert.match(named, /outputId Vd7kLm2n \(appUrl https:\/\/app\/media\/Vd7kLm2n\)/)
+  assert.match(named, /get_status \{ ids: \["Vd7kLm2n"\] \}/)
 })
 
 test('in-place enhancement hands back every outputId in one callable form', () => {
@@ -138,7 +143,7 @@ test('in-place enhancement hands back every outputId in one callable form', () =
       ],
     }),
   )
-  assert.match(out, /get_status \{ ids: \["j1", "j2"\] \}/)
+  assert.match(out, /get_status \{ ids: \["j1", "j2"\], kind: "output" \}/)
 })
 
 
@@ -365,7 +370,7 @@ test('a resolved name reaches the text header too', () => {
  * frame can draw placeholder cards from, at the right shape and the right count.
  */
 test('a pending generation binds the widget and says how many are coming', () => {
-  const res = pendingResult('o-slow', 15, {
+  const res = pendingResult({ outputId: 'o-slow' }, 15, {
     contentType: 'video',
     modelId: 'seedance-2',
     displayAspect: '9:16',
@@ -387,22 +392,22 @@ test('a pending generation binds the widget and says how many are coming', () =>
  * charged generation unclaimed. The widget is added ALONGSIDE it, never instead of it.
  */
 test('the pending text still tells the agent to poll', () => {
-  const withWidget = pendingResult('o-slow', 15, { contentType: 'video', modelId: 'seedance-2', expected: 1 })
-  const textOnly = pendingResult('o-slow', 15)
+  const withWidget = pendingResult({ outputId: 'o-slow' }, 15, { contentType: 'video', modelId: 'seedance-2', expected: 1 })
+  const textOnly = pendingResult({ outputId: 'o-slow' }, 15)
   assert.equal(withWidget.content[0].type, 'text')
   assert.equal(
     withWidget.content[0].text,
     textOnly.content[0].text,
     'adding the widget must not change one character of what the agent reads',
   )
-  assert.match(withWidget.content[0].text, /get_status \{ ids: \["o-slow"\] \}/)
+  assert.match(withWidget.content[0].text, /get_status \{ ids: \["o-slow"\], kind: "output" \}/)
 })
 
 /**
  * ⚠️ A count of zero would draw a grid with nothing in it, which reads as broken rather than busy.
  */
 test('at least one placeholder is always promised', () => {
-  const sc = pendingResult('o', 15, { contentType: 'image', modelId: 'm', expected: 0 })
+  const sc = pendingResult({ outputId: 'o' }, 15, { contentType: 'image', modelId: 'm', expected: 0 })
     .structuredContent as Record<string, unknown>
   assert.equal(sc.expected, 1)
 })
@@ -413,7 +418,7 @@ test('at least one placeholder is always promised', () => {
  * case. The widget polls and the name arrives with the first response.
  */
 test('the pending chip is empty rather than guessed', () => {
-  const sc = pendingResult('o', 15, { contentType: 'image', modelId: 'gpt-image-2', expected: 2 })
+  const sc = pendingResult({ outputId: 'o' }, 15, { contentType: 'image', modelId: 'gpt-image-2', expected: 2 })
     .structuredContent as Record<string, unknown>
   assert.equal(sc.modelName, null)
   assert.notEqual(sc.modelName, 'gpt-image-2')
@@ -472,13 +477,13 @@ test('with no server link, a tile offers no Open rather than a guessed one', () 
  * describing something other than what was asked for. `shape` is present exactly when the medium is known.
  */
 test('an image job is not told that slowness is normal for video', () => {
-  const img = pendingResult('o', 5, { contentType: 'image', modelId: 'gpt-image-2', expected: 3 })
+  const img = pendingResult({ outputId: 'o' }, 5, { contentType: 'image', modelId: 'gpt-image-2', expected: 3 })
   assert.ok(!img.content[0].text.includes('normal for video'))
   assert.match(img.content[0].text, /Still rendering \(outputId o\)\. Call/)
 })
 
 test('a video job still gets the reassurance, because for video it is true', () => {
-  const vid = pendingResult('o', 15, { contentType: 'video', modelId: 'seedance-2', expected: 1 })
+  const vid = pendingResult({ outputId: 'o' }, 15, { contentType: 'video', modelId: 'seedance-2', expected: 1 })
   assert.match(vid.content[0].text, /This is normal for video\./)
 })
 
@@ -487,7 +492,7 @@ test('a video job still gets the reassurance, because for video it is true', () 
  * the generic wording rather than silently dropping a reassurance that is usually right.
  */
 test('with no shape the wording is unchanged', () => {
-  assert.match(pendingResult('o', 15).content[0].text, /This is normal for video\./)
+  assert.match(pendingResult({ outputId: 'o' }, 15).content[0].text, /This is normal for video\./)
 })
 
 

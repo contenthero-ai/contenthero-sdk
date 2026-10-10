@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { table, keyValues, displayId, clip } from './output.js'
+import { table, keyValues, displayId, clip, statusCommand } from './output.js'
 
 /**
  * ⚠️ **THESE ASSERT LAYOUT, NOT COLOR, AND THE TEST SCRIPT SETS `NO_COLOR=1` TO KEEP THAT TRUE.**
@@ -77,4 +77,20 @@ test('clip: one line, at most max characters, an ellipsis only when cut', () => 
   assert.equal(clip('a  b\nc', 10), 'a b c')
   assert.equal(clip('abcdefghij', 5), 'abcd…')
   assert.equal(clip(null, 5), '')
+})
+
+/**
+ * Every "Next" the CLI prints for a running job is a command `contenthero status` accepts: a short id alone, a full id
+ * with its kind (the route places a full id only with one), and a job named by something else's id with its kind.
+ * Break-verified: printing the full id without `--kind` turns this red.
+ */
+test('statusCommand waits on a job by an id the status route accepts', () => {
+  const uuid = '5f0c7e1a-1111-4a2b-9c3d-000000000001'
+  assert.equal(statusCommand([{ id: uuid, shortId: 'Gen12345', kind: 'output' }]), 'contenthero status Gen12345')
+  assert.equal(statusCommand([{ id: uuid, kind: 'output' }]), `contenthero status ${uuid} --kind output`)
+  assert.equal(statusCommand([{ id: uuid, shortId: 'Pst12345', kind: 'scenes' }]), 'contenthero status Pst12345 --kind scenes')
+  assert.equal(
+    statusCommand([{ id: uuid, shortId: 'Gen12345', kind: 'output' }, { id: uuid, kind: 'output' }]),
+    `contenthero status Gen12345 ${uuid} --kind output`,
+  )
 })

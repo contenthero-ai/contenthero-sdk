@@ -28,7 +28,7 @@ import type {
   UpdateBrandKitInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, isClear, placementFrom, toInt, toJson, toList, withPageFlags, withPlacementFlags } from '../args.js'
@@ -167,14 +167,14 @@ function sectionsHuman(r: BrandKitSectionsRead): string {
 }
 
 /** What an import started, as display rows: each job's state, then how to follow it. */
-function importRows(started: BrandImportOutcome, kitId: string): [string, string][] {
+function importRows(started: BrandImportOutcome, kit: { id: string; shortId?: string | null }): [string, string][] {
   if (started.error) return [['Import', `not started: ${started.error}`]]
   if (!started.extract && !started.synthesis) return [['Import', 'nothing to import (no website, no own YouTube or Instagram)']]
   const state = (o: JobEnqueueOutcome | null) => (!o ? 'not needed' : o.status === 'deduped' ? 'already running' : o.status)
   return [
     ['Visual extraction', state(started.extract)],
     ['Analysis', state(started.synthesis)],
-    ['Next', `poll with: contenthero brand-kit get ${kitId}`],
+    ['Next', statusCommand([{ ...kit, kind: 'brand_kit' }])],
   ]
 }
 
@@ -312,7 +312,7 @@ export function registerBrandKit(program: Command): void {
           ['Created', brandKit.name],
           ['Id', displayId(brandKit)], ...linkRow(brandKit),
           // Said plainly, because a kit that is still filling in otherwise reads as a kit that came back empty.
-          ...(started ? importRows(started, brandKit.id) : []),
+          ...(started ? importRows(started, brandKit) : []),
         ]),
       )
     })
@@ -324,7 +324,7 @@ export function registerBrandKit(program: Command): void {
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
       const started = await client.extractBrandKit(id)
-      emit(started, ctx, () => keyValues([['Brand kit', id], ...importRows(started, id)]))
+      emit(started, ctx, () => keyValues([['Brand kit', id], ...importRows(started, { id })]))
     })
 
   withPlacementFlags(identityOptions(

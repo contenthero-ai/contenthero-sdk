@@ -15,7 +15,7 @@
 import type { Command } from 'commander'
 import type { Avatar, AvatarListResult, Voice, VoiceListResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { costRows, emit, keyValues, table, linkRow, displayId, withMore } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, statusCommand, withMore } from '../output.js'
 import { collect, placementFrom, toJson, withPageFlags, withPlacementFlags } from '../args.js'
 
 export function registerIdentity(program: Command): void {
@@ -119,7 +119,7 @@ export function registerIdentity(program: Command): void {
           ['Status', created.status],
           ...costRows(created.charge),
         ]) +
-        `\n\nNot ready yet: the first look is generating. Poll with:\n  contenthero avatar get ${created.avatar.id}`,
+        `\n\nNot ready yet: the first look is generating. Wait for it with:\n  ${statusCommand([{ id: created.avatar.id, shortId: created.avatar.shortId, kind: 'avatar' }])}`,
       )
     })
 

@@ -5,7 +5,7 @@
  */
 
 import pc from 'picocolors'
-import { describeCharge, type Charge } from '@contenthero/sdk'
+import { describeCharge, statusTarget, type Charge, type JobKind } from '@contenthero/sdk'
 
 /** Print a result: pretty JSON by default, the human formatter under --human. */
 export function emit(
@@ -77,6 +77,20 @@ export function displayId(item: { id: string; shortId?: string | null }): string
  */
 export function linkRow(item: { appUrl?: string | null }): Array<[string, string]> {
   return item.appUrl ? [['App URL', item.appUrl]] : []
+}
+
+/**
+ * The command that waits on jobs, from the handle the call that started them returned, by the SDK's one rule
+ * (`statusTarget`): short ids alone, a full id with its kind. The jobs share a kind.
+ */
+export function statusCommand(jobs: ReadonlyArray<{ id: string; shortId?: string | null; kind: JobKind }>): string {
+  return statusCommandFor(jobs.map(statusTarget))
+}
+
+/** The command that reads these targets, each already resolved to its id and the kind it needs. */
+export function statusCommandFor(targets: ReadonlyArray<{ id: string; kind?: JobKind }>): string {
+  const kind = targets.find((t) => t.kind)?.kind
+  return `contenthero status ${targets.map((t) => t.id).join(' ')}${kind ? ` --kind ${kind}` : ''}`
 }
 
 /** The cost row for a paid result, labeled by the SDK's one wording ("Cost" or "Estimated cost"); none without a receipt. */

@@ -10,9 +10,9 @@
  */
 
 import { Option, type Command } from 'commander'
-import { JOB_KINDS, KINDS_NAMED_BY_KIND, type JobKind, type JobStatusResult } from '@contenthero/sdk'
+import { JOB_KINDS, statusTargetOf, type JobKind, type JobStatusResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues } from '../output.js'
+import { emit, keyValues, statusCommandFor } from '../output.js'
 import { generationHuman, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { EXIT } from '../errors.js'
 import { toInt } from '../args.js'
@@ -31,7 +31,7 @@ export function statusHuman(s: JobStatusResult): string {
   for (const step of s.steps ?? []) pairs.push([`Step ${step.name}`, step.reason ? `${step.state} (${step.reason})` : step.state])
   if (s.appUrl) pairs.push(['App', s.appUrl])
   if (s.state !== 'completed' && s.state !== 'failed') {
-    pairs.push(['Next', `contenthero status ${s.id}${KINDS_NAMED_BY_KIND.includes(s.kind) ? ` --kind ${s.kind}` : ''}`])
+    pairs.push(['Next', statusCommandFor([statusTargetOf(s)])])
   }
   return keyValues(pairs)
 }
