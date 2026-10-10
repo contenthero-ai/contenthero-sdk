@@ -3924,20 +3924,20 @@ test('the ChatGPT CSP mirror lists the same origins as the MCP Apps one', async 
 })
 
 /**
- * ⭐⭐ The widget draws its own card, so it asks every host for no border of its own. Omitted, the host decides,
- * and Claude decided to draw one: the card sat inside a second outline with a different corner radius (Claude
- * Desktop, 2026-10-05). Asserted on both the listing and the read result, under both hosts' names, because a host
- * may consult either.
+ * ⭐⭐ The host draws the one frame, so the widget asks every host for its border and draws none itself. Asking
+ * for none did not stop Claude drawing one, and our own card then sat inside it with a different corner radius
+ * (Claude Desktop, 2026-10-05). Asserted on both the listing and the read result, under both hosts' names,
+ * because a host may consult either.
  */
-test('the widget asks every host for no border, on the listing and the read', async () => {
+test('the widget asks every host for its border, on the listing and the read', async () => {
   const mcp = await connect(fakeClient())
   const { resources } = await mcp.listResources()
   const listed = resources.find((r) => r.uri === GENERATION_WIDGET_URI)?._meta ?? {}
   const { contents } = await mcp.readResource({ uri: GENERATION_WIDGET_URI })
   const read = (contents[0] as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {}
   for (const meta of [listed, read]) {
-    assert.equal((meta.ui as { prefersBorder?: boolean } | undefined)?.prefersBorder, false, 'MCP Apps prefersBorder')
-    assert.equal(meta['openai/widgetPrefersBorder'], false, 'ChatGPT widgetPrefersBorder')
+    assert.equal((meta.ui as { prefersBorder?: boolean } | undefined)?.prefersBorder, true, 'MCP Apps prefersBorder')
+    assert.equal(meta['openai/widgetPrefersBorder'], true, 'ChatGPT widgetPrefersBorder')
   }
 })
 

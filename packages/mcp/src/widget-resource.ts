@@ -64,11 +64,13 @@ const WIDGET_CONNECT_DOMAINS = [MEDIA_HOST, PUBLIC_CDN_HOST].map((host) => `http
 /**
  * The widget resource's metadata, spread onto both the `resources/list` entry and the `resources/read` content.
  *
- * ⭐⭐ **NO HOST BORDER: THE WIDGET DRAWS ITS OWN CARD.** The spec leaves the frame to the host unless the
+ * ⭐⭐ **THE HOST DRAWS THE ONE FRAME; THE WIDGET DRAWS NONE.** The spec leaves the frame to the host unless the
  * resource says otherwise ("omitted: host decides border") and recommends saying, "because hosts' defaults may
- * vary". Ours did: Claude drew its own border and background around the widget, so the card sat inside a second
- * outline with a different corner radius (Claude Desktop, 2026-10-05), while ChatGPT drew none. The card
- * (`.wrap` in `widget/src/main.tsx`) is the one frame in both, so every host is asked for none, under both names.
+ * vary". This used to ask for no host frame and draw its own card, and Claude Desktop drew its frame anyway, so
+ * the card sat inside a second outline with a different corner radius (2026-10-05). A host can ignore a request
+ * for no frame, and the request is a boolean with no say over radius or color, so the only arrangement that
+ * shows one frame everywhere is the host's: every host is asked for its border, under both names, and `.wrap`
+ * in `widget/src/main.tsx` draws no border, radius or surface of its own.
  */
 export const WIDGET_RESOURCE_META = {
   _meta: {
@@ -77,7 +79,7 @@ export const WIDGET_RESOURCE_META = {
         resourceDomains: WIDGET_RESOURCE_DOMAINS,
         connectDomains: WIDGET_CONNECT_DOMAINS,
       },
-      prefersBorder: false,
+      prefersBorder: true,
     },
     /**
      * ⭐⭐ **THE SAME VALUES UNDER CHATGPT'S NAMES.** OpenAI's reference calls this "legacy CSP metadata" and it
@@ -91,7 +93,7 @@ export const WIDGET_RESOURCE_META = {
       resource_domains: WIDGET_RESOURCE_DOMAINS,
       connect_domains: WIDGET_CONNECT_DOMAINS,
     },
-    'openai/widgetPrefersBorder': false,
+    'openai/widgetPrefersBorder': true,
   },
 } as const
 

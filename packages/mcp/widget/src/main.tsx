@@ -26,6 +26,7 @@ import { useApp } from '@modelcontextprotocol/ext-apps/react'
 import { ModelGlyph } from './model-icon.js'
 import { canHover, composerBand, insetsOf, themeOf, type HostLayout } from './host.js'
 import { ZOOM_SCALE, clampPan, classifyRelease, isDoubleTap, zoomAt, type Point } from './gestures.js'
+import { cardKey, isUnfinished, loadCard, mergePoll, preferSaved, saveCard } from './persist.js'
 import {
   columnsForAspect,
   masonryColumns,
@@ -206,29 +207,18 @@ const styles = `
     background: transparent;
   }
   /*
-   * ⭐ ROUNDER, AND LIT FROM THE TOP LEFT.
+   * ⭐⭐ NO CARD OF OUR OWN: THE HOST DRAWS THE ONE FRAME.
    *
-   * A 14px radius on a panel this size reads as a utility box. The reference's widgets are noticeably
-   * rounder and carry a soft diagonal gradient, which is most of what makes them feel finished rather than
-   * functional. Both are cheap: one radius and one overlay gradient in the brand's own gold, at an opacity
-   * low enough to read as light rather than as color.
+   * This drew a border, a 22px radius, a surface and a gold diagonal wash, and asked every host for no frame.
+   * Claude Desktop drew its own anyway, so the card sat inside a second outline with a different corner radius
+   * (2026-10-05). The resource now asks for the host's frame (prefersBorder in widget-resource.ts) and this
+   * draws none, so there is one outline in every host and its radius is the host's.
    *
-   * ⚠️ The gradient goes on the CONTAINER and stays under the content, so it tints the panel without
-   * touching the media. Painting it over the grid would cast gold on every picture.
+   * ⚠️ The gold wash went with the surface. It lit the PANEL, which made it part of the frame rather than the
+   * content, and painted inside someone else's frame it would read as a stain. The gold hairline under the
+   * head stays: it separates the metadata from the media, which is content.
    */
-  .wrap {
-    position: relative;
-    border: 1px solid var(--color-border-primary, color-mix(in srgb, CanvasText 14%, transparent));
-    border-radius: var(--border-radius-lg, 22px);
-    overflow: hidden;
-    background: var(--color-background-secondary, Canvas);
-  }
-  .wrap::before {
-    content: '';
-    position: absolute; inset: 0; pointer-events: none; z-index: 0;
-    background: linear-gradient(135deg, color-mix(in srgb, ${GOLD} 7%, transparent), transparent 55%);
-  }
-  .wrap > * { position: relative; z-index: 1; }
+  .wrap { min-width: 0; }
 
   /*
    * ⚠️ THE HEAD AND THE GRID SHARE THEIR HORIZONTAL PADDING, WHICH IS WHAT ALIGNS THE MARK.
@@ -1147,6 +1137,17 @@ function Widget() {
   const [failReason, setFailReason] = useState<string | null>(null)
   /** True once ANY tool result has been delivered, whether or not it was a generation. See `readResult`. */
   const [answered, setAnswered] = useState(false)
+  /** Which card this frame is showing, named by the result itself (see `cardKey`). Set in `readResult`. */
+  const cardKeyRef = useRef<string | null>(null)
+  /**
+   * ⭐ EVERY CHANGE IS SAVED, so a remount restores the newest thing this card knew: each poll merge, and each
+   * tile that got its pixels. Only urls still on the card are kept, so the record cannot grow without bound.
+   */
+  useEffect(() => {
+    if (!data) return
+    const shown = itemsOf(data).map((o) => o.url).filter((url) => loaded.has(url))
+    saveCard(cardKeyRef.current, { data, loaded: shown })
+  }, [data, loaded])
   /** The host's merged context, for what the layout reads from it (hover, insets). Set by the effect below. */
   const [host, setHost] = useState<HostLayout | undefined>(undefined)
   /** The frame's own `(hover: none)`, the fallback when the host does not say whether it can hover. */
@@ -1207,7 +1208,25 @@ function Widget() {
      * ⭐ The real question is "is there anything to show", which is items, or a job that will produce them.
      */
     if (sc && (sc.items?.length || sc.outputs?.length || sc.status === 'processing')) {
-      setData(sc)
+      /**
+       * ⭐⭐⭐ **A REMOUNT REPLAYS THE ORIGINAL RESULT, SO WHAT THIS CARD ALREADY LEARNED IS RESTORED FIRST.**
+       *
+       * The host remounts the frame when it scrolls back into view and hands it the result the call RETURNED,
+       * which for a slow job is the pending one. Without this the card forgot a finished video, went back to
+       * skeletons and polled from scratch. The saved copy wins only when it is further along (see
+       * `preferSaved`), and tiles that already had pixels start ready instead of fading in from a laurel again.
+       */
+      const key = cardKey(sc)
+      cardKeyRef.current = key
+      const saved = loadCard<WidgetData>(key)
+      if (saved?.loaded.length) {
+        setLoaded((prev) => {
+          const next = new Set(prev)
+          for (const url of saved.loaded) next.add(url)
+          return next
+        })
+      }
+      setData(preferSaved(sc, saved?.data))
       setIndex(0)
       setRatio(null)
       setStalled(false)
@@ -1392,7 +1411,7 @@ function Widget() {
      * WITH ITS PART.** Two of three ready has items AND is still processing; stopping there would freeze
      * the card at two tiles forever. `status` is the only thing that says whether more is coming.
      */
-    if (!app || !data || data.status !== 'processing') return
+    if (!app || !data || !isUnfinished(data)) return
     const everySeconds = Math.max(3, data.pollAfterSeconds ?? 10)
     const deadline = 20 * 60
     let cancelled = false
@@ -1421,14 +1440,9 @@ function Widget() {
          * there is one answer to "what tiles does this payload have" rather than a second opinion here.
          */
         const got = sc ? itemsOf(sc) : []
-        if (got.length > 0) {
-          /**
-           * ⭐⭐ MERGED, NOT REPLACED. The poll's answer knows the items; only the ORIGINAL pending result
-           * knew how many were asked for. Replacing wholesale would drop `expected` and the remaining
-           * skeletons would vanish the moment the first tile landed, which reads as "finished" when it is
-           * not.
-           */
-          setData((prev) => ({ ...prev, ...sc, expected: prev?.expected ?? sc?.expected }))
+        if (sc && got.length > 0) {
+          // Merged, not replaced: see `mergePoll`. The save effect above records the result.
+          setData((prev) => mergePoll(prev, sc))
           setRatio(null)
           // Still processing means more are coming, so keep polling rather than returning.
           if (sc?.status !== 'processing') return
