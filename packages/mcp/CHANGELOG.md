@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.34
+
 - Breaking (hard cutover, no alias): `get_generation_status` is `get_status`. It checks any background job
   (generations and edits, exports, brand kit reads, avatars, content analysis, transcripts) and takes `ids`, each the
   id its starting call returned, with `kind` only for a full UUID, a transcript, or an id the server says is

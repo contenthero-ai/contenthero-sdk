@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.27
+
 - New: `getStatus(id, { kind? })` reads any background job (an output, an export, a brand kit read, an avatar, a
   content analysis, a transcript) from `GET /api/v1/status/{id}`, as a `JobStatus` whose `detail` is the kind's own
   resource. `waitForStatus(targets, options)` waits for several under one deadline and hands each back finished or as

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.24
+
 - Breaking (hard cutover, no hidden alias): `generation-status get` is `status <ids...>`, named after the MCP's
   `get_status`. It reads any background job (a generation or an edit's output, an export, a brand kit read, an
   avatar, a content analysis, a transcript) by its id alone; `--kind` is for a full UUID, a transcript, or an id the
