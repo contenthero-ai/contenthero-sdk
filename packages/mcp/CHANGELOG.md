@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.32
 
+- Breaking: a project's delivery loudness is a project setting. `get_timeline_settings` reads `loudness` and
+  `update_timeline_settings` changes it: a target in LUFS, or `off`. `export_project` drops `normalizeLoudness` and
+  takes `loudness`, one export's loudness in place of the project's. `get_export`, `export_project` and
+  `list_project_exports` print how a finished export's loudness came out, in the app's one line.
 - `share_media` stops sharing with `shared: false`, naming a generation by one media id or any media link as `shareUrl`.
 - New: `list_project_exports` lists a project's exports, newest first, with each finished one's download and share
   page and each running one's status.

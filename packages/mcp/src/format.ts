@@ -116,7 +116,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2808,6 +2808,7 @@ export function timelineSettingsResult(projectId: string, s: TimelineSettings): 
       `- followPlayhead: ${onOff(s.followPlayhead)}`,
       `- skimming: ${onOff(s.skimming)}`,
       `- skipDisabledClips: ${onOff(s.skipDisabledClips)}`,
+      `- loudness: ${describeLoudness(s.loudness)}`,
     ]),
   )
 }
@@ -2828,7 +2829,8 @@ export function projectExportListResult(projectId: string, { exports, nextCursor
   const rows = exports.map((e) => {
     const done = e.status === 'completed'
     const kind = e.exportType ? ` | ${e.exportType}` : ''
-    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}` : ` | ${e.status} (poll get_export)`
+    const loudness = describeExportLoudness(e.loudness)
+    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}${loudness ? ` | ${loudness}` : ''}` : ` | ${e.status} (poll get_export)`
     return `- ${e.exportId}${linkAfter(e.appUrl)} | ${e.createdAt}${kind}${e.title ? ` | "${e.title}"` : ''}${files}`
   })
   return text(lines([`${exports.length} export(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
@@ -2898,7 +2900,7 @@ export function completedExportResult(
   job: ExportJob,
   format: string,
 ): CallToolResult {
-  const prose = withCodeWarnings(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`, job.warnings)
+  const prose = withCodeWarnings(withExportLoudness(`Export ${job.exportId} completed.\nDownload: ${job.outputUrl}`, job.loudness), job.warnings)
   const medium = EXPORT_MEDIUM[format]
   if (job.status !== 'completed' || !job.outputUrl || !medium) return exportJobResult(job)
   {
@@ -2929,7 +2931,7 @@ export function completedExportResult(
 export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
   if (job.status === 'completed') {
     const share = describeExportShareLink(job.shareUrl)
-    return text(withCodeWarnings(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}${share ? `\n${share}` : ''}`, job.warnings))
+    return text(withCodeWarnings(withExportLoudness(`Export ${job.exportId}${linkAfter(job.appUrl)} completed.\nDownload: ${job.outputUrl}${share ? `\n${share}` : ''}`, job.loudness), job.warnings))
   }
   if (job.status === 'failed') {
     return text(withCodeWarnings(`Export ${job.exportId} failed: ${job.errorMessage ?? 'unknown error'}.`, job.warnings), true)

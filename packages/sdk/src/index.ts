@@ -84,6 +84,7 @@ export type {
   ProjectCoverChoice,
   UpdateProjectInput,
   LinkedTracks,
+  Loudness,
   TimelineSettings,
   TimelineSettingsChange,
   ProjectVersion,
@@ -249,6 +250,7 @@ export type {
   ImportProjectInput,
   StartExportInput,
   ExportJob,
+  ExportLoudness,
   ExportFormatSpec,
   ExportFormatCatalog,
   LinkFormats,
@@ -301,4 +303,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeExportShareLink, describeFileSize, describeLimit, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings } from './describe.js'
+export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings, withExportLoudness } from './describe.js'

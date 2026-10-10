@@ -3412,6 +3412,12 @@ export interface LinkedTracks {
   text: boolean
 }
 
+/**
+ * A delivery loudness: a target integrated loudness in LUFS, or 'off' to keep the mix as it was mixed. The server
+ * refuses a number outside the range it accepts, and its refusal states that range.
+ */
+export type Loudness = number | 'off'
+
 /** A video project's timeline settings for the caller: the same settings the editor's timeline settings menu holds. */
 export interface TimelineSettings {
   magneticTrack: boolean
@@ -3421,6 +3427,12 @@ export interface TimelineSettings {
   followPlayhead: boolean
   skimming: boolean
   skipDisabledClips: boolean
+  /**
+   * The project's delivery loudness, heard in the editor and followed by its exports. Unlike the other settings it
+   * belongs to the project, not the caller: every collaborator and every export reads it, it travels with versions
+   * and duplicates, and changing it is an edit that undo reverses.
+   */
+  loudness: Loudness
 }
 
 /** A change to some timeline settings, for `updateTimelineSettings`; a setting left out is left alone. */
@@ -3473,6 +3485,8 @@ export interface ProjectExport {
   /** Its public share page, once it has completed. */
   shareUrl: string | null
   createdAt: string
+  /** How its loudness came out. Absent or null until it finishes, and for an export with no mix (a still, a package, a subtitle file). */
+  loudness?: ExportLoudness | null
 }
 
 /** A page of a project's exports, newest first. */
@@ -3532,11 +3546,24 @@ export interface StartExportInput {
   showSpeakers?: boolean
   /** Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode. */
   timecodes?: boolean
-  /**
-   * Rendered exports (video and sound) only: bring the final mix to the delivery loudness. Defaults true; false keeps
-   * the mix exactly as it plays in the editor.
-   */
-  normalizeLoudness?: boolean
+  /** Rendered exports (video and sound) only: this export's loudness, in place of the project's own. Omitted, the project's. */
+  loudness?: Loudness
+}
+
+/** How an export's loudness came out, once it has finished. */
+export interface ExportLoudness {
+  /** What the export was asked to deliver at. */
+  target: Loudness
+  /** 'leveled': gain was applied to reach the target; 'unchanged': nothing was changed, because the mix already met the target or had no sound to level; 'off': no target was asked for. */
+  outcome: 'leveled' | 'unchanged' | 'off'
+  /** The gain applied, in dB, when leveled. */
+  gainDb: number | null
+  /** How far the limiter pulled peaks down, in dB, when it had to. */
+  peakReductionDb: number | null
+  deliveredLufs: number | null
+  deliveredTruePeakDbtp: number | null
+  /** The one line the app shows people about it. */
+  summary: string
 }
 
 /** An export job. `mp4` starts as 'rendering' (poll it); canvas still/doc formats return 'completed'. */
@@ -3564,6 +3591,8 @@ export interface ExportJob {
    * warning stops nothing; the code drew, though perhaps not as its author meant. Absent when nothing did.
    */
   warnings?: CodeDiagnostic[]
+  /** How its loudness came out. Absent or null until it finishes, and for an export with no mix (a still, a package, a subtitle file). */
+  loudness?: ExportLoudness | null
 }
 
 /** One format in the export catalog. */

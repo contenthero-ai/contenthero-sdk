@@ -12,7 +12,7 @@
  *   project undo|redo <projectId> [--expected-revision <n>]              the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
- *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--no-normalize-loudness] [--wait]
+ *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--loudness <lufs|off>] [--wait]
  *   project export-status <exportId>                                     (requires editor:read)
  *   project exports <projectId> [--limit] [--cursor]                     its exports, newest first (requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
@@ -33,11 +33,14 @@ import {
   LIST_SORTS,
   describeEditorOps,
   describeExportShareLink,
+  describeLoudness,
   describeProjectShare,
   describeProjectShareLink,
   describeScope,
   withCodeWarnings,
+  withExportLoudness,
   type EditorOp,
+  type Loudness,
   type ImportProjectSource,
   type ProjectCoverChoice,
   type ProjectListResult,
@@ -54,7 +57,7 @@ import {
 import { makeClient } from '../context.js'
 import { emit, keyValues, table, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { isClear, toFloat, toInt, toJson, withPageFlags, withSortFlags } from '../args.js'
+import { isClear, toFloat, toInt, toJson, toLoudness, withPageFlags, withSortFlags } from '../args.js'
 
 /** `--surface`, the project type's name before cli 0.3.12, still accepted and hidden from help. `--type` wins. */
 function deprecatedTypeAlias(): Option {
@@ -352,7 +355,7 @@ export function registerProject(program: Command): void {
     .option('--quality <q>', 'mp4 quality: low|recommended|high')
     .option('--frame <n>', 'editor still (png/jpg) only: timeline frame to render (default 0)', toInt)
     .option('--no-watermark', 'remove the watermark (plan-gated)')
-    .option('--no-normalize-loudness', 'video and sound only: keep the mix exactly as it plays, instead of bringing it to the delivery loudness')
+    .option('--loudness <lufs|off>', "video and sound only: this export's loudness, a target in LUFS or off, in place of the project's own (default the project's)", toLoudness)
     .option('--max-chars-per-line <n>', 'subtitles only: longest line, 20 to 80 characters (default 42)', toInt)
     .option('--max-lines-per-card <n>', 'subtitles only: lines per card, 1 to 4 (default 2)', toInt)
     .option('--show-speakers', 'subtitles only: name who speaks, when there is more than one speaker')
@@ -372,8 +375,7 @@ export function registerProject(program: Command): void {
         ...(opts.timecodes ? { timecodes: true } : {}),
         // commander sets opts.watermark=false when --no-watermark is passed; leave undefined otherwise.
         ...(opts.watermark === false ? { watermark: false } : {}),
-        // Likewise --no-normalize-loudness; the server levels by default.
-        ...(opts.normalizeLoudness === false ? { normalizeLoudness: false } : {}),
+        ...(opts.loudness !== undefined ? { loudness: opts.loudness as Loudness } : {}),
       }
       const job = opts.wait
         ? await client.exportProjectAndWait(projectId, input, { timeoutMs: (opts.timeout as number | undefined) ?? 600000 })
@@ -381,7 +383,7 @@ export function registerProject(program: Command): void {
       emit(job, ctx, () =>
         withCodeWarnings(
           job.status === 'completed'
-            ? `Export ${job.exportId} completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`
+            ? withExportLoudness(`Export ${job.exportId} completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`, job.loudness)
             : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export-status ${job.exportId}`,
           job.warnings,
         ),
@@ -397,7 +399,7 @@ export function registerProject(program: Command): void {
       const job = await client.getExport(exportId)
       emit(job, ctx, () =>
         withCodeWarnings(
-          job.status === 'completed' ? `completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}` : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%${job.stage ? `, ${job.stage}` : ''})` : ''}`,
+          job.status === 'completed' ? withExportLoudness(`completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`, job.loudness) : `${job.status}${typeof job.progress === 'number' ? ` (${Math.round(job.progress * 100)}%${job.stage ? `, ${job.stage}` : ''})` : ''}`,
           job.warnings,
         ),
       )
@@ -471,7 +473,7 @@ function toCoverPosition(value: string): { x: number; y: number } | null {
 }
 
 /** The timeline settings flags, each a setting's name with a `--no-` form to turn it off. */
-const SETTING_FLAGS: Array<[keyof Omit<TimelineSettings, 'linkedTracks'>, string]> = [
+const SETTING_FLAGS: Array<[keyof Omit<TimelineSettings, 'linkedTracks' | 'loudness'>, string]> = [
   ['magneticTrack', 'magnetic-track'],
   ['snapping', 'snapping'],
   ['linkage', 'linkage'],
@@ -485,6 +487,7 @@ function settingsHuman(s: TimelineSettings): string {
   return keyValues([
     ...SETTING_FLAGS.map(([key, flag]): [string, string] => [flag, onOff(s[key])]),
     ['linked tracks', Object.entries(s.linkedTracks).filter(([, on]) => on).map(([kind]) => kind).join(', ') || 'none'],
+    ['loudness', describeLoudness(s.loudness)],
   ])
 }
 
@@ -507,10 +510,12 @@ function registerTimelineSettings(project: Command): void {
   for (const [, flag] of SETTING_FLAGS) update.option(`--${flag}`, `turn ${flag.replace(/-/g, ' ')} on`).option(`--no-${flag}`, `turn ${flag.replace(/-/g, ' ')} off`)
   update
     .option('--linked-tracks <json>', 'which kinds of track a linked edit reaches, as JSON with media, audio and text booleans', toJson)
+    .option('--loudness <lufs|off>', "the project's delivery loudness, a target in LUFS or off: it is the project's, so every collaborator and export follows it, and undo reverses a change to it", toLoudness)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const change: TimelineSettingsChange = {}
       for (const [key] of SETTING_FLAGS) if (typeof opts[key] === 'boolean') change[key] = opts[key] as boolean
       if (opts.linkedTracks !== undefined) change.linkedTracks = opts.linkedTracks as TimelineSettingsChange['linkedTracks']
+      if (opts.loudness !== undefined) change.loudness = opts.loudness as Loudness
       if (Object.keys(change).length === 0) throw new CliError('Nothing to change: pass at least one setting flag.', EXIT.USAGE)
       const { client, ctx } = makeClient(command)
       emit(await client.updateTimelineSettings(projectId, change), ctx, settingsHuman)

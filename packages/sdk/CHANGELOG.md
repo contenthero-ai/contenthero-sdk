@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.4.25
 
+- Breaking: a project's delivery loudness is a project setting. `TimelineSettings.loudness` (`Loudness`: a target
+  integrated loudness in LUFS, or `'off'`) is read by `getTimelineSettings` and changed by `updateTimelineSettings`;
+  unlike the other settings it belongs to the project, so every collaborator and every export follows it.
+  `StartExportInput.normalizeLoudness` is removed: `loudness` sets one export's loudness in place of the project's.
+  `ExportJob.loudness` and `ProjectExport.loudness` (`ExportLoudness`) report how a finished export's loudness came
+  out, with `summary` as the one line the app shows; `describeExportLoudness` and `withExportLoudness` print it, and
+  `describeLoudness` prints a setting.
 - `shareMedia` stops sharing with `shared: false`: a generation's link by one media id, or any media link as
   `shareUrl`. `MediaShare` gains `shared`, and its `shareUrl` is null once stopped.
 - New: `listProjectExports(projectId, { limit, cursor })` reads a project's exports a page at a time, as the editor's

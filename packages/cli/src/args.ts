@@ -4,7 +4,7 @@
  */
 
 import { Option, type Command } from 'commander'
-import { PLACEMENT_ENDS, SORT_ORDERS, type Placement, type PlacementEnd } from '@contenthero/sdk'
+import { PLACEMENT_ENDS, SORT_ORDERS, type Loudness, type Placement, type PlacementEnd } from '@contenthero/sdk'
 import { CliError, EXIT } from './errors.js'
 
 /** Parse an integer option value. */
@@ -61,6 +61,19 @@ export function toFloat(value: string): number {
   const n = Number(value)
   if (Number.isNaN(n)) {
     throw new CliError(`Expected a number, got "${value}".`, EXIT.USAGE)
+  }
+  return n
+}
+
+/**
+ * Parse a loudness option value: a target integrated loudness in LUFS, or `off`. The server owns the range it
+ * accepts and states it when it refuses a number, so no range is checked here.
+ */
+export function toLoudness(value: string): Loudness {
+  if (value.trim().toLowerCase() === 'off') return 'off'
+  const n = Number(value)
+  if (value.trim() === '' || !Number.isFinite(n)) {
+    throw new CliError(`Expected a loudness in LUFS or "off", got "${value}".`, EXIT.USAGE)
   }
   return n
 }

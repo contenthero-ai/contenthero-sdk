@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.22
 
+- Breaking: a project's delivery loudness is a project setting. `project settings get` prints it and
+  `project settings update --loudness <lufs|off>` changes it. `project export` drops `--no-normalize-loudness` and
+  takes `--loudness <lufs|off>`, one export's loudness in place of the project's. `project export` and
+  `project export-status` print how a finished export's loudness came out, in the app's one line.
 - `media share --off` stops sharing: one media id, or the link with `--link`.
 - New: `project exports <projectId>` lists a project's exports, newest first, a page at a time.
 - New: `project share <projectId> [--off]` makes or revokes a project's public live link; `media share <mediaIds...>

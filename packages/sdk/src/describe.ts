@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, GenerationReference, MediaShare, ProjectReadScope, ProjectShare } from './types.js'
+import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, Loudness, MediaShare, ProjectReadScope, ProjectShare } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -237,6 +237,22 @@ export function describeProjectShareLink(shareUrl: string | null | undefined): s
 /** An export's public share page, or null before the export completes. */
 export function describeExportShareLink(shareUrl: string | null | undefined): string | null {
   return shareUrl ? `Share page: ${shareUrl}` : null
+}
+
+/** A delivery loudness as a setting reads: its target in LUFS, or off. */
+export function describeLoudness(loudness: Loudness): string {
+  return loudness === 'off' ? 'off' : `${loudness} LUFS`
+}
+
+/** How an export's loudness came out, as the one line the app shows people, or null when there is none to show. */
+export function describeExportLoudness(loudness: ExportLoudness | null | undefined): string | null {
+  return loudness?.summary || null
+}
+
+/** An export's text, then how its loudness came out, when there is a line to show. */
+export function withExportLoudness(prose: string, loudness: ExportLoudness | null | undefined): string {
+  const line = describeExportLoudness(loudness)
+  return line ? `${prose}\n${line}` : prose
 }
 
 /** Media shared as one link: the page, and any media named that it leaves out. */

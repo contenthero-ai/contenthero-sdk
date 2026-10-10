@@ -57,3 +57,17 @@ test('project exports reads a page and prints each share page', async () => {
   assert.equal(url.searchParams.get('cursor'), 'c')
   assert.match(out, /https:\/\/pages\.example\/e1/)
 })
+
+test("export-status and a waited export print how the export's loudness came out; settings print the project's", async () => {
+  const loudness = { target: -16, outcome: 'leveled', gainDb: 2, peakReductionDb: null, deliveredLufs: -16, deliveredTruePeakDbtp: -1.5, summary: 'Leveled to the project loudness.' }
+  body = { exportId: 'e1', status: 'completed', outputUrl: 'https://files.example/e1.mp4', shareUrl: 'https://pages.example/e1', loudness }
+  const polled = await cli('project', 'export-status', 'e1')
+  assert.match(polled, /completed: https:\/\/files\.example\/e1\.mp4\nShare page: https:\/\/pages\.example\/e1\nLeveled to the project loudness\./)
+  const started = await cli('project', 'export', 'p1', '--loudness', '-16')
+  assert.deepEqual(requests[0]?.body, { loudness: -16 })
+  assert.match(started, /\nLeveled to the project loudness\./)
+  body = { exportId: 'e2', status: 'completed', outputUrl: 'https://files.example/e2.png', loudness: null }
+  assert.doesNotMatch(await cli('project', 'export-status', 'e2'), /loudness/i)
+  body = { settings: { magneticTrack: true, snapping: true, linkage: true, linkedTracks: { media: true, audio: true, text: true }, followPlayhead: true, skimming: false, skipDisabledClips: false, loudness: 'off' } }
+  assert.match(await cli('project', 'settings', 'get', 'p1'), /loudness:\s+off/)
+})

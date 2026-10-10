@@ -225,6 +225,17 @@ test('project settings update sends only the settings named, on and off', async 
   assert.deepEqual(r.body, { magneticTrack: false, snapping: true, linkedTracks: { audio: false } })
   const read = await run('project', 'settings', 'get', 'p1')
   assert.equal(`${read.method} ${read.path}`, 'GET /api/v1/projects/p1/settings')
+  assert.deepEqual((await run('project', 'settings', 'update', 'p1', '--loudness', '-16')).body, { loudness: -16 })
+  assert.deepEqual((await run('project', 'settings', 'update', 'p1', '--loudness', 'off')).body, { loudness: 'off' })
+})
+
+test("project export sends this export's loudness only when it is named", async () => {
+  const leveled = await run('project', 'export', 'p1', '--loudness', '-16')
+  assert.equal(`${leveled.method} ${leveled.path}`, 'POST /api/v1/projects/p1/export')
+  assert.equal(leveled.body?.loudness, -16)
+  assert.equal((await run('project', 'export', 'p1', '--loudness', 'OFF')).body?.loudness, 'off')
+  assert.equal('loudness' in ((await run('project', 'export', 'p1')).body ?? {}), false)
+  await assert.rejects(run('project', 'export', 'p1', '--loudness', 'loud'), /Expected a loudness in LUFS or "off"/)
 })
 
 test('project version commands reach the version routes with the bodies the API reads', async () => {

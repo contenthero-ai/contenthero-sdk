@@ -3315,6 +3315,26 @@ test('export_project returns the download URL when it finishes in time', async (
   assert.match((res.content[0]).text, /out\.mp4/)
 })
 
+test("export_project passes this export's loudness through, and the result says how it came out", async () => {
+  let asked
+  const mcp = await connect(
+    fakeClient({
+      exportProjectAndWait: async (projectId, input) => (
+        (asked = [projectId, input]),
+        { exportId: 'exp1', shortId: 'e', appUrl: 'https://app.example/e', status: 'completed', outputUrl: 'https://x/out.mp4', loudness: { target: -16, outcome: 'leveled', gainDb: 2, peakReductionDb: null, deliveredLufs: -16, deliveredTruePeakDbtp: -1.5, summary: 'Leveled to the project loudness.' } }
+      ),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', format: 'mp4', loudness: -16 } })
+  assert.deepEqual(asked, ['p1', { format: 'mp4', loudness: -16 }])
+  assert.match(res.content[0].text, /Download: https:\/\/x\/out\.mp4\nLeveled to the project loudness\./)
+  const off = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', loudness: 'off' } })
+  assert.ok(!off.isError)
+  assert.deepEqual(asked, ['p1', { loudness: 'off' }])
+  const refused = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', loudness: 'loud' } })
+  assert.ok(refused.isError)
+})
+
 test('get_export polls an export job', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_export', arguments: { exportId: 'exp1' } })
@@ -4585,7 +4605,7 @@ test('list tools forward their sort, page and new filters, and a page ends with 
 test('the project tools reach their SDK methods: fields, copy, settings, versions, undo and redo', async () => {
   const calls: string[] = []
   const summary = { id: 'p2', type: 'editor', title: 'Launch (copy)', orientation: '16:9', width: 1920, height: 1080, coverSource: 'auto', coverFrame: null, isArchived: false, isFavorited: false }
-  const settings = { magneticTrack: true, snapping: false, linkage: true, linkedTracks: { media: true, audio: false, text: true }, followPlayhead: true, skimming: false, skipDisabledClips: true }
+  const settings = { magneticTrack: true, snapping: false, linkage: true, linkedTracks: { media: true, audio: false, text: true }, followPlayhead: true, skimming: false, skipDisabledClips: true, loudness: -16 }
   const mcp = await connect(
     fakeClient({
       updateProject: async (id, input) => (calls.push(`update ${id} ${JSON.stringify(input)}`), summary),
@@ -4608,7 +4628,9 @@ test('the project tools reach their SDK methods: fields, copy, settings, version
   await call('duplicate_project', { projectId: 'p1' })
   const read = await call('get_timeline_settings', { projectId: 'p1' })
   assert.match(read.content[0].text, /linkedTracks: media, text/)
+  assert.match(read.content[0].text, /- loudness: -16 LUFS$/)
   await call('update_timeline_settings', { projectId: 'p1', snapping: false, linkedTracks: { audio: false } })
+  await call('update_timeline_settings', { projectId: 'p1', loudness: 'off' })
   const listed = await call('list_project_versions', { projectId: 'p1', limit: 10 })
   assert.match(listed.content[0].text, /v1 \| t \| "Final" \| manual \| by Taylan \| revision 4/)
   await call('save_project_version', { projectId: 'p1', label: 'Before' })
@@ -4625,6 +4647,7 @@ test('the project tools reach their SDK methods: fields, copy, settings, version
     'duplicate p1',
     'settings p1',
     'settings p1 {"snapping":false,"linkedTracks":{"audio":false}}',
+    'settings p1 {"loudness":"off"}',
     'versions p1 {"limit":10}',
     'save p1 {"label":"Before"}',
     'restore p1 v1',
@@ -4804,7 +4827,7 @@ test("list_project_exports lists a project's exports with their links and status
         return {
           exports: [
             { exportId: 'e2', shortId: 's2', appUrl: 'https://app.example/e2', status: 'rendering', exportType: 'video', title: 'Cut', outputUrl: null, thumbnailUrl: null, fileSizeBytes: null, durationSeconds: null, destination: null, shareId: 'x', shareUrl: null, createdAt: '2026-10-09' },
-            { exportId: 'e1', shortId: 's1', appUrl: 'https://app.example/e1', status: 'completed', exportType: 'video', title: 'Cut', outputUrl: 'https://files.example/e1.mp4', thumbnailUrl: null, fileSizeBytes: 9, durationSeconds: 3, destination: null, shareId: 'y', shareUrl: 'https://pages.example/e1', createdAt: '2026-10-08' },
+            { exportId: 'e1', shortId: 's1', appUrl: 'https://app.example/e1', status: 'completed', exportType: 'video', title: 'Cut', outputUrl: 'https://files.example/e1.mp4', thumbnailUrl: null, fileSizeBytes: 9, durationSeconds: 3, destination: null, shareId: 'y', shareUrl: 'https://pages.example/e1', createdAt: '2026-10-08', loudness: { target: 'off', outcome: 'off', gainDb: null, peakReductionDb: null, deliveredLufs: -20, deliveredTruePeakDbtp: -3, summary: 'Exported as mixed.' } },
           ],
           nextCursor: 'n',
         }
@@ -4814,7 +4837,7 @@ test("list_project_exports lists a project's exports with their links and status
   const res = await mcp.callTool({ name: 'list_project_exports', arguments: { projectId: 'p1', limit: 2 } })
   assert.deepEqual(asked, ['p1', { limit: 2, cursor: undefined }])
   assert.match(res.content[0].text, /e2.*rendering/)
-  assert.match(res.content[0].text, /share page: https:\/\/pages\.example\/e1/)
+  assert.match(res.content[0].text, /share page: https:\/\/pages\.example\/e1 \| Exported as mixed\./)
   assert.match(res.content[0].text, /\bn\b/)
 })
 

@@ -659,9 +659,10 @@ test('importProject POSTs the source to /api/v1/projects/import and unwraps { pr
 test('startExport POSTs to /api/v1/projects/:id/export', async () => {
   const { fetch, calls } = stubFetch([{ status: 202, body: { exportId: 'exp1', status: 'rendering' } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const job = await client.startExport('p 1', { format: 'mp4', resolution: '1080p' })
+  const job = await client.startExport('p 1', { format: 'mp4', resolution: '1080p', loudness: 'off' })
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/projects/p%201/export')
   assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { format: 'mp4', resolution: '1080p', loudness: 'off' })
   assert.equal(job.status, 'rendering')
 })
 
@@ -1330,13 +1331,13 @@ test('project fields, copies and timeline settings reach their routes', async ()
   assert.equal(updated.id, 'p1')
   assert.equal((await client.duplicateProject('p1')).id, 'p2')
   assert.equal((await client.getTimelineSettings('p1')).snapping, true)
-  assert.equal((await client.updateTimelineSettings('p1', { snapping: false, linkedTracks: { audio: false } })).snapping, false)
+  assert.equal((await client.updateTimelineSettings('p1', { snapping: false, linkedTracks: { audio: false }, loudness: -16 })).snapping, false)
   assert.deepEqual(
     calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
     ['PATCH /api/v1/projects/p1', 'POST /api/v1/projects/p1/duplicate', 'GET /api/v1/projects/p1/settings', 'PATCH /api/v1/projects/p1/settings'],
   )
   assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
-  assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { snapping: false, linkedTracks: { audio: false } })
+  assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { snapping: false, linkedTracks: { audio: false }, loudness: -16 })
 })
 
 test("a project's exports are read a page at a time", async () => {

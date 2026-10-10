@@ -754,6 +754,18 @@ test("an export result says what the code warned about, in the op result's words
   assert.doesNotMatch((quiet.content[0] as { text: string }).text, /Code warnings/)
 })
 
+/** A finished export's loudness is the app's one line, beside its warnings; an export without one says nothing about it. */
+test("an export result says how its loudness came out, before what the code warned about", () => {
+  const loudness = { target: -16, outcome: 'leveled' as const, gainDb: 2, peakReductionDb: 0.5, deliveredLufs: -16, deliveredTruePeakDbtp: -1, summary: 'Leveled to the project loudness.' }
+  const warnings = [{ itemId: 'g2', severity: 'warning' as const, code: 'interpolate-repaired', message: 'out of order' }]
+  const polled = (exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.mp4', loudness, warnings }).content[0] as { text: string }).text
+  assert.match(polled, /Download: https:\/\/x\/e\.mp4\nLeveled to the project loudness\.\nCode warnings:/)
+  const shown = (completedExportResult({ exportId: 'exp-1', shortId: 'e', appUrl: 'https://app/e', status: 'completed', outputUrl: 'https://x/e.mp4', loudness }, 'mp4').content[0] as { text: string }).text
+  assert.match(shown, /\nLeveled to the project loudness\.$/)
+  const still = (exportJobResult({ exportId: 'exp-1', status: 'completed', outputUrl: 'https://x/e.png', loudness: null }).content[0] as { text: string }).text
+  assert.doesNotMatch(still, /loudness/i)
+})
+
 test('a finished generation says what it was made from, so "another like this" can pass the same inputs back', () => {
   const out = body(
     generationStatusResult(

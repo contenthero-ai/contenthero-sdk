@@ -248,7 +248,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   share_project: { shared: '--off' },
   share_media: { shared: '--off', shareUrl: '--link' },
   get_project: { fromFrame: '--from', toFrame: '--to' },
-  export_project: { watermark: '--no-watermark', normalizeLoudness: '--no-normalize-loudness' },
+  export_project: { watermark: '--no-watermark' },
   delete_project: { confirm: '--yes' },
   update_timeline: { userIntent: '--intent' },
   update_canvas: { userIntent: '--intent' },

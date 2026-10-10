@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeEditorOps, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement } from './describe.js'
+import { describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -123,4 +123,18 @@ test('describeSoundMeasurement reads a finished sound, and says when a measure h
   )
   assert.equal(describeSoundMeasurement({ kind: 'sound', state: 'rendering' }), null)
   assert.equal(describeRenderFailure({ kind: 'sound', error: { code: 'render_failed', message: 'boom' } }), 'The sound could not be rendered. render_failed: boom')
+})
+
+test("an export's loudness is the app's one line, and nothing before it finishes or when it has no mix", () => {
+  const loudness = { target: -16, outcome: 'leveled' as const, gainDb: 2.5, peakReductionDb: null, deliveredLufs: -16, deliveredTruePeakDbtp: -1.2, summary: 'Leveled to the project loudness.' }
+  assert.equal(describeExportLoudness(loudness), 'Leveled to the project loudness.')
+  assert.equal(describeExportLoudness(null), null)
+  assert.equal(describeExportLoudness(undefined), null)
+  assert.equal(withExportLoudness('Export e1 completed.', loudness), 'Export e1 completed.\nLeveled to the project loudness.')
+  assert.equal(withExportLoudness('Export e1 completed.', null), 'Export e1 completed.')
+})
+
+test('a delivery loudness reads as its target in LUFS, or off', () => {
+  assert.equal(describeLoudness(-16), '-16 LUFS')
+  assert.equal(describeLoudness('off'), 'off')
 })

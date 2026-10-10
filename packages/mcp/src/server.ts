@@ -341,6 +341,17 @@ function placementInput() {
   }
 }
 
+/**
+ * A delivery loudness, in one wording for the project's setting and an export's own: a target integrated loudness in
+ * LUFS, or 'off'. The server owns the range it accepts and states it when it refuses a number, so none is restated here.
+ */
+function loudnessInput() {
+  return z.union([
+    z.number().describe('A target integrated loudness, in LUFS. The server refuses one outside the range it accepts, and its refusal states that range.'),
+    z.literal('off').describe('Off: the mix plays and exports as it was mixed.'),
+  ])
+}
+
 const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 
@@ -4648,7 +4659,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         maxLinesPerCard: z.number().int().optional().describe('Subtitles (srt, vtt) only: lines per subtitle card, 1 to 4. Defaults 2.'),
         showSpeakers: z.boolean().optional().describe('Subtitles (srt, vtt) only: name who speaks, when the captions hold more than one speaker. Defaults false.'),
         timecodes: z.boolean().optional().describe('Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode.'),
-        normalizeLoudness: z.boolean().optional().describe('Rendered exports (video and sound) only: bring the final mix to the delivery loudness. Defaults true; false keeps the mix exactly as it plays in the editor.'),
+        loudness: loudnessInput().optional().describe("Rendered exports (video and sound) only: this export's loudness, in place of the project's own (get_timeline_settings reads it). Omitted, the project's."),
       },
     },
     async (args, extra) => {
@@ -4834,7 +4845,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Timeline Settings',
       annotations: READ,
       description:
-        "Read an editor project's timeline settings for the owner, the settings the editor's timeline settings menu holds: how editing behaves (the magnetic main track, snapping, linkage and which kinds of track it reaches) and how the timeline plays (follow playhead, skimming, skip disabled clips). update_timeline edits by them as the editor does. Requires the editor:read scope.",
+        "Read an editor project's timeline settings for the owner, the settings the editor's timeline settings menu holds: how editing behaves (the magnetic main track, snapping, linkage and which kinds of track it reaches) and how the timeline plays (follow playhead, skimming, skip disabled clips). update_timeline edits by them as the editor does. It also reads the project's delivery loudness, which belongs to the project rather than to one person: the editor plays at it and every export follows it. Requires the editor:read scope.",
       inputSchema: {
         projectId: z.string().describe('The editor project id.'),
       },
@@ -4868,6 +4879,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         followPlayhead: z.boolean().optional().describe('Follow playhead, on or off.'),
         skimming: z.boolean().optional().describe('Skimming, on or off.'),
         skipDisabledClips: z.boolean().optional().describe('Skip disabled clips during playback, on or off.'),
+        loudness: loudnessInput()
+          .optional()
+          .describe("The project's delivery loudness, for every collaborator and every export: it travels with versions and duplicates, and undo_project_edit reverses a change to it."),
       },
     },
     async (args, extra) => {
