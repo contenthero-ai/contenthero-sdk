@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: `list_content` says each `accountIds` entry that named no account of yours, one line each, instead of
+  silently matching nothing for it; the posts the other ids matched still list.
 - Fixed: every tool that starts or finishes a background job names the job by an id `get_status` takes, with its
   link, finished or still running. `export_project` finished inside the call now names the export (its id, link and
   share page) beside the file it draws, as `get_export` does. A still-running generation, board, edit, upscale, lip

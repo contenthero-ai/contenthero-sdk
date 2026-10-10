@@ -121,7 +121,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2363,11 +2363,13 @@ function outlierLine(o: ContentSummary): string {
 
 /** A page of tracked content, in the order it was asked for. */
 export function outlierListResult(result: ContentListResult): CallToolResult {
+  // Every accountIds entry that named nothing is said, whether or not the others matched anything.
+  const notMatched = describeAccountIdsNotFound(result.accountIdsNotFound)
   if (!result.content.length) {
-    return text('No content found. Track some creators in the ContentHero app, or widen the filters.')
+    return text(lines(['No content found. Track some creators in the ContentHero app, or widen the filters.', ...notMatched]))
   }
   const more = result.nextCursor ? ` (showing ${result.content.length} of ${result.total})` : ''
-  return text(lines([`${result.total} post(s)${more}:`, ...result.content.map(outlierLine), moreLine(result.nextCursor)]))
+  return text(lines([`${result.total} post(s)${more}:`, ...result.content.map(outlierLine), ...notMatched, moreLine(result.nextCursor)]))
 }
 
 /**

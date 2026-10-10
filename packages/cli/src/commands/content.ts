@@ -17,7 +17,7 @@
  * Reads only.
  */
 
-import { chargeSentence, type Charge } from '@contenthero/sdk'
+import { chargeSentence, describeAccountIdsNotFound, statusTarget, type Charge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -213,7 +213,8 @@ export function registerContent(program: Command): void {
       })
       emit(result, ctx, (r: ContentListResult) => {
         const t = outliersTable(r.content)
-        return withMore(`${t}\n\n${r.content.length} of ${r.total}`, r.nextCursor)
+        const notMatched = describeAccountIdsNotFound(r.accountIdsNotFound)
+        return withMore(`${t}\n\n${r.content.length} of ${r.total}${notMatched.length ? `\n${notMatched.join('\n')}` : ''}`, r.nextCursor)
       })
     })
 
@@ -314,27 +315,27 @@ export function registerContent(program: Command): void {
         )
         return
       }
-      const deadline = Date.now() + ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
+      const timeoutMs = ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
+      // Either kind runs as a job, waited on through the SDK's one wait (`waitForStatus`), which starts nothing. Done:
+      // ask once more, which starts nothing for a finished post and answers with the result and its final charge.
+      const waited = async (r: { contentId: string; shortId?: string }, statusKind: 'content' | 'scenes'): Promise<boolean> => {
+        if (opts.wait === false) return false
+        const [status] = await client.waitForStatus([statusTarget({ id: r.contentId, shortId: r.shortId, kind: statusKind })], {
+          timeoutMs,
+          pollIntervalMs: ANALYZE_POLL_MS,
+        })
+        return status?.state === 'completed' || status?.state === 'failed'
+      }
       if (kind === 'scenes') {
         let scenes = await client.analyzeContent(id, { kind: 'scenes' })
-        while (opts.wait !== false && scenes.scenes.status === 'running' && Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
-          const post = await client.getContent(id)
-          // Finished: ask once more, which starts nothing for a finished post and answers with the final charge.
-          if (post.scenes && post.scenes.status !== 'running') scenes = await client.analyzeContent(id, { kind: 'scenes' })
-        }
+        if (scenes.scenes.status === 'running' && (await waited(scenes, 'scenes'))) scenes = await client.analyzeContent(id, { kind: 'scenes' })
         emit(scenes, ctx, (r: ContentScenesResult) => `Scenes for post ${postName(r)}\n\n${scenesText(r.scenes, r)}${costAfter(r.charge)}`)
+        if (opts.wait !== false && scenes.scenes.status === 'running') process.exitCode = EXIT.TIMEOUT
         return
       }
       let result = await client.analyzeContent(id)
-      // It runs as a job: wait for it by reading the post's analysis status, which starts nothing.
-      while (opts.wait !== false && result.analysis.status === 'running' && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
-        const post = await client.getContent(id)
-        // Finished: ask once more, which starts nothing for a finished post and answers with the analysis and its
-        // final charge (taking the analysis from the post dropped the charge).
-        if (post.analysis.status !== 'running') result = await client.analyzeContent(id)
-      }
+      if (result.analysis.status === 'running' && (await waited(result, 'content'))) result = await client.analyzeContent(id)
+      if (opts.wait !== false && result.analysis.status === 'running') process.exitCode = EXIT.TIMEOUT
       emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${postName(r)}\n\n${analysisText(r, r.analysis)}${costAfter(r.charge)}`)
     })
 }

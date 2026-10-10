@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- New: `ContentListResult.accountIdsNotFound`, each `accountIds` entry that named none of your tracked accounts in
+  the view, with the server's reason (the list still answers with the rest), and `describeAccountIdsNotFound` to say
+  them. `AccountIdNotFound` is exported.
 - Fixed: a wait that ends with the job still running names it as the start did. `GenerationTimeoutError` and
   `GenerationInterruptedError` carry `shortId` and `appUrl` when the start returned them (`generateAndWait`,
   `generateBoardAndWait`, `importMedia`, `exportProjectAndWait`, whose timeout now names the export instead of

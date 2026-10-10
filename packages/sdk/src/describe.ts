@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
+import type { AccountIdNotFound, ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -273,6 +273,14 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
     for (const d of diagnostics) lines.push(...codeDiagnosticLines(d))
   }
   return lines.join('\n')
+}
+
+/**
+ * The `accountIds` a content list could not match, one line each in the server's words, so a surface says every id
+ * that named nothing beside the rows the others matched. Nothing when every id named an account.
+ */
+export function describeAccountIdsNotFound(notFound: readonly AccountIdNotFound[] | null | undefined): string[] {
+  return (notFound ?? []).map((n) => `Not matched: ${n.reason}`)
 }
 
 /** A project's live link after `share`: where anyone sees it, or that its old link is dead. */

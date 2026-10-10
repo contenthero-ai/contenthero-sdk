@@ -2970,6 +2970,17 @@ export interface ListTrackedAccountsOptions extends PageOptions {
 export interface ContentListResult extends Paged {
   content: ContentSummary[]
   total: number
+  /**
+   * Each `accountIds` entry that named none of your tracked accounts in this view, with the server's reason. The list
+   * answers with what the others matched; absent when every id named an account (and from an older server).
+   */
+  accountIdsNotFound?: AccountIdNotFound[]
+}
+
+/** An `accountIds` filter entry that named no account. */
+export interface AccountIdNotFound {
+  id: string
+  reason: string
 }
 
 // ---------------------------------------------------------------------------

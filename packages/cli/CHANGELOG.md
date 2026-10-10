@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `content analyze` waits through the SDK's one wait (`waitForStatus`) instead of a loop of its own, and exits 4 when
+  the analysis is still running at the end of the wait.
+- Fixed: `content list --account` says each id that named no account of yours instead of silently matching nothing.
 - Fixed: every command that starts or finishes a background job prints its short id and app link, and its `Next` is
   a `contenthero status` command the server accepts (a full id comes with its `--kind`). `project export --wait` that
   times out names the export and exits 4 instead of failing; `project export` and `project export get` print the

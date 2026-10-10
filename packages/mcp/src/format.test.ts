@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ServiceUnavailableError } from '@contenthero/sdk'
 import {
+  outlierListResult,
   generationStatusResult,
   generationBatchResult,
   getStatusCall,
@@ -813,4 +814,17 @@ test('get_media says what a creation was made from, under its own line', async (
   }
   const out = body(mediaBatchResult({ items: [item] } as never, [null] as never))
   assert.match(out, /made from:\n      Reference 1 \(image\): https:\/\/media\.contenthero\.ai\/ref\/original\.png\?t=x/)
+})
+
+/**
+ * list_content says each accountIds entry that named no account, in the server's words, whether or not the others
+ * matched anything; it used to drop such an id silently. Break-verified: dropping the not-matched lines turns it red.
+ */
+test('list_content says each account id that named nothing, beside what the others matched', () => {
+  const notFound = [{ id: 'Nope0001', reason: "'Nope0001' names no tracked account of yours, so it matched nothing." }]
+  const none = (outlierListResult({ content: [], total: 0, nextCursor: null, accountIdsNotFound: notFound }).content[0] as { text: string }).text
+  assert.match(none, /Not matched: 'Nope0001' names no tracked account of yours/)
+  const some = (outlierListResult({ content: [{ id: 'c1', title: 'A post', platform: 'youtube' } as never], total: 1, nextCursor: null, accountIdsNotFound: notFound }).content[0] as { text: string }).text
+  assert.match(some, /1 post\(s\)/)
+  assert.match(some, /Not matched: 'Nope0001'/)
 })
