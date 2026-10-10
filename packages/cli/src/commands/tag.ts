@@ -3,10 +3,10 @@
  *   tag list                    the account's tags
  *   tag create <name>           create a tag (name is lowercased)
  *   tag update <id> <name>      rename a tag (keeps its post assignments)
- *   tag remove <id>             delete a tag (removes it from every post)
+ *   tag delete <id>             delete a tag (removes it from every post)
  *
  * Apply tags to a post with `post create --tags` / `post update --tags`. Detaching
- * a tag from ONE post is `post update --tags` without it; `tag remove` destroys the
+ * a tag from ONE post is `post update --tags` without it; `tag delete` destroys the
  * tag account-wide.
  */
 
@@ -56,7 +56,7 @@ export function registerTag(program: Command): void {
     })
 
   tag
-    .command('remove')
+    .command('delete')
     .description('Delete a tag from the account, removing it from every post (requires planner:write)')
     .argument('<id>', 'the tag id (from `tag list`)')
     .action(async (id: string, _opts, command: Command) => {

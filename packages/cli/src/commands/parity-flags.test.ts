@@ -116,41 +116,71 @@ test('project get and project apply no longer take --include-render-url', async 
   }
 })
 
-// get_context's region and get_media's keyframe width reach the wire (motion graphics foundation, item 1.2).
-// Break-verified: dropping `region:` from the context call, or `frameWidth:` from the watch item, turns its case red.
-test('context --region asks for a crop in composition units', async () => {
-  const r = await run('context', '--project', 'p1', '--region', '480,270,240,135')
+// view's region reaches the wire (motion graphics foundation, item 1.2).
+// Break-verified: dropping `region:` from the view call turns its case red.
+test('view --region asks for a crop in composition units', async () => {
+  const r = await run('view', '--project', 'p1', '--region', '480,270,240,135')
   assert.equal(r.query.get('render'), 'true')
   assert.equal(r.query.get('region'), '480,270,240,135')
 })
 
-// A render is a job with an id (the review loop). Break-verified: dropping any of these from the getContext call turns
+// A render is a job with an id (the review loop). Break-verified: dropping any of these from the view call turns
 // its assertion red.
-test('context asks for exact frames, a rate, a layout, a sound, a render by its id and a wait', async () => {
-  const frames = await run('context', '--project', 'p1', '--frames', '30,5,90', '--layout', 'sheets', '--wait', '20')
+test('view asks for exact frames, a rate, a layout, a sound, a render by its id and a wait', async () => {
+  const frames = await run('view', '--project', 'p1', '--frames', '30,5,90', '--layout', 'sheets', '--wait', '20')
   assert.equal(frames.query.get('render'), 'true')
   assert.equal(frames.query.get('frames'), '30,5,90')
   assert.equal(frames.query.get('layout'), 'sheets')
   assert.equal(frames.query.get('wait'), '20')
-  const rate = await run('context', '--project', 'p1', '--from-frame', '0', '--to-frame', '90', '--per-second', '6')
+  const rate = await run('view', '--project', 'p1', '--from-frame', '0', '--to-frame', '90', '--per-second', '6')
   assert.equal(rate.query.get('perSecond'), '6')
-  const sound = await run('context', '--project', 'p1', '--sound', '--from-frame', '0', '--to-frame', '300')
+  const sound = await run('view', '--project', 'p1', '--sound', '--from-frame', '0', '--to-frame', '300')
   assert.equal(sound.query.get('sound'), 'true')
-  const read = await run('context', '--render-id', 'r1', '--page', '2')
+  // The server honors a sound on its own, so a range shaping it no longer asks for a picture too.
+  assert.equal(sound.query.get('render'), null)
+  const read = await run('view', '--render-id', 'r1', '--page', '2')
   assert.equal(read.query.get('renderId'), 'r1')
   assert.equal(read.query.get('page'), '2')
   assert.equal(read.query.get('render'), null)
 })
 
-test('media watch --frame-width asks for wider keyframes', async () => {
-  // The stub answers with no `items`, so the command fails AFTER sending; the request it sent is what this checks.
+// video, and a raw clip with its window, reach the wire; a clip's count and width do not turn it into a render.
+// Break-verified: dropping `video:` or any clip field from the view call, or the clip exemption from the implied
+// render, turns its assertion red.
+test('view asks for a video range, and a raw clip by asset or media URL with its window', async () => {
+  const video = await run('view', '--project', 'p1', '--video', '--from-frame', '0', '--to-frame', '90')
+  assert.equal(video.query.get('video'), 'true')
+  assert.equal(video.query.get('render'), null)
+  const asset = await run('view', '--asset', 'a1', '--from-sec', '1.5', '--to-sec', '4', '--count', '6', '--width', '480')
+  assert.equal(asset.query.get('assetId'), 'a1')
+  assert.equal(asset.query.get('fromSec'), '1.5')
+  assert.equal(asset.query.get('toSec'), '4')
+  assert.equal(asset.query.get('count'), '6')
+  assert.equal(asset.query.get('width'), '480')
+  assert.equal(asset.query.get('render'), null)
+  const url = await run('view', '--media-url', 'https://media.contenthero.ai/c.mp4')
+  assert.equal(url.query.get('mediaUrl'), 'https://media.contenthero.ai/c.mp4')
+})
+
+// get_media reads no clip frames: `view --asset` or `view --media-url` sees a clip, and a region on it cuts each frame.
+// Break-verified: restoring `media watch` turns the first red; dropping `region:` from the view call turns the second
+// red; dropping the clip sentence from --region's help turns the third red; a zoom description that names any media
+// file rather than an image turns the last red.
+test('media watch is gone, and view cuts a clip to a region', async () => {
   seen.length = 0
-  await buildProgram()
-    .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'media', 'watch', 'https://media.contenthero.ai/a/original.mp4', '--frame-width', '1280'], { from: 'user' })
-    .catch(() => {})
-  assert.equal(seen.length, 1)
-  const items = seen[0]?.body?.items as Array<Record<string, unknown>>
-  assert.equal(items[0]?.frameWidth, 1280)
+  const failure = await buildProgram()
+    .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'media', 'watch', 'https://media.contenthero.ai/a/original.mp4'], { from: 'user' })
+    .then(() => null, (err: { code?: string }) => err)
+  assert.equal(failure?.code, 'commander.unknownCommand')
+  assert.equal(seen.length, 0, 'nothing is sent for a removed command')
+  const clip = await run('view', '--asset', 'a1', '--region', '960,540,960,540')
+  assert.equal(clip.query.get('region'), '960,540,960,540')
+  assert.equal(clip.query.get('render'), null)
+  const view = buildProgram().commands.find((c) => c.name() === 'view')
+  const region = view?.options.find((o) => o.long === '--region')
+  assert.match(region?.description ?? '', /For a source clip, the rectangle is in the clip's own pixels, and each of its frames is cut to it\.$/)
+  const zoom = buildProgram().commands.find((c) => c.name() === 'media')?.commands.find((c) => c.name() === 'zoom')
+  assert.match(zoom?.description() ?? '', /^Cut a region from an image's original/)
 })
 
 test('card update --notes-edits sends the edits in order, with no revision required', async () => {
@@ -208,13 +238,18 @@ test('project update sends its fields, and none clears the brand kit and the cov
   assert.deepEqual(cleared.body, { brandKitId: null, cover: { mediaId: 'm1' }, coverPosition: null })
 })
 
-test('project duplicate, undo and redo reach their routes', async () => {
+test('project duplicate, edit undo and edit redo reach their routes', async () => {
   const dup = await run('project', 'duplicate', 'p1')
   assert.equal(`${dup.method} ${dup.path}`, 'POST /api/v1/projects/p1/duplicate')
-  const undo = await run('project', 'undo', 'p1', '--expected-revision', '9', '--revision', '7')
+  assert.equal(dup.body, null)
+  // A copy from a saved version names it. Break-verified: dropping the versionId from the duplicate call turns this red.
+  const fromVersion = await run('project', 'duplicate', 'p1', 'v1')
+  assert.equal(`${fromVersion.method} ${fromVersion.path}`, 'POST /api/v1/projects/p1/duplicate')
+  assert.deepEqual(fromVersion.body, { versionId: 'v1' })
+  const undo = await run('project', 'edit', 'undo', 'p1', '--expected-revision', '9', '--revision', '7')
   assert.equal(`${undo.method} ${undo.path}`, 'POST /api/v1/projects/p1/undo')
   assert.deepEqual(undo.body, { expectedRevision: 9, revision: 7 })
-  const redo = await run('project', 'redo', 'p1', '--expected-revision', '10')
+  const redo = await run('project', 'edit', 'redo', 'p1', '--expected-revision', '10')
   assert.equal(`${redo.method} ${redo.path}`, 'POST /api/v1/projects/p1/redo')
   assert.deepEqual(redo.body, { expectedRevision: 10 })
 })
@@ -229,6 +264,22 @@ test('project update sends the settings named, on and off, to the project', asyn
   await assert.rejects(run('project', 'settings', 'get', 'p1'))
 })
 
+/**
+ * `project export` runs an export AND parents `get` and `list` (get_export, list_project_exports). Commander
+ * dispatches to a subcommand when the first operand names one, and otherwise runs the export with it as the project
+ * id. Break-verified: renaming the `get` subcommand turns this red (the export then ran with `get` as its project id).
+ */
+test('project export runs an export, and dispatches get and list to their own commands', async () => {
+  const started = await run('project', 'export', 'p1', '--format', 'mp4')
+  assert.equal(`${started.method} ${started.path}`, 'POST /api/v1/projects/p1/export')
+  assert.equal(started.body?.format, 'mp4')
+  const polled = await run('project', 'export', 'get', 'e1')
+  assert.equal(`${polled.method} ${polled.path}`, 'GET /api/v1/exports/e1')
+  const listed = await run('project', 'export', 'list', 'p1', '--limit', '5')
+  assert.equal(`${listed.method} ${listed.path}`, 'GET /api/v1/projects/p1/exports')
+  assert.equal(listed.query.get('limit'), '5')
+})
+
 test("project export sends this export's loudness only when it is named", async () => {
   const leveled = await run('project', 'export', 'p1', '--loudness', '-16')
   assert.equal(`${leveled.method} ${leveled.path}`, 'POST /api/v1/projects/p1/export')
@@ -241,9 +292,9 @@ test("project export sends this export's loudness only when it is named", async 
 test('project version commands reach the version routes with the bodies the API reads', async () => {
   const cases: Array<[string[], string, unknown]> = [
     [['project', 'version', 'save', 'p1', '--label', 'Before'], 'POST /api/v1/projects/p1/versions', { label: 'Before' }],
-    [['project', 'version', 'restore', 'p1', 'v1'], 'POST /api/v1/projects/p1/versions/v1', { action: 'restore' }],
-    [['project', 'version', 'copy', 'p1', 'v1'], 'POST /api/v1/projects/p1/versions/v1', { action: 'copy' }],
-    [['project', 'version', 'rename', 'p1', 'v1', 'Final'], 'PATCH /api/v1/projects/p1/versions/v1', { label: 'Final' }],
+    [['project', 'version', 'restore', 'p1', 'v1'], 'POST /api/v1/projects/p1/versions/v1', null],
+    [['project', 'version', 'update', 'p1', 'v1', '--label', 'Final'], 'PATCH /api/v1/projects/p1/versions/v1', { label: 'Final' }],
+    [['project', 'version', 'update', 'p1', 'v1', '--label', ''], 'PATCH /api/v1/projects/p1/versions/v1', { label: '' }],
     [['project', 'version', 'delete', 'p1', 'v1'], 'DELETE /api/v1/projects/p1/versions/v1', null],
   ]
   for (const [args, route, body] of cases) {

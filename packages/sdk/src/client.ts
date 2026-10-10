@@ -78,8 +78,8 @@ import type {
   ApplyEditorOpsInput,
   ApplyEditorOpsResult,
   ProjectDetail,
-  LiveContextResult,
-  GetContextInput,
+  ViewResult,
+  ViewInput,
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectInput,
@@ -877,7 +877,7 @@ export class ContentHero {
 
   /**
    * Resolve a batch of media references to vision-ready URLs + light metadata (the
-   * micro drill-in behind get_context's macro screenshot). Each item is a raw
+   * micro drill-in behind view's macro screenshot). Each item is a raw
    * `{ url }` or an `{ mediaId, variation? }`; a mediaId with no variation resolves
    * to only the primary variation (siblings listed in `otherVariations`), never a
    * whole generation. Returns one entry per item, in order; a bad item comes back
@@ -1714,16 +1714,18 @@ export class ContentHero {
   }
 
   /**
-   * Read the LIVE context of what the user is currently viewing in the open app: the active surface + focus +
-   * selection, so an agent can operate on "what the user is looking at" like the internal assistant does. Fast
-   * and structured by default. Pass `capture: true` to also ping the live tab for a fresh viewport screenshot
-   * (returned as a short-lived `snapshotUrl`) when you need the user's screen as shown. To see the COMPOSED
-   * OUTPUT itself, pass `render: true` with the frames to draw, or `sound: true` to measure a range's mix
-   * (`GetContextInput`); the render is a job whose answer carries its images inline as data URLs and a `renderId`
-   * to read the rest with. It is ephemeral and does not need a live tab. Returns the most-recent-active session's
-   * context plus the full live participant set. Optionally scope to one project. Requires the `context:read` scope.
+   * See what the user is looking at, and see or hear your own work. With no render input it reads the LIVE context of
+   * the open app: the active surface + focus + selection, so an agent can operate on "what the user is looking at"
+   * like the internal assistant does. Fast and structured by default. Pass `capture: true` to also ping the live tab
+   * for a fresh viewport screenshot (returned as a short-lived `snapshotUrl`) when you need the user's screen as
+   * shown. To see the COMPOSED OUTPUT itself, pass `render: true` with the frames to draw, `sound: true` to measure a
+   * range's mix, or `video: true` to watch a range play (`ViewInput`); the render is a job whose answer carries its
+   * images inline as data URLs and a `renderId` to read the rest with. To see a raw source clip rather than your
+   * edit, name it with `assetId` or `mediaUrl` and window it with `fromSec` and `toSec`. Renders are ephemeral and
+   * do not need a live tab. Returns the most-recent-active session's context plus the full live participant set
+   * (`ViewResult`). Optionally scope to one project. Requires the `context:read` scope.
    */
-  async getContext(input: GetContextInput = {}): Promise<LiveContextResult> {
+  async view(input: ViewInput = {}): Promise<ViewResult> {
     const params = new URLSearchParams()
     if (input.projectId) params.set('projectId', input.projectId)
     if (input.capture) params.set('capture', 'true')
@@ -1738,6 +1740,7 @@ export class ContentHero {
     if (typeof input.perSecond === 'number') params.set('perSecond', String(input.perSecond))
     if (input.layout) params.set('layout', input.layout)
     if (input.sound) params.set('sound', 'true')
+    if (input.video) params.set('video', 'true')
     if (input.renderId) params.set('renderId', input.renderId)
     if (typeof input.page === 'number') params.set('page', String(input.page))
     if (typeof input.wait === 'number') params.set('wait', String(input.wait))
@@ -1746,11 +1749,15 @@ export class ContentHero {
       const { x, y, width, height } = input.region
       params.set('region', `${x},${y},${width},${height}`)
     }
+    if (input.assetId) params.set('assetId', input.assetId)
+    if (input.mediaUrl) params.set('mediaUrl', input.mediaUrl)
+    if (typeof input.fromSec === 'number') params.set('fromSec', String(input.fromSec))
+    if (typeof input.toSec === 'number') params.set('toSec', String(input.toSec))
     // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the
     // RFC-3986 query encoding; emit %20 so the URL is canonical (both decode to a space server-side).
     const query = params.toString().replace(/\+/g, '%20')
     const qs = query ? `?${query}` : ''
-    return this.request<LiveContextResult>('GET', `/api/v1/context${qs}`)
+    return this.request<ViewResult>('GET', `/api/v1/view${qs}`)
   }
 
   /**
@@ -1804,13 +1811,15 @@ export class ContentHero {
   }
 
   /**
-   * Copy a project: the same type, size, composition and brand kit, titled as the editor titles a copy. Returns the
-   * new project. Requires the `editor:write` scope.
+   * Copy a project: the same type, size, composition and brand kit, titled as the editor titles a copy. Pass
+   * `versionId` to make the copy from one of its saved versions (from `listProjectVersions`; premium, as version
+   * history is) instead of the project as it is now. Returns the new project. Requires the `editor:write` scope.
    */
-  async duplicateProject(projectId: string): Promise<ProjectSummary> {
+  async duplicateProject(projectId: string, options: { versionId?: string } = {}): Promise<ProjectSummary> {
     const { project } = await this.request<{ project: ProjectSummary }>(
       'POST',
       `/api/v1/projects/${encodeURIComponent(projectId)}/duplicate`,
+      options.versionId !== undefined ? { versionId: options.versionId } : undefined,
     )
     return project
   }
@@ -1851,23 +1860,19 @@ export class ContentHero {
    * restored. Returns the project's new revision. Requires `editor:write`.
    */
   async restoreProjectVersion(projectId: string, versionId: string): Promise<RestoredProjectVersion> {
-    return this.request<RestoredProjectVersion>('POST', versionPath(projectId, versionId), { action: 'restore' })
-  }
-
-  /** Make a new project from a version. Returns the new project. Requires `editor:write`. */
-  async copyProjectVersion(projectId: string, versionId: string): Promise<ProjectSummary> {
-    const { project } = await this.request<{ project: ProjectSummary }>('POST', versionPath(projectId, versionId), {
-      action: 'copy',
-    })
-    return project
+    return this.request<RestoredProjectVersion>('POST', versionPath(projectId, versionId))
   }
 
   /** Name a version; an empty label clears its name. Requires `editor:write`. */
-  async renameProjectVersion(projectId: string, versionId: string, label: string): Promise<{ id: string; label: string | null }> {
+  async updateProjectVersion(
+    projectId: string,
+    versionId: string,
+    change: { label: string },
+  ): Promise<{ id: string; label: string | null }> {
     const { version } = await this.request<{ version: { id: string; label: string | null } }>(
       'PATCH',
       versionPath(projectId, versionId),
-      { label },
+      { label: change.label },
     )
     return version
   }

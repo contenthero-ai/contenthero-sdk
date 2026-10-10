@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import type { Command } from 'commander'
 import { buildProgram } from './program.js'
 import { CliError, EXIT } from './errors.js'
+import { isRunnable } from './commands/schema.js'
 
 /** Names of the immediate subcommands of a named top-level group. */
 function subcommands(group: string): string[] {
@@ -23,9 +25,10 @@ test('every top-level command group is registered', () => {
     'generate',
     'upscale',
     'transcribe',
-    'generation',
+    'generation-status',
     'media',
     'card',
+    'post',
     'tag',
     'stage',
     'space',
@@ -50,15 +53,13 @@ test('project exposes get + apply', () => {
   assert.ok(subs.includes('apply'), 'project should have an apply subcommand')
 })
 
-test('generation exposes status only, with wait folded into a flag', () => {
-  const subs = subcommands('generation')
-  assert.ok(subs.includes('status'))
-  // `generation wait` was `status` over an array with blocking on: the two differed by a default, not by
+test('generation-status exposes get only, with wait folded into a flag', () => {
+  assert.deepEqual(subcommands('generation-status'), ['get'])
+  // `generation wait` was this command over an array with blocking on: the two differed by a default, not by
   // what they did. The direction is --no-wait now.
-  assert.ok(!subs.includes('wait'), 'generation should no longer have a separate wait subcommand')
-  const cmd = buildProgram().commands.find((c) => c.name() === 'generation')!
-  const status = cmd.commands.find((c) => c.name() === 'status')!
-  assert.ok(status.options.some((o) => o.long === '--no-wait'))
+  const cmd = buildProgram().commands.find((c) => c.name() === 'generation-status')!
+  const get = cmd.commands.find((c) => c.name() === 'get')!
+  assert.ok(get.options.some((o) => o.long === '--no-wait'))
 })
 
 test('generate exposes the five generation subcommands', () => {
@@ -70,7 +71,7 @@ test('generate exposes the five generation subcommands', () => {
 
 test('card exposes its verbs, with posts and assets folded into update', () => {
   const subs = subcommands('card')
-  for (const n of ['list', 'get', 'create', 'update', 'publish']) {
+  for (const n of ['list', 'get', 'create', 'update']) {
     assert.ok(subs.includes(n), `card is missing: ${n}`)
   }
   // Archiving moved to the universal top-level `archive` command.
@@ -80,8 +81,9 @@ test('card exposes its verbs, with posts and assets folded into update', () => {
   for (const n of ['destination', 'asset', 'schedule']) {
     assert.ok(!subs.includes(n), `card should no longer have a ${n} subcommand`)
   }
-  // publish_post KEEPS its own command: irreversible external side effects do not belong in a patch.
-  assert.ok(subs.includes('publish'))
+  // publish_post KEEPS its own command, named after it: irreversible external side effects do not belong in a patch.
+  assert.ok(!subs.includes('publish'), 'publishing is `post publish`, named after publish_post')
+  assert.deepEqual(subcommands('post'), ['publish'])
 })
 
 test('brand-kit exposes its verbs, with sections folded into update', () => {
@@ -221,7 +223,7 @@ test('schema dumps a scoped command with its options, needing no key', async () 
     return true
   }
   try {
-    await program.parseAsync(['node', 'contenthero', 'schema', 'commands', 'generate', 'image'])
+    await program.parseAsync(['node', 'contenthero', 'schema', 'get', 'commands', 'generate', 'image'])
   } finally {
     ;(process.stdout as { write: unknown }).write = orig
   }
@@ -290,12 +292,43 @@ test('stage update says "move it to an end" with --position, separately from "do
   assert.ok(!longs.includes('--to-start') && !longs.includes('--to-end'), 'one placement wording: --position, not edge flags')
 })
 
+/**
+ * Each command is named after its MCP tool, with no hidden alias for the old name (a hard cutover). Break-verified:
+ * registering any old name back turns this red.
+ */
+test('the old command names are gone', () => {
+  const program = buildProgram()
+  const find = (path: string) =>
+    path.split(' ').reduce<Command | undefined>((cmd, name) => cmd?.commands.find((c) => c.name() === name), program)
+  for (const old of [
+    'context',
+    'generation',
+    'project export-status',
+    'project exports',
+    'project undo',
+    'project redo',
+    'project version copy',
+    'project version rename',
+    'tag remove',
+    'card publish',
+  ]) {
+    assert.equal(find(old), undefined, `${old} is still registered`)
+  }
+  // `schema <kind>` and `project transcript <projectId>` became groups: they no longer run on their own.
+  for (const group of ['schema', 'project transcript', 'project edit', 'generation-status', 'post']) {
+    assert.equal(isRunnable(find(group)!), false, `${group} runs on its own`)
+  }
+  for (const current of ['view', 'generation-status get', 'project export', 'project export get', 'project export list', 'project transcript get', 'project edit undo', 'project edit redo', 'project version update', 'tag delete', 'post publish', 'schema get']) {
+    assert.ok(find(current) && isRunnable(find(current)!), current)
+  }
+})
+
 // A flag a kind does not take is refused, not ignored, like --platform and --format.
 test('schema refuses --json-schema for a kind other than timeline or layer', async () => {
   const program = buildProgram()
   program.exitOverride()
   await assert.rejects(
-    program.parseAsync(['node', 'contenthero', 'schema', 'export', '--json-schema']),
+    program.parseAsync(['node', 'contenthero', 'schema', 'get', 'export', '--json-schema']),
     (err: unknown) => err instanceof CliError && err.exitCode === EXIT.USAGE && /takes no --json-schema/.test(err.message),
   )
 })

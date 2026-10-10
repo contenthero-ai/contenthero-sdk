@@ -62,8 +62,8 @@ contenthero generate image "a red ceramic cube on white" --model <imageModelId>
 
 # Submit without blocking, then poll
 ID=$(contenthero generate video "drone shot over a canyon" --model <videoModelId> --no-wait | jq -r .outputId)
-contenthero generation status "$ID"
-contenthero generation wait "$ID" --timeout 300
+contenthero generation-status get "$ID" --no-wait
+contenthero generation-status get "$ID" --timeout 300
 
 # Chain: feed a previous output id straight in as a reference (URL or output id)
 contenthero generate video "slow zoom in" --model <videoModelId> --start-frame "$ID"
@@ -78,31 +78,44 @@ Exit code 4 means a render was accepted but did not finish before the timeout. T
 
 ## The rest of the surface
 
+Each command is named after the MCP tool it runs (`project export get` is `get_export`, `post publish` is
+`publish_post`), so what an agent learns on one surface reads the same on the other.
+
 ```
-contenthero project      list | get | create | delete | import | export | export-status
-                         | export-formats | layer-types | timeline-types | apply
-contenthero media        list | get <id>
-contenthero post         list | get | create | update | archive | schedule | publish
-                         | destination add|update | asset add
-contenthero pipeline     stages
-contenthero brand-kit    list | get | update | archive | section add|update|archive
-contenthero avatar       list | get <id>
-contenthero voice        list | get <id>
-contenthero inspiration  accounts | account <id> | outliers | content <id>
-contenthero brand-account     list | performance <id>
-contenthero connected-account list | get <id>
-contenthero account      balance
-contenthero model        list
+contenthero view               see what the user is looking at; render, hear or watch your work; see a raw clip
+contenthero project            list | get | create | update | duplicate | share | delete | import | apply
+                               | export | export get|list | transcript get | edit undo|redo
+                               | settings get|update | version list|save|restore|update|delete
+contenthero media              list | search | get | zoom | upload | share | import
+contenthero generation-status  get
+contenthero card               list | get | create | update
+contenthero post               publish
+contenthero tag                list | create | update | delete
+contenthero stage              list | create | update | delete
+contenthero space              list | get | create | update | delete
+contenthero folder             list | get | create | update | delete
+contenthero brand-kit          list | get | create | extract | update | knowledge list|get|search|add|remove
+contenthero template           list | get | create | update | delete
+contenthero kling-element      list | get | create | update | delete
+contenthero avatar             list | get | create | update | delete | look add|remove
+contenthero voice              list | get
+contenthero audio              isolate | enhance | enhance-clips
+contenthero content            list | get | analyze
+contenthero tracked-account    list | get | update
+contenthero connected-account  list | get
+contenthero account            get | update
+contenthero model              list | get
+contenthero schema             get
 ```
 
 ## For agents
 
-`schema` dumps every command's arguments and options as JSON, so an agent can wire
-up calls without reading these docs:
+`schema get commands` dumps every command's arguments and options as JSON, so an agent
+can wire up calls without reading these docs:
 
 ```bash
-contenthero schema                 # the whole surface
-contenthero schema generate image  # just one command
+contenthero schema get commands                 # the whole surface
+contenthero schema get commands generate image  # just one command
 ```
 
 ## Exit codes

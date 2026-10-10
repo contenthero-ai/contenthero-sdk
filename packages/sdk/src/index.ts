@@ -240,8 +240,8 @@ export type {
   ProjectDetail,
   ProjectReadScope,
   LiveContextParticipant,
-  LiveContextResult,
-  GetContextInput,
+  ViewResult,
+  ViewInput,
   CompositionRegion,
   ListProjectsInput,
   ProjectListResult,
@@ -308,4 +308,4 @@ export {
   pendingOutputId,
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode } from './errors.js'
-export { chargeSentence, describeCharge, describeCodeWarnings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings, withExportLoudness } from './describe.js'
+export { chargeSentence, describeCharge, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings, withExportLoudness } from './describe.js'

@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 /**
- * `project exports` reads a project's exports a page at a time and prints each one's share page.
+ * `project export list` reads a project's exports a page at a time and prints each one's share page.
  *
  * Run as a real process under --human against a local server that records each request.
  * Break-verified: dropping the page flags turns it red; printing no share page turns it red.
@@ -44,12 +44,12 @@ async function cli(...args: string[]): Promise<string> {
   return stdout
 }
 
-test('project exports reads a page and prints each share page', async () => {
+test('project export list reads a page and prints each share page', async () => {
   body = {
     exports: [{ exportId: 'e1', status: 'completed', exportType: 'video', title: 'Cut', createdAt: '2026-10-09', shareUrl: 'https://pages.example/e1' }],
     nextCursor: 'n',
   }
-  const out = await cli('project', 'exports', 'p1', '--limit', '5', '--cursor', 'c')
+  const out = await cli('project', 'export', 'list', 'p1', '--limit', '5', '--cursor', 'c')
   assert.equal(requests[0]?.method, 'GET')
   const url = new URL(requests[0]!.url, 'http://x')
   assert.equal(url.pathname, '/api/v1/projects/p1/exports')
@@ -58,16 +58,16 @@ test('project exports reads a page and prints each share page', async () => {
   assert.match(out, /https:\/\/pages\.example\/e1/)
 })
 
-test("export-status and a waited export print how the export's loudness came out; the project prints its own", async () => {
+test("export get and a waited export print how the export's loudness came out; the project prints its own", async () => {
   const loudness = { target: -16, outcome: 'leveled', gainDb: 2, peakReductionDb: null, deliveredLufs: -16, deliveredTruePeakDbtp: -1.5, summary: 'Leveled to the project loudness.' }
   body = { exportId: 'e1', status: 'completed', outputUrl: 'https://files.example/e1.mp4', shareUrl: 'https://pages.example/e1', loudness }
-  const polled = await cli('project', 'export-status', 'e1')
+  const polled = await cli('project', 'export', 'get', 'e1')
   assert.match(polled, /completed: https:\/\/files\.example\/e1\.mp4\nShare page: https:\/\/pages\.example\/e1\nLeveled to the project loudness\./)
   const started = await cli('project', 'export', 'p1', '--loudness', '-16')
   assert.deepEqual(requests[0]?.body, { loudness: -16 })
   assert.match(started, /\nLeveled to the project loudness\./)
   body = { exportId: 'e2', status: 'completed', outputUrl: 'https://files.example/e2.png', loudness: null }
-  assert.doesNotMatch(await cli('project', 'export-status', 'e2'), /loudness/i)
+  assert.doesNotMatch(await cli('project', 'export', 'get', 'e2'), /loudness/i)
   // The project's settings print with the project: `project get` reads them, `project update` changes them.
   body = { project: { id: 'p1', title: 'Cut', type: 'editor', revision: 3, state: {}, groups: [], fps: 30, loudness: 'off', magneticTrack: false, linkage: true, linkedTracks: { media: true, audio: false, text: true } } }
   const read = await cli('project', 'get', 'p1')

@@ -430,7 +430,7 @@ function fakeClient(overrides = {}) {
       nextCursor: null,
     }),
     getProject: async (projectId, options) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
-    getContext: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
+    view: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
     createProject: async (input) => ({ id: 'new1', type: input.type ?? 'editor', kind: input.type ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: input.type ?? 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', type: 'canvas', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
@@ -1494,7 +1494,13 @@ test('get_media resolves a batch and reports each item with its variation + url'
   assert.match(res.content[0].text, /other outputs: Out12345-1/)
 })
 
-test('get_media returns an image block per video keyframe when a window is requested', async () => {
+/**
+ * get_media reads no clip frames: its items take no window, a video's keyframes are not shown even if a server sent
+ * them, and its description points a clip to view. Break-verified: restoring the `frames` and `fromSec` fields on the
+ * mediaId item schema turns the first assertion red (zod strips an unknown key, so the server never sees them);
+ * restoring the video keyframe sentence in the description turns the last two red.
+ */
+test('get_media takes no clip window and points a clip to view', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -1503,56 +1509,22 @@ test('get_media returns an image block per video keyframe when a window is reque
         return {
           items: [
             {
-              ok: true,
-              input: items[0],
-              url: 'https://cdn/clip.mp4',
-              imageUrl: null,
-              type: 'video',
-              model: null,
-              prompt: null,
-              mediaId: 'vid-1',
-              otherMediaIds: [],
-              keyframes: [
-                { atSec: 0, dataUrl: 'data:image/jpeg;base64,AAAA' },
-                { atSec: 5, dataUrl: 'data:image/jpeg;base64,BBBB' },
-              ],
+              ok: true, input: items[0], url: 'https://cdn/clip.mp4', imageUrl: null, type: 'video', model: null, prompt: null,
+              mediaId: 'vid-1', otherMediaIds: [], keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AAAA' }],
             },
           ],
         }
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5 }] } })
-  assert.ok(!res.isError)
-  assert.deepEqual(captured, [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5 }])
-  const images = res.content.filter((c) => c.type === 'image')
-  assert.equal(images.length, 2, 'expected one image block per keyframe')
-  assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB'])
-})
-
-test('get_media keyframes spend the one result budget: in order, and the ones that do not fit are counted', async () => {
-  // Three frames of 400,000 base64 characters against a ~900,000 allowance: two fit, the third cannot.
-  const frame = (c) => ({ atSec: 0, dataUrl: `data:image/jpeg;base64,${c.repeat(400_000)}` })
-  const mcp = await connect(
-    fakeClient({
-      getMediaBatch: async (items) => ({
-        items: [
-          {
-            ok: true, input: items[0], url: 'https://cdn/clip.mp4', imageUrl: null, type: 'video', model: null, prompt: null,
-            mediaId: 'vid-1', otherMediaIds: [], keyframes: [frame('A'), frame('B'), frame('C')],
-          },
-        ],
-      }),
-    }),
-  )
-  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 3 }] } })
-  const images = res.content.filter((c) => c.type === 'image')
-  assert.equal(images.length, 2)
-  assert.deepEqual(images.map((i) => i.data[0]), ['A', 'B'])
-  const total = res.content.reduce((n, c) => n + (c.type === 'image' ? c.data.length : 0), 0)
-  assert.ok(total <= 900_000, `inline bytes ${total} exceed the allowance`)
-  assert.match(res.content[0].text, /1 keyframe\(s\) not shown: too large for this reply\. Ask for fewer frames or a narrower fromSec\/toSec\./)
-  assert.ok(res.content.some((c) => c.type === 'text' && /2 of 3 keyframe\(s\) for item \[1\]/.test(c.text)))
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5, frameWidth: 640 }] } })
+  assert.deepEqual(captured, [{ mediaId: 'vid-1' }])
+  assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
+  assert.match(res.content[0].text, /\(video: no still available for this view; use the url\)/)
+  const { tools } = await mcp.listTools()
+  const getMedia = tools.find((t) => t.name === 'get_media')
+  assert.doesNotMatch(getMedia.description, /keyframe|fromSec/i)
+  assert.match(getMedia.description, /To see a clip's frames, use view;/)
 })
 
 test('list_models surfaces ids, content type, and a capability summary', async () => {
@@ -2862,13 +2834,13 @@ test('get_project states the scope a windowed read applied', async () => {
   assert.match(res.content[0].text, /Scoped read \(frames 600 to 629, track main\): the state is that part of the project, not all of it\./)
 })
 
-test('get_context returns the context text + a focused-slide image block', async () => {
+test('view returns the context text + a focused-slide image block', async () => {
   const origFetch = globalThis.fetch
   globalThis.fetch = (async () =>
     new Response(new Uint8Array([1, 2, 3, 4]), { headers: { 'content-type': 'image/webp' } })) as typeof fetch
   try {
     const mcp = await connect(fakeClient())
-    const res = await mcp.callTool({ name: 'get_context', arguments: {} })
+    const res = await mcp.callTool({ name: 'view', arguments: {} })
     assert.match((res.content[0]).text, /canvas surface/)
     const image = res.content.find((c) => c.type === 'image')
     assert.ok(image, 'expected an image content block')
@@ -2879,18 +2851,18 @@ test('get_context returns the context text + a focused-slide image block', async
   }
 })
 
-test('get_context render returns the composed-output as an inline image block', async () => {
+test('view render returns the composed-output as an inline image block', async () => {
   const rendered = { surface: 'editor', frame: 34, dataUrl: 'data:image/webp;base64,AQIDBA==' }
   const mcp = await connect(
     fakeClient({
-      getContext: async () => ({
+      view: async () => ({
         context: { surface: 'editor', playheadFrame: 34, rendered },
         participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' },
         participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }],
       }),
     }),
   )
-  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, frame: 34 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { render: true, frame: 34 } })
   const image = res.content.find((c) => c.type === 'image')
   assert.ok(image, 'expected an inline render image block')
   assert.equal(image.mimeType, 'image/webp')
@@ -2899,7 +2871,7 @@ test('get_context render returns the composed-output as an inline image block', 
   assert.doesNotMatch((res.content[0]).text, /AQIDBA==/)
 })
 
-test('get_context returns one image block per frame across a range', async () => {
+test('view returns one image block per frame across a range', async () => {
   const rendered = {
     fromFrame: 0,
     toFrame: 60,
@@ -2911,14 +2883,14 @@ test('get_context returns one image block per frame across a range', async () =>
   }
   const mcp = await connect(
     fakeClient({
-      getContext: async () => ({
+      view: async () => ({
         context: { surface: 'editor', playheadFrame: 0, rendered },
         participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' },
         participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }],
       }),
     }),
   )
-  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, count: 3, fromFrame: 0, toFrame: 60 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { render: true, count: 3, fromFrame: 0, toFrame: 60 } })
   const images = res.content.filter((c) => c.type === 'image')
   assert.equal(images.length, 3, 'expected one image block per frame in the range')
   assert.deepEqual(images.map((i) => i.data), ['AAAA', 'BBBB', 'CCCC'])
@@ -2935,10 +2907,10 @@ test('get_context returns one image block per frame across a range', async () =>
  * third; sending a wait on a structured read, or none on a render, the fourth.
  */
 function noTabFirst(rendered) {
-  return fakeClient({ getContext: async () => ({ context: { rendered }, participant: null, participants: [] }) })
+  return fakeClient({ view: async () => ({ context: { rendered }, participant: null, participants: [] }) })
 }
 
-test('get_context attaches contact sheets as images and keeps their frames in the text', async () => {
+test('view attaches contact sheets as images and keeps their frames in the text', async () => {
   const rendered = {
     renderId: 'r1',
     state: 'done',
@@ -2953,7 +2925,7 @@ test('get_context attaches contact sheets as images and keeps their frames in th
     ],
   }
   const mcp = await connect(noTabFirst(rendered))
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, fromFrame: 0, toFrame: 90, perSecond: 3 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, fromFrame: 0, toFrame: 90, perSecond: 3 } })
   assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['U0hFRVQx', 'U0hFRVQy'])
   assert.match(res.content[0].text, /2 contact sheets are attached below, in order\. Each frame's number is written under its tile/)
   assert.match(res.content[0].text, /Page 1 of 2\. Read another page with renderId r1 and its page number\./)
@@ -2961,16 +2933,16 @@ test('get_context attaches contact sheets as images and keeps their frames in th
   assert.doesNotMatch(res.content[0].text, /U0hFRVQ/)
 })
 
-test('get_context says a render still going is read with its id, and shows what is ready', async () => {
+test('view says a render still going is read with its id, and shows what is ready', async () => {
   const rendered = { renderId: 'r2', state: 'rendering', kind: 'picture', layout: 'sheets', page: 1, pages: 6, readyPages: [], frameCount: 600, renderedFrameCount: 0 }
   const mcp = await connect(noTabFirst(rendered))
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, count: 600 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, count: 600 } })
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
   assert.match(res.content[0].text, /Still rendering: 0 of 600 frames are drawn\. Read the rest with renderId r2 and a page number\./)
   assert.doesNotMatch(res.content[0].text, /The render produced no image/)
 })
 
-test("get_context attaches a sound's picture and says what it measured", async () => {
+test("view attaches a sound's picture and says what it measured", async () => {
   const rendered = {
     renderId: 'r3',
     state: 'done',
@@ -2984,7 +2956,7 @@ test("get_context attaches a sound's picture and says what it measured", async (
     audioUrl: 'https://media.contenthero.ai/a/original.wav?t=x',
   }
   const mcp = await connect(noTabFirst(rendered))
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', sound: true, fromFrame: 0, toFrame: 299 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', sound: true, fromFrame: 0, toFrame: 299 } })
   assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['V0FWRQ=='])
   assert.match(res.content[0].text, /A picture of the sound is attached below/)
   assert.match(res.content[0].text, /Integrated loudness -14 LUFS, true peak -1 dBTP/)
@@ -2992,12 +2964,12 @@ test("get_context attaches a sound's picture and says what it measured", async (
   assert.doesNotMatch(res.content[0].text, /V0FWRQ==/)
 })
 
-test('get_context forwards the new render inputs, and waits only when it renders', async () => {
+test('view forwards the new render inputs, and waits only when it renders', async () => {
   const seen = []
-  const mcp = await connect(fakeClient({ getContext: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
-  await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, frames: [4, 2], layout: 'frames' } })
-  await mcp.callTool({ name: 'get_context', arguments: { renderId: 'r1', page: 2 } })
-  await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1' } })
+  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, frames: [4, 2], layout: 'frames' } })
+  await mcp.callTool({ name: 'view', arguments: { renderId: 'r1', page: 2 } })
+  await mcp.callTool({ name: 'view', arguments: { projectId: 'p1' } })
   assert.deepEqual(seen[0].frames, [4, 2])
   assert.equal(seen[0].layout, 'frames')
   assert.ok(seen[0].wait > 0 && seen[0].wait < 45, 'a render waits inside the call deadline')
@@ -3005,6 +2977,127 @@ test('get_context forwards the new render inputs, and waits only when it renders
   assert.equal(seen[1].page, 2)
   assert.ok(seen[1].wait > 0)
   assert.equal(seen[2].wait, undefined)
+})
+
+// video starts a render (it waits), and a raw clip is named by assetId or mediaUrl with its window. Break-verified:
+// dropping video from the wait condition, or any clip field from the forwarded input, turns this red.
+test('view forwards video and a raw clip, and waits for video', async () => {
+  const seen = []
+  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', video: true, fromFrame: 0, toFrame: 90 } })
+  await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 1.5, toSec: 4, count: 6, width: 480 } })
+  await mcp.callTool({ name: 'view', arguments: { mediaUrl: 'https://media.contenthero.ai/c.mp4' } })
+  assert.equal(seen[0].video, true)
+  assert.ok(seen[0].wait > 0, 'video is a render, so it waits')
+  assert.deepEqual(
+    { assetId: seen[1].assetId, fromSec: seen[1].fromSec, toSec: seen[1].toSec, count: seen[1].count, width: seen[1].width },
+    { assetId: 'a1', fromSec: 1.5, toSec: 4, count: 6, width: 480 },
+  )
+  assert.equal(seen[2].mediaUrl, 'https://media.contenthero.ai/c.mp4')
+})
+
+/**
+ * Where video cannot be received, the server renders the range's frames into `rendered` and its sound into
+ * `renderedSound`, and the sound reads exactly as a sound render does. Break-verified: dropping the renderedSound
+ * section from viewResult turns this red.
+ */
+test('view shows the frames and the sound of a video range', async () => {
+  const rendered = {
+    renderId: 'r5', state: 'done', kind: 'picture', layout: 'frames',
+    frames: [{ frame: 0, dataUrl: 'data:image/webp;base64,RjA=' }, { frame: 30, dataUrl: 'data:image/webp;base64,RjE=' }],
+  }
+  const renderedSound = {
+    renderId: 'r6', state: 'done', kind: 'sound', fromFrame: 0, toFrame: 60,
+    loudness: { integratedLufs: -15, truePeakDbtp: -1.5, loudnessRangeLu: 4, samplePeakDbfs: -2 },
+    onsets: [], stereo: null,
+    picture: { width: 1240, height: 402, dataUrl: 'data:image/webp;base64,U05E' },
+  }
+  const mcp = await connect(fakeClient({ view: async () => ({ context: { rendered, renderedSound }, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', video: true, fromFrame: 0, toFrame: 60 } })
+  assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['RjA=', 'RjE=', 'U05E'])
+  assert.match(res.content[0].text, /2 rendered frames are attached below, in order\./)
+  assert.match(res.content[0].text, /A picture of the sound is attached below/)
+  assert.match(res.content[0].text, /Integrated loudness -15 LUFS, true peak -1\.5 dBTP/)
+  assert.ok(res.content.some((c) => c.type === 'text' && c.text === 'The sound of the same range:'))
+  assert.doesNotMatch(res.content[0].text, /U05E|RjA=/)
+})
+
+/**
+ * A raw clip's keyframes come back as images, each labeled with its time in the clip, within the one result budget,
+ * with no live tab. Break-verified: dropping the clip from the "No live context" check turns both red; dropping the
+ * time labels turns the first red; admitting keyframes without the budget turns the second red.
+ */
+test('view shows a raw clip by its keyframes, each labeled with its time', async () => {
+  const clip = {
+    url: 'https://media.contenthero.ai/c.mp4', type: 'video', fromSec: 1, toSec: 3, durationSeconds: 12,
+    keyframes: [{ atSec: 1, dataUrl: 'data:image/jpeg;base64,SzE=' }, { atSec: 2.5, dataUrl: 'data:image/jpeg;base64,SzI=' }],
+  }
+  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 1, toSec: 3 } })
+  assert.doesNotMatch(res.content[0].text, /No live context/)
+  assert.match(res.content[0].text, /Raw source clip \(video\) \(12\.00s long\), from 1s to 3s: https:\/\/media\.contenthero\.ai\/c\.mp4/)
+  assert.match(res.content[0].text, /2 keyframe\(s\) of the clip are attached below/)
+  assert.doesNotMatch(res.content[0].text, /SzE=/)
+  assert.deepEqual(
+    res.content.slice(1).map((c) => (c.type === 'image' ? c.data : c.text)),
+    ['At 1s:', 'SzE=', 'At 2.5s:', 'SzI='],
+  )
+})
+
+/**
+ * A region on a raw clip is in the clip's own pixels and cuts each frame; the answer says how the cut maps back, or why
+ * it could not be cut, in get_media's zoom wording. Break-verified: dropping the describeCrop line from describeClip
+ * turns the second and third assertions red; dropping the clip sentence from region's description turns the first red.
+ */
+test("view cuts a clip's frames to a region and says how they map back", async () => {
+  const mcp = await connect(
+    fakeClient({
+      view: async () => ({
+        context: {
+          clip: {
+            url: 'https://media.contenthero.ai/c.mp4', type: 'video',
+            crop: { width: 640, height: 360, region: { x: 960, y: 540, width: 960, height: 540 }, pixelsPerSourcePixel: 0.6667 },
+          },
+        },
+        participant: null,
+        participants: [],
+      }),
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  const region = tools.find((t) => t.name === 'view').inputSchema.properties.region
+  assert.match(region.description, /For a source clip, the rectangle is in the clip's own pixels, and each of its frames is cut to it\.$/)
+  const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', region: { x: 960, y: 540, width: 960, height: 540 } } })
+  assert.match(res.content[0].text, /Zoom: 960x540 at \(960, 540\) in the file's pixels, shown at 640x360 \(0\.6667 px per file px\)/)
+  const failed = await connect(
+    fakeClient({
+      view: async () => ({ context: { clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', cropError: 'The region is outside the clip.' } }, participant: null, participants: [] }),
+    }),
+  )
+  const why = await failed.callTool({ name: 'view', arguments: { assetId: 'a1', region: { x: 0, y: 0, width: 10, height: 10 } } })
+  assert.match(why.content[0].text, /Zoom not shown: The region is outside the clip\./)
+})
+
+test('view keyframes spend the one result budget, and a clip that failed says why', async () => {
+  const frame = (c, atSec) => ({ atSec, dataUrl: `data:image/jpeg;base64,${c.repeat(400_000)}` })
+  const clip = { url: 'https://media.contenthero.ai/c.mp4', type: 'video', keyframes: [frame('A', 0), frame('B', 1), frame('C', 2)] }
+  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', count: 3 } })
+  assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data[0]), ['A', 'B'])
+  assert.match(res.content[0].text, /1 keyframe\(s\) not shown: too large for this reply\. Ask for fewer frames or a narrower fromSec\/toSec\./)
+
+  const failed = await connect(
+    fakeClient({
+      view: async () => ({
+        context: { clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', keyframeError: 'The video service is unavailable.', error: { code: 'clip_unreadable', message: 'The clip could not be opened.' } } },
+        participant: null,
+        participants: [],
+      }),
+    }),
+  )
+  const why = await failed.callTool({ name: 'view', arguments: { assetId: 'a1' } })
+  assert.match(why.content[0].text, /Keyframes not shown: The video service is unavailable\./)
+  assert.match(why.content[0].text, /The clip could not be read\. clip_unreadable: The clip could not be opened\./)
 })
 
 /**
@@ -3018,11 +3111,11 @@ test('get_context forwards the new render inputs, and waits only when it renders
  * fourth red.
  */
 const noTab = (rendered) =>
-  fakeClient({ getContext: async () => ({ context: { rendered }, participant: null, participants: [] }) })
+  fakeClient({ view: async () => ({ context: { rendered }, participant: null, participants: [] }) })
 
-test('get_context shows a render with no live tab', async () => {
+test('view shows a render with no live tab', async () => {
   const mcp = await connect(noTab({ surface: 'editor', frame: 12, dataUrl: 'data:image/webp;base64,AQIDBA==' }))
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, frame: 12 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, frame: 12 } })
   const image = res.content.find((c) => c.type === 'image')
   assert.ok(image, 'the render must come back even though no one is viewing the project')
   assert.equal(image.data, 'AQIDBA==')
@@ -3030,14 +3123,14 @@ test('get_context shows a render with no live tab', async () => {
   assert.doesNotMatch(res.content[0].text, /No live context/)
 })
 
-test('get_context states why a render produced no image, with no live tab', async () => {
+test('view states why a render produced no image, with no live tab', async () => {
   const mcp = await connect(noTab({ error: { code: 'render_unavailable', message: 'Rendering is unavailable right now.' } }))
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true } })
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
   assert.match(res.content[0].text, /The render produced no image\. render_unavailable: Rendering is unavailable right now\./)
 })
 
-test('get_context names the frames of a range that did not render', async () => {
+test('view names the frames of a range that did not render', async () => {
   const rendered = {
     fromFrame: 0,
     toFrame: 60,
@@ -3047,28 +3140,27 @@ test('get_context names the frames of a range that did not render', async () => 
   }
   const mcp = await connect(
     fakeClient({
-      getContext: async () => ({
+      view: async () => ({
         context: { surface: 'editor', rendered },
         participant: { userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' },
         participants: [{ userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' }],
       }),
     }),
   )
-  const res = await mcp.callTool({ name: 'get_context', arguments: { render: true, count: 3, fromFrame: 0, toFrame: 60 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { render: true, count: 3, fromFrame: 0, toFrame: 60 } })
   assert.equal(res.content.filter((c) => c.type === 'image').length, 2)
   assert.match(res.content[0].text, /1 frame could not be rendered \(frames 30\)\. render_failed: Lambda timed out/)
 })
 
 /**
  * Full resolution is reachable: the width limit was 1440 while the server rendered at 960, and a region crops at native
- * scale. Break-verified: restoring `.max(1440)` turns the first red; dropping `region: args.region` turns it red too;
- * dropping `frameWidth` from the get_media item schema turns the second red (zod strips the unknown key).
+ * scale. Break-verified: restoring `.max(1440)` turns it red; dropping `region: args.region` turns it red too.
  */
-test('get_context accepts a native-width render and forwards a region', async () => {
+test('view accepts a native-width render and forwards a region', async () => {
   let seen
-  const mcp = await connect(fakeClient({ getContext: async (input) => ((seen = input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => ((seen = input), { context: null, participant: null, participants: [] }) }))
   const res = await mcp.callTool({
-    name: 'get_context',
+    name: 'view',
     arguments: { projectId: 'p1', render: true, width: 3840, region: { x: 480, y: 270, width: 240, height: 135 } },
   })
   assert.ok(!res.isError, `the call was refused: ${JSON.stringify(res.content)}`)
@@ -3076,18 +3168,11 @@ test('get_context accepts a native-width render and forwards a region', async ()
   assert.deepEqual(seen.region, { x: 480, y: 270, width: 240, height: 135 })
 })
 
-test('get_media forwards a keyframe width', async () => {
-  let seen
-  const mcp = await connect(fakeClient({ getMediaBatch: async (items) => ((seen = items), { items: [] }) }))
-  await mcp.callTool({ name: 'get_media', arguments: { items: [{ url: 'https://media.contenthero.ai/a/original.mp4', frames: 2, frameWidth: 1280 }] } })
-  assert.equal(seen[0].frameWidth, 1280)
-})
-
-test('get_context frames spend the one result budget and name the frames that did not fit', async () => {
+test('view frames spend the one result budget and name the frames that did not fit', async () => {
   // 24 frames of 100,000 base64 characters each is 2.4 MB against a 1 MB ceiling for the whole result.
   const frames = Array.from({ length: 24 }, (_, i) => ({ frame: i * 10, dataUrl: `data:image/webp;base64,${'A'.repeat(100_000)}` }))
   const mcp = await connect(noTab({ fromFrame: 0, toFrame: 230, frames }))
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, count: 24 } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, count: 24 } })
   const images = res.content.filter((c) => c.type === 'image')
   const bytes = images.reduce((n, c) => n + c.data.length, 0)
   assert.ok(bytes <= 900_000, `inline images must stay inside the result allowance (got ${bytes})`)
@@ -3101,24 +3186,24 @@ test('get_context frames spend the one result budget and name the frames that di
  * principle, that frames across a range are how an agent judges motion. Break-verified: restoring `get_preview` or a
  * `mode` turns case 1 red; dropping the sentence, case 2.
  */
-test('get_context renders images only, takes no mode, and get_preview is gone', async () => {
+test('view takes no mode, and get_preview is gone', async () => {
   let sent
-  const mcp = await connect(fakeClient({ getContext: async (input) => ((sent = input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => ((sent = input), { context: null, participant: null, participants: [] }) }))
   const { tools } = await mcp.listTools()
   assert.equal(tools.some((t) => t.name === 'get_preview'), false)
-  const schema = tools.find((t) => t.name === 'get_context')?.inputSchema
+  const schema = tools.find((t) => t.name === 'view')?.inputSchema
   assert.equal('mode' in (schema?.properties ?? {}), false)
   // The tool's schema is strict, so a caller still sending a medium is refused, never answered with images unasked.
-  const res = await mcp.callTool({ name: 'get_context', arguments: { projectId: 'p1', render: true, mode: 'video' } })
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, mode: 'video' } })
   assert.equal(res.isError, true)
   assert.equal(sent, undefined)
 })
 
-test('get_context says frames across a range are how motion is judged', async () => {
+test('view says frames across a range are how motion is judged', async () => {
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
-  const schema = tools.find((t) => t.name === 'get_context')?.inputSchema as { properties: Record<string, { description?: string; enum?: string[] }> }
-  assert.match(schema.properties.render?.description ?? '', /Frames across a range are how you judge motion/)
+  const schema = tools.find((t) => t.name === 'view')?.inputSchema as { properties: Record<string, { description?: string; enum?: string[] }> }
+  assert.match(schema.properties.render?.description ?? '', /Frames across a range show motion, timing and pacing/)
 })
 
 test("get_schema kind 'layer' detail 'full' lists canvas layer types + props", async () => {
@@ -3290,7 +3375,7 @@ test('get_schema does not offer the retired solid layer type', async () => {
 
 /**
  * ⛔ `includeRenderUrl` IS RETIRED (2026-10-04): it made a read and an edit render and SAVE a cover, and the url it
- * returned was the stored address an agent could not download. get_context's render is the one way to see a project.
+ * returned was the stored address an agent could not download. view's render is the one way to see a project.
  * Break-verified: restoring the parameter on any of the three tools turns this red.
  */
 test('get_project and the edit tools offer no render option', async () => {
@@ -4640,12 +4725,11 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
     fakeClient({
       updateProject: async (id, input) => (calls.push(`update ${id} ${JSON.stringify(input)}`), { ...summary, ...settings }),
       getProject: async (id) => (calls.push(`get ${id}`), { ...summary, ...settings, revision: 3, state: {}, groups: [] }),
-      duplicateProject: async (id) => (calls.push(`duplicate ${id}`), summary),
+      duplicateProject: async (id, o) => (calls.push(`duplicate ${id} ${JSON.stringify(o)}`), summary),
       listProjectVersions: async (id, page) => (calls.push(`versions ${id} ${JSON.stringify(page)}`), { versions: [{ id: 'v1', createdAt: 't', label: 'Final', triggerReason: 'manual', authorName: 'Taylan', revision: 4, kind: 'tracks', createdBy: 'u', sizeBytes: 1 }], nextCursor: null }),
       saveProjectVersion: async (id, o) => (calls.push(`save ${id} ${JSON.stringify(o)}`), { id: 'v2', label: o.label }),
       restoreProjectVersion: async (id, v) => (calls.push(`restore ${id} ${v}`), { revision: 9, kind: 'tracks' }),
-      copyProjectVersion: async (id, v) => (calls.push(`copy ${id} ${v}`), summary),
-      renameProjectVersion: async (id, v, label) => (calls.push(`rename ${id} ${v} ${label}`), { id: v, label }),
+      updateProjectVersion: async (id, v, change) => (calls.push(`rename ${id} ${v} ${JSON.stringify(change)}`), { id: v, label: change.label }),
       deleteProjectVersion: async (id, v) => void calls.push(`delete ${id} ${v}`),
       undo: async (id, o) => (calls.push(`undo ${id} ${JSON.stringify(o)}`), { revision: 10, undidRevision: 8, label: 'Undid revision 8' }),
       redo: async (id, o) => (calls.push(`redo ${id} ${JSON.stringify(o)}`), { revision: 11, undidRevision: 10, label: 'Undid revision 10' }),
@@ -4667,12 +4751,12 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
   assert.equal(listedTools.includes('get_timeline_settings'), false)
   assert.equal(listedTools.includes('update_timeline_settings'), false)
   await call('duplicate_project', { projectId: 'p1' })
+  await call('duplicate_project', { projectId: 'p1', versionId: 'v1' })
   const listed = await call('list_project_versions', { projectId: 'p1', limit: 10 })
   assert.match(listed.content[0].text, /v1 \| t \| "Final" \| manual \| by Taylan \| revision 4/)
   await call('save_project_version', { projectId: 'p1', label: 'Before' })
   const restored = await call('restore_project_version', { projectId: 'p1', versionId: 'v1' })
   assert.match(restored.content[0].text, /revision 9/)
-  await call('restore_project_version', { projectId: 'p1', versionId: 'v1', action: 'copy' })
   await call('update_project_version', { projectId: 'p1', versionId: 'v1', label: 'Final' })
   await call('delete_project_version', { projectId: 'p1', versionId: 'v1' })
   const undone = await call('undo_project_edit', { projectId: 'p1', expectedRevision: 9 })
@@ -4682,17 +4766,26 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
     'update p1 {"title":"Launch","brandKitId":null,"cover":{"frame":12},"coverPosition":{"x":50,"y":40}}',
     'update p1 {"width":1080,"height":1920,"fps":30,"loudness":"off","magneticTrack":false,"linkedTracks":{"audio":false}}',
     'get p1',
-    'duplicate p1',
-
+    'duplicate p1 {}',
+    'duplicate p1 {"versionId":"v1"}',
     'versions p1 {"limit":10}',
     'save p1 {"label":"Before"}',
     'restore p1 v1',
-    'copy p1 v1',
-    'rename p1 v1 Final',
+    'rename p1 v1 {"label":"Final"}',
     'delete p1 v1',
     'undo p1 {"expectedRevision":9}',
     'redo p1 {"expectedRevision":10}',
   ])
+})
+
+// A copy from a saved version is duplicate_project with versionId; restore only restores. Break-verified: putting
+// `action` back on restore_project_version, or dropping versionId from duplicate_project, turns this red.
+test('restore_project_version only restores, and duplicate_project takes the version to copy from', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const props = (name: string) => Object.keys((tools.find((t) => t.name === name)?.inputSchema as { properties: Record<string, unknown> }).properties)
+  assert.deepEqual(props('restore_project_version').sort(), ['projectId', 'versionId'])
+  assert.deepEqual(props('duplicate_project').sort(), ['projectId', 'versionId'])
 })
 
 test('list_media follows the library-file contract: its sources, its types, no status, and its sort', async () => {

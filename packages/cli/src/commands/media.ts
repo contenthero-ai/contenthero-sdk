@@ -3,7 +3,7 @@
  *   media list [--type --kind --status --limit --cursor --small-copies]   recent outputs, newest first
  *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
- *   media zoom <idOrUrl> <x,y,width,height>                 a region, cut from the original at its own detail
+ *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
  *   media share <mediaIds...> [--title]                      a public link to outputs of finished generations
  *
  * Spans creations, reference boards, and looks; filter with --kind. Every item is named by its media id: the short
@@ -118,7 +118,7 @@ export function importStartedHuman(m: Pick<ImportStarted, 'outputId' | 'status'>
   return keyValues([
     ['Output id', m.outputId],
     ['Status', m.status],
-    ['Next', `contenthero generation status ${m.outputId}`],
+    ['Next', `contenthero generation-status get ${m.outputId}`],
   ])
 }
 
@@ -338,60 +338,8 @@ export function registerMedia(program: Command): void {
     })
 
   media
-    .command('watch')
-    .description('Watch a VIDEO as low-res keyframes across a time window (inspect raw footage)')
-    .argument('<idOrUrl>', 'a studio output id (short id, full id or first 8 characters) OR a media URL on our storage')
-    .option('--from <sec>', 'start of the source-time window (seconds)', (v) => parseFloat(v))
-    .option('--to <sec>', 'end of the source-time window (seconds)', (v) => parseFloat(v))
-    .option('--frames <n>', 'how many keyframes (default 8)', (v) => parseInt(v, 10))
-    .option('--frame-width <px>', 'each keyframe\'s width in pixels (default 640; 160 to 1280)', (v) => parseInt(v, 10))
-    .option('--save <dir>', 'write the keyframes to <dir>')
-    .action(async (idOrUrl: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const base = /^https?:\/\//.test(idOrUrl) ? { url: idOrUrl } : { mediaId: idOrUrl }
-      const item = {
-        ...base,
-        fromSec: opts.from as number | undefined,
-        toSec: opts.to as number | undefined,
-        frames: (opts.frames as number | undefined) ?? 8,
-        frameWidth: opts.frameWidth as number | undefined,
-      } as MediaBatchItem
-      const result = await client.getMediaBatch([item])
-      const first = result.items[0]
-      const keyframes = first?.keyframes ?? []
-
-      const saved: string[] = []
-      if (opts.save && keyframes.length > 0) {
-        const dir = String(opts.save)
-        await mkdir(dir, { recursive: true })
-        for (let i = 0; i < keyframes.length; i++) {
-          const kf = keyframes[i]
-          const buf = kf ? bufferFromDataUrl(kf.dataUrl) : null
-          if (!buf) continue
-          const file = join(dir, `kf-${String(i + 1).padStart(2, '0')}.jpg`)
-          await writeFile(file, buf)
-          saved.push(file)
-        }
-      }
-
-      emit(result, ctx, () => {
-        if (!first?.ok) return `Could not resolve the media: ${first?.error ?? 'unknown error'}`
-        // The server says why when it can; the guess remains only for a server too old to say.
-        if (keyframes.length === 0) {
-          return first.keyframeError
-            ? `No keyframes: ${first.keyframeError}.`
-            : 'No keyframes returned (is it a video, and is the ffmpeg service configured?).'
-        }
-        const savedBlock = saved.length
-          ? `\nSaved ${saved.length} keyframe(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
-          : ''
-        return `${keyframes.length} keyframe(s) at ${keyframes.map((k) => `${k.atSec}s`).join(', ')}.${savedBlock}`
-      })
-    })
-
-  media
     .command('zoom')
-    .description("Cut a region from a media file's original and get it at its own detail (never enlarged)")
+    .description("Cut a region from an image's original and get it at its own detail (never enlarged)")
     .argument('<idOrUrl>', 'a media id (a1B2c3D4-2) OR a media URL on our storage')
     .argument('<region>', "x,y,width,height in the file's own pixels (clamped to the file)")
     .option('--save <file>', 'write the cut to <file> (webp)')

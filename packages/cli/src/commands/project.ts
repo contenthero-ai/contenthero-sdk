@@ -6,16 +6,17 @@
  *   project create [--type <t>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project update <projectId> [--title] [--orientation] [--width] [--height] [--brand-kit] [--cover] [--cover-position]
  *                  [--fps] [--loudness] [--magnetic-track|--no-magnetic-track] [--linkage|--no-linkage] [--linked-tracks]
- *   project duplicate <projectId>                                        (requires editor:write)
+ *   project duplicate <projectId> [versionId]                            a copy, of a saved version when named (editor:write)
  *   project share <projectId> [--off]                                    its public live link, or revoke it (editor:write)
 
- *   project version list|save|restore|copy|rename|delete <projectId>     its version history (premium)
- *   project undo|redo <projectId> [--expected-revision <n>]              the editor's own undo and redo
+ *   project version list|save|restore|update|delete <projectId>          its version history (premium)
+ *   project edit undo|redo <projectId> [--expected-revision <n>]         the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--loudness <lufs|off>] [--wait]
- *   project export-status <exportId>                                     (requires editor:read)
- *   project exports <projectId> [--limit] [--cursor]                     its exports, newest first (requires editor:read)
+ *   project export get <exportId>                                        poll an export (requires editor:read)
+ *   project export list <projectId> [--limit] [--cursor]                 its exports, newest first (requires editor:read)
+ *   project transcript get <projectId> [--search] [--granularity] ...    its transcript (requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
@@ -23,7 +24,7 @@
  * new clips/tracks/transitions; EDIT ops (move_clip, trim_clip, update_clip, delete_clip, remove_background,
  * disable_ranges, update_transition, remove_transition, ...) act on existing clips + transitions. CAPTION ops (add_captions,
  * update_captions, remove_captions) generate / restyle / remove transcript-driven captions.
- * Run `schema timeline` (or `schema layer`) first: each clip type carries a copy-pasteable `example`
+ * Run `schema get timeline` (or `schema get layer`) first: each clip type carries a copy-pasteable `example`
  * clip skeleton and the catalog carries a `creation` section with the exact op shapes, so you know both what
  * to create and the item shape to pass. Then read `project get` for the current state + revision, and pass
  * that revision as --expected-revision for safe concurrent edits. All edits require the editor:write scope.
@@ -159,6 +160,8 @@ export function registerProject(program: Command): void {
 
   project
     .command('transcript')
+    .description("A project's transcript")
+    .command('get')
     .description("Read a project's transcript mapped to its timeline clips (requires editor:read)")
     .argument('<projectId>', 'the editor project id')
     .option('--search <text>', 'only clip segments whose text contains this substring')
@@ -271,12 +274,22 @@ export function registerProject(program: Command): void {
 
   project
     .command('duplicate')
-    .description('Copy a project: the same type, size, composition and brand kit (requires editor:write)')
+    .description('Copy a project: the same type, size, composition and brand kit, as it is now or from a saved version (requires editor:write)')
     .argument('<projectId>', 'the project id')
-    .action(async (projectId: string, _opts: Record<string, unknown>, command: Command) => {
+    /*
+      ⚠️ A POSITIONAL, NOT `--version`. The root's `-v, --version` is a program option, and commander reads program
+      options after a subcommand too, so `project duplicate p1 --version v1` printed the CLI version and copied nothing.
+      The version id follows the project id, as it does in every `project version` command.
+    */
+    .argument('[versionId]', 'a saved version to copy from (from `project version list`); omit to copy the project as it is now')
+    .action(async (projectId: string, versionId: string | undefined, _opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const p = await client.duplicateProject(projectId)
-      emit(p, ctx, (r: ProjectSummary) => `Created ${r.type} project ${r.id} "${r.title}", a copy of ${projectId}`)
+      const p = await client.duplicateProject(projectId, versionId !== undefined ? { versionId } : {})
+      emit(p, ctx, (r: ProjectSummary) =>
+        versionId !== undefined
+          ? `Created ${r.type} project ${r.id} "${r.title}" from version ${versionId} of ${projectId}`
+          : `Created ${r.type} project ${r.id} "${r.title}", a copy of ${projectId}`,
+      )
     })
 
   project
@@ -292,8 +305,9 @@ export function registerProject(program: Command): void {
 
   registerVersions(project)
 
+  const edit = project.command('edit').description("The editor's own undo and redo")
   for (const direction of ['undo', 'redo'] as const) {
-    const cmd = project
+    const cmd = edit
       .command(direction)
       .description(
         direction === 'undo'
@@ -359,11 +373,11 @@ export function registerProject(program: Command): void {
       )
     })
 
-  project
+  const exportCommand = project
     .command('export')
-    .description('Export a project to a file: video, stills, documents, and for an editor project its sound, subtitles and transcript (`contenthero schema export` lists every format) (requires editor:write)')
+    .description('Export a project to a file: video, stills, documents, and for an editor project its sound, subtitles and transcript (`contenthero schema get export` lists every format) (requires editor:write)')
     .argument('<projectId>', 'the project id')
-    .option('--format <format>', 'a format `contenthero schema export` lists (default mp4)')
+    .option('--format <format>', 'a format `contenthero schema get export` lists (default mp4)')
     .option('--resolution <res>', 'output resolution for ANY format: 480p|720p|1080p|2k|4k. Defaults 720p for an editor mp4, the project native size for a still. 1080p+ is plan-gated')
     .option('--quality <q>', 'mp4 quality: low|recommended|high')
     .option('--frame <n>', 'editor still (png/jpg) only: timeline frame to render (default 0)', toInt)
@@ -397,14 +411,19 @@ export function registerProject(program: Command): void {
         withCodeWarnings(
           job.status === 'completed'
             ? withExportLoudness(`Export ${job.exportId} completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`, job.loudness)
-            : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export-status ${job.exportId}`,
+            : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export get ${job.exportId}`,
           job.warnings,
         ),
       )
     })
 
-  project
-    .command('export-status')
+  /*
+    `project export <projectId>` runs the export, and `project export get` / `project export list` are its subcommands
+    (get_export and list_project_exports). Commander dispatches to a subcommand when the first operand names one, and
+    otherwise runs the export with it as the project id.
+  */
+  exportCommand
+    .command('get')
     .description('Poll an export job by id (requires editor:read)')
     .argument('<exportId>', 'the export id')
     .action(async (exportId: string, _opts: Record<string, unknown>, command: Command) => {
@@ -419,8 +438,8 @@ export function registerProject(program: Command): void {
     })
 
   withPageFlags(
-    project
-      .command('exports')
+    exportCommand
+      .command('list')
       .description("List a project's exports, newest first: finished ones with their download and share page, running ones with their status (requires editor:read)")
       .argument('<projectId>', 'the project id'),
   ).action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
@@ -442,7 +461,7 @@ export function registerProject(program: Command): void {
   project
     .command('apply')
     .description(
-      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...) and KEYFRAME ops (add_keyframe, update_keyframe, remove_keyframe, apply_combo). One-shot cleanups: remove_silence, remove_filler_words, extract_audio. Templates: insert_template places one from `template list`, branded with the project\'s brand kit (see `schema timeline` for shapes). Build items from the `example` skeletons in `schema timeline` / `schema layer`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
+      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...) and KEYFRAME ops (add_keyframe, update_keyframe, remove_keyframe, apply_combo). One-shot cleanups: remove_silence, remove_filler_words, extract_audio. Templates: insert_template places one from `template list`, branded with the project\'s brand kit (see `schema get timeline` for shapes). Build each item from its type\'s `example`, read with `schema get timeline --name <type>` or `schema get layer --name <type>`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
     )
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')
@@ -538,7 +557,7 @@ function registerVersions(project: Command): void {
 
   version
     .command('restore')
-    .description('Put a version back into its project; the current state is saved as a version first (requires editor:write)')
+    .description('Put a version back into its project; the current state is saved as a version first. To make a new project from a version, use `project duplicate <projectId> <versionId>` (requires editor:write)')
     .argument('<projectId>', 'the project id')
     .argument('<versionId>', 'the version id (from `project version list`)')
     .action(async (projectId: string, versionId: string, _opts: Record<string, unknown>, command: Command) => {
@@ -548,25 +567,14 @@ function registerVersions(project: Command): void {
     })
 
   version
-    .command('copy')
-    .description('Make a new project from a version (requires editor:write)')
-    .argument('<projectId>', 'the project id')
-    .argument('<versionId>', 'the version id (from `project version list`)')
-    .action(async (projectId: string, versionId: string, _opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const p = await client.copyProjectVersion(projectId, versionId)
-      emit(p, ctx, (r: ProjectSummary) => `Created ${r.type} project ${r.id} "${r.title}" from version ${versionId}`)
-    })
-
-  version
-    .command('rename')
+    .command('update')
     .description('Name a version; an empty label clears its name (requires editor:write)')
     .argument('<projectId>', 'the project id')
     .argument('<versionId>', 'the version id (from `project version list`)')
-    .argument('<label>', 'the new name')
-    .action(async (projectId: string, versionId: string, label: string, _opts: Record<string, unknown>, command: Command) => {
+    .requiredOption('--label <label>', 'the new name; empty clears it')
+    .action(async (projectId: string, versionId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const v = await client.renameProjectVersion(projectId, versionId, label)
+      const v = await client.updateProjectVersion(projectId, versionId, { label: opts.label as string })
       emit(v, ctx, () => (v.label ? `Version ${v.id} is now "${v.label}".` : `Version ${v.id} has no name.`))
     })
 

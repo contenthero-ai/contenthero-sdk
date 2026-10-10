@@ -1,4 +1,4 @@
-import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, Loudness, MediaShare, ProjectReadScope, ProjectShare } from './types.js'
+import type { ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
 import type { LimitError } from './errors.js'
 
 /**
@@ -56,7 +56,7 @@ export function describeLimit(err: LimitError): string {
 }
 
 /**
- * Why a get_context render produced no image, or some frames of a range, in words: the API's `rendered.error` and
+ * Why a view render produced no image, or some frames of a range, in words: the API's `rendered.error` and
  * `rendered.missingFrames`. Null when the render reported no error. An error the summary does not state reads as a
  * render that simply came back empty, which is what agents saw during the 2026-10-01 export outage.
  */
@@ -75,7 +75,7 @@ export function describeRenderFailure(rendered: Record<string, unknown> | null |
 }
 
 /**
- * Where a get_context render job stands, in words: still rendering (how much is ready, and the id to read the rest
+ * Where a view render job stands, in words: still rendering (how much is ready, and the id to read the rest
  * with), or done across several pages (which page this is). Null for a render that came back whole on one page, or
  * that is not a job. Without it, a render that outlasted its wait reads as a render that returned nothing.
  */
@@ -95,6 +95,45 @@ export function describeRenderProgress(rendered: Record<string, unknown> | null 
   }
   if (pages > 1) return `Page ${page} of ${pages}. Read another page with renderId ${id} and its page number.`
   return null
+}
+
+/**
+ * A region cut from a file, in words: what was cut and how its pixels map back to the file, so a point can be placed on
+ * the source, or why it could not be cut. Null when no region was asked for. The one wording for an image get_media
+ * zoomed and for a clip view cut.
+ */
+export function describeCrop(
+  crop: ResolvedMediaBatchItem['crop'] | null,
+  cropError: string | null | undefined,
+): string | null {
+  if (crop) {
+    return `zoom: ${crop.region.width}x${crop.region.height} at (${crop.region.x}, ${crop.region.y}) in the file's pixels, shown at ${crop.width}x${crop.height} (${crop.pixelsPerSourcePixel} px per file px)`
+  }
+  return cropError ? `zoom not shown: ${cropError}` : null
+}
+
+/**
+ * A raw source clip a view read (`context.clip`), in words: what it is, how long, which window was read and its url,
+ * the region each frame was cut to, then why its keyframes, the region or the clip itself could not be read. Empty for
+ * no clip. The keyframes themselves are images, so each surface says how it shows them.
+ */
+export function describeClip(clip: Record<string, unknown> | null | undefined): string[] {
+  if (!clip) return []
+  const from = typeof clip.fromSec === 'number' ? clip.fromSec : null
+  const to = typeof clip.toSec === 'number' ? clip.toSec : null
+  const window = from !== null || to !== null ? `, from ${from ?? 0}s to ${to !== null ? `${to}s` : 'its end'}` : ''
+  const length = typeof clip.durationSeconds === 'number' ? ` (${clip.durationSeconds.toFixed(2)}s long)` : ''
+  const lines = [`Raw source clip${typeof clip.type === 'string' ? ` (${clip.type})` : ''}${length}${window}: ${String(clip.url ?? '')}`]
+  const crop = clip.crop && typeof clip.crop === 'object' && !Array.isArray(clip.crop) ? (clip.crop as ResolvedMediaBatchItem['crop']) : null
+  const zoom = describeCrop(crop, typeof clip.cropError === 'string' ? clip.cropError : null)
+  if (zoom) lines.push(`${zoom[0]!.toUpperCase()}${zoom.slice(1)}`)
+  if (typeof clip.keyframeError === 'string' && clip.keyframeError) lines.push(`Keyframes not shown: ${clip.keyframeError}`)
+  const error = clip.error
+  if (error && typeof error === 'object' && !Array.isArray(error)) {
+    const { code, message } = error as { code?: unknown; message?: unknown }
+    lines.push(`The clip could not be read. ${typeof code === 'string' ? code : 'clip_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`)
+  }
+  return lines
 }
 
 /** One measure's value with its unit, or that there was nothing to measure. */

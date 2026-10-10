@@ -94,7 +94,7 @@ function withFieldFlags(command: Command): Command {
     .option('--lottie <url>', 'a Lottie file of ours')
     .option('--recolor <hex=prop>', 'a color in the Lottie file that a prop recolors; repeatable', collect)
     .option('--emoji <name>', "an animated emoji's name, as the animated emoji list names it")
-    .option('--shape <name>', "a shape's name, as `schema layer --name shape` lists them")
+    .option('--shape <name>', "a shape's name, as `schema get layer --name shape` lists them")
     .option('--props <json>', 'its props as placed, as a JSON object', toJson)
     .option('--props-schema <json>', "each prop's control, as a JSON object (as `template get --json` shows them)", toJson)
     .option('--duration-frames <n>', 'how long it lasts when placed, in frames', toInt)

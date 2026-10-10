@@ -1,18 +1,18 @@
 /**
- * `contenthero schema <kind>` - read a vocabulary another command accepts. The CLI twin of the MCP's `get_schema`
- * (agreed 2026-09-28): one reference command replaced `platform list`, `platform get`, `project export-formats`,
- * `project layer-types` and `project timeline-types`.
+ * `contenthero schema get <kind>` - read a vocabulary another command accepts. The CLI twin of the MCP's `get_schema`,
+ * named after it (agreed 2026-09-28): one reference command replaced `platform list`, `platform get`,
+ * `project export-formats`, `project layer-types` and `project timeline-types`.
  *
- *   schema commands [command...]                 the CLI's own command inputs as JSON, scoped to a path such as
- *                                                `generate image` (no API key needed: it reflects over the tree)
- *   schema platform [--platform p] [--format f]  the platforms you can publish to, or one platform's post shape
- *   schema timeline [--name n | --detail full]   the editor timeline schema: its index, one op or clip type in full,
- *                                                or the whole (--json-schema adds each type's JSON Schema)
- *   schema layer [--name n | --detail full]      the canvas schema, in the same two steps
- *   schema export                                export formats per project type
- *   schema link                                  the link contract: how to build any app address from a noun + id
- *   schema code                                  the authoring guide for a clip's code, as one document
- *   schema effect [--name n]                     every effect code or a clip can use, or one effect in full
+ *   schema get commands [command...]                 the CLI's own command inputs as JSON, scoped to a path such as
+ *                                                    `generate image` (no API key needed: it reflects over the tree)
+ *   schema get platform [--platform p] [--format f]  the platforms you can publish to, or one platform's post shape
+ *   schema get timeline [--name n | --detail full]   the editor timeline schema: its index, one op or clip type in
+ *                                                    full, or the whole (--json-schema adds each type's JSON Schema)
+ *   schema get layer [--name n | --detail full]      the canvas schema, in the same two steps
+ *   schema get export                                export formats per project type
+ *   schema get link                                  the link contract: how to build any app address from a noun + id
+ *   schema get code                                  the authoring guide for a clip's code, as one document
+ *   schema get effect [--name n]                     every effect code or a clip can use, or one effect in full
  *
  * timeline, layer, export, code and effect require editor:read.
  */
@@ -73,16 +73,22 @@ function describe(cmd: Command, path: string): CommandSchema {
   }
 }
 
-/** Collect every leaf (action-bearing) command, with its full space-joined path. */
+/**
+ * Whether a command runs on its own: it has an action, or nothing under it. `project export <projectId>` is both a
+ * command and the parent of `project export get` and `project export list`, so having subcommands does not make a
+ * command a group. Commander keeps the action private; this is the one place that reads it.
+ */
+export function isRunnable(cmd: Command): boolean {
+  return (cmd as unknown as { _actionHandler: unknown })._actionHandler != null || realSubcommands(cmd).length === 0
+}
+
+/** Collect every runnable command, with its full space-joined path. */
 function collectLeaves(cmd: Command, prefix: string[]): CommandSchema[] {
   const out: CommandSchema[] = []
   for (const sub of realSubcommands(cmd)) {
     const path = [...prefix, sub.name()]
-    if (realSubcommands(sub).length === 0) {
-      out.push(describe(sub, path.join(' ')))
-    } else {
-      out.push(...collectLeaves(sub, path))
-    }
+    if (isRunnable(sub)) out.push(describe(sub, path.join(' ')))
+    out.push(...collectLeaves(sub, path))
   }
   return out
 }
@@ -93,6 +99,8 @@ type Kind = (typeof KINDS)[number]
 export function registerSchema(program: Command): void {
   program
     .command('schema')
+    .description('Read a vocabulary another command accepts')
+    .command('get')
     .description('Read a vocabulary another command accepts: commands, platform, timeline, layer, export, link, code or effect')
     .argument('<kind>', `which vocabulary: ${KINDS.join(', ')}`)
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
@@ -129,7 +137,7 @@ export function registerSchema(program: Command): void {
           ? all.filter((c) => c.command === target || c.command.startsWith(target + ' '))
           : all
         if (target && commands.length === 0) {
-          throw new CliError(`No command matches "${target}". Run \`contenthero schema commands\` for the full list.`, EXIT.USAGE)
+          throw new CliError(`No command matches "${target}". Run \`contenthero schema get commands\` for the full list.`, EXIT.USAGE)
         }
 
         const globalOptions = program.options.map(describeOption)

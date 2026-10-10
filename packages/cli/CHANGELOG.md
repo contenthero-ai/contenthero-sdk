@@ -1,10 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.3.23
 
 - Breaking: a project's settings are read by `project get` and changed by `project update`, which takes `--fps`,
   `--loudness`, `--magnetic-track` / `--no-magnetic-track`, `--linkage` / `--no-linkage` and `--linked-tracks`.
   `project settings get|update` is removed.
+
+- Breaking (hard cutover, no hidden aliases): commands are named after the MCP tools they run.
+  `context` is `view`; `project export-status` is `project export get`; `project exports` is `project export list`;
+  `project transcript` is `project transcript get`; `project undo` and `project redo` are `project edit undo` and
+  `project edit redo`; `project version rename <projectId> <versionId> <label>` is
+  `project version update <projectId> <versionId> --label <label>`; `tag remove` is `tag delete`; `card publish` is
+  `post publish`; `generation status` is `generation-status get`; `schema <kind>` is `schema get <kind>`.
+  `project export <projectId>` still runs an export.
+- Breaking: `project version copy` is removed. A copy from a saved version is
+  `project duplicate <projectId> <versionId>`.
+- New: `view --video` watches a range (here, its frames and its sound measured), and `view --asset <id>` or
+  `view --media-url <url>` with `--from-sec` and `--to-sec` sees a raw source clip; `--save` writes its keyframes.
+- Breaking: `media watch` is removed: get_media no longer reads a clip's frames; use `view --asset <id>` or
+  `view --media-url <url>`. `view --region` on a clip is in the clip's own pixels and cuts each of its frames.
+  `media zoom` cuts a region of an image.
 
 ## 0.3.22
 

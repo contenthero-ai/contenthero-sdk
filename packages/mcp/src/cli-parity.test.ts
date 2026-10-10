@@ -5,6 +5,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { Command } from 'commander'
 import { buildServer } from './server.js'
 import { buildProgram } from '../../cli/src/program.js'
+import { isRunnable } from '../../cli/src/commands/schema.js'
 
 /**
  * ⭐⭐⭐ MCP / CLI PARITY, ENFORCED RATHER THAN REMEMBERED.
@@ -61,7 +62,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   remove_brand_knowledge: ['brand-kit knowledge remove'],
   list_media: ['media list'],
   search_media: ['media search'],
-  get_media: ['media get', 'media watch', 'media zoom'],
+  get_media: ['media get', 'media zoom'],
   create_media_upload: ['media upload'],
   complete_media_upload: ['media upload'],
   import_media: ['media import'],
@@ -73,7 +74,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   delete_folder: ['folder delete'],
   list_models: ['model list'],
   get_model: ['model get'],
-  get_schema: ['schema'],
+  get_schema: ['schema get'],
   list_kling_elements: ['kling-element list'],
   get_kling_element: ['kling-element get'],
   create_kling_element: ['kling-element create'],
@@ -84,12 +85,12 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   create_template: ['template create'],
   update_template: ['template update'],
   delete_template: ['template delete'],
-  get_generation_status: ['generation status'],
+  get_generation_status: ['generation-status get'],
   list_cards: ['card list'],
   get_card: ['card get'],
   create_card: ['card create'],
   update_card: ['card update'],
-  publish_post: ['card publish'],
+  publish_post: ['post publish'],
   list_spaces: ['space list'],
   get_space: ['space get'],
   create_space: ['space create'],
@@ -102,7 +103,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   list_tags: ['tag list'],
   create_tag: ['tag create'],
   update_tag: ['tag update'],
-  delete_tag: ['tag remove'],
+  delete_tag: ['tag delete'],
   list_tracked_accounts: ['tracked-account list'],
   get_tracked_account: ['tracked-account get'],
   update_tracked_account: ['tracked-account update'],
@@ -120,23 +121,23 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   create_project: ['project create'],
   import_project: ['project import'],
   export_project: ['project export'],
-  get_export: ['project export-status'],
-  list_project_exports: ['project exports'],
+  get_export: ['project export get'],
+  list_project_exports: ['project export list'],
   delete_project: ['project delete'],
-  get_transcript: ['project transcript'],
+  get_transcript: ['project transcript get'],
   update_project: ['project update'],
   duplicate_project: ['project duplicate'],
   share_project: ['project share'],
   list_project_versions: ['project version list'],
   save_project_version: ['project version save'],
-  restore_project_version: ['project version restore', 'project version copy'],
-  update_project_version: ['project version rename'],
+  restore_project_version: ['project version restore'],
+  update_project_version: ['project version update'],
   delete_project_version: ['project version delete'],
-  undo_project_edit: ['project undo'],
-  redo_project_edit: ['project redo'],
+  undo_project_edit: ['project edit undo'],
+  redo_project_edit: ['project edit redo'],
   update_timeline: ['project apply'],
   update_canvas: ['project apply'],
-  get_context: ['context'],
+  view: ['view'],
 }
 
 /** Tools with no CLI counterpart, BY DESIGN. */
@@ -224,7 +225,6 @@ const ALIASES: Record<string, Record<string, string>> = {
   get_generation_status: { outputIds: '<id>', wait: '--no-wait' },
   delete_stage: { targetStageId: '--target' },
   update_card: { cardIds: '--also', scheduledAt: '--schedule' },
-  publish_post: { cardId: '<id>' },
   list_cards: { isFavorite: '--favorite' },
   list_tracked_accounts: { accountType: '--kind' },
   get_tracked_account: { accountId: '<id>' },
@@ -265,7 +265,6 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   create_media_upload: { files: '`media upload` takes one local file per run and reads its name, type and size from it' },
   complete_media_upload: { outputIds: '`media upload` runs both steps, so the ids never reach the caller' },
   list_projects: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
-  restore_project_version: { action: 'the subcommand names it: `project version restore` or `project version copy`' },
   create_project: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
 }
 
@@ -290,9 +289,10 @@ async function mcpTools(): Promise<Map<string, string[]>> {
 
 function cliLeaves(): Map<string, Leaf> {
   const out = new Map<string, Leaf>()
-  // A leaf is hidden when it, or any command above it, is left out of its parent's help.
+  // A leaf is hidden when it, or any command above it, is left out of its parent's help. A leaf is any command that
+  // runs on its own, which includes one that also parents subcommands (`project export` and its `get` and `list`).
   const walk = (cmd: Command, path: string[], hidden: boolean) => {
-    if (path.length && cmd.commands.length === 0) {
+    if (path.length && isRunnable(cmd)) {
       const flags = new Set<string>([
         ...cmd.options.map((o) => o.long).filter((l): l is string => Boolean(l)),
         ...cmd.registeredArguments.map((arg) => `<${kebab(arg.name())}>`),
@@ -350,6 +350,14 @@ test('every deprecated CLI command is hidden, and stands in exactly for a comman
     }
   }
   assert.deepEqual(problems, [])
+})
+
+// A copy from a saved version is `project duplicate <projectId> [versionId]`, matched by the naming rules rather than
+// an alias. Break-verified: dropping the [versionId] argument turns this red (and the coverage test above it).
+test('duplicate_project takes its versionId as the positional after the project id', () => {
+  const leaf = cliLeaves().get('project duplicate')
+  assert.ok(leaf?.flags.has('<version-id>'), `project duplicate takes [${[...(leaf?.flags ?? [])].join(' ')}]`)
+  assert.ok(!cliLeaves().has('project version copy'), 'a copy from a version is project duplicate, not version copy')
 })
 
 test('every input of a mapped MCP tool is expressible in the CLI, or is a recorded known gap', async () => {

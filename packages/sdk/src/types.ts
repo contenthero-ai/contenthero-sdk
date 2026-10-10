@@ -434,7 +434,7 @@ export interface GenerateRequest {
   avatarId?: string
   /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
   placement?: PlacementIntent
-  /** Optional interactive-fallback playhead frame (echo one from get_context for playhead-relative placement). */
+  /** Optional interactive-fallback playhead frame (echo one from view for playhead-relative placement). */
   playheadFrame?: number
 }
 
@@ -571,7 +571,7 @@ export interface GenerateResult {
   /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
   idempotentReplay?: boolean
   /** Where the asset is being placed (present only when `projectId` was supplied). Lets a caller chain further
-   *  ops onto the placed clip/layer without a get_context hop, and see any placement warnings. */
+   *  ops onto the placed clip/layer without a view hop, and see any placement warnings. */
   placement?: PlacementResult
 }
 
@@ -677,7 +677,7 @@ export interface EditAudioRequest {
   projectId?: string
   /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
   placement?: PlacementIntent
-  /** Optional interactive-fallback playhead frame (echo one from get_context for playhead-relative placement). */
+  /** Optional interactive-fallback playhead frame (echo one from view for playhead-relative placement). */
   playheadFrame?: number
   /**
    * IN-PLACE mode: enhance the audio OF EXISTING CLIPS on `projectId`, rather than processing a standalone file.
@@ -1585,22 +1585,9 @@ export interface MediaItem extends MediaSummary {
 }
 
 /**
- * VIDEO keyframe watch (opt-in): set any of these on a video item to get low-res keyframes across the
- * [fromSec, toSec] source-time window (whole clip by default), so you can SEE the footage, which is the fix for
- * "video returns no frame yet". Frame-based, so cost is decoupled from clip length.
- */
-export interface MediaClipWindow {
-  fromSec?: number
-  toSec?: number
-  /** How many keyframes (proportional default; service-capped). */
-  frames?: number
-  /** Each keyframe's width in pixels (default 640; the service keeps it within 160 to 1280). */
-  frameWidth?: number
-}
-
-/**
- * ZOOM: a rectangle in the file's own pixels to cut from the original and return at the detail it has, never
- * enlarged. Clamped to the file, so "the right half" needs no exact size. On a video it applies to every keyframe.
+ * ZOOM: a rectangle in an image's own pixels to cut from the original and return at the detail it has, never
+ * enlarged. Clamped to the file, so "the right half" needs no exact size. A clip's frames, and a region of them, are
+ * seen with `view`.
  */
 export interface MediaRegion {
   x: number
@@ -1609,8 +1596,8 @@ export interface MediaRegion {
   height: number
 }
 
-/** One requested item for `getMediaBatch`: a raw URL, or a media reference; videos accept a window; either a region. */
-export type MediaBatchItem = ({ url: string } | { mediaId: string }) & MediaClipWindow & { region?: MediaRegion }
+/** One requested item for `getMediaBatch`: a raw URL, or a media reference; either a region. */
+export type MediaBatchItem = ({ url: string } | { mediaId: string }) & { region?: MediaRegion }
 
 /**
  * One resolved item from `getMediaBatch`, uniform across the url and mediaId
@@ -1692,13 +1679,6 @@ export interface ResolvedMediaBatchItem {
   /** What the generation was made FROM (its input references), when the item is a creation. */
   references?: GenerationReference[]
   /**
-   * VIDEO keyframes (present only when the item requested a window on a video): low-res frames across the
-   * source-time window, each an inline `data:image/jpeg;base64,...`. The MCP turns each into an image block.
-   */
-  keyframes?: { atSec: number; dataUrl: string }[]
-  /** Why a video that asked for keyframes has none, in words (the video service is down, say). */
-  keyframeError?: string
-  /**
    * MEASURED PIXEL GEOMETRY from the storage spine. Absent for an asset that is not ours or not yet measured.
    *
    * `content` is the ARTWORK's bounds within the file (its alpha bounds). For a padded logo these differ
@@ -1721,9 +1701,9 @@ export interface ResolvedMediaBatchItem {
    */
   durationSeconds?: number
   /**
-   * The asked-for `region`, cut from the original. For an image `dataUrl` is the crop (`data:image/webp;base64`);
-   * for a video each keyframe already is, and this says how they map back. `pixelsPerSourcePixel` is 1 at full
-   * detail, less when the region was too large to return whole: a source point x lies at (x - region.x) * it.
+   * The asked-for `region`, cut from the original image: `dataUrl` is the crop (`data:image/webp;base64`).
+   * `pixelsPerSourcePixel` is 1 at full detail, less when the region was too large to return whole: a source point x
+   * lies at (x - region.x) * it.
    */
   crop?: { dataUrl?: string; width: number; height: number; region: MediaRegion; pixelsPerSourcePixel: number }
   /** Why the region could not be cut, when the item itself resolved. */
@@ -3041,7 +3021,7 @@ export interface ApplyEditorOpsInput {
   /*
     ⛔ `includeRenderUrl` WAS RETIRED ON 2026-10-04, with `renderUrl` on the result and on ProjectDetail.
     It made an edit (and a read) render and SAVE a cover, and the url it returned was the stored address, which an
-    API key cannot download. See the result with `getContext({ projectId, render: true })`.
+    API key cannot download. See the result with `view({ projectId, render: true })`.
   */
 }
 
@@ -3192,7 +3172,7 @@ export interface ProjectReadScope {
   slideId?: string
 }
 
-/** One live participant in `getContext`: who is present and on what surface/scope. */
+/** One live participant in `view`: who is present and on what surface/scope. */
 export interface LiveContextParticipant {
   userId: string
   sessionId: string
@@ -3204,12 +3184,21 @@ export interface LiveContextParticipant {
   updatedAt: string
 }
 
-/** The result of `getContext`: the most-recent-active session's live context + the full participant set. */
-export interface LiveContextResult {
+/**
+ * The result of `view`: the most-recent-active session's live context, the full participant set, and whatever was
+ * rendered.
+ */
+export interface ViewResult {
   /**
    * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object carrying
    * the focus (e.g. `focusedSlideId`, `playheadFrame`) and current selection. A short-lived `snapshotUrl` of
-   * the live viewport is included ONLY when the read was made with `capture: true`. Null when no session is live.
+   * the live viewport is included ONLY when the read was made with `capture: true`. It may also carry:
+   * - `rendered`: the picture or sound job answer, when the read rendered or read a render.
+   * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
+   *   `rendered` and its sound measurement here, a sound answer of the same shape as a sound `rendered`.
+   * - `clip`: a raw source clip named by `assetId` or `mediaUrl`: `{ url, type: 'video' | 'image', fromSec?, toSec?,
+   *   durationSeconds?, keyframes?: [{ atSec, dataUrl }], keyframeError?, crop?, cropError?, error?: { code, message } }`.
+   * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
    */
   context: Record<string, unknown> | null
   /** Metadata for that default participant, or null when no one is live. */
@@ -3218,8 +3207,8 @@ export interface LiveContextResult {
   participants: LiveContextParticipant[]
 }
 
-/** Options for `getContext`. */
-export interface GetContextInput {
+/** Options for `view`. */
+export interface ViewInput {
   /** Scope to a specific project's presence (editor/canvas). Omit for the caller's most-recent surface anywhere. */
   projectId?: string
   /**
@@ -3235,8 +3224,8 @@ export interface GetContextInput {
    * frames you name. Frames that fit one response come back one by one; more come back as contact sheets, each frame
    * numbered under its tile, split into pages. Set `sound` to render a range's mix and measure it instead. A render is a
    * job: the answer carries `rendered.renderId`, what finished within the wait, and which pages are ready; read the
-   * rest with `renderId` and `page`. Ephemeral (counts against no quota) and does not need a live tab. To watch a RAW
-   * source clip use `getMedia` with a video item.
+   * rest with `renderId` and `page`. Ephemeral (counts against no quota) and does not need a live tab. To see a RAW
+   * source clip rather than your edit, name it with `assetId` or `mediaUrl`.
    */
   render?: boolean
   /** Editor: which single timeline frame. Omit to render the current playhead frame. */
@@ -3245,11 +3234,14 @@ export interface GetContextInput {
   slideId?: string
   /** Canvas: which slide (1-based index; alternative to `slideId`). */
   slideIndex?: number
-  /** Start timeline frame of the range (edit space), for several frames. Omit to start at the beginning. */
+  /** Start timeline frame of the range (edit space), for several frames, sound or video. Omit to start at the beginning. */
   fromFrame?: number
   /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
-  /** How many frames to spread evenly across the range. Omit for one at the focus point, or about one a second of a range. */
+  /**
+   * How many frames to spread evenly across the range, or across a clip's window. Omit for one frame at the focus
+   * point, or about one a second of a range.
+   */
   count?: number
   /** Editor: exactly these timeline frames, in this order. */
   frames?: number[]
@@ -3264,6 +3256,12 @@ export interface GetContextInput {
    * that expires with the render.
    */
   sound?: boolean
+  /**
+   * Watch the range (`fromFrame` to `toFrame`) play with its sound, to judge motion, timing, transitions and pacing,
+   * or a clip's window. Where video cannot be received, the range's frames come back in `rendered` and its sound
+   * measurement in `renderedSound`.
+   */
+  video?: boolean
   /** Read a render already started, by the `rendered.renderId` it returned. Pass only `page` (and `wait`) with it. */
   renderId?: string
   /** Which page of a render to read, starting at 1. */
@@ -3271,15 +3269,25 @@ export interface GetContextInput {
   /** How long to wait for results before answering, in seconds. What is not ready by then is read later with `renderId`. */
   wait?: number
   /**
-   * The width in pixels to render at, to check legibility at the size it will be seen (a thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
+   * The width in pixels to render at, or of a clip's frames, to check legibility at the size it will be seen (a
+   * thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
    */
   width?: number
   /**
    * Render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect
    * detail at full resolution. Without `width`, it renders at native scale; `rendered` reports
-   * `pixelsPerCompositionUnit`.
+   * `pixelsPerCompositionUnit`. For a source clip, the rectangle is in the clip's own pixels, and each of its frames
+   * is cut to it.
    */
   region?: CompositionRegion
+  /** A raw source clip to see, by its asset id, rather than your edit. Or pass `mediaUrl`. */
+  assetId?: string
+  /** A raw source clip to see, by its media URL, rather than your edit. Or pass `assetId`. */
+  mediaUrl?: string
+  /** Start of the clip's window, in its own seconds. Omit to start at its beginning. */
+  fromSec?: number
+  /** End of the clip's window, in its own seconds. Omit to run to its end. */
+  toSec?: number
 }
 
 /** A rectangle in composition units: the space layer geometry is expressed in (`ProjectDetail.compositionSpace`). */
@@ -3305,7 +3313,7 @@ export interface EditorSelectedItem {
 /**
  * ⛔ `LiveContextRender` WAS DELETED HERE ON 2026-09-21. DO NOT RE-ADD IT.
  *
- * It described the `rendered` key inside `LiveContextResult.context`, which is deliberately typed
+ * It described the `rendered` key inside `ViewResult.context` (then named `LiveContextResult`), which is deliberately typed
  * `Record<string, unknown>` because the context is discriminated by surface. So the interface could
  * never be referenced by anything: git history confirms it was introduced in ONE commit (the
  * visual-preview surface) and `rendered?: LiveContextRender` never existed in any commit. It was

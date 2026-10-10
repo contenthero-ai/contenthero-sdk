@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, withExportLoudness } from './describe.js'
+import { describeClip, describeCrop, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -137,4 +137,46 @@ test("an export's loudness is the app's one line, and nothing before it finishes
 test('a delivery loudness reads as its target in LUFS, or off', () => {
   assert.equal(describeLoudness(-16), '-16 LUFS')
   assert.equal(describeLoudness('off'), 'off')
+})
+
+// Break-verified: dropping the keyframe error line from describeClip turns this red.
+test('describeClip says what the clip is, the window read, and why it or its keyframes could not be read', () => {
+  assert.deepEqual(describeClip(null), [])
+  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', type: 'video', durationSeconds: 12, fromSec: 2 }), [
+    'Raw source clip (video) (12.00s long), from 2s to its end: https://media.test/c.mp4',
+  ])
+  assert.deepEqual(
+    describeClip({
+      url: 'https://media.test/c.mp4',
+      keyframeError: 'The video service is unavailable.',
+      error: { code: 'clip_unreadable', message: 'The clip could not be opened.' },
+    }),
+    [
+      'Raw source clip: https://media.test/c.mp4',
+      'Keyframes not shown: The video service is unavailable.',
+      'The clip could not be read. clip_unreadable: The clip could not be opened.',
+    ],
+  )
+})
+
+/**
+ * A region reads the one way for an image get_media zoomed and for a clip view cut. Break-verified: dropping the
+ * describeCrop line from describeClip turns this red.
+ */
+test('describeClip says the region each frame was cut to, or why it could not be cut, in the zoom wording', () => {
+  const crop = { width: 640, height: 360, region: { x: 960, y: 540, width: 960, height: 540 }, pixelsPerSourcePixel: 0.6667 }
+  assert.equal(
+    describeCrop(crop, undefined),
+    "zoom: 960x540 at (960, 540) in the file's pixels, shown at 640x360 (0.6667 px per file px)",
+  )
+  assert.equal(describeCrop(undefined, 'The region is outside the file.'), 'zoom not shown: The region is outside the file.')
+  assert.equal(describeCrop(undefined, undefined), null)
+  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', type: 'video', crop }), [
+    'Raw source clip (video): https://media.test/c.mp4',
+    "Zoom: 960x540 at (960, 540) in the file's pixels, shown at 640x360 (0.6667 px per file px)",
+  ])
+  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', cropError: 'The region is outside the clip.' }), [
+    'Raw source clip: https://media.test/c.mp4',
+    'Zoom not shown: The region is outside the clip.',
+  ])
 })

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.26
 
 - Breaking: a project's settings are read by `getProject` and changed by `updateProject`. `ProjectDetail` gains
   `loudness`, `magneticTrack`, `linkage` and `linkedTracks` (`ProjectSettings`, beside `fps`); `UpdateProjectInput`
@@ -9,6 +9,23 @@
   a change is an edit that `undo` reverses. `getTimelineSettings`, `updateTimelineSettings`, `TimelineSettings` and
   `TimelineSettingsChange` are removed. Snapping, skimming, follow playhead and skip disabled clips are the editor's
   own, per person, and reach no tool.
+
+- Breaking (hard cutover, no alias): `getContext` is `view`, reading `GET /api/v1/view` (was `/api/v1/context`).
+  `GetContextInput` is `ViewInput` and `LiveContextResult` is `ViewResult`. `ViewInput` gains `video` (watch a range
+  play; where video cannot be received the frames come back in `rendered` and the sound measured in `renderedSound`),
+  and `assetId` or `mediaUrl` with `fromSec` and `toSec` to see a raw source clip, which comes back as
+  `context.clip`. `sound` is sent as given: the server now renders it without `render`.
+- New: `describeClip` says what a raw clip a view read is, the window read, and why it or its keyframes could not be
+  read.
+- Breaking: `getMediaBatch` no longer reads a clip's frames: `MediaBatchItem` drops `fromSec`, `toSec`, `frames` and
+  `frameWidth` (`MediaClipWindow` is removed), and `ResolvedMediaBatchItem` drops `keyframes` and `keyframeError`; its
+  `region` zooms an image only. Use `view`: `ViewInput.region` on a source clip is in the clip's own pixels and cuts
+  each of its frames, and `context.clip` carries `crop` or `cropError`. New: `describeCrop` says how a region maps
+  back, or why it was not cut, in one wording for get_media and a view clip; `describeClip` includes it.
+- Breaking: `copyProjectVersion` is removed. A copy from a saved version is `duplicateProject(projectId, { versionId })`.
+  `restoreProjectVersion` sends no body: the version route only restores.
+- Breaking: `renameProjectVersion(projectId, versionId, label)` is `updateProjectVersion(projectId, versionId, { label })`,
+  named after the MCP tool `update_project_version`.
 
 ## 0.4.25
 

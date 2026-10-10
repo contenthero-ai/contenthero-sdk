@@ -25,7 +25,7 @@ import { registerTranscribe } from './commands/transcribe.js'
 import { registerGeneration } from './commands/generation.js'
 import { registerMedia } from './commands/media.js'
 import { registerFolder } from './commands/folder.js'
-import { registerCard } from './commands/card.js'
+import { registerCard, registerPost } from './commands/card.js'
 import { registerStage } from './commands/stage.js'
 import { registerSpace } from './commands/space.js'
 import { registerBrandKit } from './commands/brandkit.js'
@@ -35,7 +35,7 @@ import { registerConnectedAccount } from './commands/connected.js'
 import { registerSchema } from './commands/schema.js'
 import { registerFavorites } from './commands/favorites.js'
 import { registerProject } from './commands/project.js'
-import { registerContext } from './commands/context.js'
+import { registerView } from './commands/view.js'
 
 /** Read our own version from package.json (kept in lockstep with sdk + mcp). */
 function readVersion(): string {
@@ -80,6 +80,7 @@ export function buildProgram(): Command {
   registerMedia(program)
   registerFolder(program)
   registerCard(program)
+  registerPost(program)
   registerTag(program)
   registerStage(program)
   registerSpace(program)
@@ -91,7 +92,7 @@ export function buildProgram(): Command {
   registerSchema(program)
   registerFavorites(program)
   registerProject(program)
-  registerContext(program)
+  registerView(program)
 
   return program
 }

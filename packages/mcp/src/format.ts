@@ -102,7 +102,7 @@ import type {
   Voice,
   ApplyEditorOpsResult,
   ProjectDetail,
-  LiveContextResult,
+  ViewResult,
   LayerTypeCatalog,
   LayerSchemaIndex,
   LayerSchemaEntry,
@@ -118,7 +118,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeCodeWarnings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -178,7 +178,7 @@ export type GeneratedAttachment =
  * broken its signature.
  *
  * ⭐ The machinery already existed and was wired to the wrong tools: `mediaBatchResult` and
- * `liveContextResult` have pushed image blocks for a while. Generation, the surface where a user most wants
+ * `viewResult` have pushed image blocks for a while. Generation, the surface where a user most wants
  * to SEE the result, was the one that did not.
  *
  * ## ⛔ THE AGENT CANNOT SEE WHAT IT MADE FROM THIS RESULT, AND THAT IS DELIBERATE
@@ -1207,7 +1207,7 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   let note = ''
   if (!hasImage) {
     if (it.type === 'audio') note = '\n    (audio: no visual; use the url)'
-    else if (it.type === 'video' && !it.keyframeError) note = '\n    (video: no still available for this view; use the url)'
+    else if (it.type === 'video') note = '\n    (video: no still available for this view; use the url)'
     else if (it.type === 'transcript') note = '\n    (transcript: text only)'
   }
   // MEASURED GEOMETRY, when the spine has it. Without these numbers a caller cannot compute an asset's true
@@ -1229,18 +1229,13 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   // dimensions, so it carried no measured facts at all, and `edit_audio` requires a durationSeconds to price
   // the job. The only way to call it correctly was to download the file and probe it.
   const dur = it.durationSeconds != null ? `\n    duration: ${it.durationSeconds.toFixed(2)}s` : ''
-  // THE ZOOM (7.50): what was cut, and how its pixels map back to the file, so a point can be placed on the source.
-  const zoom = it.crop
-    ? `\n    zoom: ${it.crop.region.width}x${it.crop.region.height} at (${it.crop.region.x}, ${it.crop.region.y}) in the file's pixels, shown at ${it.crop.width}x${it.crop.height} (${it.crop.pixelsPerSourcePixel} px per file px)`
-    : it.cropError
-      ? `\n    zoom not shown: ${it.cropError}`
-      : ''
-  // A failure says what failed. Reported as "no still available" until 2026-10-06, which read as expected behavior.
-  const keyframes = it.keyframeError ? `\n    keyframes not shown: ${it.keyframeError}` : ''
+  // THE ZOOM (7.50): what was cut, and how its pixels map back to the file, in the one wording a view clip shares.
+  const cut = describeCrop(it.crop, it.cropError)
+  const zoom = cut ? `\n    ${cut}` : ''
   // What it was made FROM, labeled as Studio labels it, so "make another like this" can pass the same inputs back.
   const refs = describeReferences(it.references)
   const madeFrom = refs.length > 0 ? `\n    made from:${refs.map((r) => `\n      ${r}`).join('')}` : ''
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${keyframes}${prompt}${madeFrom}${note}`
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${prompt}${madeFrom}${note}`
 }
 
 /**
@@ -1331,7 +1326,7 @@ export interface InlinedImageSlot {
  * Images that arrive ALREADY ENCODED (data urls), admitted against what is left of the result's inline allowance.
  *
  * In order, and contiguous: once one does not fit, the rest are counted, never a scattered subset, so "the first N
- * attached" is always a true reading. The one rule for in-hand bytes: get_media keyframes and get_context renders.
+ * attached" is always a true reading. The one rule for in-hand bytes: a view clip's keyframes and view renders.
  * A fetched image goes through `inlineImagesWithinBudget` in server.ts instead, which spends the same allowance.
  */
 export function admitWithinBudget<T extends { data: string }>(
@@ -1352,31 +1347,32 @@ export function admitWithinBudget<T extends { data: string }>(
   return { admitted, dropped, remaining }
 }
 
-export function mediaBatchResult(
-  result: MediaBatchResult,
-  images: InlinedImageSlot[],
-  /**
-   * What is left of the result's inline allowance after `images`. Keyframes arrive already encoded, so they were
-   * added with no size check at all: 24 frames at 640px is about 2 MB against a 1 MB ceiling for the whole result.
-   * They now spend the same budget, in order, and the ones that do not fit are counted rather than dropped silently.
-   */
-  keyframeBudget: number,
-): CallToolResult {
+/** A raw clip's keyframes, each an image block's parts with its time in the clip. Unparseable data urls are skipped. */
+function parseKeyframes(keyframes: unknown): Array<{ data: string; mimeType: string; atSec: unknown }> {
+  if (!Array.isArray(keyframes)) return []
+  return (keyframes as Array<Record<string, unknown>>).flatMap((kf) => {
+    const parsed = isPlainRecord(kf) ? parseDataUrl(kf.dataUrl) : null
+    return parsed ? [{ ...parsed, atSec: kf.atSec }] : []
+  })
+}
+
+/** Keyframes of a view clip that did not fit the result. */
+function keyframesNotShown(dropped: number): string {
+  return `${dropped} keyframe(s) not shown: too large for this reply. Ask for fewer frames or a narrower fromSec/toSec.`
+}
+
+/** Each admitted keyframe of a view clip as a label with its time in the clip, then its image. */
+function keyframeBlocks(keyframes: ReadonlyArray<{ data: string; mimeType: string; atSec: unknown }>): CallToolResult['content'] {
+  return keyframes.flatMap((kf) => [
+    ...(typeof kf.atSec === 'number' ? [{ type: 'text' as const, text: `At ${kf.atSec}s:` }] : []),
+    { type: 'image' as const, data: kf.data, mimeType: kf.mimeType },
+  ])
+}
+
+export function mediaBatchResult(result: MediaBatchResult, images: InlinedImageSlot[]): CallToolResult {
   const { items } = result
   const okCount = items.filter((i) => i.ok).length
-  const keyframes = items.flatMap((it, item) =>
-    (it.keyframes ?? []).flatMap((kf) => {
-      const parsed = parseDataUrl(kf.dataUrl)
-      return parsed ? [{ ...parsed, item }] : []
-    }),
-  )
-  const spent = admitWithinBudget(keyframes, keyframeBudget)
-  const keyframesDropped = spent.dropped
-  const admitted = items.map((_, item) =>
-    spent.admitted.filter((kf) => kf.item === item).map(({ data, mimeType }) => ({ data, mimeType })),
-  )
-  const keyframeCount = admitted.reduce((n, a) => n + a.length, 0)
-  const shownImages = images.filter((s) => s?.image).length + keyframeCount
+  const shownImages = images.filter((s) => s?.image).length
   /**
    * ⚠️ REPORTED ONCE PER DISTINCT CAUSE, not once per item. Eight items failing the same way is one fact,
    * and printing it eight times buries the item lines that carry the urls.
@@ -1388,31 +1384,19 @@ export function mediaBatchResult(
    */
   const crowdedOut = images.some((s) => s?.reason === 'budget-spent')
   const summary =
-    `Found ${okCount} of ${items.length} item(s); showing ${shownImages} image(s) below` +
-    (keyframeCount > 0 ? ` (including ${keyframeCount} video keyframe(s))` : '') +
-    '.' +
+    `Found ${okCount} of ${items.length} item(s); showing ${shownImages} image(s) below.` +
     (reasons.length > 0 ? ` Not shown: ${reasons.join('; ')}.` : '') +
     (crowdedOut ? ' Ask for fewer items per call to see the rest.' : '') +
-    (keyframesDropped > 0
-      ? ` ${keyframesDropped} keyframe(s) not shown: too large for this reply. Ask for fewer frames or a narrower fromSec/toSec.`
-      : '') +
     `\n\n` +
     items
-      .map((it, i) => batchItemLine(it, i, Boolean(images[i]?.image) || (admitted[i]?.length ?? 0) > 0))
+      .map((it, i) => batchItemLine(it, i, Boolean(images[i]?.image)))
       .join('\n')
   const content: CallToolResult['content'] = [{ type: 'text', text: summary }]
-  items.forEach((it, i) => {
+  items.forEach((_, i) => {
     const img = images[i]?.image
     if (img) {
       content.push({ type: 'text', text: `Image for item [${i + 1}]:` })
       content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
-    }
-    const keyframes = admitted[i] ?? []
-    const total = it.keyframes?.length ?? 0
-    if (keyframes.length > 0) {
-      const of = keyframes.length < total ? ` of ${total}` : ''
-      content.push({ type: 'text', text: `${keyframes.length}${of} keyframe(s) for item [${i + 1}] (raw footage, in order):` })
-      for (const kf of keyframes) content.push({ type: 'image', data: kf.data, mimeType: kf.mimeType })
     }
   })
   /**
@@ -2620,92 +2604,57 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
   )
 }
 
+/** One rendered image block's parts, with the frame or frames it shows (for naming what did not fit). */
+type RenderImage = { data: string; mimeType: string; frame?: unknown; frames?: unknown[] }
+
 /**
- * Live context (get_context). Returns a text summary + the discriminated context JSON, plus IMAGE content
- * block(s) so the calling model can actually SEE: the viewport `snapshot` (capture) when the user's screen was
- * requested, and/or the inline composed-output render (`context.rendered.dataUrl`) when `render` was requested.
- * The heavy render data URL is stripped from the JSON text (it rides only as the image block).
+ * One render answer (`rendered`, or the `renderedSound` beside it), formatted the one way: its images in order, its
+ * JSON with the bulky data URLs replaced by a pointer, and its lines (what is attached, the sound's measurement, where
+ * the job stands, what did not fit, why it failed, code warnings). A single frame or slide carries `dataUrl`, frames
+ * one by one `frames[].dataUrl`, contact sheets `sheets[].dataUrl`, and a sound its picture's.
  */
-export function liveContextResult(
-  result: LiveContextResult,
-  snapshot: { data: string; mimeType: string } | null | undefined,
-  /**
-   * The result's inline allowance (`MAX_INLINE_BASE64_CHARS` in server.ts). A range is up to 24 frames, about 2 MB
-   * of base64 at the default size, against a 1 MB ceiling for the WHOLE result, so a long range failed the call at
-   * the host. The screen capture and the frames now spend this, in that order, and what does not fit is named.
-   */
+function renderedSection(
+  rendered: Record<string, unknown>,
   budget: number,
-): CallToolResult {
-  const { context, participant, participants } = result
-  const rendered = context && isPlainRecord(context.rendered) ? context.rendered : null
-  /**
-   * ⭐ A RENDER IS SHOWN WITH OR WITHOUT A LIVE TAB. Render works from the saved project, and the API returns it
-   * with `participant: null` when no one is viewing. This returned "No live context" whenever the participant was
-   * null, so a render requested with a projectId and no open tab could never reach the agent, image or error.
-   */
-  if (!context || (!participant && !rendered)) {
-    return text(
-      'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
-        'The user may not have the editor/studio/content open right now.',
-    )
+): { json: Record<string, unknown>; lines: string[]; images: RenderImage[]; remaining: number } {
+  const renderImages: RenderImage[] = []
+  let json: Record<string, unknown> = rendered
+  const still = parseDataUrl(rendered.dataUrl)
+  const frames = Array.isArray(rendered.frames) ? (rendered.frames as Array<Record<string, unknown>>) : null
+  const sheets = Array.isArray(rendered.sheets) ? (rendered.sheets as Array<Record<string, unknown>>) : null
+  const picture = isPlainRecord(rendered.picture) ? rendered.picture : null
+  const soundPicture = picture ? parseDataUrl(picture.dataUrl) : null
+  if (still) renderImages.push(still)
+  for (const f of frames ?? []) {
+    const img = parseDataUrl(f.dataUrl)
+    if (img) renderImages.push({ ...img, frame: f.frame })
   }
-  // Pull the render's images out as image blocks: a single frame or slide carries `rendered.dataUrl`, frames one by one
-  // `rendered.frames[].dataUrl`, contact sheets `rendered.sheets[].dataUrl`, and a sound its picture's. Keep the light
-  // metadata in the JSON (frame numbers, a sheet's grid) and drop the bulky data URLs so the text stays readable.
-  const renderImages: Array<{ data: string; mimeType: string; frame?: unknown; frames?: unknown[] }> = []
-  let contextForJson: unknown = context
-  if (rendered) {
-    const still = parseDataUrl(rendered.dataUrl)
-    const frames = Array.isArray(rendered.frames) ? (rendered.frames as Array<Record<string, unknown>>) : null
-    const sheets = Array.isArray(rendered.sheets) ? (rendered.sheets as Array<Record<string, unknown>>) : null
-    const picture = isPlainRecord(rendered.picture) ? rendered.picture : null
-    const soundPicture = picture ? parseDataUrl(picture.dataUrl) : null
-    if (still) renderImages.push(still)
-    for (const f of frames ?? []) {
-      const img = parseDataUrl(f.dataUrl)
-      if (img) renderImages.push({ ...img, frame: f.frame })
-    }
-    for (const sheet of sheets ?? []) {
-      const img = parseDataUrl(sheet.dataUrl)
-      if (img) renderImages.push({ ...img, frames: Array.isArray(sheet.frames) ? sheet.frames : [] })
-    }
-    if (soundPicture) renderImages.push(soundPicture)
-    if (renderImages.length > 0) {
-      const withoutData = (items: Array<Record<string, unknown>> | null) =>
-        items
-          ? items.map((item) => {
-              const { dataUrl: _drop, ...rest } = item
-              return rest
-            })
-          : undefined
-      contextForJson = {
-        ...context,
-        rendered: {
-          ...rendered,
-          ...(still ? { dataUrl: '[attached as an image below]' } : {}),
-          ...(frames ? { frames: withoutData(frames) } : {}),
-          ...(sheets ? { sheets: withoutData(sheets) } : {}),
-          ...(picture ? { picture: { ...picture, dataUrl: '[attached as an image below]' } } : {}),
-        },
-      }
+  for (const sheet of sheets ?? []) {
+    const img = parseDataUrl(sheet.dataUrl)
+    if (img) renderImages.push({ ...img, frames: Array.isArray(sheet.frames) ? sheet.frames : [] })
+  }
+  if (soundPicture) renderImages.push(soundPicture)
+  if (renderImages.length > 0) {
+    const withoutData = (items: Array<Record<string, unknown>> | null) =>
+      items
+        ? items.map((item) => {
+            const { dataUrl: _drop, ...rest } = item
+            return rest
+          })
+        : undefined
+    json = {
+      ...rendered,
+      ...(still ? { dataUrl: '[attached as an image below]' } : {}),
+      ...(frames ? { frames: withoutData(frames) } : {}),
+      ...(sheets ? { sheets: withoutData(sheets) } : {}),
+      ...(picture ? { picture: { ...picture, dataUrl: '[attached as an image below]' } } : {}),
     }
   }
 
-  // The screen capture first, because it is what `capture` asked for; then the render, in order.
-  const screen = admitWithinBudget(snapshot ? [snapshot] : [], budget)
-  const shown = admitWithinBudget(renderImages, screen.remaining)
-
+  const shown = admitWithinBudget(renderImages, budget)
   const lines: string[] = []
-  if (participant) {
-    const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
-    lines.push(`Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.`)
-  } else {
-    lines.push('No one is viewing this in the open app right now; the render is from the saved project.')
-  }
-  if (screen.admitted.length > 0) lines.push('An image of what the user is looking at (their screen) is attached below.')
-  if (screen.dropped > 0) lines.push("The screen capture was not attached: it is over this result's size limit.")
-  const isSound = rendered?.kind === 'sound'
-  const isSheets = Array.isArray(rendered?.sheets)
+  const isSound = rendered.kind === 'sound'
+  const isSheets = Array.isArray(rendered.sheets)
   if (isSound && shown.admitted.length > 0) {
     lines.push('A picture of the sound is attached below: its waveform above its spectrogram, on one time axis in seconds from the start of the range.')
   } else if (isSheets && shown.admitted.length > 0) {
@@ -2732,14 +2681,112 @@ export function liveContextResult(
   }
   const failure = describeRenderFailure(rendered)
   if (failure) lines.push(failure)
-  const warned = describeCodeWarnings(isPlainRecord(rendered) && Array.isArray(rendered.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
+  const warned = describeCodeWarnings(Array.isArray(rendered.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
   if (warned) lines.push(warned)
+  return { json, lines, images: shown.admitted, remaining: shown.remaining }
+}
 
+/**
+ * A raw source clip named by assetId or mediaUrl (`context.clip`): what it is and which window was read, its
+ * keyframes as image blocks each labeled with its time in the clip, within
+ * what is left of the result's allowance, and why it or its keyframes could not be read.
+ */
+function clipSection(
+  clip: Record<string, unknown>,
+  budget: number,
+): { json: Record<string, unknown>; lines: string[]; blocks: CallToolResult['content'] } {
+  const keyframes = parseKeyframes(clip.keyframes)
+  const spent = admitWithinBudget(keyframes, budget)
+  const [what, ...why] = describeClip(clip)
+  const lines: string[] = what ? [what] : []
+  if (spent.admitted.length > 0) {
+    lines.push(`${spent.admitted.length} keyframe(s) of the clip are attached below, in order, each labeled with its time in the clip.`)
+  }
+  if (spent.dropped > 0) lines.push(keyframesNotShown(spent.dropped))
+  lines.push(...why)
+  const json =
+    keyframes.length > 0 && Array.isArray(clip.keyframes)
+      ? {
+          ...clip,
+          keyframes: (clip.keyframes as Array<Record<string, unknown>>).map((kf) => {
+            const { dataUrl: _drop, ...rest } = isPlainRecord(kf) ? kf : {}
+            return rest
+          }),
+        }
+      : clip
+  return { json, lines, blocks: keyframeBlocks(spent.admitted) }
+}
+
+/**
+ * The view tool. Returns a text summary + the discriminated context JSON, plus IMAGE content block(s) so the calling
+ * model can actually SEE: the viewport `snapshot` (capture) when the user's screen was requested, the composed-output
+ * render (`context.rendered`), the range's sound beside frames when video could not be received
+ * (`context.renderedSound`, formatted exactly as a sound `rendered`), and a raw source clip's keyframes
+ * (`context.clip`). The heavy data URLs are stripped from the JSON text (they ride only as image blocks).
+ */
+export function viewResult(
+  result: ViewResult,
+  snapshot: { data: string; mimeType: string } | null | undefined,
+  /**
+   * The result's inline allowance (`MAX_INLINE_BASE64_CHARS` in server.ts). A range is up to 24 frames, about 2 MB
+   * of base64 at the default size, against a 1 MB ceiling for the WHOLE result, so a long range failed the call at
+   * the host. The screen capture, the frames, the sound's picture and a clip's keyframes spend this, in that order,
+   * and what does not fit is named.
+   */
+  budget: number,
+): CallToolResult {
+  const { context, participant, participants } = result
+  const rendered = context && isPlainRecord(context.rendered) ? context.rendered : null
+  const renderedSound = context && isPlainRecord(context.renderedSound) ? context.renderedSound : null
+  const clip = context && isPlainRecord(context.clip) ? context.clip : null
+  /**
+   * ⭐ A RENDER IS SHOWN WITH OR WITHOUT A LIVE TAB. Render works from the saved project, and the API returns it
+   * with `participant: null` when no one is viewing. This returned "No live context" whenever the participant was
+   * null, so a render requested with a projectId and no open tab could never reach the agent, image or error.
+   * A raw clip needs no tab either.
+   */
+  if (!context || (!participant && !rendered && !renderedSound && !clip)) {
+    return text(
+      'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
+        'The user may not have the editor/studio/content open right now.',
+    )
+  }
+
+  // The screen capture first, because it is what `capture` asked for; then the render, its sound, and a clip, in order.
+  const screen = admitWithinBudget(snapshot ? [snapshot] : [], budget)
+  const picture = rendered ? renderedSection(rendered, screen.remaining) : null
+  const sound = renderedSound ? renderedSection(renderedSound, picture?.remaining ?? screen.remaining) : null
+  const clipped = clip ? clipSection(clip, sound?.remaining ?? picture?.remaining ?? screen.remaining) : null
+
+  const lines: string[] = []
+  if (participant) {
+    const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
+    lines.push(`Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.`)
+  } else if (rendered || renderedSound) {
+    lines.push('No one is viewing this in the open app right now; the render is from the saved project.')
+  }
+  if (screen.admitted.length > 0) lines.push('An image of what the user is looking at (their screen) is attached below.')
+  if (screen.dropped > 0) lines.push("The screen capture was not attached: it is over this result's size limit.")
+  if (picture) lines.push(...picture.lines)
+  if (sound) lines.push(...sound.lines)
+  if (clipped) lines.push(...clipped.lines)
+
+  const contextForJson = {
+    ...context,
+    ...(picture ? { rendered: picture.json } : {}),
+    ...(sound ? { renderedSound: sound.json } : {}),
+    ...(clipped ? { clip: clipped.json } : {}),
+  }
   const content: CallToolResult['content'] = [
     { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(contextForJson, null, 2)}` },
   ]
   for (const img of screen.admitted) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
-  for (const img of shown.admitted) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  for (const img of picture?.images ?? []) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  if (sound && sound.images.length > 0 && (picture?.images.length ?? 0) > 0) {
+    content.push({ type: 'text', text: 'The sound of the same range:' })
+  }
+  for (const img of sound?.images ?? []) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  if (clipped) content.push(...clipped.blocks)
   return { content }
 }
 

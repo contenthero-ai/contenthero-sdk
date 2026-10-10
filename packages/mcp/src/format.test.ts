@@ -152,7 +152,7 @@ test('in-place enhancement hands back every outputId in one callable form', () =
  * Claude replied "I can't see the image myself, only the metadata", and the link beside it was already dead
  * because ChatGPT had appended `utm_source=chatgpt.com` to a presigned URL and invalidated its signature.
  *
- * ⭐ The machinery was already here and wired to other tools: `mediaBatchResult` and `liveContextResult`
+ * ⭐ The machinery was already here and wired to other tools: `mediaBatchResult` and `viewResult`
  * have pushed image blocks for a while. Generation, the one surface where a user most wants to SEE the
  * output, was the only one that did not.
  *
@@ -804,6 +804,6 @@ test('get_media says what a creation was made from, under its own line', async (
     otherMediaIds: [],
     references: [{ label: 'Reference 1', type: 'image', role: 'reference', url: 'https://media.contenthero.ai/ref/original.png?t=x' }],
   }
-  const out = body(mediaBatchResult({ items: [item] } as never, [null] as never, 1_000_000))
+  const out = body(mediaBatchResult({ items: [item] } as never, [null] as never))
   assert.match(out, /made from:\n      Reference 1 \(image\): https:\/\/media\.contenthero\.ai\/ref\/original\.png\?t=x/)
 })

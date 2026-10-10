@@ -1,11 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.4.33
 
 - Breaking: a project's settings are read by `get_project` and changed by `update_project`. `update_project` takes
   `fps`, `loudness`, `magneticTrack`, `linkage` and `linkedTracks` beside the title, size, brand kit and cover, and
   both tools report the settings. `get_timeline_settings` and `update_timeline_settings` are removed. `update_timeline`
   carries content only: `set_frame_rate` is no longer one of its operations.
+
+- Breaking (hard cutover, no alias): `get_context` is `view`. It also takes `video` (watch a range play; here it
+  returns frames across the range and the sound measured), and `assetId` or `mediaUrl` with `fromSec` and `toSec` to
+  see a raw source clip, whose keyframes come back as images labeled with their time in the clip. `count` and `width`
+  shape a clip's keyframes too. The descriptions that named `get_context` name `view`.
+- Breaking: `get_media` no longer reads a clip's frames: its items drop `fromSec`, `toSec`, `frames` and
+  `frameWidth`, and its `region` zooms an image only. Use `view`, whose `region` on a source clip is in the clip's own
+  pixels and cuts each of its frames; a view clip says how a region maps back, or why it was not cut.
+- Breaking: `restore_project_version` takes no `action`: it only restores. A copy from a saved version is
+  `duplicate_project` with `versionId`.
 
 ## 0.4.32
 

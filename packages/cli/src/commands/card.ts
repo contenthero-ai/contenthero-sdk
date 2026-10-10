@@ -1,6 +1,7 @@
 /**
  * `contenthero card` - the planner's unit of work. Space > Stage > Card > Post.
- *   card list | get | create | update | publish
+ *   card list | get | create | update
+ *   post publish <cardId>     publish a card's posts now (the MCP's publish_post)
  *
  * A card's POSTS (the platforms it goes out to) are set through `card update`,
  * which takes the whole set; there is no separate add/remove subcommand.
@@ -319,16 +320,21 @@ export function registerCard(program: Command): void {
       }
       emit(await client.updateCard(id, input), ctx, (p: CardSummary) => summaryHuman(p, 'Updated'))
     })
+}
 
-  card
+/** `post publish`: the CLI twin of the MCP's publish_post, named after it. */
+export function registerPost(program: Command): void {
+  const post = program.command('post').description("A card's posts: publish them")
+
+  post
     .command('publish')
     .description('Publish a card\'s posts NOW (requires publish:write; pushes to live socials)')
-    .argument('<id>', 'the post id')
+    .argument('<cardId>', 'the card whose posts to publish')
     .option('--platform <platform>', 'publish only this platform (default: every post on the card)')
-    .action(async (id: string, opts: { platform?: string }, command: Command) => {
+    .action(async (cardId: string, opts: { platform?: string }, command: Command) => {
       assertPlatform(opts.platform)
       const { client, ctx } = makeClient(command)
-      const result = await client.publishPost(id, { platform: opts.platform as PostPlatform | undefined })
+      const result = await client.publishPost(cardId, { platform: opts.platform as PostPlatform | undefined })
       emit(result, ctx, (r: PublishResult) => {
         const t = table(
           ['PLATFORM', 'OK', 'URL / ERROR'],

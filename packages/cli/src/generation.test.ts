@@ -236,7 +236,7 @@ test('generationHuman lists urls that have already landed while still processing
   assert.match(out, /Abc12345-2:\s+pending/)
   assert.match(out, /processing/)
   // The poll hint must survive: a partial render is not a finished one.
-  assert.match(out, /contenthero generation status abc/)
+  assert.match(out, /contenthero generation-status get abc/)
 })
 
 test('generationHuman on a processing generation with no urls yet shows none', () => {
@@ -251,5 +251,5 @@ test('generationHuman on a processing generation with no urls yet shows none', (
     completedAt: null,
   })
   assert.doesNotMatch(out, /URL 1/)
-  assert.match(out, /contenthero generation status abc/)
+  assert.match(out, /contenthero generation-status get abc/)
 })

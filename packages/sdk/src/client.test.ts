@@ -543,72 +543,96 @@ test('getProject GETs the encoded /api/v1/projects path and unwraps { project }'
   assert.equal(p.revision, 2)
 })
 
-test('getContext GETs /api/v1/context and returns the envelope', async () => {
+test('view GETs /api/v1/view and returns the envelope', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { context: { surface: 'canvas', focusedSlideId: 's1', snapshotUrl: 'https://x/s.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const r = await client.getContext()
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context')
+  const r = await client.view()
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view')
   assert.equal(calls[0]?.init?.method, 'GET')
   assert.equal((r.context as Record<string, unknown>)?.surface, 'canvas')
   assert.equal(r.participant?.userId, 'u1')
 })
 
-test('getContext with projectId appends the query param', async () => {
+test('view with projectId appends the query param', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { context: null, participant: null, participants: [] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getContext({ projectId: 'p 1' })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p%201')
+  await client.view({ projectId: 'p 1' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?projectId=p%201')
 })
 
-test('getContext with render options appends render/frame/slide query params', async () => {
+test('view with render options appends render/frame/slide query params', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { context: null, participant: null, participants: [] } },
     { status: 200, body: { context: null, participant: null, participants: [] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getContext({ projectId: 'p1', render: true, frame: 34 })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&frame=34')
-  await client.getContext({ projectId: 'p1', render: true, slideIndex: 2 })
-  assert.equal(calls[1]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&slideIndex=2')
+  await client.view({ projectId: 'p1', render: true, frame: 34 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?projectId=p1&render=true&frame=34')
+  await client.view({ projectId: 'p1', render: true, slideIndex: 2 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/view?projectId=p1&render=true&slideIndex=2')
 })
 
-test('getContext forwards an explicit render width', async () => {
+test('view forwards an explicit render width', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { context: null, participant: null, participants: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getContext({ projectId: 'p1', render: true, slideIndex: 1, width: 273 })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&slideIndex=1&width=273')
+  await client.view({ projectId: 'p1', render: true, slideIndex: 1, width: 273 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?projectId=p1&render=true&slideIndex=1&width=273')
 })
 
-// A render is a job with an id (the review loop). Break-verified: dropping any of the new params from getContext turns
+// A render is a job with an id (the review loop). Break-verified: dropping any of the new params from view turns
 // this red.
-test('getContext sends the frames, the rate, the layout, a sound, a render to read and how long to wait', async () => {
+test('view sends the frames, the rate, the layout, a sound, a render to read and how long to wait', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { context: null, participant: null, participants: [] } },
     { status: 200, body: { context: null, participant: null, participants: [] } },
     { status: 200, body: { context: null, participant: null, participants: [] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getContext({ projectId: 'p1', render: true, frames: [30, 5, 90], layout: 'sheets', wait: 20 })
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/context?projectId=p1&render=true&frames=30%2C5%2C90&layout=sheets&wait=20')
-  await client.getContext({ projectId: 'p1', sound: true, fromFrame: 0, toFrame: 300, perSecond: 4 })
-  assert.equal(calls[1]?.url, 'https://example.test/api/v1/context?projectId=p1&fromFrame=0&toFrame=300&perSecond=4&sound=true')
-  await client.getContext({ renderId: 'r1', page: 3 })
-  assert.equal(calls[2]?.url, 'https://example.test/api/v1/context?renderId=r1&page=3')
+  await client.view({ projectId: 'p1', render: true, frames: [30, 5, 90], layout: 'sheets', wait: 20 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?projectId=p1&render=true&frames=30%2C5%2C90&layout=sheets&wait=20')
+  await client.view({ projectId: 'p1', sound: true, fromFrame: 0, toFrame: 300, perSecond: 4 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/view?projectId=p1&fromFrame=0&toFrame=300&perSecond=4&sound=true')
+  await client.view({ renderId: 'r1', page: 3 })
+  assert.equal(calls[2]?.url, 'https://example.test/api/v1/view?renderId=r1&page=3')
 })
 
-// Break-verified: dropping the region block from getContext turns this red.
-test('getContext sends a region as x,y,width,height', async () => {
+// Break-verified: dropping the region block from view turns this red.
+test('view sends a region as x,y,width,height', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { context: null, participant: null, participants: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getContext({ projectId: 'p1', render: true, width: 1920, region: { x: 480, y: 270, width: 240, height: 135 } })
+  await client.view({ projectId: 'p1', render: true, width: 1920, region: { x: 480, y: 270, width: 240, height: 135 } })
   assert.equal(
     calls[0]?.url,
-    'https://example.test/api/v1/context?projectId=p1&render=true&width=1920&region=480%2C270%2C240%2C135',
+    'https://example.test/api/v1/view?projectId=p1&render=true&width=1920&region=480%2C270%2C240%2C135',
   )
+})
+
+// Break-verified: dropping the video line or the clip block from view turns this red.
+test('view sends video, and a raw clip by asset id or media URL with its window', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.view({ projectId: 'p1', video: true, fromFrame: 0, toFrame: 90 })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?projectId=p1&fromFrame=0&toFrame=90&video=true')
+  await client.view({ assetId: 'a1', fromSec: 1.5, toSec: 4, count: 6, width: 480 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/view?count=6&width=480&assetId=a1&fromSec=1.5&toSec=4')
+  await client.view({ mediaUrl: 'https://media.test/a b.mp4', fromSec: 0 })
+  assert.equal(calls[2]?.url, 'https://example.test/api/v1/view?mediaUrl=https%3A%2F%2Fmedia.test%2Fa%20b.mp4&fromSec=0')
+})
+
+// The server honors `sound` on its own (it no longer needs `render`), so the SDK sends what it is given.
+test('view sends sound without render', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { context: null, participant: null, participants: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.view({ projectId: 'p1', sound: true })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?projectId=p1&sound=true')
 })
 
 // `includeRenderUrl` was retired (a read must not render and save a cover). A JavaScript caller still passing it
@@ -1331,6 +1355,7 @@ test("a project's fields and settings are read by getProject and changed by upda
     { status: 200, body: { project: { id: 'p1', title: 'T', width: 1080, height: 1920, orientation: '9:16', ...settings } } },
     { status: 200, body: { project: { id: 'p1', title: 'T', revision: 3, state: {}, ...settings } } },
     { status: 201, body: { project: { id: 'p2' } } },
+    { status: 201, body: { project: { id: 'p3' } } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const updated = await client.updateProject('p1', {
@@ -1345,10 +1370,15 @@ test("a project's fields and settings are read by getProject and changed by upda
   assert.equal(read.loudness, -14)
   assert.equal(read.magneticTrack, false)
   assert.equal((await client.duplicateProject('p1')).id, 'p2')
+  assert.equal((await client.duplicateProject('p1', { versionId: 'v1' })).id, 'p3')
   assert.deepEqual(
     calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
-    ['PATCH /api/v1/projects/p1', 'GET /api/v1/projects/p1', 'POST /api/v1/projects/p1/duplicate'],
+    ['PATCH /api/v1/projects/p1', 'GET /api/v1/projects/p1', 'POST /api/v1/projects/p1/duplicate', 'POST /api/v1/projects/p1/duplicate'],
   )
+  // A plain copy sends no body; a copy from a saved version names it. Break-verified: dropping the versionId body turns
+  // this red.
+  assert.equal(calls[2]!.init?.body, undefined)
+  assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { versionId: 'v1' })
   assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), {
     title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 },
     orientation: '9:16', fps: 30, loudness: -14, magneticTrack: false, linkedTracks: { audio: false },
@@ -1396,7 +1426,6 @@ test('version history, undo and redo reach their routes with the bodies the API 
     { status: 200, body: { versions: [{ id: 'v1' }], nextCursor: null } },
     { status: 201, body: { version: { id: 'v2', label: 'Before' } } },
     { status: 200, body: { revision: 9, kind: 'tracks' } },
-    { status: 201, body: { project: { id: 'p2' } } },
     { status: 200, body: { version: { id: 'v1', label: 'Final' } } },
     { status: 200, body: { deleted: true } },
     { status: 200, body: { revision: 10, undidRevision: 8, label: 'Undid revision 8' } },
@@ -1406,8 +1435,7 @@ test('version history, undo and redo reach their routes with the bodies the API 
   assert.equal((await client.listProjectVersions('p1')).versions[0]?.id, 'v1')
   assert.equal((await client.saveProjectVersion('p1', { label: 'Before' })).id, 'v2')
   assert.deepEqual(await client.restoreProjectVersion('p1', 'v1'), { revision: 9, kind: 'tracks' })
-  assert.equal((await client.copyProjectVersion('p1', 'v1')).id, 'p2')
-  assert.deepEqual(await client.renameProjectVersion('p1', 'v1', 'Final'), { id: 'v1', label: 'Final' })
+  assert.deepEqual(await client.updateProjectVersion('p1', 'v1', { label: 'Final' }), { id: 'v1', label: 'Final' })
   await client.deleteProjectVersion('p1', 'v1')
   assert.equal((await client.undo('p1', { expectedRevision: 9 })).undidRevision, 8)
   assert.equal((await client.redo('p1', { expectedRevision: 10 })).revision, 11)
@@ -1416,8 +1444,7 @@ test('version history, undo and redo reach their routes with the bodies the API 
     [
       'GET /api/v1/projects/p1/versions',
       'POST /api/v1/projects/p1/versions {"label":"Before"}',
-      'POST /api/v1/projects/p1/versions/v1 {"action":"restore"}',
-      'POST /api/v1/projects/p1/versions/v1 {"action":"copy"}',
+      'POST /api/v1/projects/p1/versions/v1',
       'PATCH /api/v1/projects/p1/versions/v1 {"label":"Final"}',
       'DELETE /api/v1/projects/p1/versions/v1',
       'POST /api/v1/projects/p1/undo {"expectedRevision":9}',

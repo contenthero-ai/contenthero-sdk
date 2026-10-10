@@ -118,8 +118,8 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     slug: 'account',
     title: 'Account',
     blurb:
-      'Your ContentHero account (balance, spend cap, plan), the platforms available to publish to, and what the user is looking at.',
-    tools: ['get_account', 'update_account', 'get_context', 'get_schema'],
+      'Your ContentHero account (balance, spend cap, plan), the platforms available to publish to, what the user is looking at, and your own work seen or heard.',
+    tools: ['get_account', 'update_account', 'view', 'get_schema'],
   },
 ]
 
