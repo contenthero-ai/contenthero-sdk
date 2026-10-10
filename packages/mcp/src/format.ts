@@ -120,7 +120,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, KINDS_NAMED_BY_KIND, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -876,10 +876,17 @@ export function jobStatusRow(status: JobStatus): string {
  * this is for the rest, one line each, with the call to make again while any is unfinished.
  */
 export function jobStatusesResult(statuses: JobStatus[]): CallToolResult {
-  const unfinished = statuses.filter((s) => s.state !== 'completed' && s.state !== 'failed').map((s) => s.id)
+  const unfinished = statuses.filter((s) => s.state !== 'completed' && s.state !== 'failed')
   const rows = statuses.map(jobStatusRow)
   const head = statuses.length === 1 ? null : `${statuses.length} job(s):`
-  const tail = unfinished.length ? `Still running: call ${getStatusCall(unfinished)} again.` : null
+  // A kind whose id alone names a different job keeps its kind in the call, one call per such kind.
+  const groups = new Map<JobKind | undefined, string[]>()
+  for (const s of unfinished) {
+    const kind = KINDS_NAMED_BY_KIND.includes(s.kind) ? s.kind : undefined
+    groups.set(kind, [...(groups.get(kind) ?? []), s.id])
+  }
+  const calls = [...groups].map(([kind, ids]) => getStatusCall(ids, kind))
+  const tail = calls.length ? `Still running: call ${calls.join(' and ')} again.` : null
   const failed = statuses.length > 0 && statuses.every((s) => s.state === 'failed')
   return text(lines([head, ...rows, tail]), failed)
 }
@@ -2372,7 +2379,7 @@ export function inspirationContentResult(c: ContentDetail, frames: InlinedImageS
       c.description ? `description: ${c.description}` : null,
       ...(c.transcript ? transcriptLines(c.transcript) : []),
       ...analysisLines(c.id, c.analysis),
-      ...scenesLines(c.scenes, frames),
+      ...scenesLines(c.id, c.scenes, frames),
     ]),
   )
   // Each shown frame follows its label, so the picture and the scene it belongs to cannot be mismatched.
@@ -2394,9 +2401,9 @@ function seconds(ms: number): string {
  * The scenes availability line, always, and the scene map when it was asked for. A frame that was shown says so; one
  * that did not fit this result is given as its link, with the reason, so nothing is silently missing.
  */
-function scenesLines(scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]): Array<string | null> {
+function scenesLines(contentId: string, scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]): Array<string | null> {
   if (!scenes) return []
-  if (scenes.status === 'running') return ['scenes: running (call analyze_content with kind scenes again for the result)']
+  if (scenes.status === 'running') return [`scenes: running (${analysisWait(contentId, 'scenes')})`]
   if (scenes.status === 'failed') return [`scenes: failed (${scenes.error}); analyze_content with kind scenes tries them again`]
   if (scenes.status === 'unavailable') return [`scenes: unavailable (${scenes.reason})`]
   if (scenes.status !== 'complete') return ['scenes: absent (analyze_content with kind scenes prepares them)']
@@ -2426,7 +2433,7 @@ function scenesLines(scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]
  * make the surgical pull undiscoverable.
  */
 function analysisLines(contentId: string, analysis: ContentDetail['analysis']): Array<string | null> {
-  if (analysis?.status === 'running') return [`analysis: running (${analysisWait(contentId)})`]
+  if (analysis?.status === 'running') return [`analysis: running (${analysisWait(contentId, 'content')})`]
   if (analysis?.status === 'failed') {
     return [`analysis: failed (${analysis.error ?? 'no reason recorded'}); analyze_content tries it again`]
   }
@@ -2446,11 +2453,11 @@ function analysisLines(contentId: string, analysis: ContentDetail['analysis']): 
 }
 
 /**
- * How to wait for a running Break It Down: get_status follows it by the post's id, and analyze_content then reads the
- * finished analysis at no charge. Scenes have no status of their own, so a running scene map is asked for again.
+ * How to wait for a running Break It Down or scene map: get_status follows it by the post's id with its kind, and
+ * analyze_content then reads the finished result at no charge.
  */
-function analysisWait(contentId: string): string {
-  return `wait with ${getStatusCall([contentId], 'content')}, then analyze_content reads it at no charge`
+function analysisWait(contentId: string, kind: 'content' | 'scenes'): string {
+  return `wait with ${getStatusCall([contentId], kind)}, then analyze_content reads it at no charge`
 }
 
 /** analyze_content's price check: nothing ran and nothing was charged. */
@@ -2474,7 +2481,7 @@ export function analysisCostResult(est: CostEstimate, kind: ContentAnalysisKind 
 export function contentScenesResult(r: ContentScenesResult): CallToolResult {
   const running = r.scenes.status === 'running'
   const body = running
-    ? "scenes: pending, still being prepared (call analyze_content again for the result)"
+    ? `scenes: pending, still being prepared (${analysisWait(r.contentId, 'scenes')})`
     : r.scenes.status === 'complete'
       ? `${r.scenes.sceneCount} scene${r.scenes.sceneCount === 1 ? '' : 's'} ready. Read them with get_content scenes='map', or scenes='frames' to see them.`
       : `scenes: ${r.scenes.status}`
@@ -2489,7 +2496,7 @@ export function contentAnalysisResult(r: ContentAnalysisResult): CallToolResult 
   // "pending" is the word the tool's description uses for a run still going.
   const body =
     r.analysis.status === 'running'
-      ? [`analysis: pending, still running (${analysisWait(r.contentId)})`]
+      ? [`analysis: pending, still running (${analysisWait(r.contentId, 'content')})`]
       : analysisLines(r.contentId, r.analysis)
   return {
     content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body, chargeLine(r.charge)]) }],

@@ -363,8 +363,9 @@ export class ContentHero {
 
   /**
    * Any background job's status by its id: a generation or an edit's output, an export, a brand kit read, an avatar,
-   * a content analysis, a transcript. The id alone names most jobs; pass `kind` for a full UUID, for a transcript (its
-   * id is the media or post it belongs to), or when the server answers that the id is ambiguous. Answers at once with where
+   * a post's analysis or scene map, a transcript. The id alone names most jobs; pass `kind` for a full UUID, for the
+   * kinds in `KINDS_NAMED_BY_KIND` (their id is the post or media they belong to), or when the server answers that the
+   * id is ambiguous. Answers at once with where
    * the job is; `detail` is the kind's own resource (an output's is its `Generation`). `waitForStatus` waits.
    */
   async getStatus(id: string, options: { kind?: JobKind; signal?: AbortSignal } = {}): Promise<JobStatus> {
@@ -1623,7 +1624,8 @@ export class ContentHero {
    *
    * `kind: 'scenes'` prepares the post to be seen instead: its scene map and a frame per scene, read afterwards
    * with `getContent`, priced per started minute of video. Same rules: free when it exists, charged once when
-   * stored, safe to call again while it runs. A post with no video is refused with the reason.
+   * stored, safe to call again while it runs: wait for it with `getStatus` (kind `'scenes'`, the post's id). A post
+   * with no video is refused with the reason.
    */
   async analyzeContent(contentId: string, options?: { kind?: 'breakdown' }): Promise<ContentAnalysisResult>
   async analyzeContent(contentId: string, options: { kind: 'scenes' }): Promise<ContentScenesResult>
@@ -2049,18 +2051,28 @@ export class ContentHero {
     return this.waitForExport(job.exportId, options)
   }
 
-  /** Poll an export job to a terminal state, within the same deadline rule as `waitForGeneration`. */
+  /**
+   * Wait for an export to finish and answer with it, resolved like `exportProjectAndWait`. The same wait as
+   * `waitForStatus`, read as an export: the status route's `detail` is the export as `getExport` returns it, so a
+   * finished one needs no second read.
+   */
   async waitForExport(exportId: string, options: WaitOptions = {}): Promise<ExportJob> {
-    return this.#pollWithin(
-      (signal) => this.getExport(exportId, { signal }),
-      (job) => {
-        if (job.status === 'completed') return true
-        if (job.status === 'failed') throw new GenerationFailedError(exportId, job.errorMessage ?? 'Export failed')
-        return false
-      },
-      options,
-      () => new GenerationTimeoutError(exportId),
-    )
+    const exportOf = (status: JobStatus): ExportJob => {
+      if (status.kind !== 'export') throw new ContentHeroError(`${exportId} is not an export (the server named it a ${status.kind}).`)
+      return status.detail
+    }
+    let status: JobStatus
+    try {
+      status = await this.#pollStatus(exportId, 'export', options)
+    } catch (err) {
+      if (err instanceof StatusDeadline) throw new GenerationTimeoutError(exportId)
+      throw err
+    }
+    const job = exportOf(status)
+    if (status.state === 'failed') {
+      throw new GenerationFailedError(exportId, status.reason ?? job.errorMessage ?? 'Export failed')
+    }
+    return job
   }
 
   /**
@@ -2198,8 +2210,8 @@ function readEnv(name: string): string | undefined {
 }
 
 /**
- * A job wait ran out of time. Internal: `waitForStatus` answers with `last`, and `waitForGeneration` turns it into a
- * `GenerationTimeoutError`, so no caller ever sees this class.
+ * A job wait ran out of time. Internal: `waitForStatus` answers with `last`, and `waitForGeneration` and
+ * `waitForExport` turn it into a `GenerationTimeoutError`, so no caller ever sees this class.
  */
 class StatusDeadline extends Error {
   constructor(

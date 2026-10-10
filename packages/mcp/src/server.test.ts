@@ -1113,6 +1113,23 @@ test('get_status passes kind through, and a lone finished transcript reads as do
   assert.doesNotMatch(res.content[0].text, /poll_after_seconds|again/)
 })
 
+test('get_status: a running scene map keeps its kind in the call to make again, beside a job its id names alone', async () => {
+  const mcp = await connect(
+    fakeClient({
+      getStatus: async (id, opts) =>
+        opts?.kind === 'scenes'
+          ? { kind: 'scenes', id, state: 'processing', reason: null, appUrl: null, progress: null, detail: { status: 'running' } }
+          : { kind: 'export', id, state: 'processing', reason: null, appUrl: null, progress: 0.5, detail: {} },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Pc4tSc3n'], kind: 'scenes', wait: false } })
+  assert.match(res.content[0].text, /^- scenes Pc4tSc3n: processing/)
+  // Without its kind the post's id would name the post's analysis, a different job.
+  assert.match(res.content[0].text, /call get_status \{ ids: \["Pc4tSc3n"\], kind: "scenes" \} again/)
+  const mixed = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Exp12345'], wait: false } })
+  assert.match(mixed.content[0].text, /call get_status \{ ids: \["Exp12345"\] \} again/)
+})
+
 test('get_status refuses a kind it does not know', async () => {
   const mcp = await connect(fakeClient())
   let refused = false
@@ -2441,9 +2458,11 @@ test('analyze_content prices first, waits for a running analysis, and returns it
               analysis: { status: 'complete', sections: ['hook'], data: { hook: { text: 'wait for it' } } },
               charge: { credits: 10, held: 0, state: 'charged', balanceAfter: 90 },
             },
-      getContent: async () => {
+      // The one status wait, by the post's id as its analysis.
+      waitForStatus: async (targets) => {
         reads++
-        return { analysis: { status: 'complete' } }
+        assert.deepEqual(targets, [{ id: 'c1', kind: 'content' }])
+        return [{ kind: 'content', id: 'c1', state: 'completed', reason: null, appUrl: null, progress: null, detail: { status: 'complete' } }]
       },
     }),
   )
@@ -2458,8 +2477,8 @@ test('analyze_content prices first, waits for a running analysis, and returns it
   assert.match(res.content[0].text, /Cost: 10 credits charged\. Balance after: 90 credits\./)
 })
 
-test('analyze_content kind scenes prices by kind, waits on the scene availability, and says how to read them', async () => {
-  const seen = { estimate: null, analyze: null, asked: 0 }
+test('analyze_content kind scenes prices by kind, waits through get_status as scenes, and says how to read them', async () => {
+  const seen = { estimate: null, analyze: null, asked: 0, waited: null }
   const mcp = await connect(
     fakeClient({
       estimateAnalysisCost: async (_id, opts) => ((seen.estimate = opts), { getCost: true, creditsEstimate: 5 }),
@@ -2469,7 +2488,10 @@ test('analyze_content kind scenes prices by kind, waits on the scene availabilit
           ? { contentId: id, kind: 'scenes', scenes: { status: 'complete', sceneCount: 7 } }
           : { contentId: id, kind: 'scenes', scenes: { status: 'running' } }
       ),
-      getContent: async () => ({ analysis: { status: 'absent' }, scenes: { status: 'complete', sceneCount: 7 } }),
+      waitForStatus: async (targets) => (
+        (seen.waited = targets),
+        [{ kind: 'scenes', id: 'c1', state: 'completed', reason: null, appUrl: null, progress: null, detail: { status: 'complete', sceneCount: 7 } }]
+      ),
     }),
   )
   const cost = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes', getCost: true } })
@@ -2478,6 +2500,7 @@ test('analyze_content kind scenes prices by kind, waits on the scene availabilit
 
   const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes' } })
   assert.deepEqual(seen.analyze, { kind: 'scenes' })
+  assert.deepEqual(seen.waited, [{ id: 'c1', kind: 'scenes' }])
   assert.match(res.content[0].text, /7 scenes ready\. Read them with get_content scenes='map'/)
   assert.equal(res.structuredContent.status, 'complete')
 })
@@ -2538,13 +2561,21 @@ test('get_content without scenes reports only whether they exist', async () => {
 test('analyze_content says pending when the analysis outlasts the call', async () => {
   const mcp = await connect(
     fakeClient({
-      analyzeContent: async (id) => ({ contentId: id, analysis: { status: 'running' } }),
-      getContent: async () => ({ analysis: { status: 'running' } }),
+      analyzeContent: async (id, opts) =>
+        opts?.kind === 'scenes'
+          ? { contentId: id, kind: 'scenes', scenes: { status: 'running' } }
+          : { contentId: id, analysis: { status: 'running' } },
+      waitForStatus: async (targets) =>
+        targets.map((t) => ({ kind: t.kind, id: t.id, state: 'processing', reason: null, appUrl: null, progress: null, detail: { status: 'running' } })),
     }),
   )
   const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1' } })
   assert.match(res.content[0].text, /pending, still running \(wait with get_status \{ ids: \["c1"\], kind: "content" \}, then analyze_content reads it at no charge\)/)
   assert.equal(res.structuredContent.status, 'pending')
+  // Scenes wait the same way: get_status names them by kind, since the post's id alone names its analysis.
+  const scenes = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes' } })
+  assert.match(scenes.content[0].text, /still being prepared \(wait with get_status \{ ids: \["c1"\], kind: "scenes" \}, then analyze_content reads it at no charge\)/)
+  assert.equal(scenes.structuredContent.status, 'pending')
 })
 
 test('get_content omits the transcript unless it is asked for', async () => {

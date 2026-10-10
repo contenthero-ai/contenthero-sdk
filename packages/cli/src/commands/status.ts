@@ -9,7 +9,7 @@
  */
 
 import { Option, type Command } from 'commander'
-import { JOB_KINDS, type JobKind, type JobStatus } from '@contenthero/sdk'
+import { JOB_KINDS, KINDS_NAMED_BY_KIND, type JobKind, type JobStatus } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues } from '../output.js'
 import { generationHuman, DEFAULT_TIMEOUT_SEC } from '../generation.js'
@@ -29,7 +29,7 @@ export function statusHuman(s: JobStatus): string {
   for (const step of s.steps ?? []) pairs.push([`Step ${step.name}`, step.reason ? `${step.state} (${step.reason})` : step.state])
   if (s.appUrl) pairs.push(['App', s.appUrl])
   if (s.state !== 'completed' && s.state !== 'failed') {
-    pairs.push(['Next', `contenthero status ${s.id}${s.kind === 'transcript' ? ' --kind transcript' : ''}`])
+    pairs.push(['Next', `contenthero status ${s.id}${KINDS_NAMED_BY_KIND.includes(s.kind) ? ` --kind ${s.kind}` : ''}`])
   }
   return keyValues(pairs)
 }

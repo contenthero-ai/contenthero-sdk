@@ -3372,7 +3372,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       // DRAFT for Taylan's approval (2026-10-10).
       description:
-        "Check any background job: generations and edits, exports, brand kit reads, avatars, content analysis and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Pass kind only for a full UUID, for a transcript (its id is the media or post it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
+        "Check any background job: generations and edits, exports, brand kit reads, avatars, a post's analysis or scenes, and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Pass kind only for a full UUID, for scenes or a transcript (the id is the post or media it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
       inputSchema: {
         ids: z
           .array(z.string())
@@ -3382,7 +3382,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         kind: z
           .enum(JOB_KINDS)
           .optional()
-          .describe('Which kind of job the ids name. Only for a full UUID, a transcript, or an id the answer says is ambiguous.'),
+          .describe('Which kind of job the ids name. Only for a full UUID, scenes, a transcript, or an id the answer says is ambiguous.'),
         wait: z
           .boolean()
           .optional()
@@ -4212,7 +4212,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
       description:
-        "Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. A breakdown still running returns pending: wait for it with get_status (kind content, by the post's id), then call this again to read it at no charge. Scenes still being prepared have no status of their own, so call this again for them.",
+        "Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. Either one still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         kind: z
@@ -4227,31 +4227,32 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const kind = args.kind ?? 'breakdown'
         if (args.getCost) return analysisCostResult(await client.estimateAnalysisCost(args.contentId, { kind }), kind)
+        // Either kind runs as a job. Wait a while within this call (the hosted route allows 60s) through the one
+        // status wait, which starts nothing; past that the agent waits with get_status and calls again, also free.
+        // Finished: ask once more, which starts nothing for a finished post and answers with the result and its
+        // final charge (taking the result from the post dropped the charge).
+        const waitFor = async (statusKind: 'content' | 'scenes'): Promise<boolean> => {
+          try {
+            const [status] = await client.waitForStatus([{ id: args.contentId, kind: statusKind }], {
+              timeoutMs: jobWait.waitMs,
+              pollIntervalMs: jobWait.pollMs,
+            })
+            return status?.state === 'completed' || status?.state === 'failed'
+          } catch {
+            // The wait is a courtesy: a status read that fails still leaves a true answer, pending with how to wait.
+            return false
+          }
+        }
         if (kind === 'scenes') {
           let scenes = await client.analyzeContent(args.contentId, { kind: 'scenes' })
-          // Same wait as the breakdown: read the post's scene availability, which starts nothing, until they are
-          // ready or the call's budget is spent.
-          const deadline = Date.now() + jobWait.waitMs
-          while (scenes.scenes.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
-            await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
-            const post = await client.getContent(args.contentId)
-            // Finished: ask once more, which starts nothing for a finished post and answers with the final charge.
-            if (post.scenes && post.scenes.status !== 'running') scenes = await client.analyzeContent(args.contentId, { kind: 'scenes' })
+          if (scenes.scenes.status === 'running' && (await waitFor('scenes'))) {
+            scenes = await client.analyzeContent(args.contentId, { kind: 'scenes' })
           }
           return contentScenesResult(scenes)
         }
         let result = await client.analyzeContent(args.contentId)
-        // The analysis runs as a job. Wait a while within this call (the hosted route allows 60s), reading the
-        // post's analysis status, which starts nothing; past that the agent waits with get_status and calls again,
-        // which is also free.
-        const deadline = Date.now() + jobWait.waitMs
-        while (result.analysis.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
-          const post = await client.getContent(args.contentId)
-          // Finished: ask once more, which starts nothing for a finished post and answers with the analysis and its
-          // final charge. Taking the analysis from the post dropped the charge, so the tool this card began with
-          // still reported no cost whenever it waited.
-          if (post.analysis.status !== 'running') result = await client.analyzeContent(args.contentId)
+        if (result.analysis.status === 'running' && (await waitFor('content'))) {
+          result = await client.analyzeContent(args.contentId)
         }
         return contentAnalysisResult(result)
       } catch (err) {

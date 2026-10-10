@@ -825,10 +825,16 @@ export interface WaitOptions {
 
 /**
  * The kinds of background job `getStatus` reads. An id alone names most jobs; the kind is needed only for a full
- * UUID, for a transcript (whose id is the media or post it belongs to), or when the server says an id is ambiguous.
+ * UUID, for the kinds in `KINDS_NAMED_BY_KIND`, or when the server says an id is ambiguous.
  */
-export const JOB_KINDS = ['output', 'export', 'brand_kit', 'avatar', 'content', 'transcript'] as const
+export const JOB_KINDS = ['output', 'export', 'brand_kit', 'avatar', 'content', 'scenes', 'transcript'] as const
 export type JobKind = (typeof JOB_KINDS)[number]
+
+/**
+ * The kinds whose id is something else's, so the id alone names a different job: a post's scene map and a transcript
+ * are read by the post's (or the media's) id, which alone names the post's analysis. Waiting on one passes its kind.
+ */
+export const KINDS_NAMED_BY_KIND: readonly JobKind[] = ['scenes', 'transcript']
 
 /** Where a background job is. `completed` and `failed` are terminal; the other two mean it is still going. */
 export type JobState = 'queued' | 'processing' | 'completed' | 'failed'
@@ -872,7 +878,8 @@ export type JobStatus =
   | JobStatusOf<'export', ExportJob>
   | JobStatusOf<'brand_kit', BrandKit>
   | JobStatusOf<'avatar', Avatar>
-  | JobStatusOf<'content', ContentDetail>
+  | JobStatusOf<'content', ContentAnalysis>
+  | JobStatusOf<'scenes', ContentScenes>
   | JobStatusOf<'transcript', TranscriptJobDetail>
 
 /** A job to wait on: its id, or its id with the kind when the id alone does not name it. */

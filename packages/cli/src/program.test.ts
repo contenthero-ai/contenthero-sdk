@@ -57,7 +57,7 @@ test('status is one top-level command over ids, with wait folded into a flag and
   const cmd = buildProgram().commands.find((c) => c.name() === 'status')!
   assert.deepEqual(cmd.commands, [], 'status runs on its own')
   assert.ok(cmd.options.some((o) => o.long === '--no-wait'))
-  assert.deepEqual(cmd.options.find((o) => o.long === '--kind')?.argChoices, ['output', 'export', 'brand_kit', 'avatar', 'content', 'transcript'])
+  assert.deepEqual(cmd.options.find((o) => o.long === '--kind')?.argChoices, ['output', 'export', 'brand_kit', 'avatar', 'content', 'scenes', 'transcript'])
   assert.equal(cmd.registeredArguments[0]?.variadic, true)
 })
 

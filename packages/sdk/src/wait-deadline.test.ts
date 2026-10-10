@@ -125,3 +125,35 @@ test('6. waitForGeneration reads the status route as an output and keeps its own
   const gen = await new ContentHero({ apiKey: 'ch_live_test', fetch: abandoned, baseUrl: 'https://x.test' }).waitForGeneration('g7', { pollIntervalMs: 10 })
   assert.equal(gen.status, 'abandoned')
 })
+
+test('7. an export waits through the status route as an export, and answers with the export it read', async () => {
+  const urls: string[] = []
+  let reads = 0
+  const exportStatus = (state: string, detail: Record<string, unknown>, reason: string | null = null) => ({
+    kind: 'export', id: 'Exp12345', state, reason, appUrl: null, progress: null, detail,
+  })
+  const fetch: FetchLike = async (url) => {
+    urls.push(url)
+    reads++
+    return json(
+      reads < 2
+        ? exportStatus('processing', { exportId: 'Exp12345', status: 'rendering' })
+        : exportStatus('completed', { exportId: 'Exp12345', status: 'completed', outputUrl: 'https://cdn/o.mp4' }),
+    )
+  }
+  const job = await new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' }).waitForExport('Exp12345', { pollIntervalMs: 10 })
+  assert.equal(job.outputUrl, 'https://cdn/o.mp4')
+  // Every read is the status route's, and none is the export's own: the SDK has one wait loop.
+  assert.deepEqual(urls, ['https://x.test/api/v1/status/Exp12345?kind=export', 'https://x.test/api/v1/status/Exp12345?kind=export'])
+
+  const failed: FetchLike = async () => json(exportStatus('failed', { exportId: 'Exp12345', status: 'failed' }, 'render crashed'))
+  await assert.rejects(
+    new ContentHero({ apiKey: 'ch_live_test', fetch: failed, baseUrl: 'https://x.test' }).waitForExport('Exp12345', { pollIntervalMs: 10 }),
+    (e: unknown) => e instanceof GenerationFailedError && /render crashed/.test(e.message),
+  )
+  const slow: FetchLike = async () => json(exportStatus('processing', { exportId: 'Exp12345', status: 'rendering' }))
+  await assert.rejects(
+    new ContentHero({ apiKey: 'ch_live_test', fetch: slow, baseUrl: 'https://x.test' }).waitForExport('Exp12345', { timeoutMs: 100, pollIntervalMs: 20 }),
+    GenerationTimeoutError,
+  )
+})
