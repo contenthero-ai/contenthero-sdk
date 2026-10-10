@@ -6,8 +6,9 @@
  *   schema commands [command...]                 the CLI's own command inputs as JSON, scoped to a path such as
  *                                                `generate image` (no API key needed: it reflects over the tree)
  *   schema platform [--platform p] [--format f]  the platforms you can publish to, or one platform's post shape
- *   schema timeline [--json-schema]              editor clip + track types, with copy-pasteable `example` skeletons
- *   schema layer [--json-schema]                 canvas layer types and their fields
+ *   schema timeline [--name n | --detail full]   the editor timeline schema: its index, one op or clip type in full,
+ *                                                or the whole (--json-schema adds each type's JSON Schema)
+ *   schema layer [--name n | --detail full]      the canvas schema, in the same two steps
  *   schema export                                export formats per project type
  *   schema link                                  the link contract: how to build any app address from a noun + id
  *   schema code                                  the authoring guide for a clip's code, as one document
@@ -97,9 +98,9 @@ export function registerSchema(program: Command): void {
     .argument('[command...]', 'kind commands only: a command path to scope the dump, e.g. "generate image"')
     .option('--platform <platform>', 'kind platform only: the platform to read; omit to list every platform')
     .option('--format <format>', 'kind platform with --platform only: narrow to one format (e.g. reel, short, story)')
-    .option('--json-schema', "kinds timeline (with a clip type's --name, or --detail full) and layer only: also return each type's full JSON Schema (large)")
-    .option('--name <name>', 'kind effect: the effect to read in full; omit to list the effects. kind timeline: one op or clip type to read in full, or animations for the presets; omit for the index.')
-    .option('--detail <detail>', 'kind timeline only: full reads the whole schema at once (large)')
+    .option('--json-schema', "kinds timeline and layer only, with a type's --name or --detail full: also return each type's full JSON Schema (large)")
+    .option('--name <name>', 'kind effect: the effect to read in full; omit to list the effects. kind timeline: one op or clip type to read in full, or animations for the presets; omit for the index. kind layer: one op or layer type to read in full; omit for the index.')
+    .option('--detail <detail>', 'kinds timeline and layer only: full reads the whole schema at once (large)')
     .action(async (kind: string, parts: string[], opts: { platform?: string; format?: string; jsonSchema?: boolean; name?: string; detail?: string }, command: Command) => {
       if (!(KINDS as readonly string[]).includes(kind)) {
         throw new CliError(`Unknown kind "${kind}". Use one of: ${KINDS.join(', ')}.`, EXIT.USAGE)
@@ -111,10 +112,12 @@ export function registerSchema(program: Command): void {
         throw new CliError(`kind ${k} takes no --platform or --format; those belong to kind platform.`, EXIT.USAGE)
       }
       if (opts.format && !opts.platform) throw new CliError('--format narrows one platform: pass --platform with it.', EXIT.USAGE)
-      if (opts.name !== undefined && k !== 'effect' && k !== 'timeline') {
-        throw new CliError(`kind ${k} takes no --name; it belongs to kinds effect and timeline.`, EXIT.USAGE)
+      if (opts.name !== undefined && k !== 'effect' && k !== 'timeline' && k !== 'layer') {
+        throw new CliError(`kind ${k} takes no --name; it belongs to kinds effect, timeline and layer.`, EXIT.USAGE)
       }
-      if (opts.detail !== undefined && k !== 'timeline') throw new CliError(`kind ${k} takes no --detail; it belongs to kind timeline.`, EXIT.USAGE)
+      if (opts.detail !== undefined && k !== 'timeline' && k !== 'layer') {
+        throw new CliError(`kind ${k} takes no --detail; it belongs to kinds timeline and layer.`, EXIT.USAGE)
+      }
       if (opts.detail !== undefined && opts.detail !== 'full') throw new CliError(`Unknown --detail "${opts.detail}". The only value is full.`, EXIT.USAGE)
       if (opts.jsonSchema && k !== 'timeline' && k !== 'layer') {
         throw new CliError(`kind ${k} takes no --json-schema; it belongs to kinds timeline and layer.`, EXIT.USAGE)
@@ -214,7 +217,7 @@ export function registerSchema(program: Command): void {
           const ops = (use: 'create' | 'edit') => index.ops.filter((o) => o.use === use).map((o) => `${o.op}: ${o.shape}`).join('\n')
           const clips = index.clipTypes.map((t) => `${t.type}: ${t.description}`).join('\n')
           const tracks = index.trackTypes.map((t) => `${t.trackType} holds ${t.holds.join(', ')}`).join('\n')
-          return `Create ops:\n${ops('create')}\n\nEdit ops:\n${ops('edit')}\n\nClips:\n${clips}\n\nTracks:\n${tracks}\n(read one in full with --name)`
+          return `Rules:\n${index.rules.join('\n')}\n\nCreate ops:\n${ops('create')}\n\nEdit ops:\n${ops('edit')}\n\nClips:\n${clips}\n\nTracks:\n${tracks}\n(read one in full with --name)`
         })
         return
       }
@@ -230,8 +233,26 @@ export function registerSchema(program: Command): void {
         })
         return
       }
+      // The canvas schema reads in the timeline's two steps (2026-10-10), as the MCP's get_schema does.
+      if (k === 'layer' && opts.name !== undefined) {
+        const entry = await client.getLayerTypes({ jsonSchema: opts.jsonSchema, name: opts.name })
+        emit(entry, ctx, () => {
+          if (entry.entry === 'op') return `${entry.shape}\n${entry.description}`
+          return `${entry.layerType.type}: ${entry.layerType.props.map((p) => p.name).join(', ')}\nShared groups: ${Object.keys(entry.sharedProps).join(', ') || 'none'}`
+        })
+        return
+      }
+      if (k === 'layer' && opts.detail === undefined) {
+        const index = await client.getLayerTypes({ jsonSchema: opts.jsonSchema })
+        emit(index, ctx, () => {
+          const ops = index.ops.map((o) => `${o.op}: ${o.shape}`).join('\n')
+          const layers = index.layerTypes.map((t) => `${t.type}: ${t.description}`).join('\n')
+          return `Rules:\n${index.rules.join('\n')}\n\nOps:\n${ops}\n\nLayers:\n${layers}\n(read one in full with --name)`
+        })
+        return
+      }
       if (k === 'layer') {
-        const cat = await client.getLayerTypes({ jsonSchema: opts.jsonSchema })
+        const cat = await client.getLayerTypes({ jsonSchema: opts.jsonSchema, detail: 'full' })
         emit(cat, ctx, () => cat.layerTypes.map((t) => `${t.type}: ${t.props.map((p) => p.name).join(', ')}`).join('\n'))
         return
       }

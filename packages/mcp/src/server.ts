@@ -176,7 +176,7 @@ import {
   projectVersionRenamedResult,
   projectVersionDeletedResult,
   undoResult,
-  layerTypesResult,
+  layerSchemaResult,
   timelineSchemaResult,
   editorTranscriptResult,
   exportJobResult,
@@ -3152,7 +3152,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Schema',
       annotations: READ,
       description:
-        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline schema, in two steps. Without a name, its index: every update_timeline op with its shape, and every clip type (video, image, text, shape, audio) and track type. With a name, that one entry in full: an op with its rules, or a clip type with its fields (each with who writes it, its range and its allowed values), the shared field groups it has and a copy-pasteable `example` clip; the name 'animations' reads the presets add_animation, add_transition and apply_combo take. detail 'full' reads the whole schema at once. Read the index, then the entries you need, before building any clip with update_timeline. 'layer': the CANVAS layer types (image, text, shape, video) with their fields and the shared prop groups (base, animation, template, transform, decoration, adjust), so you know what update_canvas ops can create and set. 'export': the export formats and their options per project type, so you know what export_project accepts. 'link': the grammar of app addresses and every noun and section it takes (what each opens, its tabs, what a tab's item names) plus the app's origin, so you can build a link to any item from its noun and id. 'code': the authoring guide for a code clip or code layer (a video, audio or image whose content is code): what the sandbox can import and what it cannot use, the box the code draws in, the sound it can synthesize, the brand prop names, the size limit, the workflow and examples; read it before writing or changing a clip's code. 'effect': every effect code or a video or image clip can use, by group, with what it does, where code imports it, and whether a clip can carry it; with a name, that effect's parameters with their ranges and defaults, and which of them keyframe on a clip. Read it before giving anything effects. 'timeline', 'layer', 'export', 'code' and 'effect' require the editor:read scope.",
+        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline schema, in two steps. Without a name, its index: every update_timeline op with its shape, every clip and track type, and the rules every op follows. With a name, that one entry in full: an op with its rules, or a clip type with its fields (each with who writes it, its range and its allowed values), the shared field groups it has and a copy-pasteable `example` clip; the name 'animations' reads the presets add_animation, add_transition and apply_combo take. detail 'full' reads the whole schema at once. Read the index, then the entries you need, before building any clip with update_timeline. 'layer': the CANVAS schema, in the same two steps. Without a name, its index: every update_canvas op with its shape, every layer type, and the rules every op follows. With a name, that one entry in full: an op with its rules, or a layer type with its fields and the shared field groups it has. detail 'full' reads the whole schema at once. Read the index, then the entries you need, before building any layer with update_canvas. 'export': the export formats and their options per project type, so you know what export_project accepts. 'link': the grammar of app addresses and every noun and section it takes (what each opens, its tabs, what a tab's item names) plus the app's origin, so you can build a link to any item from its noun and id. 'code': the authoring guide for a code clip or code layer (a video, audio or image whose content is code): what the sandbox can import and what it cannot use, the box the code draws in, the sound it can synthesize, the brand prop names, the size limit, the workflow and examples; read it before writing or changing a clip's code. 'effect': every effect code or a video or image clip can use, by group, with what it does, where code imports it, and whether a clip can carry it; with a name, that effect's parameters with their ranges and defaults, and which of them keyframe on a clip. Read it before giving anything effects. 'timeline', 'layer', 'export', 'code' and 'effect' require the editor:read scope.",
       inputSchema: {
         kind: z.enum(['platform', 'timeline', 'layer', 'export', 'link', 'code', 'effect']).describe('Which vocabulary to read.'),
         platform: z
@@ -3166,15 +3166,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         jsonSchema: z
           .boolean()
           .optional()
-          .describe("kind 'timeline' (with a clip type's name, or detail 'full') or 'layer' only: also return each type's full JSON Schema. It is large; ask for it only to validate a whole item before sending it."),
+          .describe("kinds 'timeline' and 'layer' only, with a type's name or detail 'full': also return each type's full JSON Schema. It is large; ask for it only to validate a whole item before sending it."),
         name: z
           .string()
           .optional()
-          .describe("kind 'effect': the effect to read in full (such as \"glow\"); omit to list the effects. kind 'timeline': one op or clip type to read in full, or 'animations' for the presets; omit for the index."),
+          .describe("kind 'effect': the effect to read in full (such as \"glow\"); omit to list the effects. kind 'timeline': one op or clip type to read in full, or 'animations' for the presets; omit for the index. kind 'layer': one op or layer type to read in full; omit for the index."),
         detail: z
           .enum(['full'])
           .optional()
-          .describe("kind 'timeline' only: 'full' reads the whole schema at once. It is large; read the index and the entries you need instead unless you need everything."),
+          .describe("kinds 'timeline' and 'layer' only: 'full' reads the whole schema at once. It is large; read the index and the entries you need instead unless you need everything."),
       },
     },
     async (args, extra) => {
@@ -3187,30 +3187,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (args.jsonSchema && args.kind !== 'timeline' && args.kind !== 'layer') {
           return errorResult(new Error(`kind '${args.kind}' takes no jsonSchema; it belongs to kinds 'timeline' and 'layer'.`))
         }
-        if (args.name !== undefined && args.kind !== 'effect' && args.kind !== 'timeline') {
-          return errorResult(new Error(`kind '${args.kind}' takes no name; it belongs to kinds 'effect' and 'timeline'.`))
+        if (args.name !== undefined && args.kind !== 'effect' && args.kind !== 'timeline' && args.kind !== 'layer') {
+          return errorResult(new Error(`kind '${args.kind}' takes no name; it belongs to kinds 'effect', 'timeline' and 'layer'.`))
         }
-        if (args.detail !== undefined && args.kind !== 'timeline') {
-          return errorResult(new Error(`kind '${args.kind}' takes no detail; it belongs to kind 'timeline'.`))
+        if (args.detail !== undefined && args.kind !== 'timeline' && args.kind !== 'layer') {
+          return errorResult(new Error(`kind '${args.kind}' takes no detail; it belongs to kinds 'timeline' and 'layer'.`))
         }
         if (args.format && !args.platform) {
           return errorResult(new Error("format narrows one platform: pass platform with it, or omit both to list the platforms."))
         }
         const client = await getClient(extra)
+        // The index by default, one entry by name, or the whole schema; the server refuses a combination it cannot read.
+        const schemaRead = {
+          ...(args.jsonSchema !== undefined ? { jsonSchema: args.jsonSchema } : {}),
+          ...(args.name !== undefined ? { name: args.name } : {}),
+          ...(args.detail !== undefined ? { detail: args.detail } : {}),
+        }
         switch (args.kind) {
           case 'platform':
             return args.platform
               ? platformResult(await client.getPlatform(args.platform, { format: args.format }))
               : platformListResult(await client.listPlatforms())
           case 'timeline':
-            // The index by default, one entry by name, or the whole schema; the server refuses a combination it cannot read.
-            return timelineSchemaResult(await client.getTimelineTypes({
-              ...(args.jsonSchema !== undefined ? { jsonSchema: args.jsonSchema } : {}),
-              ...(args.name !== undefined ? { name: args.name } : {}),
-              ...(args.detail !== undefined ? { detail: args.detail } : {}),
-            }))
+            return timelineSchemaResult(await client.getTimelineTypes(schemaRead))
           case 'layer':
-            return layerTypesResult(await client.getLayerTypes({ jsonSchema: args.jsonSchema }))
+            return layerSchemaResult(await client.getLayerTypes(schemaRead))
           case 'export':
             return exportFormatsResult(await client.getExportFormats())
           case 'link':
@@ -5286,7 +5287,7 @@ const templateFieldsInput = {
     .optional()
     .describe('A Lottie file of ours, and the colors in it that props recolor (each role names a prop).'),
   emoji: z.string().optional().describe("An animated emoji's name, as the animated emoji list names it."),
-  shape: z.string().optional().describe("A shape's name, as get_schema (kind 'layer') lists them."),
+  shape: z.string().optional().describe("A shape's name, as the shape layer type lists them in get_schema kind 'layer'."),
   props: z.record(z.string(), z.unknown()).optional().describe('Its props as placed.'),
   propsSchema: z.record(z.string(), z.unknown()).nullable().optional().describe("Each prop's control, as get_template shows them; brand names the brand value a prop takes when placed."),
   durationFrames: z.number().int().positive().optional().describe('How long it lasts when placed, in frames.'),

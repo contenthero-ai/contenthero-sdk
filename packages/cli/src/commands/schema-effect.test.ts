@@ -44,10 +44,19 @@ test('schema timeline reads the index, --name one entry, and --detail full the w
   assert.deepEqual(seen, ['/api/v1/editor/timeline-types', '/api/v1/editor/timeline-types?name=update_clip', '/api/v1/editor/timeline-types?detail=full'])
 })
 
+// The canvas schema reads in the same two steps (2026-10-10).
+test('schema layer reads the index, --name one entry, and --detail full the whole', async () => {
+  seen.length = 0
+  await run('schema', 'layer')
+  await run('schema', 'layer', '--name', 'create_layer')
+  await run('schema', 'layer', '--detail', 'full')
+  assert.deepEqual(seen, ['/api/v1/editor/layer-types', '/api/v1/editor/layer-types?name=create_layer', '/api/v1/editor/layer-types?detail=full'])
+})
+
 test('--name on another kind is refused, and nothing is asked', async () => {
   seen.length = 0
-  await assert.rejects(() => run('schema', 'layer', '--name', 'glow'), /kind layer takes no --name; it belongs to kinds effect and timeline\./)
-  await assert.rejects(() => run('schema', 'layer', '--detail', 'full'), /kind layer takes no --detail; it belongs to kind timeline\./)
+  await assert.rejects(() => run('schema', 'export', '--name', 'glow'), /kind export takes no --name; it belongs to kinds effect, timeline and layer\./)
+  await assert.rejects(() => run('schema', 'export', '--detail', 'full'), /kind export takes no --detail; it belongs to kinds timeline and layer\./)
   await assert.rejects(() => run('schema', 'timeline', '--detail', 'summary'), /Unknown --detail "summary"\. The only value is full\./)
   assert.deepEqual(seen, [])
 })

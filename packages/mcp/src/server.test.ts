@@ -3121,12 +3121,40 @@ test('get_context says frames across a range are how motion is judged', async ()
   assert.match(schema.properties.render?.description ?? '', /Frames across a range are how you judge motion/)
 })
 
-test("get_schema kind 'layer' lists canvas layer types + props", async () => {
+test("get_schema kind 'layer' detail 'full' lists canvas layer types + props", async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer' } })
+  const res = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', detail: 'full' } })
   const body = (res.content[0]).text
   assert.match(body, /Canvas layer types/)
   assert.match(body, /text/)
+})
+
+// The canvas schema reads in two steps, as the timeline's does (2026-10-10).
+test("get_schema kind 'layer' reads the index, one entry by name, or the whole on request", async () => {
+  const seen: unknown[] = []
+  const index = { projectType: 'canvas', surface: 'canvas', description: 'The canvas index.', rules: ['Each op is { op, ...fields }.'], layerTypes: [{ type: 'text', description: 'A text.', supports: ['base'] }], ops: [{ op: 'create_layer', shape: "{ op: 'create_layer', layer, slideId? }" }] }
+  const op = { entry: 'op', op: 'create_layer', shape: "{ op: 'create_layer', layer, slideId? }", description: 'Add a new layer.' }
+  const layerType = { entry: 'layerType', layerType: { type: 'text', description: 'A text.', props: [{ name: 'text', type: 'string' }], supports: ['base'] }, sharedProps: { base: [] } }
+  const mcp = await connect(
+    fakeClient({
+      getLayerTypes: async (options?: { name?: string; detail?: string }) => {
+        seen.push(options)
+        if (options?.name === 'create_layer') return op
+        if (options?.name === 'text') return layerType
+        return index
+      },
+    } as never),
+  )
+  const read = async (args: Record<string, unknown>) => (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', ...args } })).content[0].text as string
+  const indexText = await read({})
+  assert.match(indexText, /^The canvas index\./)
+  assert.match(indexText, /Rules:\n- Each op is \{ op, \.\.\.fields \}\./)
+  assert.match(indexText, /Ops:\n- \{ op: 'create_layer', layer, slideId\? \}/)
+  assert.match(indexText, /Layer types:\n- text: A text\./)
+  assert.match(await read({ name: 'create_layer' }), /^\{ op: 'create_layer', layer, slideId\? \}\nAdd a new layer\./)
+  assert.match(await read({ name: 'text', jsonSchema: true }), /^text: A text\.\nFields: text\nShared groups: base/)
+  await read({ detail: 'full' })
+  assert.deepEqual(seen, [{}, { name: 'create_layer' }, { jsonSchema: true, name: 'text' }, { detail: 'full' }])
 })
 
 /**
@@ -3179,9 +3207,9 @@ test("get_schema kind 'effect' lists the effects, reads one by name, and refuses
   const one = (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'effect', name: 'glow' } })).content[0].text
   assert.match(one, /- radius: number 0\.\.200, default 20 \(Radius\)/)
   assert.match(one, /Keyframeable on a clip \(effects\.<id>\.<param>\): radius/)
-  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', name: 'glow' } })
+  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'export', name: 'glow' } })
   assert.ok(refused.isError)
-  assert.match(refused.content[0].text, /kind 'layer' takes no name; it belongs to kinds 'effect' and 'timeline'\./)
+  assert.match(refused.content[0].text, /kind 'export' takes no name; it belongs to kinds 'effect', 'timeline' and 'layer'\./)
   assert.deepEqual(asked, ['list', 'get glow'])
 })
 
@@ -3213,7 +3241,7 @@ test("get_schema passes jsonSchema through for kinds 'timeline' and 'layer', and
 // The timeline schema reads in two steps (2026-10-09): the whole is larger than one tool result carries.
 test("get_schema kind 'timeline' reads the index, one entry by name, or the whole on request", async () => {
   const seen: unknown[] = []
-  const index = { projectType: 'editor', surface: 'editor', description: 'The index.', clipTypes: [{ type: 'video', description: 'A video.', supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'm', holds: ['video'] }], ops: [{ op: 'create_clip', shape: "{ op: 'create_clip', trackId, clip }", use: 'create' }, { op: 'update_clip', shape: "{ op: 'update_clip', clipId, patch?, edits? }", use: 'edit' }] }
+  const index = { projectType: 'editor', surface: 'editor', description: 'The index.', rules: ['Mint your own string ids.'], clipTypes: [{ type: 'video', description: 'A video.', supports: ['base'] }], trackTypes: [{ trackType: 'media', description: 'm', holds: ['video'] }], ops: [{ op: 'create_clip', shape: "{ op: 'create_clip', trackId, clip }", use: 'create' }, { op: 'update_clip', shape: "{ op: 'update_clip', clipId, patch?, edits? }", use: 'edit' }] }
   const op = { entry: 'op', op: 'update_clip', shape: "{ op: 'update_clip', clipId, patch?, edits? }", description: 'Patch one clip.', use: 'edit' }
   const clipType = { entry: 'clipType', clipType: { type: 'video', description: 'A video.', props: [{ name: 'code', type: 'string' }], supports: ['base'] }, sharedProps: { base: [] } }
   const mcp = await connect(
@@ -3229,15 +3257,16 @@ test("get_schema kind 'timeline' reads the index, one entry by name, or the whol
   const read = async (args: Record<string, unknown>) => (await mcp.callTool({ name: 'get_schema', arguments: { kind: 'timeline', ...args } })).content[0].text as string
   const indexText = await read({})
   assert.match(indexText, /^The index\./)
+  assert.match(indexText, /Rules:\n- Mint your own string ids\./)
   assert.match(indexText, /Create ops:\n- \{ op: 'create_clip', trackId, clip \}/)
   assert.match(indexText, /Edit ops:\n- \{ op: 'update_clip', clipId, patch\?, edits\? \}/)
   assert.match(await read({ name: 'update_clip' }), /^\{ op: 'update_clip', clipId, patch\?, edits\? \}\nPatch one clip\./)
   assert.match(await read({ name: 'video', jsonSchema: true }), /^video: A video\.\nFields: code\nShared groups: base/)
   await read({ detail: 'full' })
   assert.deepEqual(seen, [{}, { name: 'update_clip' }, { jsonSchema: true, name: 'video' }, { detail: 'full' }])
-  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'layer', detail: 'full' } })
+  const refused = await mcp.callTool({ name: 'get_schema', arguments: { kind: 'code', detail: 'full' } })
   assert.equal(refused.isError, true)
-  assert.match((refused.content[0]).text, /kind 'layer' takes no detail; it belongs to kind 'timeline'\./)
+  assert.match((refused.content[0]).text, /kind 'code' takes no detail; it belongs to kinds 'timeline' and 'layer'\./)
 })
 
 test('update_timeline and update_canvas say a batch applies whole or not at all; get_project names the main track', async () => {

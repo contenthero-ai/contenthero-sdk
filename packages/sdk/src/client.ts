@@ -94,7 +94,9 @@ import type {
   TimelineTypeCatalog,
   TimelineSchemaIndex,
   TimelineSchemaEntry,
-  TimelineSchemaOptions,
+  EditorSchemaOptions,
+  LayerSchemaIndex,
+  LayerSchemaEntry,
   TypeCatalogOptions,
   TranscriptResult,
   MediaItem,
@@ -2026,25 +2028,31 @@ export class ContentHero {
   }
 
   /**
-   * The canvas layer-type catalog (types + editable props), so you know what `update_canvas` ops can
-   * create/edit. Requires the `editor:read` scope.
+   * The canvas schema, so you know what `update_canvas` ops can create and edit, in two steps, as the timeline's. With no
+   * name, the index: every op with its shape, every layer type, and the rules every op follows. With `name`, one entry in
+   * full: an op, or a layer type with its fields and the shared groups it has (`jsonSchema` adds its JSON Schema). With
+   * `detail: 'full'`, the whole schema in one read. Requires the `editor:read` scope.
    */
-  async getLayerTypes(options: TypeCatalogOptions = {}): Promise<LayerTypeCatalog> {
-    return this.request<LayerTypeCatalog>('GET', `/api/v1/editor/layer-types${catalogQuery(options)}`)
+  async getLayerTypes(options: EditorSchemaOptions & { detail: 'full' }): Promise<LayerTypeCatalog>
+  async getLayerTypes(options: EditorSchemaOptions & { name: string }): Promise<LayerSchemaEntry>
+  async getLayerTypes(options?: TypeCatalogOptions): Promise<LayerSchemaIndex>
+  async getLayerTypes(options: EditorSchemaOptions): Promise<LayerSchemaIndex | LayerSchemaEntry | LayerTypeCatalog>
+  async getLayerTypes(options: EditorSchemaOptions = {}): Promise<LayerSchemaIndex | LayerSchemaEntry | LayerTypeCatalog> {
+    return this.request('GET', `/api/v1/editor/layer-types${schemaQuery(options)}`)
   }
 
   /**
    * The editor timeline schema, so you know what `update_timeline` ops can create and edit, in two steps. With no name,
-   * the index: every op with its shape, and every clip and track type. With `name`, one entry in full: an op, a clip
+   * the index: every op with its shape, every clip and track type, and the rules every op follows. With `name`, one entry in full: an op, a clip
    * type with its fields and the shared groups it has (`jsonSchema` adds its JSON Schema), or `animations`, the
    * presets. With `detail: 'full'`, the whole schema in one read. Requires the `editor:read` scope.
    */
-  async getTimelineTypes(options: TimelineSchemaOptions & { detail: 'full' }): Promise<TimelineTypeCatalog>
-  async getTimelineTypes(options: TimelineSchemaOptions & { name: string }): Promise<TimelineSchemaEntry>
+  async getTimelineTypes(options: EditorSchemaOptions & { detail: 'full' }): Promise<TimelineTypeCatalog>
+  async getTimelineTypes(options: EditorSchemaOptions & { name: string }): Promise<TimelineSchemaEntry>
   async getTimelineTypes(options?: TypeCatalogOptions): Promise<TimelineSchemaIndex>
-  async getTimelineTypes(options: TimelineSchemaOptions): Promise<TimelineSchemaIndex | TimelineSchemaEntry | TimelineTypeCatalog>
-  async getTimelineTypes(options: TimelineSchemaOptions = {}): Promise<TimelineSchemaIndex | TimelineSchemaEntry | TimelineTypeCatalog> {
-    return this.request('GET', `/api/v1/editor/timeline-types${timelineSchemaQuery(options)}`)
+  async getTimelineTypes(options: EditorSchemaOptions): Promise<TimelineSchemaIndex | TimelineSchemaEntry | TimelineTypeCatalog>
+  async getTimelineTypes(options: EditorSchemaOptions = {}): Promise<TimelineSchemaIndex | TimelineSchemaEntry | TimelineTypeCatalog> {
+    return this.request('GET', `/api/v1/editor/timeline-types${schemaQuery(options)}`)
   }
 
   /**
@@ -2223,13 +2231,8 @@ export function importedMediaFrom(gen: Generation, shortId: string | null): Impo
   }
 }
 
-/** A type-catalog read's query: the JSON Schema is opt-in on the server too. */
-function catalogQuery(options: TypeCatalogOptions): string {
-  return options.jsonSchema ? '?include=jsonSchema' : ''
-}
-
-/** A timeline schema read's query: the catalog's own option, then the entry or the whole schema. */
-function timelineSchemaQuery(options: TimelineSchemaOptions): string {
+/** A schema read's query, timeline or canvas: the catalog's own option, then the entry or the whole schema. */
+function schemaQuery(options: EditorSchemaOptions): string {
   const parts = [
     ...(options.jsonSchema ? ['include=jsonSchema'] : []),
     ...(options.name !== undefined ? [`name=${encodeURIComponent(options.name)}`] : []),
