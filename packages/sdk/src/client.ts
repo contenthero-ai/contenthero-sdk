@@ -167,6 +167,8 @@ import type {
   Placement,
   JobKind,
   JobStatus,
+  JobStatusResult,
+  JobStatusUnanswered,
   JobTarget,
 } from './types.js'
 
@@ -377,25 +379,46 @@ export class ContentHero {
   }
 
   /**
-   * Wait for several jobs under ONE deadline. Each comes back finished (`completed` or `failed`) or as last read
-   * when the deadline came, so one slow or failed job never hides the others: read each `state`. Nothing throws for
-   * a failed job or a timeout. A transient read error on one target falls back to a single snapshot within the same
-   * deadline, and throws only when that fails too.
+   * Several jobs' statuses at once, with no waiting: each id answers on its own. An id the server cannot answer for
+   * (it names nothing in your account, needs its kind, needs a scope the key lacks) comes back as `state:
+   * 'unanswered'` with the server's reason, in its own place, so it never hides the others. Throws only for what
+   * would fail every id alike: the key itself refused, the rate limit, or no answer at all.
    */
-  async waitForStatus(targets: JobTarget[], options: Omit<WaitOptions, 'onPoll'> = {}): Promise<JobStatus[]> {
+  async getStatuses(targets: JobTarget[], options: { signal?: AbortSignal } = {}): Promise<JobStatusResult[]> {
+    return Promise.all(
+      targets.map(async (target) => {
+        const { id, kind } = jobTargetOf(target)
+        try {
+          return await this.getStatus(id, { kind, signal: options.signal })
+        } catch (err) {
+          return unansweredOrThrow(id, err)
+        }
+      }),
+    )
+  }
+
+  /**
+   * Wait for several jobs under ONE deadline. Each comes back finished (`completed` or `failed`), as last read when
+   * the deadline came, or `unanswered` when the server cannot answer for its id (as in `getStatuses`), so one slow,
+   * failed or unknown job never hides the others: read each `state`. Nothing throws for a failed job, an unknown id
+   * or a timeout. A transient read error on one target falls back to a single snapshot within the same deadline.
+   */
+  async waitForStatus(targets: JobTarget[], options: Omit<WaitOptions, 'onPoll'> = {}): Promise<JobStatusResult[]> {
     const deadline = Date.now() + (options.timeoutMs ?? 600_000)
     return Promise.all(
       targets.map(async (target) => {
-        const { id, kind } = typeof target === 'string' ? { id: target, kind: undefined } : target
+        const { id, kind } = jobTargetOf(target)
         try {
           return await this.#pollStatus(id, kind, { ...options, timeoutMs: Math.max(0, deadline - Date.now()) })
         } catch (err) {
           if (err instanceof StatusDeadline && err.last) return err.last
+          // The server said this id names no job it can answer for: reading it again changes nothing.
+          if (refusesTheId(err)) return unansweredOrThrow(id, err)
           const timer = deadlineSignal(deadline, options.signal)
           try {
             return await this.getStatus(id, { kind, signal: timer.signal })
-          } catch {
-            throw err
+          } catch (again) {
+            return unansweredOrThrow(id, again)
           } finally {
             timer.release()
           }
@@ -2221,6 +2244,32 @@ class StatusDeadline extends Error {
     super(`Timed out waiting for ${id}`)
     this.name = 'StatusDeadline'
   }
+}
+
+/** A job target as its id and the kind it was named with, if any. */
+function jobTargetOf(target: JobTarget): { id: string; kind: JobKind | undefined } {
+  return typeof target === 'string' ? { id: target, kind: undefined } : { id: target.id, kind: target.kind }
+}
+
+/**
+ * Whether the server refused the id itself (it names nothing of the caller's, needs its kind, needs a scope), as
+ * opposed to the caller as a whole (401, 429) or the read (5xx). A refusal is that id's answer and is final.
+ */
+function refusesTheId(err: unknown): err is ContentHeroError & { status: number } {
+  return err instanceof ContentHeroError && typeof err.status === 'number' && err.status >= 400 && err.status < 500 && !CALLER_STATUSES.has(err.status)
+}
+
+/** Statuses that are about the caller, not one id: every id in the same read would get the same answer. */
+const CALLER_STATUSES = new Set([401, 429])
+
+/**
+ * One id's error as its own answer in a read of several, or the error itself when it would fail every id alike: the
+ * key refused, the rate limit, or no answer from the server at all. The one rule `getStatuses` and `waitForStatus`
+ * share.
+ */
+function unansweredOrThrow(id: string, err: unknown): JobStatusUnanswered {
+  if (!(err instanceof ContentHeroError) || typeof err.status !== 'number' || CALLER_STATUSES.has(err.status)) throw err
+  return { kind: null, id, state: 'unanswered', reason: err.message, httpStatus: err.status, appUrl: null, progress: null, detail: null }
 }
 
 /**

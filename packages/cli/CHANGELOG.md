@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed: `status` with several ids prints each one's answer. An id that names no job of yours prints its reason
+  instead of failing the others; the exit code is 1 when any id failed or could not be answered for.
+
 ## 0.3.24
 
 - Breaking (hard cutover, no hidden alias): `generation-status get` is `status <ids...>`, named after the MCP's

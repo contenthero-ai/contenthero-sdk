@@ -882,6 +882,27 @@ export type JobStatus =
   | JobStatusOf<'scenes', ContentScenes>
   | JobStatusOf<'transcript', TranscriptJobDetail>
 
+/**
+ * An id a status read could not answer for, in that id's place: it names nothing in the caller's account, names
+ * something with no background job, is not an id, needs its kind, needs a scope the key lacks, or its read failed on
+ * the server. A read of several ids answers each one, so one such id never hides the others. `reason` is the server's
+ * own words; `httpStatus` is the status it answered with (404 when the id names no job of the caller's).
+ */
+export interface JobStatusUnanswered {
+  kind: null
+  /** The id exactly as it was asked for. */
+  id: string
+  state: 'unanswered'
+  reason: string
+  httpStatus: number
+  appUrl: null
+  progress: null
+  detail: null
+}
+
+/** One id's answer in a read of several: its job's status, or why there is none. */
+export type JobStatusResult = JobStatus | JobStatusUnanswered
+
 /** A job to wait on: its id, or its id with the kind when the id alone does not name it. */
 export type JobTarget = string | { id: string; kind?: JobKind }
 

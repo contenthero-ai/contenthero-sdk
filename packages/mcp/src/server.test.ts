@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS } from '@contenthero/sdk'
+import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -241,6 +241,10 @@ function fakeClient(overrides = {}) {
     // The status route, over whichever generation reads this fake carries: an output's status wraps its generation.
     async getStatus(id) {
       return outputStatus(await this.getGeneration(id))
+    },
+    // A snapshot of several, over whichever getStatus this fake carries.
+    async getStatuses(targets) {
+      return Promise.all(targets.map((t) => (typeof t === 'string' ? this.getStatus(t) : this.getStatus(t.id, { kind: t.kind }))))
     },
     // The SDK's rule, over whichever waitForGeneration this fake carries: each id finished or as last read.
     async waitForStatus(targets, opts) {
@@ -1095,6 +1099,42 @@ test('get_status answers an export, a brand kit read and a failed avatar one lin
   assert.match(out, /get_status \{ ids: \["Exp12345", "Bk123456"\] \}/)
   assert.ok(!res.isError, 'one failed job among running ones is an answer, not an error')
   assert.equal(res._meta, undefined, 'a status answer never mounts a card')
+})
+
+/**
+ * One id that names nothing never fails the others (found live 2026-10-10: two ids, one unknown, and the whole call
+ * answered "Export not found"). Runs the real SDK over a fake server, so the rule is held where it lives (the SDK's
+ * per-id answer) and where it is read (one line per id). Break-verified: letting `unansweredOrThrow` rethrow a 404
+ * turns both calls red.
+ */
+test('get_status answers each id on its own: one that names nothing is its own line, and the rest still answer', async () => {
+  const fetch = async (url) => {
+    const id = url.split('/').pop().split('?')[0]
+    if (id === 'Exp12345') {
+      return new Response(
+        JSON.stringify({ kind: 'export', id, state: 'completed', reason: null, appUrl: 'https://app/exports/Exp12345', progress: 1, detail: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    if (id === 'Theirs12') {
+      return new Response(JSON.stringify({ error: `Export '${id}' not found in your account.` }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ error: `'${id}' names nothing.` }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+  }
+  const mcp = await connect(new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' }))
+  for (const wait of [true, false]) {
+    const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Exp12345', 'Nope1234', 'Theirs12'], wait } })
+    const out = res.content[0].text
+    assert.match(out, /3 job\(s\):/)
+    assert.match(out, /- export Exp12345: completed \| progress: 100% \| https:\/\/app\/exports\/Exp12345/)
+    assert.match(out, /- Nope1234: not found \| 'Nope1234' names nothing\./)
+    assert.match(out, /- Theirs12: not found \| Export 'Theirs12' not found in your account\./)
+    assert.ok(!res.isError, `wait ${wait}: one unknown id beside a found one is an answer, not an error`)
+  }
+  // Every id unanswered is an error, still one line each.
+  const none = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Nope1234'], wait: false } })
+  assert.equal(none.isError, true)
+  assert.match(none.content[0].text, /^- Nope1234: not found \| 'Nope1234' names nothing\.$/)
 })
 
 test('get_status passes kind through, and a lone finished transcript reads as done', async () => {

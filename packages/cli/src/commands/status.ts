@@ -4,12 +4,13 @@
  * finish unless `--no-wait`. An id alone names its job; `--kind` is for a full UUID, a transcript (its id is the
  * media or post it belongs to), or an id the server says is ambiguous.
  *
- * Returns exit 1 if any job failed, exit 4 if any was still running when the timeout elapsed (the ids are still
- * emitted so the caller can keep polling), otherwise 0.
+ * Returns exit 1 if any job failed or any id could not be answered for (every id still prints its own answer), exit 4
+ * if any was still running when the timeout elapsed (the ids are still emitted so the caller can keep polling),
+ * otherwise 0.
  */
 
 import { Option, type Command } from 'commander'
-import { JOB_KINDS, KINDS_NAMED_BY_KIND, type JobKind, type JobStatus } from '@contenthero/sdk'
+import { JOB_KINDS, KINDS_NAMED_BY_KIND, type JobKind, type JobStatusResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues } from '../output.js'
 import { generationHuman, DEFAULT_TIMEOUT_SEC } from '../generation.js'
@@ -17,7 +18,8 @@ import { EXIT } from '../errors.js'
 import { toInt } from '../args.js'
 
 /** One job for a person: a generation keeps its own rendering, every other kind its state, progress and steps. */
-export function statusHuman(s: JobStatus): string {
+export function statusHuman(s: JobStatusResult): string {
+  if (s.state === 'unanswered') return keyValues([['Id', s.id], ['State', 'unanswered'], ['Reason', s.reason]])
   if (s.kind === 'output') return generationHuman(s.detail)
   const pairs: Array<[string, string | number]> = [
     ['Id', s.id],
@@ -52,14 +54,15 @@ export function registerStatus(program: Command): void {
       const timeoutSec = opts.timeout ?? DEFAULT_TIMEOUT_SEC
       const targets = ids.map((id) => ({ id, kind: opts.kind }))
 
-      // The SDK's one rule for several: each finished or as last read at the deadline, with no second read.
-      const results: JobStatus[] = blocking
+      // The SDK's one rule for several: each id answers on its own, finished, as last read at the deadline, or
+      // unanswered with the server's reason, so one unknown id never hides the others.
+      const results: JobStatusResult[] = blocking
         ? await client.waitForStatus(targets, { timeoutMs: timeoutSec * 1000 })
-        : await Promise.all(targets.map((t) => client.getStatus(t.id, { kind: t.kind })))
+        : await client.getStatuses(targets)
 
-      emit(results, ctx, (rows: JobStatus[]) => rows.map(statusHuman).join('\n\n'))
+      emit(results, ctx, (rows: JobStatusResult[]) => rows.map(statusHuman).join('\n\n'))
 
-      if (results.some((s) => s.state === 'failed')) {
+      if (results.some((s) => s.state === 'failed' || s.state === 'unanswered')) {
         process.exitCode = EXIT.GENERAL
       } else if (results.some((s) => s.state !== 'completed')) {
         process.exitCode = EXIT.TIMEOUT

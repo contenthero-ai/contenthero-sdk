@@ -3340,7 +3340,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Status',
       annotations: READ,
       description:
-        "Check any background job: generations and edits, exports, brand kit reads, avatars, a post's analysis or scenes, and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Pass kind only for a full UUID, for scenes or a transcript (the id is the post or media it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
+        "Check any background job: generations and edits, exports, brand kit reads, avatars, a post's analysis or scenes, and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Each id answers on its own line, so one that names no job of yours says why and the others still answer. Pass kind only for a full UUID, for scenes or a transcript (the id is the post or media it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
       inputSchema: {
         ids: z
           .array(z.string())
@@ -3362,12 +3362,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const deadline = Date.now() + CALL_DEADLINE_MS
         const targets = args.ids.map((id) => ({ id, kind: args.kind }))
-        // Each comes back finished or as last read when the wait ended, with no second read for any of them; a
-        // transient error on one falls back to a snapshot without failing the batch (the SDK's rule).
+        // Each id answers on its own (the SDK's rule): finished, as last read when the wait ended, or unanswered with
+        // the server's reason, so one unknown id never fails the others.
         const statuses =
           args.wait !== false
             ? await client.waitForStatus(targets, { timeoutMs: WAIT_MS })
-            : await Promise.all(targets.map((t) => client.getStatus(t.id, { kind: t.kind })))
+            : await client.getStatuses(targets)
         const gens = statuses.flatMap((s) => (s.kind === 'output' ? [s.detail] : []))
         if (gens.length === statuses.length) {
           // ⭐ Only the single-generation case is attached: a batch of ten would embed ten sets of bytes into

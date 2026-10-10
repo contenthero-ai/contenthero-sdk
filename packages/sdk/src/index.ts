@@ -41,6 +41,8 @@ export type {
   JobState,
   JobStep,
   JobStatus,
+  JobStatusResult,
+  JobStatusUnanswered,
   JobTarget,
   TranscriptJobDetail,
   Account,

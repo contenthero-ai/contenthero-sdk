@@ -12,12 +12,13 @@
  * ## Break-verified
  *
  * Reading without the deadline's signal turns case 1 red; pausing a full interval turns case 2 red; dropping the last
- * status from the error turns case 3 red; letting one failure throw out of `waitForStatus` turns case 4 red.
+ * status from the error turns case 3 red; letting one failure throw out of `waitForStatus` turns case 4 red; letting
+ * one id's 404 throw out of `getStatuses` or `waitForStatus` turns case 8 red.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ContentHero } from './client.js'
-import { GenerationFailedError, GenerationTimeoutError } from './errors.js'
+import { AuthenticationError, GenerationFailedError, GenerationTimeoutError } from './errors.js'
 import type { FetchLike } from './client.js'
 
 const processing = (outputId: string) => ({
@@ -156,4 +157,35 @@ test('7. an export waits through the status route as an export, and answers with
     new ContentHero({ apiKey: 'ch_live_test', fetch: slow, baseUrl: 'https://x.test' }).waitForExport('Exp12345', { timeoutMs: 100, pollIntervalMs: 20 }),
     GenerationTimeoutError,
   )
+})
+
+test('8. one id the server cannot answer for is its own answer, and every other id still answers', async () => {
+  const reads: Record<string, number> = {}
+  const fetch: FetchLike = async (url) => {
+    const id = idOf(url)
+    reads[id] = (reads[id] ?? 0) + 1
+    if (id === 'gone') return new Response(JSON.stringify({ error: "Export 'gone' not found in your account." }), { status: 404 })
+    if (id === 'uuid') return new Response(JSON.stringify({ error: 'A full id needs its kind.' }), { status: 400 })
+    return json(status(id, 'completed'))
+  }
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' })
+  const expected = [
+    ['done', 'output', 'completed', null],
+    ['gone', null, 'unanswered', 404],
+    ['uuid', null, 'unanswered', 400],
+  ]
+  const snapshot = await client.getStatuses(['done', { id: 'gone', kind: 'export' }, 'uuid'])
+  assert.deepEqual(snapshot.map((s) => [s.id, s.kind, s.state, s.state === 'unanswered' ? s.httpStatus : null]), expected)
+  const gone = snapshot[1]
+  assert.ok(gone?.state === 'unanswered' && /not found in your account/.test(gone.reason))
+  const waited = await client.waitForStatus(['done', { id: 'gone', kind: 'export' }, 'uuid'], { timeoutMs: 500, pollIntervalMs: 40 })
+  assert.deepEqual(waited.map((s) => [s.id, s.kind, s.state, s.state === 'unanswered' ? s.httpStatus : null]), expected)
+  // A refusal of the id is final: the wait does not read it a second time.
+  assert.equal(reads.gone, 2, 'once by the snapshot, once by the wait')
+
+  // What would fail every id alike still fails the call.
+  const refusedKey: FetchLike = async () => new Response(JSON.stringify({ error: 'Invalid API key.' }), { status: 401 })
+  const locked = new ContentHero({ apiKey: 'ch_live_test', fetch: refusedKey, baseUrl: 'https://x.test' })
+  await assert.rejects(locked.getStatuses(['a', 'b']), AuthenticationError)
+  await assert.rejects(locked.waitForStatus(['a', 'b'], { timeoutMs: 200, pollIntervalMs: 40 }), AuthenticationError)
 })

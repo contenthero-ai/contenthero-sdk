@@ -67,6 +67,7 @@ import type {
   Generation,
   JobKind,
   JobStatus,
+  JobStatusResult,
   GenerationOutput,
   GenerateResult,
   EditAudioResult,
@@ -857,7 +858,8 @@ export function jobPollAfterSeconds(kind: JobKind): number {
  * One job of any kind as a line: kind, id, state, why it failed, how far along, its steps, its link, and a re-poll
  * hint while it is unfinished. A generation keeps its own richer line, with the files that have landed.
  */
-export function jobStatusRow(status: JobStatus): string {
+export function jobStatusRow(status: JobStatusResult): string {
+  if (status.state === 'unanswered') return `- ${status.id}: ${unansweredState(status.httpStatus)} | ${status.reason}`
   if (status.kind === 'output') return generationRow(status.detail)
   const parts = [`- ${status.kind} ${status.id}: ${status.state}`]
   if (status.reason) parts.push(`reason: ${status.reason}`)
@@ -871,12 +873,22 @@ export function jobStatusRow(status: JobStatus): string {
   return unfinished ? `${line} [poll_after_seconds: ${jobPollAfterSeconds(status.kind)}]` : line
 }
 
+/** How an unanswered id reads in its line, by what the server said about it. */
+function unansweredState(httpStatus: number): string {
+  if (httpStatus === 404) return 'not found'
+  if (httpStatus === 403) return 'not permitted'
+  if (httpStatus >= 500) return 'could not be read'
+  return 'not readable'
+}
+
 /**
  * Several jobs, or any job that is not a generation. Every generation keeps the rich answer (`generationBatchResult`);
  * this is for the rest, one line each, with the call to make again while any is unfinished.
  */
-export function jobStatusesResult(statuses: JobStatus[]): CallToolResult {
-  const unfinished = statuses.filter((s) => s.state !== 'completed' && s.state !== 'failed')
+export function jobStatusesResult(statuses: JobStatusResult[]): CallToolResult {
+  const unfinished = statuses.filter(
+    (s): s is JobStatus => s.state !== 'completed' && s.state !== 'failed' && s.state !== 'unanswered',
+  )
   const rows = statuses.map(jobStatusRow)
   const head = statuses.length === 1 ? null : `${statuses.length} job(s):`
   // A kind whose id alone names a different job keeps its kind in the call, one call per such kind.
@@ -887,7 +899,7 @@ export function jobStatusesResult(statuses: JobStatus[]): CallToolResult {
   }
   const calls = [...groups].map(([kind, ids]) => getStatusCall(ids, kind))
   const tail = calls.length ? `Still running: call ${calls.join(' and ')} again.` : null
-  const failed = statuses.length > 0 && statuses.every((s) => s.state === 'failed')
+  const failed = statuses.length > 0 && statuses.every((s) => s.state === 'failed' || s.state === 'unanswered')
   return text(lines([head, ...rows, tail]), failed)
 }
 

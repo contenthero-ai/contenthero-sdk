@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: `get_status` with several ids answers each one on its own line. An id that names no job of yours reads
+  `not found` with the server's reason, naming the id; the others still answer. It is an error only when no id
+  answered.
+
 ## 0.4.34
 
 - Breaking (hard cutover, no alias): `get_generation_status` is `get_status`. It checks any background job

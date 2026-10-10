@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: one id the server cannot answer for no longer fails a read of several. `waitForStatus` hands it back in its
+  own place as `state: 'unanswered'` with the server's reason and `httpStatus` (404 when it names no job of yours,
+  400 when it needs its kind or is not an id, 403 when the key lacks the scope), and every other id still answers.
+  Only what would fail every id alike (the key refused, the rate limit, no answer at all) still throws.
+- New: `getStatuses(targets)`, the instant snapshot of several ids under the same per-id rule. `JobStatusUnanswered`
+  and `JobStatusResult` (a `JobStatus` or a `JobStatusUnanswered`) are exported.
+- Breaking (types only): `waitForStatus` returns `JobStatusResult[]`; narrow on `state !== 'unanswered'` before
+  reading `kind` or `detail`.
+
 ## 0.4.27
 
 - New: `getStatus(id, { kind? })` reads any background job (an output, an export, a brand kit read, an avatar, a
