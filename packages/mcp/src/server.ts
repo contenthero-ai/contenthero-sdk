@@ -1528,7 +1528,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         multiShot: z
           .boolean()
           .optional()
-          .describe('Enable multi-shot mode (one longer sequence of several shots) on a model that offers it; get_model says which do. On a model that takes per-shot prompts, pass `shots` instead, which turns multi-shot on.'),
+          .describe('Multi-shot with the cuts planned by the model, on a model whose shots include auto (get_model). To write each shot yourself, pass shots instead.'),
+        inputMode: z
+          .string()
+          .optional()
+          .describe('The input mode, by id from get_model. Omit to let the attached inputs decide.'),
         shots: z
           .array(z.object({ prompt: z.string(), duration: z.number() }))
           .optional()
@@ -1545,6 +1549,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const parameters: Record<string, unknown> = {}
         if (wantMultiShot) parameters.multiShot = true
         if (klingMultiShot) parameters.shots = args.shots
+        if (args.inputMode) parameters.inputMode = args.inputMode
         const request = compact<GenerateRequest>({
           contentType: 'video',
           kind: 'generate',

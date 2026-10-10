@@ -1816,6 +1816,52 @@ export function modelListResult(models: ModelInfo[]): CallToolResult {
   )
 }
 
+type ShotKind = 'single' | 'auto' | 'custom'
+type InputModeCap = { id: string; label: string; inputTypes: string[]; shotKinds?: ShotKind[]; keepsInputLength?: boolean }
+
+/**
+ * A model's input modes, each with what it takes, the shots it narrows to and whether it keeps the source's length.
+ * Empty for a model without modes. Every value is the registry's; only the framing is written here.
+ */
+function inputModeLines(m: ModelInfo): string[] {
+  const modes = cap(m, 'inputModes')?.modes as InputModeCap[] | undefined
+  if (!Array.isArray(modes) || !modes.length) return []
+  return [
+    '  Input modes (inputMode on generate_video picks one; without it, the attached inputs decide):',
+    ...modes.map((md) => {
+      const parts = [md.inputTypes.join(', ')]
+      if (md.shotKinds?.length) parts.push(`shots: ${md.shotKinds.join(', ')}`)
+      if (md.keepsInputLength) parts.push("output keeps the source video's length")
+      return `    ${md.id} (${md.label}): ${parts.join('; ')}`
+    }),
+  ]
+}
+
+/** The shot kinds a model offers and how to ask for each, with the written-shot limits from the registry. */
+function shotLines(m: ModelInfo): string[] {
+  const kinds = cap(m, 'shotKinds') as ShotKind[] | undefined
+  if (!Array.isArray(kinds) || !kinds.some((k) => k !== 'single')) return []
+  const c = (cap(m, 'multiShotConfig') ?? {}) as {
+    maxShots?: number
+    minShotDuration?: number
+    maxShotDuration?: number
+    maxCharsPerShot?: number
+  }
+  const count = c.maxShots ? `up to ${c.maxShots}` : null
+  const each = [
+    c.minShotDuration && c.maxShotDuration ? `each ${c.minShotDuration}-${c.maxShotDuration}s` : null,
+    c.maxCharsPerShot ? `up to ${c.maxCharsPerShot} chars` : null,
+  ].filter(Boolean).join(' and ')
+  const limits = [count, each].filter(Boolean).join(', ')
+  return [
+    `  Shots: ${kinds.join(', ')}`,
+    ...(kinds.includes('auto') ? ['    auto: pass multiShot; the model plans the cuts from the prompt.'] : []),
+    ...(kinds.includes('custom')
+      ? [`    custom: pass shots${limits ? `; ${limits}` : ''}.`]
+      : []),
+  ]
+}
+
 /** One model's full request shape (the grounding view). */
 export function modelResult(m: ModelInfo): CallToolResult {
   const res = cap(m, 'resolution')
@@ -1844,6 +1890,7 @@ export function modelResult(m: ModelInfo): CallToolResult {
       Array.isArray(cap(m, 'inputTypes')) && cap(m, 'inputTypes').length
         ? `  input types: ${cap(m, 'inputTypes').join(', ')}`
         : null,
+      ...inputModeLines(m),
       res?.supported?.length
         ? `  resolution: ${res.supported.join(', ')}${res.default ? ` (default ${res.default})` : ''}`
         : null,
@@ -1855,6 +1902,7 @@ export function modelResult(m: ModelInfo): CallToolResult {
       cap(m, 'negativePrompt') ? '  negativePrompt: supported' : null,
       gen ? `  generations: ${gen.min}-${gen.max} (default ${gen.default})` : null,
       ...refLines.map((l) => `  ${l}`),
+      ...shotLines(m),
       enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
       ...promptReferenceLines(m.promptReferences),
       ...(m.boardTypes?.length

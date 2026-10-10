@@ -117,8 +117,9 @@ export function registerGenerate(program: Command): void {
       .option('--kling-element <id>', 'saved Kling element id (Kling 3.0, @name in prompt); repeatable', collect)
       // `--element`, the flag's name before 2026-10-04, still accepted and hidden from help. `--kling-element` wins.
       .addOption(new Option('--element <id>', 'deprecated alias for --kling-element').argParser(collect).hideHelp())
-      .option('--multi-shot', 'enable multi-shot mode (e.g. WAN 2.6)')
-      .option('--shots <json>', 'Kling 3.0 multi-shot: JSON array of { prompt, duration } objects', toJson),
+      .option('--multi-shot', 'multi-shot with the cuts planned by the model, on a model whose shots include auto (model get); to write each shot yourself, pass --shots instead')
+      .option('--shots <json>', 'write each shot yourself, on a model whose shots include custom: JSON array of { prompt, duration } objects', toJson)
+      .option('--input-mode <id>', 'the input mode, by id from model get; omit to let the attached inputs decide'),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
     const shots = opts.shots as Array<{ prompt: string; duration: number }> | undefined
@@ -126,6 +127,7 @@ export function registerGenerate(program: Command): void {
     const wantMultiShot = klingMultiShot || opts.multiShot === true
     const parameters: Record<string, unknown> = {}
     if (wantMultiShot) parameters.multiShot = true
+    if (typeof opts.inputMode === 'string') parameters.inputMode = opts.inputMode
     if (klingMultiShot) parameters.shots = shots
     const request = compact<GenerateRequest>({
       contentType: 'video',
