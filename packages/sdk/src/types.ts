@@ -312,7 +312,7 @@ export interface TemplateFields {
   lottie?: { url: string; recolor?: Array<{ from: string; role: string }> }
   /** An animated emoji's name, as the animated emoji list names it. */
   emoji?: string
-  /** A shape's name, as get_schema (kind 'layer') lists them. */
+  /** A shape's name, as the shape layer type lists them in get_schema kind 'layer'. */
   shape?: string
   props?: Record<string, unknown>
   propsSchema?: Record<string, unknown> | null
@@ -3804,7 +3804,7 @@ export interface EditorSharedProps {
   adjust: EditorTypeProp[]
 }
 
-/** The canvas layer-type catalog, from `getLayerTypes`. Makes `update_canvas` self-describing. */
+/** The whole canvas schema, from `getLayerTypes({ detail: 'full' })`. Makes `update_canvas` self-describing. */
 export interface LayerTypeCatalog {
   projectType: 'canvas'
   /** @deprecated Alias for `projectType`, still emitted for one release window. */
@@ -3869,6 +3869,8 @@ export interface TimelineSchemaIndex {
   /** @deprecated Alias for `projectType`, still emitted for one release window. */
   surface: 'editor'
   description: string
+  /** What holds for every op, so one op read in full is enough to use it. */
+  rules: string[]
   clipTypes: Array<Pick<EditorTypeSpec, 'type' | 'description' | 'supports'>>
   trackTypes: EditorTrackSpec[]
   ops: TimelineOpIndexEntry[]
@@ -3895,9 +3897,49 @@ export interface TimelineAnimationsEntry extends AnimationCatalog {
 /** One entry of the timeline schema, by name. */
 export type TimelineSchemaEntry = TimelineOpEntry | TimelineClipTypeEntry | TimelineAnimationsEntry
 
-/** What a timeline schema read asks for: the index (nothing), one entry (`name`), or the whole schema (`detail`). */
-export interface TimelineSchemaOptions extends TypeCatalogOptions {
-  /** One op or clip type to read in full, or `animations` for the presets. */
+/** One update_canvas op as the schema's index lists it. */
+export interface LayerOpIndexEntry {
+  op: string
+  shape: string
+}
+
+/**
+ * The INDEX of the canvas schema, from `getLayerTypes()`: every update_canvas op with its shape, every layer type, and
+ * the rules every op follows. Read one entry in full with `{ name }`, or everything with `{ detail: 'full' }`.
+ */
+export interface LayerSchemaIndex {
+  projectType: 'canvas'
+  /** @deprecated Alias for `projectType`, still emitted for one release window. */
+  surface: 'canvas'
+  description: string
+  /** What holds for every op, so one op read in full is enough to use it. */
+  rules: string[]
+  layerTypes: Array<Pick<EditorTypeSpec, 'type' | 'description' | 'supports'>>
+  ops: LayerOpIndexEntry[]
+}
+
+/** One canvas op in full, from `getLayerTypes({ name })`. */
+export interface LayerOpEntry extends LayerOpIndexEntry {
+  entry: 'op'
+  description: string
+}
+
+/** One layer type in full, with the shared field groups it has, from `getLayerTypes({ name })`. */
+export interface LayerTypeEntry {
+  entry: 'layerType'
+  layerType: EditorTypeSpec
+  sharedProps: Partial<EditorSharedProps>
+}
+
+/** One entry of the canvas schema, by name. */
+export type LayerSchemaEntry = LayerOpEntry | LayerTypeEntry
+
+/**
+ * What a schema read asks for, timeline or canvas alike: the index (nothing), one entry (`name`), or the whole schema
+ * (`detail`).
+ */
+export interface EditorSchemaOptions extends TypeCatalogOptions {
+  /** One op or type to read in full; for the timeline, `animations` reads the presets. */
   name?: string
   /** `full`: the whole schema in one read. */
   detail?: 'full'

@@ -104,6 +104,8 @@ import type {
   ProjectDetail,
   LiveContextResult,
   LayerTypeCatalog,
+  LayerSchemaIndex,
+  LayerSchemaEntry,
   TimelineTypeCatalog,
   TimelineSchemaIndex,
   TimelineSchemaEntry,
@@ -2863,8 +2865,36 @@ export function undoResult(projectId: string, r: UndoResult): CallToolResult {
   return text(`${r.label} on project ${projectId}. The project is at revision ${r.revision}.`)
 }
 
-/** The canvas layer-type catalog (types + editable props) as readable text + the JSON. */
-export function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
+/**
+ * A canvas schema read, in whichever of its three shapes it came: the index (the default), one entry by name, or the
+ * whole schema (`detail: 'full'`). Each is a text summary, then the read itself as JSON.
+ */
+export function layerSchemaResult(read: LayerSchemaIndex | LayerSchemaEntry | LayerTypeCatalog): CallToolResult {
+  if ('entry' in read) return layerEntryResult(read)
+  if ('rules' in read) return layerIndexResult(read)
+  return layerTypesResult(read)
+}
+
+function layerIndexResult(index: LayerSchemaIndex): CallToolResult {
+  const layers = index.layerTypes.map((t) => `- ${t.type}: ${t.description} (shared groups: ${t.supports.join(', ') || 'none'})`)
+  return text(
+    `${index.description}\n\nRules:\n${index.rules.map((r) => `- ${r}`).join('\n')}\n\nOps:\n${index.ops.map((o) => `- ${o.shape}`).join('\n')}\n\n` +
+      `Layer types:\n${layers.join('\n')}\n\n` +
+      JSON.stringify(index),
+  )
+}
+
+function layerEntryResult(entry: LayerSchemaEntry): CallToolResult {
+  if (entry.entry === 'op') return text(`${entry.shape}\n${entry.description}\n\n${JSON.stringify(entry)}`)
+  const t = entry.layerType
+  return text(
+    `${t.type}: ${t.description}\nFields: ${t.props.map((p) => p.name).join(', ')}\n` +
+      `Shared groups: ${Object.keys(entry.sharedProps).join(', ') || 'none'}\n\n${JSON.stringify(entry)}`,
+  )
+}
+
+/** The whole canvas schema (types + editable props + ops) as readable text + the JSON. */
+function layerTypesResult(cat: LayerTypeCatalog): CallToolResult {
   const lines = cat.layerTypes.map((t) => `- ${t.type}: ${t.description} (props: ${t.props.map((p) => p.name).join(', ')}; supports: ${t.supports.join(', ')})`)
   const ops = cat.ops ? cat.ops.ops.map((o) => `- ${o.shape}  ${o.description}`) : []
   return text(
@@ -3075,7 +3105,7 @@ export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
  */
 export function timelineSchemaResult(read: TimelineSchemaIndex | TimelineSchemaEntry | TimelineTypeCatalog): CallToolResult {
   if ('entry' in read) return timelineEntryResult(read)
-  if ('ops' in read) return timelineIndexResult(read)
+  if ('rules' in read) return timelineIndexResult(read)
   return timelineTypesResult(read)
 }
 
@@ -3084,7 +3114,7 @@ function timelineIndexResult(index: TimelineSchemaIndex): CallToolResult {
   const clips = index.clipTypes.map((t) => `- ${t.type}: ${t.description} (shared groups: ${t.supports.join(', ') || 'none'})`)
   const tracks = index.trackTypes.map((t) => `- ${t.trackType}: holds ${t.holds.join(', ')}`)
   return text(
-    `${index.description}\n\nCreate ops:\n${ops('create').join('\n')}\n\nEdit ops:\n${ops('edit').join('\n')}\n\n` +
+    `${index.description}\n\nRules:\n${index.rules.map((r) => `- ${r}`).join('\n')}\n\nCreate ops:\n${ops('create').join('\n')}\n\nEdit ops:\n${ops('edit').join('\n')}\n\n` +
       `Clip types:\n${clips.join('\n')}\n\nTrack types:\n${tracks.join('\n')}\n\n` +
       JSON.stringify(index),
   )

@@ -689,16 +689,16 @@ test('getExportFormats GETs /api/v1/export-formats', async () => {
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/export-formats')
 })
 
-test('getLayerTypes GETs the canvas catalog', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'canvas', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, layerTypes: [] } }])
+test('getLayerTypes GETs the canvas schema index', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { projectType: 'canvas', surface: 'canvas', description: 'd', rules: [], layerTypes: [], ops: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const cat = await client.getLayerTypes()
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/layer-types')
   assert.equal(cat.surface, 'canvas')
 })
 
-test('getTimelineTypes GETs the timeline catalog', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: { surface: 'editor', description: 'd', sharedProps: { base: [], transform: [], decoration: [], adjust: [] }, clipTypes: [], trackTypes: [] } }])
+test('getTimelineTypes GETs the timeline schema index', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { projectType: 'editor', surface: 'editor', description: 'd', rules: [], clipTypes: [], trackTypes: [], ops: [] } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   const cat = await client.getTimelineTypes()
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/editor/timeline-types')
@@ -727,20 +727,26 @@ test('listEffects and getEffect read the effect catalog, one effect by its name'
   assert.equal(list.effects[0]?.name, 'glow')
 })
 
-// The timeline schema reads in two steps (2026-10-09): the index by default, one entry by name, or the whole on request.
-test('getTimelineTypes reads the index, one entry by name, or the whole schema', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: {} }, { status: 200, body: {} }, { status: 200, body: {} }, { status: 200, body: {} }])
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getTimelineTypes()
-  await client.getTimelineTypes({ name: 'update_clip' })
-  await client.getTimelineTypes({ name: 'video', jsonSchema: true })
-  await client.getTimelineTypes({ detail: 'full' })
-  assert.deepEqual(calls.map((c) => c.url), [
-    'https://example.test/api/v1/editor/timeline-types',
-    'https://example.test/api/v1/editor/timeline-types?name=update_clip',
-    'https://example.test/api/v1/editor/timeline-types?include=jsonSchema&name=video',
-    'https://example.test/api/v1/editor/timeline-types?detail=full',
-  ])
+// The timeline schema reads in two steps (2026-10-09), and the canvas schema the same way (2026-10-10): the index by
+// default, one entry by name, or the whole on request.
+test('getTimelineTypes and getLayerTypes read the index, one entry by name, or the whole schema', async () => {
+  for (const [read, path, op, type] of [
+    ['getTimelineTypes', 'timeline-types', 'update_clip', 'video'],
+    ['getLayerTypes', 'layer-types', 'create_layer', 'text'],
+  ] as const) {
+    const { fetch, calls } = stubFetch([{ status: 200, body: {} }, { status: 200, body: {} }, { status: 200, body: {} }, { status: 200, body: {} }])
+    const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+    await client[read]()
+    await client[read]({ name: op })
+    await client[read]({ name: type, jsonSchema: true })
+    await client[read]({ detail: 'full' })
+    assert.deepEqual(calls.map((c) => c.url), [
+      `https://example.test/api/v1/editor/${path}`,
+      `https://example.test/api/v1/editor/${path}?name=${op}`,
+      `https://example.test/api/v1/editor/${path}?include=jsonSchema&name=${type}`,
+      `https://example.test/api/v1/editor/${path}?detail=full`,
+    ])
+  }
 })
 
 // The JSON Schema is opt-in on the server (most of the catalog's size), so the SDK asks for it only when told to.
