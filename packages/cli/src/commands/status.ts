@@ -2,7 +2,7 @@
  * `contenthero status <ids...>` - where any background job is: a generation or an edit's output, an export, a brand
  * kit read, an avatar, a content analysis, a transcript. Named after the MCP's get_status. Blocks until the jobs
  * finish unless `--no-wait`. An id alone names its job; `--kind` is for a full UUID, a transcript (its id is the
- * media it belongs to), or an id the server says is ambiguous.
+ * media or post it belongs to), or an id the server says is ambiguous.
  *
  * Returns exit 1 if any job failed, exit 4 if any was still running when the timeout elapsed (the ids are still
  * emitted so the caller can keep polling), otherwise 0.

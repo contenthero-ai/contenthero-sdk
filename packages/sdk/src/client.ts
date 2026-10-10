@@ -364,7 +364,7 @@ export class ContentHero {
   /**
    * Any background job's status by its id: a generation or an edit's output, an export, a brand kit read, an avatar,
    * a content analysis, a transcript. The id alone names most jobs; pass `kind` for a full UUID, for a transcript (its
-   * id is the media it belongs to), or when the server answers that the id is ambiguous. Answers at once with where
+   * id is the media or post it belongs to), or when the server answers that the id is ambiguous. Answers at once with where
    * the job is; `detail` is the kind's own resource (an output's is its `Generation`). `waitForStatus` waits.
    */
   async getStatus(id: string, options: { kind?: JobKind; signal?: AbortSignal } = {}): Promise<JobStatus> {

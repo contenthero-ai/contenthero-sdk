@@ -825,7 +825,7 @@ export interface WaitOptions {
 
 /**
  * The kinds of background job `getStatus` reads. An id alone names most jobs; the kind is needed only for a full
- * UUID, for a transcript (whose id is the media it belongs to), or when the server says an id is ambiguous.
+ * UUID, for a transcript (whose id is the media or post it belongs to), or when the server says an id is ambiguous.
  */
 export const JOB_KINDS = ['output', 'export', 'brand_kit', 'avatar', 'content', 'transcript'] as const
 export type JobKind = (typeof JOB_KINDS)[number]
@@ -841,7 +841,7 @@ export interface JobStep {
   reason: string | null
 }
 
-/** What a transcript job carries: its own status and the media it belongs to. */
+/** What a transcript job carries: its own status and the media or post it belongs to. */
 export interface TranscriptJobDetail {
   status: string
   mediaId: string

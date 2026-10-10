@@ -3372,7 +3372,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       annotations: READ,
       // DRAFT for Taylan's approval (2026-10-10).
       description:
-        "Check any background job: generations and edits, exports, brand kit reads, avatars, content analysis and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Pass kind only for a full UUID, for a transcript (its id is the media it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
+        "Check any background job: generations and edits, exports, brand kit reads, avatars, content analysis and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Pass kind only for a full UUID, for a transcript (its id is the media or post it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
       inputSchema: {
         ids: z
           .array(z.string())
