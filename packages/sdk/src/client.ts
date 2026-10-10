@@ -152,8 +152,7 @@ import type {
   TrackedAccountListResult,
   ConnectedAccountListResult,
   UpdateProjectInput,
-  TimelineSettings,
-  TimelineSettingsChange,
+  ProjectWithSettings,
   ProjectVersionListResult,
   ProjectExportListResult,
   SavedProjectVersion,
@@ -1789,12 +1788,14 @@ export class ContentHero {
   }
 
   /**
-   * Change a project's own fields: rename it, resize it, choose its brand kit, choose or frame its cover. A PATCH: a
-   * field left out is left alone, and `brandKitId` / `coverPosition` take `null` to clear them. Returns the project's
-   * summary as it now stands. Requires the `editor:write` scope.
+   * Change a project: rename it, choose its brand kit, choose or frame its cover, and change its settings: its canvas
+   * size, and a video project's frame rate, delivery loudness, magnetic main track, linkage and linked tracks. A PATCH:
+   * a field left out is left alone, and `brandKitId` / `coverPosition` take `null` to clear them. A setting belongs to
+   * the project: changing one is an edit, so `undo` reverses it and every open editor shows it. Returns the
+   * project and its settings as they now stand. Requires the `editor:write` scope.
    */
-  async updateProject(projectId: string, input: UpdateProjectInput): Promise<ProjectSummary> {
-    const { project } = await this.request<{ project: ProjectSummary }>(
+  async updateProject(projectId: string, input: UpdateProjectInput): Promise<ProjectWithSettings> {
+    const { project } = await this.request<{ project: ProjectWithSettings }>(
       'PATCH',
       `/api/v1/projects/${encodeURIComponent(projectId)}`,
       input,
@@ -1821,25 +1822,6 @@ export class ContentHero {
    */
   async shareProject(projectId: string, input: ShareProjectInput = {}): Promise<ProjectShare> {
     return this.request<ProjectShare>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/share`, input)
-  }
-
-  /** A video project's timeline settings for the caller, as the editor's timeline settings menu holds them. Requires `editor:read`. */
-  async getTimelineSettings(projectId: string): Promise<TimelineSettings> {
-    const { settings } = await this.request<{ settings: TimelineSettings }>(
-      'GET',
-      `/api/v1/projects/${encodeURIComponent(projectId)}/settings`,
-    )
-    return settings
-  }
-
-  /** Change some of a video project's timeline settings; returns all of them. Requires `editor:write`. */
-  async updateTimelineSettings(projectId: string, change: TimelineSettingsChange): Promise<TimelineSettings> {
-    const { settings } = await this.request<{ settings: TimelineSettings }>(
-      'PATCH',
-      `/api/v1/projects/${encodeURIComponent(projectId)}/settings`,
-      change,
-    )
-    return settings
   }
 
   // ─── Version history (premium, as in the editor) ───────────────────────────

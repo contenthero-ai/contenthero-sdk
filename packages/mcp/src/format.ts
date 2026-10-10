@@ -45,7 +45,7 @@ import type {
   ProjectExportListResult,
   SavedProjectVersion,
   RestoredProjectVersion,
-  TimelineSettings,
+  ProjectSettings,
   UndoResult,
   Account,
   Charge,
@@ -2557,6 +2557,10 @@ const PROJECT_DETAIL_EXPOSURE = {
   revision: 'rendered',
   compositionSpace: 'rendered',
   fps: 'rendered',
+  loudness: 'rendered',
+  magneticTrack: 'rendered',
+  linkage: 'rendered',
+  linkedTracks: 'rendered',
   groups: 'rendered',
   state: 'rendered',
   scope: 'rendered',
@@ -2600,6 +2604,7 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
         : '') +
       // The rate every frame number in the timeline counts at (7.39; approved text 8).
       (p.fps ? `Frame rate: ${p.fps} fps. Every frame number in its timeline counts at this rate.\n` : '') +
+      settingsText(p) +
       // An agent asked to keep a design on-brand otherwise has no way to know WHICH kit this project is
       // linked to: it can list kits, but not resolve the association.
       (p.brandKitId ? `Brand kit: ${p.brandKitId} (read it with get_brand_kit).\n` : '') +
@@ -2787,33 +2792,35 @@ export function projectDeletedResult(projectId: string): CallToolResult {
   return text(`Permanently deleted project ${projectId}. This cannot be undone.`)
 }
 
-/** A project's summary after a change, or a new project made by a copy: what it is now. */
-export function projectSummaryResult(p: ProjectSummary, verb: string): CallToolResult {
+/**
+ * A video project's delivery loudness and editing settings, a line each, as get_project and update_project report them
+ * (the frame rate and size have their own lines). Empty for a canvas, which has none. Draft wording (2026-10-10).
+ */
+export function settingsText(p: ProjectSettings): string {
+  const onOff = (b: boolean) => (b ? 'on' : 'off')
+  const out: string[] = []
+  if (p.loudness !== undefined) out.push(`Delivery loudness: ${describeLoudness(p.loudness)}.`)
+  if (p.magneticTrack !== undefined && p.linkage !== undefined && p.linkedTracks) {
+    const linked = Object.entries(p.linkedTracks).filter(([, on]) => on).map(([kind]) => kind)
+    out.push(
+      `Editing: magnetic main track ${onOff(p.magneticTrack)}, linkage ${onOff(p.linkage)}` +
+        `${p.linkage ? `, reaching ${linked.length ? linked.join(', ') : 'no'} tracks` : ''}. Every edit ripples by these; update_project changes them.`,
+    )
+  }
+  return out.map((l) => `${l}\n`).join('')
+}
+
+/** A project's summary after a change, or a new project made by a copy: what it is now, with its settings when known. */
+export function projectSummaryResult(p: ProjectSummary & ProjectSettings, verb: string): CallToolResult {
   const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
   return text(
     `${verb} ${p.type} project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height})` +
-      `, cover ${p.coverSource}${p.coverFrame != null ? ` at frame ${p.coverFrame}` : ''}${flags ? ` (${flags})` : ''}.`,
+      `, cover ${p.coverSource}${p.coverFrame != null ? ` at frame ${p.coverFrame}` : ''}${flags ? ` (${flags})` : ''}.` +
+      (p.fps ? `\nFrame rate: ${p.fps} fps.` : '') +
+      (settingsText(p) ? `\n${settingsText(p).trimEnd()}` : ''),
   )
 }
 
-/** A video project's timeline settings, one per line. */
-export function timelineSettingsResult(projectId: string, s: TimelineSettings): CallToolResult {
-  const onOff = (b: boolean) => (b ? 'on' : 'off')
-  const linked = Object.entries(s.linkedTracks).filter(([, on]) => on).map(([kind]) => kind)
-  return text(
-    lines([
-      `Timeline settings for project ${projectId}:`,
-      `- magneticTrack: ${onOff(s.magneticTrack)}`,
-      `- snapping: ${onOff(s.snapping)}`,
-      `- linkage: ${onOff(s.linkage)}`,
-      `- linkedTracks: ${linked.length ? linked.join(', ') : 'none'}`,
-      `- followPlayhead: ${onOff(s.followPlayhead)}`,
-      `- skimming: ${onOff(s.skimming)}`,
-      `- skipDisabledClips: ${onOff(s.skipDisabledClips)}`,
-      `- loudness: ${describeLoudness(s.loudness)}`,
-    ]),
-  )
-}
 
 /** A page of a project's saved versions, newest first. */
 export function projectVersionListResult(projectId: string, { versions, nextCursor }: ProjectVersionListResult): CallToolResult {

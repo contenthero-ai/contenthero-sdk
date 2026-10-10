@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: a project's settings are read by `get_project` and changed by `update_project`. `update_project` takes
+  `fps`, `loudness`, `magneticTrack`, `linkage` and `linkedTracks` beside the title, size, brand kit and cover, and
+  both tools report the settings. `get_timeline_settings` and `update_timeline_settings` are removed. `update_timeline`
+  carries content only: `set_frame_rate` is no longer one of its operations.
+
 ## 0.4.32
 
 - Breaking: a project's delivery loudness is a project setting. `get_timeline_settings` reads `loudness` and

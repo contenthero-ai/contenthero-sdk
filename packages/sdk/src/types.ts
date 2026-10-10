@@ -3147,7 +3147,7 @@ export interface GroupSummary {
   memberClipIds: string[]
 }
 
-export interface ProjectDetail extends ProjectSummary {
+export interface ProjectDetail extends ProjectSummary, ProjectSettings {
   revision: number
   /** The full composition state (`{ slides }` for canvas, `{ tracks }` for the editor timeline). */
   state: unknown
@@ -3181,9 +3181,8 @@ export interface ProjectDetail extends ProjectSummary {
    * Use it for any absolute geometry, and pass it as layerWidth/layerHeight for a FULL-FRAME layer.
    */
   compositionSpace?: { width: number; height: number }
-  /** The project's frame rate. Every frame number in its timeline counts at this rate. Editor projects only. */
-  fps?: number
 }
+
 
 /** What a `getProject` read was narrowed to (see `ProjectDetail.scope`). */
 export interface ProjectReadScope {
@@ -3403,7 +3402,39 @@ export interface UpdateProjectInput {
   /** Where the cover is framed, as percentages of its width and height, or null for the default framing. */
   coverPosition?: { x: number; y: number } | null
   cover?: ProjectCoverChoice
+  /** Video projects: the frame rate. Every frame number in the timeline converts with it, so clips keep their timing. */
+  fps?: 24 | 25 | 30 | 50 | 60
+  /** Video projects: the delivery loudness. */
+  loudness?: Loudness
+  /** Video projects: the magnetic main track. Turning it on closes the main track's gaps in the same edit. */
+  magneticTrack?: boolean
+  /** Video projects: whether other tracks follow the main track's ripple and delete. */
+  linkage?: boolean
+  /** Video projects: which kinds of track linkage reaches; a kind left out is left alone. */
+  linkedTracks?: Partial<LinkedTracks>
 }
+
+/**
+ * A video project's settings besides its canvas size (which is `width`, `height` and `orientation`), as `getProject`
+ * reads them and `updateProject` returns them. They belong to the project, not the caller: every collaborator and every
+ * export follows them, they travel with versions and duplicates, and changing one is an edit that undo reverses.
+ * Absent on a canvas project.
+ */
+export interface ProjectSettings {
+  /** The frame rate. Every frame number in the timeline counts at it. */
+  fps?: number
+  /** The delivery loudness, heard in the editor and followed by its exports. */
+  loudness?: Loudness
+  /** The magnetic main track: moving, trimming or deleting a clip on the main track closes the gap it leaves. */
+  magneticTrack?: boolean
+  /** Whether other tracks follow the main track's ripple and delete. */
+  linkage?: boolean
+  /** Which kinds of track linkage reaches. */
+  linkedTracks?: LinkedTracks
+}
+
+/** A project as `updateProject` returns it: its summary and its settings, as they now stand. */
+export type ProjectWithSettings = ProjectSummary & ProjectSettings
 
 /** Which kinds of track a linked edit reaches. */
 export interface LinkedTracks {
@@ -3418,27 +3449,6 @@ export interface LinkedTracks {
  */
 export type Loudness = number | 'off'
 
-/** A video project's timeline settings for the caller: the same settings the editor's timeline settings menu holds. */
-export interface TimelineSettings {
-  magneticTrack: boolean
-  snapping: boolean
-  linkage: boolean
-  linkedTracks: LinkedTracks
-  followPlayhead: boolean
-  skimming: boolean
-  skipDisabledClips: boolean
-  /**
-   * The project's delivery loudness, heard in the editor and followed by its exports. Unlike the other settings it
-   * belongs to the project, not the caller: every collaborator and every export reads it, it travels with versions
-   * and duplicates, and changing it is an edit that undo reverses.
-   */
-  loudness: Loudness
-}
-
-/** A change to some timeline settings, for `updateTimelineSettings`; a setting left out is left alone. */
-export type TimelineSettingsChange = Partial<Omit<TimelineSettings, 'linkedTracks'>> & {
-  linkedTracks?: Partial<LinkedTracks>
-}
 
 /** A saved version of a project, as the version history lists it and a save returns it. */
 export interface ProjectVersion {

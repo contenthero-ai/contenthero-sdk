@@ -127,8 +127,6 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   update_project: ['project update'],
   duplicate_project: ['project duplicate'],
   share_project: ['project share'],
-  get_timeline_settings: ['project settings get'],
-  update_timeline_settings: ['project settings update'],
   list_project_versions: ['project version list'],
   save_project_version: ['project version save'],
   restore_project_version: ['project version restore', 'project version copy'],

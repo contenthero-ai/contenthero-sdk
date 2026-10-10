@@ -4631,16 +4631,16 @@ test('list tools forward their sort, page and new filters, and a page ends with 
   assert.match(tags.content[0].text, /More: pass cursor "n1"\.$/)
 })
 
-test('the project tools reach their SDK methods: fields, copy, settings, versions, undo and redo', async () => {
+test('the project tools reach their SDK methods: fields, settings, copy, versions, undo and redo', async () => {
   const calls: string[] = []
+  // A project's settings ride its read and its update (2026-10-10): get_project reads them, update_project changes them.
+  const settings = { fps: 30, loudness: -16, magneticTrack: false, linkage: true, linkedTracks: { media: true, audio: false, text: true } }
   const summary = { id: 'p2', type: 'editor', title: 'Launch (copy)', orientation: '16:9', width: 1920, height: 1080, coverSource: 'auto', coverFrame: null, isArchived: false, isFavorited: false }
-  const settings = { magneticTrack: true, snapping: false, linkage: true, linkedTracks: { media: true, audio: false, text: true }, followPlayhead: true, skimming: false, skipDisabledClips: true, loudness: -16 }
   const mcp = await connect(
     fakeClient({
-      updateProject: async (id, input) => (calls.push(`update ${id} ${JSON.stringify(input)}`), summary),
+      updateProject: async (id, input) => (calls.push(`update ${id} ${JSON.stringify(input)}`), { ...summary, ...settings }),
+      getProject: async (id) => (calls.push(`get ${id}`), { ...summary, ...settings, revision: 3, state: {}, groups: [] }),
       duplicateProject: async (id) => (calls.push(`duplicate ${id}`), summary),
-      getTimelineSettings: async (id) => (calls.push(`settings ${id}`), settings),
-      updateTimelineSettings: async (id, change) => (calls.push(`settings ${id} ${JSON.stringify(change)}`), settings),
       listProjectVersions: async (id, page) => (calls.push(`versions ${id} ${JSON.stringify(page)}`), { versions: [{ id: 'v1', createdAt: 't', label: 'Final', triggerReason: 'manual', authorName: 'Taylan', revision: 4, kind: 'tracks', createdBy: 'u', sizeBytes: 1 }], nextCursor: null }),
       saveProjectVersion: async (id, o) => (calls.push(`save ${id} ${JSON.stringify(o)}`), { id: 'v2', label: o.label }),
       restoreProjectVersion: async (id, v) => (calls.push(`restore ${id} ${v}`), { revision: 9, kind: 'tracks' }),
@@ -4654,12 +4654,19 @@ test('the project tools reach their SDK methods: fields, copy, settings, version
   const call = (name: string, args: Record<string, unknown>) => mcp.callTool({ name, arguments: args })
   const updated = await call('update_project', { projectId: 'p1', title: 'Launch', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
   assert.match(updated.content[0].text, /^Updated editor project p2/)
+  // The settings, changed and reported back as they now stand.
+  const set = await call('update_project', { projectId: 'p1', fps: 30, loudness: 'off', magneticTrack: false, linkedTracks: { audio: false }, width: 1080, height: 1920 })
+  assert.match(set.content[0].text, /Frame rate: 30 fps\./)
+  assert.match(set.content[0].text, /Delivery loudness: -16 LUFS/)
+  assert.match(set.content[0].text, /Editing: magnetic main track off, linkage on, reaching media, text tracks\./)
+  const read = await call('get_project', { projectId: 'p1' })
+  assert.match(read.content[0].text, /Delivery loudness: -16 LUFS/)
+  assert.match(read.content[0].text, /magnetic main track off/)
+  // The timeline settings tools are gone: a project setting has one reader and one writer.
+  const listedTools = (await mcp.listTools()).tools.map((t) => t.name)
+  assert.equal(listedTools.includes('get_timeline_settings'), false)
+  assert.equal(listedTools.includes('update_timeline_settings'), false)
   await call('duplicate_project', { projectId: 'p1' })
-  const read = await call('get_timeline_settings', { projectId: 'p1' })
-  assert.match(read.content[0].text, /linkedTracks: media, text/)
-  assert.match(read.content[0].text, /- loudness: -16 LUFS$/)
-  await call('update_timeline_settings', { projectId: 'p1', snapping: false, linkedTracks: { audio: false } })
-  await call('update_timeline_settings', { projectId: 'p1', loudness: 'off' })
   const listed = await call('list_project_versions', { projectId: 'p1', limit: 10 })
   assert.match(listed.content[0].text, /v1 \| t \| "Final" \| manual \| by Taylan \| revision 4/)
   await call('save_project_version', { projectId: 'p1', label: 'Before' })
@@ -4673,10 +4680,10 @@ test('the project tools reach their SDK methods: fields, copy, settings, version
   await call('redo_project_edit', { projectId: 'p1', expectedRevision: 10 })
   assert.deepEqual(calls, [
     'update p1 {"title":"Launch","brandKitId":null,"cover":{"frame":12},"coverPosition":{"x":50,"y":40}}',
+    'update p1 {"width":1080,"height":1920,"fps":30,"loudness":"off","magneticTrack":false,"linkedTracks":{"audio":false}}',
+    'get p1',
     'duplicate p1',
-    'settings p1',
-    'settings p1 {"snapping":false,"linkedTracks":{"audio":false}}',
-    'settings p1 {"loudness":"off"}',
+
     'versions p1 {"limit":10}',
     'save p1 {"label":"Before"}',
     'restore p1 v1',

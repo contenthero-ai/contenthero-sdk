@@ -219,14 +219,14 @@ test('project duplicate, undo and redo reach their routes', async () => {
   assert.deepEqual(redo.body, { expectedRevision: 10 })
 })
 
-test('project settings update sends only the settings named, on and off', async () => {
-  const r = await run('project', 'settings', 'update', 'p1', '--snapping', '--no-magnetic-track', '--linked-tracks', '{"audio":false}')
-  assert.equal(`${r.method} ${r.path}`, 'PATCH /api/v1/projects/p1/settings')
-  assert.deepEqual(r.body, { magneticTrack: false, snapping: true, linkedTracks: { audio: false } })
-  const read = await run('project', 'settings', 'get', 'p1')
-  assert.equal(`${read.method} ${read.path}`, 'GET /api/v1/projects/p1/settings')
-  assert.deepEqual((await run('project', 'settings', 'update', 'p1', '--loudness', '-16')).body, { loudness: -16 })
-  assert.deepEqual((await run('project', 'settings', 'update', 'p1', '--loudness', 'off')).body, { loudness: 'off' })
+test('project update sends the settings named, on and off, to the project', async () => {
+  const r = await run('project', 'update', 'p1', '--no-magnetic-track', '--linkage', '--linked-tracks', '{"audio":false}', '--fps', '25', '--loudness', '-16')
+  assert.equal(`${r.method} ${r.path}`, 'PATCH /api/v1/projects/p1')
+  assert.deepEqual(r.body, { fps: 25, loudness: -16, magneticTrack: false, linkage: true, linkedTracks: { audio: false } })
+  assert.deepEqual((await run('project', 'update', 'p1', '--loudness', 'off')).body, { loudness: 'off' })
+  assert.deepEqual((await run('project', 'update', 'p1', '--orientation', '9:16')).body, { orientation: '9:16' })
+  // The timeline settings commands are gone: a project setting has one reader and one writer.
+  await assert.rejects(run('project', 'settings', 'get', 'p1'))
 })
 
 test("project export sends this export's loudness only when it is named", async () => {

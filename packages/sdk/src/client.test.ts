@@ -1325,26 +1325,39 @@ test('listTrackedAccounts sends camelCase filters and reads trackedAccounts; lis
   assert.equal(connected.connectedAccounts[0]?.id, 'c1')
 })
 
-test('project fields, copies and timeline settings reach their routes', async () => {
+test("a project's fields and settings are read by getProject and changed by updateProject, copies by duplicateProject", async () => {
+  const settings = { fps: 30, loudness: -14, magneticTrack: false, linkage: true, linkedTracks: { media: true, audio: false, text: true } }
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { project: { id: 'p1', title: 'T' } } },
+    { status: 200, body: { project: { id: 'p1', title: 'T', width: 1080, height: 1920, orientation: '9:16', ...settings } } },
+    { status: 200, body: { project: { id: 'p1', title: 'T', revision: 3, state: {}, ...settings } } },
     { status: 201, body: { project: { id: 'p2' } } },
-    { status: 200, body: { settings: { snapping: true } } },
-    { status: 200, body: { settings: { snapping: false } } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const updated = await client.updateProject('p1', { title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
+  const updated = await client.updateProject('p1', {
+    title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 },
+    orientation: '9:16', fps: 30, loudness: -14, magneticTrack: false, linkedTracks: { audio: false },
+  })
+  // The answer carries the settings as they now stand, read the same way get_project reads them.
   assert.equal(updated.id, 'p1')
+  assert.equal(updated.magneticTrack, false)
+  assert.deepEqual(updated.linkedTracks, { media: true, audio: false, text: true })
+  const read = await client.getProject('p1')
+  assert.equal(read.loudness, -14)
+  assert.equal(read.magneticTrack, false)
   assert.equal((await client.duplicateProject('p1')).id, 'p2')
-  assert.equal((await client.getTimelineSettings('p1')).snapping, true)
-  assert.equal((await client.updateTimelineSettings('p1', { snapping: false, linkedTracks: { audio: false }, loudness: -16 })).snapping, false)
   assert.deepEqual(
     calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
-    ['PATCH /api/v1/projects/p1', 'POST /api/v1/projects/p1/duplicate', 'GET /api/v1/projects/p1/settings', 'PATCH /api/v1/projects/p1/settings'],
+    ['PATCH /api/v1/projects/p1', 'GET /api/v1/projects/p1', 'POST /api/v1/projects/p1/duplicate'],
   )
-  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 } })
-  assert.deepEqual(JSON.parse(String(calls[3]!.init?.body)), { snapping: false, linkedTracks: { audio: false }, loudness: -16 })
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), {
+    title: 'T', brandKitId: null, coverPosition: { x: 50, y: 40 }, cover: { frame: 12 },
+    orientation: '9:16', fps: 30, loudness: -14, magneticTrack: false, linkedTracks: { audio: false },
+  })
+  // The timeline settings are gone: a project setting has one reader and one writer.
+  assert.equal('getTimelineSettings' in client, false)
+  assert.equal('updateTimelineSettings' in client, false)
 })
+
 
 test("a project's exports are read a page at a time", async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { exports: [{ exportId: 'e1', status: 'completed' }], nextCursor: 'n' } }])

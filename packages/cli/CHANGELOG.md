@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: a project's settings are read by `project get` and changed by `project update`, which takes `--fps`,
+  `--loudness`, `--magnetic-track` / `--no-magnetic-track`, `--linkage` / `--no-linkage` and `--linked-tracks`.
+  `project settings get|update` is removed.
+
 ## 0.3.22
 
 - Breaking: a project's delivery loudness is a project setting. `project settings get` prints it and

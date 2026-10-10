@@ -5,9 +5,10 @@
  *   project get   <projectId>                                            (requires editor:read)
  *   project create [--type <t>] [--title <t>] [--orientation <r>] [--width <n>] [--height <n>]
  *   project update <projectId> [--title] [--orientation] [--width] [--height] [--brand-kit] [--cover] [--cover-position]
+ *                  [--fps] [--loudness] [--magnetic-track|--no-magnetic-track] [--linkage|--no-linkage] [--linked-tracks]
  *   project duplicate <projectId>                                        (requires editor:write)
  *   project share <projectId> [--off]                                    its public live link, or revoke it (editor:write)
- *   project settings get|update <projectId>                              a video project's timeline settings
+
  *   project version list|save|restore|copy|rename|delete <projectId>     its version history (premium)
  *   project undo|redo <projectId> [--expected-revision <n>]              the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
@@ -49,8 +50,8 @@ import {
   type ProjectVersionListResult,
   type ProjectExportListResult,
   type SortOrder,
-  type TimelineSettings,
-  type TimelineSettingsChange,
+  type ProjectSettings,
+  type ProjectWithSettings,
   type UndoResult,
   type UpdateProjectInput,
 } from '@contenthero/sdk'
@@ -147,6 +148,7 @@ export function registerProject(program: Command): void {
           ? `\nLayer geometry space: ${p.compositionSpace.width}x${p.compositionSpace.height} (center-relative px; output resolution is ${p.width}x${p.height})` +
             `\n  Full-frame layer: layerWidth ${p.compositionSpace.width}, layerHeight ${p.compositionSpace.height}`
           : '') +
+        settingsText(p) +
         (p.groups?.length
           ? `\nGroups: ${p.groups
               .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)
@@ -230,12 +232,19 @@ export function registerProject(program: Command): void {
 
   project
     .command('update')
-    .description("Change a project's own fields: rename, resize, brand kit, cover (requires editor:write)")
+    .description("Change a project: its title, brand kit and cover, and its settings, which are the project's and shared by everyone who edits it: canvas size, and a video project's frame rate, loudness and editing settings (requires editor:write)")
     .argument('<projectId>', 'the project id')
     .option('--title <text>', 'a new title')
-    .option('--orientation <ratio>', 'a new aspect ratio')
-    .option('--width <n>', 'a new pixel width', toInt)
-    .option('--height <n>', 'a new pixel height', toInt)
+    .option('--orientation <ratio>', "an aspect from the editor's list, or custom; alone, it sets the size the editor gives that aspect")
+    .option('--width <n>', 'a pixel width, given with --height', toInt)
+    .option('--height <n>', 'a pixel height, given with --width', toInt)
+    .option('--fps <n>', "a video project's frame rate; every frame number converts with it, so clips keep their timing", toInt)
+    .option('--loudness <lufs|off>', "a video project's delivery loudness, a target in LUFS or off; every export follows it", toLoudness)
+    .option('--magnetic-track', "turn a video project's magnetic main track on; it closes the main track's gaps")
+    .option('--no-magnetic-track', "turn a video project's magnetic main track off")
+    .option('--linkage', "turn a video project's linkage on: other tracks follow the main track's ripple and delete")
+    .option('--no-linkage', "turn a video project's linkage off")
+    .option('--linked-tracks <json>', 'which kinds of track linkage reaches, as JSON with media, audio and text booleans; a kind left out is left alone', toJson)
     .option('--brand-kit <id>', 'the brand kit to associate, or none to clear it')
     .option('--cover <choice>', 'the cover: auto (follows the composition), frame:<n> (a chosen frame or slide index), or media:<id> (a library image)', toCoverChoice)
     .option('--cover-position <x,y>', 'where the cover is framed, as percentages of its width and height, or none for the default framing')
@@ -249,10 +258,15 @@ export function registerProject(program: Command): void {
       if (opts.cover !== undefined) input.cover = opts.cover as ProjectCoverChoice
       // Parsed here, not by commander: an option parser that returns null is read as no value.
       if (opts.coverPosition !== undefined) input.coverPosition = toCoverPosition(opts.coverPosition as string)
+      if (opts.fps !== undefined) input.fps = opts.fps as UpdateProjectInput['fps']
+      if (opts.loudness !== undefined) input.loudness = opts.loudness as Loudness
+      if (typeof opts.magneticTrack === 'boolean') input.magneticTrack = opts.magneticTrack
+      if (typeof opts.linkage === 'boolean') input.linkage = opts.linkage
+      if (opts.linkedTracks !== undefined) input.linkedTracks = opts.linkedTracks as UpdateProjectInput['linkedTracks']
       if (Object.keys(input).length === 0) throw new CliError('Nothing to change: pass at least one field flag.', EXIT.USAGE)
       const { client, ctx } = makeClient(command)
       const p = await client.updateProject(projectId, input)
-      emit(p, ctx, (r: ProjectSummary) => `Updated ${r.type} project ${r.id} "${r.title}" (${r.orientation} ${r.width}x${r.height})`)
+      emit(p, ctx, (r: ProjectWithSettings) => `Updated ${r.type} project ${r.id} "${r.title}" (${r.orientation} ${r.width}x${r.height})` + (r.fps ? `\nFrame rate: ${r.fps} fps` : '') + settingsText(r))
     })
 
   project
@@ -276,7 +290,6 @@ export function registerProject(program: Command): void {
       emit(share, ctx, () => describeProjectShare(share))
     })
 
-  registerTimelineSettings(project)
   registerVersions(project)
 
   for (const direction of ['undo', 'redo'] as const) {
@@ -472,55 +485,21 @@ function toCoverPosition(value: string): { x: number; y: number } | null {
   return { x: parts[0]!, y: parts[1]! }
 }
 
-/** The timeline settings flags, each a setting's name with a `--no-` form to turn it off. */
-const SETTING_FLAGS: Array<[keyof Omit<TimelineSettings, 'linkedTracks' | 'loudness'>, string]> = [
-  ['magneticTrack', 'magnetic-track'],
-  ['snapping', 'snapping'],
-  ['linkage', 'linkage'],
-  ['followPlayhead', 'follow-playhead'],
-  ['skimming', 'skimming'],
-  ['skipDisabledClips', 'skip-disabled-clips'],
-]
-
-function settingsHuman(s: TimelineSettings): string {
+/**
+ * A video project's delivery loudness and editing settings, a line each, as `project get` and `project update` print
+ * them (the frame rate and size have their own). Empty for a canvas, which has none.
+ */
+function settingsText(p: ProjectSettings): string {
   const onOff = (b: boolean) => (b ? 'on' : 'off')
-  return keyValues([
-    ...SETTING_FLAGS.map(([key, flag]): [string, string] => [flag, onOff(s[key])]),
-    ['linked tracks', Object.entries(s.linkedTracks).filter(([, on]) => on).map(([kind]) => kind).join(', ') || 'none'],
-    ['loudness', describeLoudness(s.loudness)],
-  ])
+  return (
+    (p.loudness !== undefined ? `\nDelivery loudness: ${describeLoudness(p.loudness)}` : '') +
+    (p.magneticTrack !== undefined && p.linkage !== undefined && p.linkedTracks
+      ? `\nEditing: magnetic main track ${onOff(p.magneticTrack)}, linkage ${onOff(p.linkage)}` +
+        (p.linkage ? `, reaching ${Object.entries(p.linkedTracks).filter(([, on]) => on).map(([kind]) => kind).join(', ') || 'no'} tracks` : '')
+      : '')
+  )
 }
 
-function registerTimelineSettings(project: Command): void {
-  const settings = project.command('settings').description("A video project's timeline settings, as the editor's timeline settings menu holds them")
-
-  settings
-    .command('get')
-    .description("Read a video project's timeline settings (requires editor:read)")
-    .argument('<projectId>', 'the project id')
-    .action(async (projectId: string, _opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      emit(await client.getTimelineSettings(projectId), ctx, settingsHuman)
-    })
-
-  const update = settings
-    .command('update')
-    .description('Change some timeline settings; a setting left out is left alone (requires editor:write)')
-    .argument('<projectId>', 'the project id')
-  for (const [, flag] of SETTING_FLAGS) update.option(`--${flag}`, `turn ${flag.replace(/-/g, ' ')} on`).option(`--no-${flag}`, `turn ${flag.replace(/-/g, ' ')} off`)
-  update
-    .option('--linked-tracks <json>', 'which kinds of track a linked edit reaches, as JSON with media, audio and text booleans', toJson)
-    .option('--loudness <lufs|off>', "the project's delivery loudness, a target in LUFS or off: it is the project's, so every collaborator and export follows it, and undo reverses a change to it", toLoudness)
-    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
-      const change: TimelineSettingsChange = {}
-      for (const [key] of SETTING_FLAGS) if (typeof opts[key] === 'boolean') change[key] = opts[key] as boolean
-      if (opts.linkedTracks !== undefined) change.linkedTracks = opts.linkedTracks as TimelineSettingsChange['linkedTracks']
-      if (opts.loudness !== undefined) change.loudness = opts.loudness as Loudness
-      if (Object.keys(change).length === 0) throw new CliError('Nothing to change: pass at least one setting flag.', EXIT.USAGE)
-      const { client, ctx } = makeClient(command)
-      emit(await client.updateTimelineSettings(projectId, change), ctx, settingsHuman)
-    })
-}
 
 function registerVersions(project: Command): void {
   const version = project.command('version').description("A project's version history (premium, as in the editor)")

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Breaking: a project's settings are read by `getProject` and changed by `updateProject`. `ProjectDetail` gains
+  `loudness`, `magneticTrack`, `linkage` and `linkedTracks` (`ProjectSettings`, beside `fps`); `UpdateProjectInput`
+  gains `fps`, `loudness`, `magneticTrack`, `linkage` and `linkedTracks`, and `updateProject` returns the project with
+  its settings (`ProjectWithSettings`). The settings belong to the project and are shared by everyone who edits it;
+  a change is an edit that `undo` reverses. `getTimelineSettings`, `updateTimelineSettings`, `TimelineSettings` and
+  `TimelineSettingsChange` are removed. Snapping, skimming, follow playhead and skip disabled clips are the editor's
+  own, per person, and reach no tool.
+
 ## 0.4.25
 
 - Breaking: a project's delivery loudness is a project setting. `TimelineSettings.loudness` (`Loudness`: a target
