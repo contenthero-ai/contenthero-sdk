@@ -106,26 +106,26 @@ test('the batch form also surfaces partial urls', () => {
 /**
  * The async handoff must name the argument the tool actually takes.
  *
- * `get_generation_status` requires `outputIds`, an ARRAY of 1 to 8, even for a single job. The handoff
- * used to read "call get_generation_status with this outputId", so an agent following it literally sent
- * `{ outputId }` and the schema rejected the call. Found by driving the MCP as an ordinary user on
+ * `get_status` requires `ids`, an ARRAY of 1 to 8, even for a single job. The handoff used to read "call the
+ * status tool with this outputId", so an agent following it literally sent `{ outputId }` and the schema
+ * rejected the call. Found by driving the MCP as an ordinary user on
  * 2026-08-31. These tests assert the printed CALL, not prose, because prose is what drifted.
  */
 
-test('the status call names outputIds and passes an array, even for one id', () => {
+test('the status call names ids and passes an array, even for one id', () => {
   const call = getStatusCall(['o1'])
-  assert.match(call, /outputIds: \["o1"\]/)
+  assert.match(call, /^get_status \{ ids: \["o1"\] \}$/)
   // The singular must not appear as an argument name anywhere in the call.
   assert.doesNotMatch(call, /outputId:/)
 })
 
 test('the status call carries every id in one call', () => {
-  assert.match(getStatusCall(['a', 'b', 'c']), /outputIds: \["a", "b", "c"\]/)
+  assert.match(getStatusCall(['a', 'b', 'c']), /ids: \["a", "b", "c"\]/)
 })
 
-test('a still-rendering job hands back a callable get_generation_status', () => {
+test('a still-rendering job hands back a callable get_status', () => {
   const out = body(pendingResult('vid-7', 15))
-  assert.match(out, /outputIds: \["vid-7"\]/)
+  assert.match(out, /get_status \{ ids: \["vid-7"\] \}/)
   assert.doesNotMatch(out, /with this outputId/)
 })
 
@@ -138,7 +138,7 @@ test('in-place enhancement hands back every outputId in one callable form', () =
       ],
     }),
   )
-  assert.match(out, /outputIds: \["j1", "j2"\]/)
+  assert.match(out, /get_status \{ ids: \["j1", "j2"\] \}/)
 })
 
 
@@ -395,7 +395,7 @@ test('the pending text still tells the agent to poll', () => {
     textOnly.content[0].text,
     'adding the widget must not change one character of what the agent reads',
   )
-  assert.match(withWidget.content[0].text, /get_generation_status \{ outputIds: \["o-slow"\] \}/)
+  assert.match(withWidget.content[0].text, /get_status \{ ids: \["o-slow"\] \}/)
 })
 
 /**

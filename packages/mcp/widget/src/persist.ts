@@ -114,6 +114,17 @@ export function isUnfinished(p: CardPayload | null | undefined): boolean {
 }
 
 /**
+ * The call the card makes to learn how its generation is doing: the server's `get_status`, by the output's id.
+ * The answer's `structuredContent` is the same card payload the generation started with (the server builds it from
+ * the status's `detail`), so the poll merges it as is.
+ *
+ * ⚠️ `ids`, PLURAL, and an array even for one. The singular spelling is a validation error.
+ */
+export function statusPollCall(outputId: string): { name: 'get_status'; arguments: { ids: string[] } } {
+  return { name: 'get_status', arguments: { ids: [outputId] } }
+}
+
+/**
  * Reads a card's saved state. Storage can be absent or throw in a sandboxed frame (no same-origin, blocked
  * site data), so every failure reads as "nothing saved" and the widget behaves exactly as it did before.
  */

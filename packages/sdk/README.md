@@ -42,11 +42,14 @@ const { outputId } = await client.generate({
   audioEnabled: true,
 })
 
-// Poll yourself, later.
-const generation = await client.getGeneration(outputId)
-if (generation.status === 'completed') {
-  console.log(generation.outputUrls)
+// Poll yourself, later. getStatus reads any background job by its id; an output's detail is its Generation.
+const status = await client.getStatus(outputId)
+if (status.kind === 'output' && status.state === 'completed') {
+  console.log(status.detail.outputs.map((o) => o.url))
 }
+
+// Or wait for several jobs under one deadline: each comes back completed, failed, or as last read.
+const [job] = await client.waitForStatus([outputId], { timeoutMs: 60_000 })
 ```
 
 `generateAndWait` does the polling for you and resolves with the finished `Generation` (or throws `GenerationFailedError` / `GenerationTimeoutError`). Tune it with `{ pollIntervalMs, timeoutMs, signal }`.

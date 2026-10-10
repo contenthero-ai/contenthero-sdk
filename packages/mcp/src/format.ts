@@ -65,6 +65,8 @@ import type {
   TemplateSummary,
   TemplateListResult,
   Generation,
+  JobKind,
+  JobStatus,
   GenerationOutput,
   GenerateResult,
   EditAudioResult,
@@ -518,15 +520,15 @@ export function pollAfterSecondsFor(contentType: string): number {
 }
 
 /**
- * How to call `get_generation_status`, written as the call itself.
+ * How to call `get_status`, written as the call itself.
  *
- * ⚠️ THE ARGUMENT IS `outputIds` AND IT IS AN ARRAY, ALWAYS, even for one job. Every handoff here used to
- * say "call get_generation_status with this outputId", which names a parameter that does not exist: an agent
- * following the sentence literally sends `{ outputId }` and the schema rejects it. Naming the shape in prose
- * is what drifted, so these messages now print the call instead, and every site shares this one function.
+ * ⚠️ THE ARGUMENT IS `ids` AND IT IS AN ARRAY, ALWAYS, even for one job. Every handoff here used to say "call the
+ * status tool with this outputId", which names a parameter that does not exist: an agent following the sentence
+ * literally sends the singular and the schema rejects it. Naming the shape in prose is what drifted, so these
+ * messages now print the call instead, and every site shares this one function.
  */
-export function getStatusCall(outputIds: readonly string[]): string {
-  return `get_generation_status { outputIds: [${outputIds.map((id) => `"${id}"`).join(', ')}] }`
+export function getStatusCall(ids: readonly string[]): string {
+  return `get_status { ids: [${ids.map((id) => `"${id}"`).join(', ')}] }`
 }
 
 /** What a still-running generation already knows about the shape of its own result. */
@@ -575,7 +577,7 @@ export interface PendingShape {
  *
  * ⚠️ No model NAME here, and that is deliberate. Resolving one would mean a second network call from
  * inside a `catch`, which is the exact shape that produced a chip flickering between kebab case and title
- * case. The widget polls `get_generation_status`, and the name arrives with the first response.
+ * case. The widget polls `get_status`, and the name arrives with the first response.
  */
 export function pendingResult(
   outputId: string,
@@ -758,7 +760,7 @@ export function generationStatusResult(
     return text(`Generation ${gen.outputId} was set aside and produced nothing of its own. It will not change.`)
   }
   const secs = pollAfterSecondsFor(gen.contentType)
-  const poll = `Call get_generation_status again in ~${secs}s [poll_after_seconds: ${secs}]`
+  const poll = `Call get_status again in ~${secs}s [poll_after_seconds: ${secs}]`
   /**
    * ⭐⭐⭐ **THE OUTPUTS THAT HAVE LANDED, WHICH IS WHAT LETS A CARD FILL IN ONE TILE AT A TIME.**
    *
@@ -811,6 +813,26 @@ export function generationStatusResult(
   }
 }
 
+/** One generation as a line of a batch answer: its state, the files that have landed, and a re-poll hint while unfinished. */
+function generationRow(gen: Generation): string {
+  if (gen.status === 'completed') {
+    const landed = landedOutputs(gen)
+    return `- ${gen.outputId}: completed | ${landed.map((o) => `${o.mediaId} ${o.url}`).join(', ') || '(no urls)'}`
+  }
+  if (gen.status === 'failed') {
+    return `- ${gen.outputId}: failed | ${gen.error ?? 'unknown error'}`
+  }
+  const secs = pollAfterSecondsFor(gen.contentType)
+  // Same rule as the single form: surface the slots that already landed rather than making the
+  // caller block on the slowest one. The count says the set is incomplete, so a row can never be
+  // mistaken for a finished generation.
+  const ready = landedOutputs(gen)
+  if (ready.length > 0) {
+    return `- ${gen.outputId}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${o.mediaId} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
+  }
+  return `- ${gen.outputId}: ${gen.status} [poll_after_seconds: ${secs}]`
+}
+
 /** One or more generations (snapshot or post-wait). Falls through to the single form for one id. */
 export function generationBatchResult(
   gens: Generation[],
@@ -821,25 +843,44 @@ export function generationBatchResult(
   // The single form is what a caller polling one generation hits, and that is the case worth rendering.
   if (gens.length === 1)
     return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
-  const rows = gens.map((gen) => {
-    if (gen.status === 'completed') {
-      const landed = landedOutputs(gen)
-      return `- ${gen.outputId}: completed | ${landed.map((o) => `${o.mediaId} ${o.url}`).join(', ') || '(no urls)'}`
-    }
-    if (gen.status === 'failed') {
-      return `- ${gen.outputId}: failed | ${gen.error ?? 'unknown error'}`
-    }
-    const secs = pollAfterSecondsFor(gen.contentType)
-    // Same rule as the single form: surface the slots that already landed rather than making the
-    // caller block on the slowest one. The count says the set is incomplete, so a row can never be
-    // mistaken for a finished generation.
-    const ready = landedOutputs(gen)
-    if (ready.length > 0) {
-      return `- ${gen.outputId}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${o.mediaId} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
-    }
-    return `- ${gen.outputId}: ${gen.status} [poll_after_seconds: ${secs}]`
-  })
+  const rows = gens.map(generationRow)
   return text([`${gens.length} generation(s):`, ...rows].join('\n'))
+}
+
+/** Seconds to wait before re-reading a job that is not a generation: exports move fast, the rest are slower reads. */
+export function jobPollAfterSeconds(kind: JobKind): number {
+  return kind === 'export' ? 5 : 10
+}
+
+/**
+ * One job of any kind as a line: kind, id, state, why it failed, how far along, its steps, its link, and a re-poll
+ * hint while it is unfinished. A generation keeps its own richer line, with the files that have landed.
+ */
+export function jobStatusRow(status: JobStatus): string {
+  if (status.kind === 'output') return generationRow(status.detail)
+  const parts = [`- ${status.kind} ${status.id}: ${status.state}`]
+  if (status.reason) parts.push(`reason: ${status.reason}`)
+  if (status.progress !== null && status.progress !== undefined) parts.push(`progress: ${Math.round(status.progress * 100)}%`)
+  if (status.steps?.length) {
+    parts.push(`steps: ${status.steps.map((st) => `${st.name} ${st.state}${st.reason ? ` (${st.reason})` : ''}`).join(', ')}`)
+  }
+  if (status.appUrl) parts.push(status.appUrl)
+  const unfinished = status.state !== 'completed' && status.state !== 'failed'
+  const line = parts.join(' | ')
+  return unfinished ? `${line} [poll_after_seconds: ${jobPollAfterSeconds(status.kind)}]` : line
+}
+
+/**
+ * Several jobs, or any job that is not a generation. Every generation keeps the rich answer (`generationBatchResult`);
+ * this is for the rest, one line each, with the call to make again while any is unfinished.
+ */
+export function jobStatusesResult(statuses: JobStatus[]): CallToolResult {
+  const unfinished = statuses.filter((s) => s.state !== 'completed' && s.state !== 'failed').map((s) => s.id)
+  const rows = statuses.map(jobStatusRow)
+  const head = statuses.length === 1 ? null : `${statuses.length} job(s):`
+  const tail = unfinished.length ? `Still running: call ${getStatusCall(unfinished)} again.` : null
+  const failed = statuses.length > 0 && statuses.every((s) => s.state === 'failed')
+  return text(lines([head, ...rows, tail]), failed)
 }
 
 /** A finished transcription: header line plus the transcript body. */

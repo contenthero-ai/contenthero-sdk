@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- New: `getStatus(id, { kind? })` reads any background job (an output, an export, a brand kit read, an avatar, a
+  content analysis, a transcript) from `GET /api/v1/status/{id}`, as a `JobStatus` whose `detail` is the kind's own
+  resource. `waitForStatus(targets, options)` waits for several under one deadline and hands each back finished or as
+  last read. `JobKind`, `JOB_KINDS`, `JobState`, `JobStep`, `JobStatus`, `JobTarget` and `TranscriptJobDetail` are
+  exported.
+- Breaking: `waitForGenerations` is removed; `waitForStatus` replaces it. `waitForGeneration` (behind
+  `generateAndWait`, `generateBoardAndWait` and `importMedia`) now reads the status route, so the server alone
+  decides when a generation is done.
+
 ## 0.4.26
 
 - Breaking: a project's settings are read by `getProject` and changed by `updateProject`. `ProjectDetail` gains

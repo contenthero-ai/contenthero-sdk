@@ -8,6 +8,7 @@
  */
 
 import {
+  ContentHeroError,
   errorFromResponse,
   GenerationFailedError,
   GenerationInterruptedError,
@@ -163,6 +164,9 @@ import type {
   SortOptions,
   ProjectSummary,
   Placement,
+  JobKind,
+  JobStatus,
+  JobTarget,
 } from './types.js'
 
 /** Minimal fetch signature, so a custom implementation can be injected. */
@@ -270,7 +274,7 @@ export class ContentHero {
 
   /**
    * Submit a generation. Returns immediately. For image/video the result is
-   * `status: 'processing'` (poll with `getGeneration` or use `generateAndWait`);
+   * `status: 'processing'` (poll with `getStatus` or use `generateAndWait`);
    * audio returns `status: 'completed'` with `outputUrls` populated.
    */
   async generate(request: GenerateRequest): Promise<GenerateResult> {
@@ -291,7 +295,7 @@ export class ContentHero {
    * Submit a generation and poll until it reaches a terminal state. Resolves
    * with the completed `Generation`, throws `GenerationFailedError` if it fails,
    * or `GenerationTimeoutError` if it does not finish within `timeoutMs` (the
-   * server-side job may still complete; re-poll with `getGeneration`).
+   * server-side job may still complete; re-poll with `getStatus`).
    */
   async generateAndWait(request: GenerateRequest, options: WaitOptions = {}): Promise<Generation> {
     const submitted = await this.generate(request)
@@ -305,7 +309,7 @@ export class ContentHero {
    * Submit a Reference Board: a dense multi-panel reference sheet built from a
    * source image and/or a written description (one of them is required). A board
    * is a pipeline, not a registry model, so it has its own endpoint. Returns
-   * immediately with `status: 'processing'`; poll with `getGeneration` (boards
+   * immediately with `status: 'processing'`; poll with `getStatus` (boards
    * are ordinary outputs) or use `generateBoardAndWait`.
    */
   async generateBoard(request: GenerateBoardRequest): Promise<GenerateResult> {
@@ -315,7 +319,7 @@ export class ContentHero {
   /**
    * Submit a board and poll until it reaches a terminal state. Same semantics as
    * `generateAndWait`. Boards render slowly (minutes), so size `timeoutMs`
-   * accordingly or catch `GenerationTimeoutError` and re-poll with `getGeneration`.
+   * accordingly or catch `GenerationTimeoutError` and re-poll with `getStatus`.
    */
   async generateBoardAndWait(
     request: GenerateBoardRequest,
@@ -358,55 +362,36 @@ export class ContentHero {
   }
 
   /**
-   * Poll an already-submitted generation to a terminal state. Pass an outputId
-   * from a prior `generate` / `generateBoard` (e.g. one you got back when a
-   * render was still in progress). Resolves with the completed `Generation` (or an
-   * `abandoned` one, which is terminal without being a failure),
-   * throws `GenerationFailedError` on failure, or `GenerationTimeoutError` if it
-   * does not finish within `timeoutMs` (the server-side job may still complete;
-   * re-poll). Also backs `generateAndWait` / `generateBoardAndWait`.
+   * Any background job's status by its id: a generation or an edit's output, an export, a brand kit read, an avatar,
+   * a content analysis, a transcript. The id alone names most jobs; pass `kind` for a full UUID, for a transcript (its
+   * id is the media it belongs to), or when the server answers that the id is ambiguous. Answers at once with where
+   * the job is; `detail` is the kind's own resource (an output's is its `Generation`). `waitForStatus` waits.
    */
-  async waitForGeneration(
-    outputId: string,
-    options: WaitOptions = {},
-  ): Promise<Generation> {
-    return this.#pollWithin(
-      (signal) => this.getGeneration(outputId, { signal }),
-      (generation) => {
-        options.onPoll?.(generation)
-        // Terminal only when SETTLED: a placement-bearing generation is not "done" for a caller until its swap /
-        // cutout side-effect has landed (see Generation.settled). `settled !== false` keeps older servers (which
-        // omit the field) working as before, and a no-placement output is settled the moment it completes.
-        if (generation.status === 'completed' && generation.settled !== false) return true
-        // Terminal without being a failure: set aside with no output of its own (see GenerationStatus).
-        if (generation.status === 'abandoned') return true
-        if (generation.status === 'failed') {
-          throw new GenerationFailedError(generation.outputId, generation.error ?? 'Generation failed', { generation })
-        }
-        return false
-      },
-      options,
-      (last) => new GenerationTimeoutError(outputId, undefined, last),
-    )
+  async getStatus(id: string, options: { kind?: JobKind; signal?: AbortSignal } = {}): Promise<JobStatus> {
+    const query = options.kind ? `?kind=${encodeURIComponent(options.kind)}` : ''
+    return this.request<JobStatus>('GET', `/api/v1/status/${encodeURIComponent(id)}${query}`, undefined, {
+      signal: options.signal,
+    })
   }
 
   /**
-   * Wait for several generations under one deadline. Each comes back settled, failed, or as last read when the
-   * deadline came, so one slow or failed generation never hides the others: read each `status`. A transient read
-   * error on one id falls back to a single snapshot within the same deadline, and throws only when that fails too.
+   * Wait for several jobs under ONE deadline. Each comes back finished (`completed` or `failed`) or as last read
+   * when the deadline came, so one slow or failed job never hides the others: read each `state`. Nothing throws for
+   * a failed job or a timeout. A transient read error on one target falls back to a single snapshot within the same
+   * deadline, and throws only when that fails too.
    */
-  async waitForGenerations(outputIds: string[], options: WaitOptions = {}): Promise<Generation[]> {
+  async waitForStatus(targets: JobTarget[], options: Omit<WaitOptions, 'onPoll'> = {}): Promise<JobStatus[]> {
     const deadline = Date.now() + (options.timeoutMs ?? 600_000)
     return Promise.all(
-      outputIds.map(async (id) => {
+      targets.map(async (target) => {
+        const { id, kind } = typeof target === 'string' ? { id: target, kind: undefined } : target
         try {
-          return await this.waitForGeneration(id, { ...options, timeoutMs: Math.max(0, deadline - Date.now()) })
+          return await this.#pollStatus(id, kind, { ...options, timeoutMs: Math.max(0, deadline - Date.now()) })
         } catch (err) {
-          if (err instanceof GenerationTimeoutError && err.lastStatus) return err.lastStatus
-          if (err instanceof GenerationFailedError && err.generation) return err.generation
+          if (err instanceof StatusDeadline && err.last) return err.last
           const timer = deadlineSignal(deadline, options.signal)
           try {
-            return await this.getGeneration(id, { signal: timer.signal })
+            return await this.getStatus(id, { kind, signal: timer.signal })
           } catch {
             throw err
           } finally {
@@ -414,6 +399,66 @@ export class ContentHero {
           }
         }
       }),
+    )
+  }
+
+  /**
+   * Poll an already-submitted generation to a terminal state. Pass an outputId
+   * from a prior `generate` / `generateBoard` (e.g. one you got back when a
+   * render was still in progress). Resolves with the completed `Generation` (or an
+   * `abandoned` one, which is terminal without being a failure),
+   * throws `GenerationFailedError` on failure, or `GenerationTimeoutError` if it
+   * does not finish within `timeoutMs` (the server-side job may still complete;
+   * re-poll). Also backs `generateAndWait` / `generateBoardAndWait`.
+   *
+   * The same wait as `waitForStatus`, read as an output: the server says when a generation is done (completed AND
+   * settled), so this client holds no second copy of that rule.
+   */
+  async waitForGeneration(
+    outputId: string,
+    options: WaitOptions = {},
+  ): Promise<Generation> {
+    const generationOf = (status: JobStatus | undefined): Generation | undefined =>
+      status?.kind === 'output' ? status.detail : undefined
+    let status: JobStatus
+    try {
+      status = await this.#pollStatus(outputId, 'output', options, (s) => {
+        const gen = generationOf(s)
+        if (gen) options.onPoll?.(gen)
+      })
+    } catch (err) {
+      if (err instanceof StatusDeadline) throw new GenerationTimeoutError(outputId, undefined, generationOf(err.last))
+      throw err
+    }
+    const generation = generationOf(status)
+    if (!generation) throw new ContentHeroError(`${outputId} is not a generation (the server named it a ${status.kind}).`)
+    // Terminal without being a failure: set aside with no output of its own (see GenerationStatus).
+    if (status.state === 'failed' && generation.status !== 'abandoned') {
+      throw new GenerationFailedError(generation.outputId, status.reason ?? generation.error ?? 'Generation failed', {
+        generation,
+      })
+    }
+    return generation
+  }
+
+  /**
+   * One job, read until it is `completed` or `failed`, through `#pollWithin`. Running out of time throws a
+   * `StatusDeadline` carrying the last status read, which each caller turns into its own answer.
+   */
+  async #pollStatus(
+    id: string,
+    kind: JobKind | undefined,
+    options: Omit<WaitOptions, 'onPoll'>,
+    onRead?: (status: JobStatus) => void,
+  ): Promise<JobStatus> {
+    return this.#pollWithin(
+      (signal) => this.getStatus(id, { kind, signal }),
+      (status) => {
+        onRead?.(status)
+        return status.state === 'completed' || status.state === 'failed'
+      },
+      options,
+      (last) => new StatusDeadline(id, last),
     )
   }
 
@@ -979,7 +1024,7 @@ export class ContentHero {
     return importedMediaFrom(gen, started.shortId)
   }
 
-  /** Start an import and return at once; follow it with `waitForGeneration` or `getGeneration`. See `importMedia`. */
+  /** Start an import and return at once; follow it with `waitForGeneration` or `getStatus`. See `importMedia`. */
   async startImport(input: ImportMediaInput): Promise<ImportStarted> {
     return this.request<ImportStarted>('POST', '/api/v1/media/imports', input)
   }
@@ -2146,6 +2191,20 @@ function readEnv(name: string): string | undefined {
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
     ?.env
   return env?.[name]
+}
+
+/**
+ * A job wait ran out of time. Internal: `waitForStatus` answers with `last`, and `waitForGeneration` turns it into a
+ * `GenerationTimeoutError`, so no caller ever sees this class.
+ */
+class StatusDeadline extends Error {
+  constructor(
+    readonly id: string,
+    readonly last: JobStatus | undefined,
+  ) {
+    super(`Timed out waiting for ${id}`)
+    this.name = 'StatusDeadline'
+  }
 }
 
 /**

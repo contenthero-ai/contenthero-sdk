@@ -7,7 +7,7 @@ Official [ContentHero](https://contenthero.ai) MCP server. Generate images, vide
 | Tool | What it does |
 | --- | --- |
 | `generate_image` | Generate images from a prompt (or image-to-image). Waits for the result and returns the URLs. |
-| `generate_video` | Generate video from a prompt (or start/end frame, references). Returns at once with an `outputId`; `get_generation_status` waits for the render. |
+| `generate_video` | Generate video from a prompt (or start/end frame, references). Returns at once with an `outputId`; `get_status` waits for the render. |
 | `generate_audio` | ElevenLabs speech (TTS), music, or sound effects. Synchronous: returns the audio URL directly. |
 | `check_generation` | Poll an image/video `outputId` to its final URLs. |
 | `get_account` | Your ContentHero account: balance, spend this month, the monthly spend cap, plan and auto top-up. |

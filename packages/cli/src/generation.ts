@@ -1,7 +1,7 @@
 /**
  * Shared generation plumbing: submit a request, optionally preflight its cost,
  * optionally block until it finishes, and render the result. Used by the
- * `generate`, `upscale`, and `generation` commands so they behave identically.
+ * `generate`, `upscale`, and `status` commands so they behave identically.
  *
  * Async contract (mirrors the SDK / MCP): image, video, and upscale return
  * `processing`; audio returns `completed` inline. With --wait (the default) we
@@ -66,7 +66,7 @@ function resultHuman(r: GenerateResult): string {
   // Each output by its media id, the name to pass back; nothing is numbered by position (7.44).
   for (const o of r.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
   if (r.status === 'processing') {
-    pairs.push(['Next', `contenthero generation-status get ${r.outputId}`])
+    pairs.push(['Next', `contenthero status ${r.outputId}`])
   }
   return keyValues(pairs)
 }
@@ -89,7 +89,7 @@ function generationHuman(g: Generation): string {
   for (const r of describeReferences(g.references)) pairs.push(['Made from', r])
   pairs.push(...costRows(g.charge))
   if (g.status === 'processing' || g.status === 'pending') {
-    pairs.push(['Next', `contenthero generation-status get ${g.outputId}`])
+    pairs.push(['Next', `contenthero status ${g.outputId}`])
   }
   return keyValues(pairs)
 }

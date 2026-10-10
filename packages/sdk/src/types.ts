@@ -411,7 +411,7 @@ export interface GenerateRequest {
    * Optional client-chosen id for idempotency. Must be a UUID; it becomes the
    * generation's id. Re-submitting with the same id returns the existing job
    * instead of starting (and charging for) another, so retries are safe. You
-   * also know the id up front and can poll `getGeneration` immediately.
+   * also know the id up front and can poll `getStatus` immediately.
    */
   outputId?: string
 
@@ -541,7 +541,7 @@ export interface GenerationOutput {
 
 /**
  * Result of submitting a generation. Image/video return `status: 'processing'`
- * (poll with `getGeneration`, or use `generateAndWait`). Audio is synchronous
+ * (poll with `getStatus`, or use `generateAndWait`). Audio is synchronous
  * and returns `status: 'completed'` with `outputs` already populated.
  */
 export interface GenerateResult {
@@ -727,7 +727,7 @@ export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
   note?: string
 }
 
-/** A generation record as returned by `getGeneration` and `generateAndWait`. */
+/** A generation record as returned by `getGeneration` and `generateAndWait`, and as an output's `JobStatus.detail`. */
 export interface Generation {
   outputId: string
   /** This generation in the app (its first output, or its pending state while it runs). */
@@ -753,9 +753,9 @@ export interface Generation {
   /** The terminal signal to await when a generation carries a project PLACEMENT (a fresh asset placed on a canvas
    *  / timeline, or an in-place background removal): true once the output exists AND its placement side-effect
    *  (the placeholder->asset swap, the cutout, a background promotion) has been applied to the project. `status`
-   *  flips to 'completed' when the asset exists and billing settles, which can precede the swap; `waitForGeneration`
-   *  keys on `settled` so "done" always implies the visible composition change is in. Absent (older servers) is
-   *  treated as settled. Outputs with no placement are settled as soon as they complete. */
+   *  flips to 'completed' when the asset exists and billing settles, which can precede the swap; an output's
+   *  `JobStatus.state` is 'completed' only once this is true, so "done" always implies the visible composition change
+   *  is in. Outputs with no placement are settled as soon as they complete. */
   settled?: boolean
   /** Where the asset was placed (present only when `projectId` was supplied to generate). Carried from the submit
    *  response through `generateAndWait` so a caller gets the placement outcome alongside the finished asset. */
@@ -822,6 +822,61 @@ export interface WaitOptions {
   /** Called with every status read, so a caller can show progress: a generation's outputs land one at a time. */
   onPoll?: (generation: Generation) => void
 }
+
+/**
+ * The kinds of background job `getStatus` reads. An id alone names most jobs; the kind is needed only for a full
+ * UUID, for a transcript (whose id is the media it belongs to), or when the server says an id is ambiguous.
+ */
+export const JOB_KINDS = ['output', 'export', 'brand_kit', 'avatar', 'content', 'transcript'] as const
+export type JobKind = (typeof JOB_KINDS)[number]
+
+/** Where a background job is. `completed` and `failed` are terminal; the other two mean it is still going. */
+export type JobState = 'queued' | 'processing' | 'completed' | 'failed'
+
+/** One named step of a job that runs in stages (a brand kit's website read and its analysis). */
+export interface JobStep {
+  name: string
+  state: JobState
+  /** Why the step failed, null otherwise. */
+  reason: string | null
+}
+
+/** What a transcript job carries: its own status and the media it belongs to. */
+export interface TranscriptJobDetail {
+  status: string
+  mediaId: string
+}
+
+/** The fields every job status has; `detail` is the kind's own resource body. */
+interface JobStatusOf<K extends JobKind, D> {
+  kind: K
+  /** The job's public id (its short id where it has one). */
+  id: string
+  state: JobState
+  /** Why it failed, null otherwise. */
+  reason: string | null
+  appUrl: string | null
+  /** 0 to 1 where the kind reports progress (exports), null otherwise. */
+  progress: number | null
+  /** The named steps, for a kind that runs in stages (a brand kit). */
+  steps?: JobStep[]
+  detail: D
+}
+
+/**
+ * One background job's status, as `getStatus` and `waitForStatus` return it. `kind` says which resource `detail` is:
+ * an output's is the generation itself, so a finished output is `state: 'completed'` only once it has settled.
+ */
+export type JobStatus =
+  | JobStatusOf<'output', Generation>
+  | JobStatusOf<'export', ExportJob>
+  | JobStatusOf<'brand_kit', BrandKit>
+  | JobStatusOf<'avatar', Avatar>
+  | JobStatusOf<'content', ContentDetail>
+  | JobStatusOf<'transcript', TranscriptJobDetail>
+
+/** A job to wait on: its id, or its id with the kind when the id alone does not name it. */
+export type JobTarget = string | { id: string; kind?: JobKind }
 
 /** Request to transcribe an audio URL to text. */
 export interface TranscribeRequest {

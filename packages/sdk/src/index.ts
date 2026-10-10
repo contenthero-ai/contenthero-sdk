@@ -6,7 +6,7 @@
  */
 
 export { ContentHero, importedMediaFrom } from './client.js'
-export { LIST_SORTS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES, PLACEMENT_ENDS } from './types.js'
+export { LIST_SORTS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS } from './types.js'
 export type {
   SortableList,
   SortFieldOf,
@@ -37,6 +37,12 @@ export type {
   Generation,
   GenerationOutput,
   GenerationStatus,
+  JobKind,
+  JobState,
+  JobStep,
+  JobStatus,
+  JobTarget,
+  TranscriptJobDetail,
   Account,
   AccountUpdate,
   SubscriptionTier,

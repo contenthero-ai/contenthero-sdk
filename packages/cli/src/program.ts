@@ -22,7 +22,7 @@ import { registerGenerate } from './commands/generate.js'
 import { registerUpscale } from './commands/upscale.js'
 import { registerAudio } from './commands/audio.js'
 import { registerTranscribe } from './commands/transcribe.js'
-import { registerGeneration } from './commands/generation.js'
+import { registerStatus } from './commands/status.js'
 import { registerMedia } from './commands/media.js'
 import { registerFolder } from './commands/folder.js'
 import { registerCard, registerPost } from './commands/card.js'
@@ -76,7 +76,7 @@ export function buildProgram(): Command {
   registerUpscale(program)
   registerAudio(program)
   registerTranscribe(program)
-  registerGeneration(program)
+  registerStatus(program)
   registerMedia(program)
   registerFolder(program)
   registerCard(program)

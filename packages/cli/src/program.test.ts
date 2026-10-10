@@ -25,7 +25,7 @@ test('every top-level command group is registered', () => {
     'generate',
     'upscale',
     'transcribe',
-    'generation-status',
+    'status',
     'media',
     'card',
     'post',
@@ -53,13 +53,12 @@ test('project exposes get + apply', () => {
   assert.ok(subs.includes('apply'), 'project should have an apply subcommand')
 })
 
-test('generation-status exposes get only, with wait folded into a flag', () => {
-  assert.deepEqual(subcommands('generation-status'), ['get'])
-  // `generation wait` was this command over an array with blocking on: the two differed by a default, not by
-  // what they did. The direction is --no-wait now.
-  const cmd = buildProgram().commands.find((c) => c.name() === 'generation-status')!
-  const get = cmd.commands.find((c) => c.name() === 'get')!
-  assert.ok(get.options.some((o) => o.long === '--no-wait'))
+test('status is one top-level command over ids, with wait folded into a flag and kind a choice', () => {
+  const cmd = buildProgram().commands.find((c) => c.name() === 'status')!
+  assert.deepEqual(cmd.commands, [], 'status runs on its own')
+  assert.ok(cmd.options.some((o) => o.long === '--no-wait'))
+  assert.deepEqual(cmd.options.find((o) => o.long === '--kind')?.argChoices, ['output', 'export', 'brand_kit', 'avatar', 'content', 'transcript'])
+  assert.equal(cmd.registeredArguments[0]?.variadic, true)
 })
 
 test('generate exposes the five generation subcommands', () => {
@@ -303,6 +302,7 @@ test('the old command names are gone', () => {
   for (const old of [
     'context',
     'generation',
+    'generation-status',
     'project export-status',
     'project exports',
     'project undo',
@@ -315,10 +315,10 @@ test('the old command names are gone', () => {
     assert.equal(find(old), undefined, `${old} is still registered`)
   }
   // `schema <kind>` and `project transcript <projectId>` became groups: they no longer run on their own.
-  for (const group of ['schema', 'project transcript', 'project edit', 'generation-status', 'post']) {
+  for (const group of ['schema', 'project transcript', 'project edit', 'post']) {
     assert.equal(isRunnable(find(group)!), false, `${group} runs on its own`)
   }
-  for (const current of ['view', 'generation-status get', 'project export', 'project export get', 'project export list', 'project transcript get', 'project edit undo', 'project edit redo', 'project version update', 'tag delete', 'post publish', 'schema get']) {
+  for (const current of ['view', 'status', 'project export', 'project export get', 'project export list', 'project transcript get', 'project edit undo', 'project edit redo', 'project version update', 'tag delete', 'post publish', 'schema get']) {
     assert.ok(find(current) && isRunnable(find(current)!), current)
   }
 })

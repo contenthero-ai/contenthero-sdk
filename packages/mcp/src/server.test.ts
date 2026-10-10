@@ -9,6 +9,7 @@ import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
 import { GENERATION_WIDGET_URI, WIDGET_RESOURCE_META } from './widget-resource.js'
 import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
+import { statusPollCall } from '../widget/src/persist.js'
 import { assertGroupsCoverTools, groupedToolNames, TOOL_GROUPS } from './groups.js'
 
 /** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
@@ -61,6 +62,12 @@ function withCatalogEntry(model) {
 }
 
 /** A minimal fake of the SDK client; override any method per test. */
+/** A generation as the status route answers for it: `state` is completed only once it has settled. */
+function outputStatus(gen) {
+  const state = gen.status === 'completed' || gen.status === 'abandoned' ? 'completed' : gen.status === 'failed' ? 'failed' : 'processing'
+  return { kind: 'output', id: gen.outputId, state, reason: gen.error ?? null, appUrl: gen.appUrl ?? null, progress: null, detail: gen }
+}
+
 function fakeClient(overrides = {}) {
   return {
     getAccount: async () => ({
@@ -231,16 +238,21 @@ function fakeClient(overrides = {}) {
       createdAt: 't',
       completedAt: 't2',
     }),
-    // The SDK's rule, over whichever waitForGeneration this fake carries: each id settled, failed, or as last read.
-    async waitForGenerations(ids, opts) {
+    // The status route, over whichever generation reads this fake carries: an output's status wraps its generation.
+    async getStatus(id) {
+      return outputStatus(await this.getGeneration(id))
+    },
+    // The SDK's rule, over whichever waitForGeneration this fake carries: each id finished or as last read.
+    async waitForStatus(targets, opts) {
       return Promise.all(
-        ids.map(async (id) => {
+        targets.map(async (t) => {
+          const id = typeof t === 'string' ? t : t.id
           try {
-            return await this.waitForGeneration(id, opts)
+            return outputStatus(await this.waitForGeneration(id, opts))
           } catch (err) {
-            if (err?.lastStatus) return err.lastStatus
-            if (err?.generation) return err.generation
-            return this.getGeneration(id)
+            if (err?.lastStatus) return outputStatus(err.lastStatus)
+            if (err?.generation) return outputStatus(err.generation)
+            return this.getStatus(id)
           }
         }),
       )
@@ -722,7 +734,7 @@ test('generate_image submits and hands back a pollable id, rather than waiting',
   assert.ok(!res.isError)
   // The id is what makes it resumable: the job is running and charged whether or not anyone polls.
   assert.match(res.content[0].text, /gen1/)
-  assert.match(res.content[0].text, /get_generation_status/)
+  assert.match(res.content[0].text, /get_status/)
   // And the payload the widget draws its placeholders from.
   assert.equal((res.structuredContent as { status?: string })?.status, 'processing')
 })
@@ -740,7 +752,7 @@ test('generate_video surfaces a smart-wait timeout as a pollable pending result'
     arguments: { modelId: 'veo-3.1-fast', prompt: 'a city at dusk' },
   })
   assert.match(res.content[0].text, /pending-99/)
-  assert.match(res.content[0].text, /get_generation_status/)
+  assert.match(res.content[0].text, /get_status/)
   assert.ok(!res.isError)
 })
 
@@ -767,7 +779,7 @@ test('generate_board surfaces a smart-wait timeout as a pollable pending result'
     arguments: { boardType: 'creature', prompt: 'a six-headed hydra' },
   })
   assert.match(res.content[0].text, /board-pending-7/)
-  assert.match(res.content[0].text, /get_generation_status/)
+  assert.match(res.content[0].text, /get_status/)
   assert.ok(!res.isError)
 })
 
@@ -1010,9 +1022,9 @@ test('rejects an unknown model at the schema boundary', async () => {
   assert.ok(blocked, 'expected an invalid modelId to be blocked before the handler')
 })
 
-test('get_generation_status blocks by default and returns the final URLs', async () => {
+test('get_status blocks by default and returns the final URLs', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1'] } })
+  const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['gen1'] } })
   assert.match(urlsIn(res), /https:\/\/cdn\/v\.mp4/)
   assert.ok(!res.isError)
 })
@@ -1024,21 +1036,21 @@ test('import_media waits within the call, and hands back the outputId as pending
   assert.deepEqual(options, { timeoutMs: 300, pollIntervalMs: 50 })
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /Import im9 is still running/)
-  assert.match(res.content[0].text, /get_generation_status \{ outputIds: \["im9"\] \}/)
+  assert.match(res.content[0].text, /get_status \{ ids: \["im9"\] \}/)
 })
 
-test('get_generation_status: an abandoned import says where the bytes already are, and never asks to poll again', async () => {
+test('get_status: an abandoned import says where the bytes already are, and never asks to poll again', async () => {
   const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
   const abandoned = (id, extra = {}) => ({ outputId: id, status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputs: outs([]), error: null, ...extra })
   const mcp = await connect(fakeClient({ waitForGeneration: async (id) => abandoned(id, id === 'imp1' ? { alreadyExisted: dup } : {}) }))
-  const dupRes = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['imp1'] } })
+  const dupRes = await mcp.callTool({ name: 'get_status', arguments: { ids: ['imp1'] } })
   assert.match(dupRes.content[0].text, /Already in your library/)
   assert.match(dupRes.content[0].text, /https:\/\/cdn\/old\.png/)
-  const other = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['voice1'] } })
+  const other = await mcp.callTool({ name: 'get_status', arguments: { ids: ['voice1'] } })
   assert.doesNotMatch(other.content[0].text, /again/)
 })
 
-test('get_generation_status takes wait:false for an instant snapshot', async () => {
+test('get_status takes wait:false for an instant snapshot', async () => {
   let waited = false
   const mcp = await connect(
     fakeClient({
@@ -1048,15 +1060,87 @@ test('get_generation_status takes wait:false for an instant snapshot', async () 
       },
     }),
   )
-  await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1'], wait: false } })
+  await mcp.callTool({ name: 'get_status', arguments: { ids: ['gen1'], wait: false } })
   // The direction that used to live in the tool NAME is an argument now, so this must not block.
   assert.equal(waited, false)
 })
 
-test('get_generation_status checks several outputIds in one call', async () => {
+test('get_status checks several ids in one call', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['gen1', 'gen2'] } })
+  const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['gen1', 'gen2'] } })
   assert.match(res.content[0].text, /2 generation\(s\)/)
+})
+
+/**
+ * get_status reads any background job. A job that is not a generation answers one line each: kind, id, state, why it
+ * failed, progress, steps and its link, with the call to make again while any is unfinished. Break-verified: routing a
+ * non-output status into the generation formatter turns the first red; dropping `kind` from the read turns the second.
+ */
+test('get_status answers an export, a brand kit read and a failed avatar one line each, and says how to re-poll', async () => {
+  const statuses = {
+    Exp12345: { kind: 'export', id: 'Exp12345', state: 'processing', reason: null, appUrl: 'https://app/e', progress: 0.42, detail: {} },
+    Bk123456: {
+      kind: 'brand_kit', id: 'Bk123456', state: 'processing', reason: null, appUrl: 'https://app/b', progress: null,
+      steps: [{ name: 'website', state: 'completed', reason: null }, { name: 'analysis', state: 'processing', reason: null }], detail: {},
+    },
+    Av123456: { kind: 'avatar', id: 'Av123456', state: 'failed', reason: 'no face found', appUrl: null, progress: null, detail: {} },
+  }
+  const mcp = await connect(fakeClient({ waitForStatus: async (targets) => targets.map((t) => statuses[t.id]) }))
+  const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Exp12345', 'Bk123456', 'Av123456'] } })
+  const out = res.content[0].text
+  assert.match(out, /3 job\(s\):/)
+  assert.match(out, /- export Exp12345: processing \| progress: 42% \| https:\/\/app\/e \[poll_after_seconds: \d+\]/)
+  assert.match(out, /- brand_kit Bk123456: processing \| steps: website completed, analysis processing/)
+  assert.match(out, /- avatar Av123456: failed \| reason: no face found$/m)
+  assert.match(out, /get_status \{ ids: \["Exp12345", "Bk123456"\] \}/)
+  assert.ok(!res.isError, 'one failed job among running ones is an answer, not an error')
+  assert.equal(res._meta, undefined, 'a status answer never mounts a card')
+})
+
+test('get_status passes kind through, and a lone finished transcript reads as done', async () => {
+  let asked
+  const mcp = await connect(
+    fakeClient({
+      getStatus: async (id, opts) => {
+        asked = { id, kind: opts?.kind }
+        return { kind: 'transcript', id, state: 'completed', reason: null, appUrl: null, progress: null, detail: { status: 'ready', mediaId: id } }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Med12345'], kind: 'transcript', wait: false } })
+  assert.deepEqual(asked, { id: 'Med12345', kind: 'transcript' })
+  assert.match(res.content[0].text, /^- transcript Med12345: completed$/)
+  assert.doesNotMatch(res.content[0].text, /poll_after_seconds|again/)
+})
+
+test('get_status refuses a kind it does not know', async () => {
+  const mcp = await connect(fakeClient())
+  let refused = false
+  try {
+    const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['x'], kind: 'project' } })
+    refused = res.isError === true
+  } catch {
+    refused = true
+  }
+  assert.ok(refused)
+})
+
+/**
+ * The generation card polls the server by itself. Its call is built by `statusPollCall`, and this runs that exact call
+ * against the real tool: the schema must accept it, and the answer must carry the card payload the widget merges.
+ * Break-verified: the old tool name, or the old `outputIds` argument, turns this red.
+ */
+test('the widget polls with get_status, and the answer carries the finished card', async () => {
+  const mcp = await connect(fakeClient())
+  const call = statusPollCall('gen1')
+  assert.equal(call.name, 'get_status')
+  const res = await mcp.callTool(call)
+  assert.ok(!res.isError, res.content?.[0]?.text)
+  const sc = res.structuredContent
+  assert.equal(sc.outputId, 'gen1')
+  assert.notEqual(sc.status, 'processing')
+  assert.ok(sc.items.some((i) => /https:\/\/cdn\/v\.mp4/.test(i.url)), JSON.stringify(sc))
+  assert.equal(res._meta, undefined, 'the poll answers the card; it never mounts a second one')
 })
 
 test('generate_image get_cost returns an estimate without generating', async () => {
@@ -1161,7 +1245,7 @@ test('upscale accepts an upscale model and returns the result', async () => {
   // ⚠️ SUBMITS AND RETURNS, like every other generate_* tool: an upscale is work in progress, and its card
   // should exist while the work is happening rather than appearing already finished.
   assert.match(res.content[0].text, /gen1/)
-  assert.match(res.content[0].text, /get_generation_status/)
+  assert.match(res.content[0].text, /get_status/)
 })
 
 
@@ -1198,7 +1282,7 @@ test('generate_lip_sync (script mode) builds a portrait + script request and ret
   assert.ok(!res.isError)
   // ⚠️ The REQUEST is what this test is about, and it still is. The result is now a pollable pending id
   // rather than a finished url, because the card has to exist while the work is happening.
-  assert.match(res.content[0].text, /get_generation_status/)
+  assert.match(res.content[0].text, /get_status/)
   // The portrait rides in references.images; the motion prompt in `prompt`.
   assert.deepEqual(captured.references.images, ['https://cdn/face.png'])
   assert.equal(captured.references.audio, undefined)
@@ -3832,7 +3916,7 @@ test('every media tool declares the widget, and only media tools do', async () =
  * handler can return a result carrying the payload. Adding a tool that produces media and forgetting the
  * binding now fails here, by name, without anyone having to notice.
  *
- * ⚠️ NO EXEMPTIONS, deliberately. `get_generation_status` reports rather than displays, so its result
+ * ⚠️ NO EXEMPTIONS, deliberately. `get_status` reports rather than displays, so its result
  * builder strips the payload; that is why it can sit on the false side of the equivalence honestly instead
  * of as a special case. An invariant with an exemption is a list again.
  */
@@ -4482,17 +4566,17 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
  * red; showing the full still instead of the crop turns the third red; dropping the shortfall line turns the fourth
  * red; fetching past the deadline turns the fifth red.
  */
-test('get_generation_status waits 40s for every id at once, inside the host ceiling', async () => {
+test('get_status waits 40s for every id at once, inside the host ceiling', async () => {
   let asked
   const mcp = await connect(
     fakeClient({
-      waitForGenerations: async (ids, opts) => {
-        asked = { ids, timeoutMs: opts.timeoutMs }
-        return ids.map((id) => ({ outputId: id, status: 'processing', contentType: 'image', modelId: 'm', outputs: [], error: null, createdAt: 't', completedAt: null }))
+      waitForStatus: async (targets, opts) => {
+        asked = { ids: targets.map((t) => t.id), timeoutMs: opts.timeoutMs }
+        return targets.map((t) => outputStatus({ outputId: t.id, status: 'processing', contentType: 'image', modelId: 'm', outputs: [], error: null, createdAt: 't', completedAt: null }))
       },
     }),
   )
-  await mcp.callTool({ name: 'get_generation_status', arguments: { outputIds: ['g1', 'g2'] } })
+  await mcp.callTool({ name: 'get_status', arguments: { ids: ['g1', 'g2'] } })
   assert.deepEqual(asked, { ids: ['g1', 'g2'], timeoutMs: 40_000 })
 })
 

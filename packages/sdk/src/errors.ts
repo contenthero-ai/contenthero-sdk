@@ -278,7 +278,7 @@ export class GenerationFailedError extends ContentHeroError {
 /**
  * Thrown by `generateAndWait` when the generation does not reach a terminal
  * state before the configured timeout. The job may still complete server-side;
- * `outputId` lets the caller keep polling with `getGeneration`.
+ * `outputId` lets the caller keep polling with `getStatus`.
  */
 export class GenerationTimeoutError extends ContentHeroError {
   readonly outputId: string
@@ -304,7 +304,7 @@ export class GenerationTimeoutError extends ContentHeroError {
  * The distinction that matters: this is NOT a failed generation. Discarding the outputId
  * here turns a recoverable blip into a lost job, and the caller's natural response is to
  * retry, which submits a SECOND generation and charges for it again. The id lets the
- * caller resume with `getGeneration` instead.
+ * caller resume with `getStatus` instead.
  */
 export class GenerationInterruptedError extends ContentHeroError {
   readonly outputId: string

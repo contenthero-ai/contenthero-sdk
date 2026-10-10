@@ -372,3 +372,21 @@ test('brand-kit --display-logo marks the named logo isDisplay, and must name one
   assert.ok(failure, 'a display logo that is not among the logos is refused')
   assert.equal(seen.length, 0, 'nothing is sent for a refused command')
 })
+
+// get_status's kind reaches the wire as a query parameter, and the id is the path. Break-verified: dropping `kind`
+// from the status read turns this red.
+test('status sends each id in the path and --kind as the query', async () => {
+  const exitBefore = process.exitCode
+  try {
+    const r = await run('status', 'Med12345', '--kind', 'transcript', '--no-wait')
+    assert.equal(r.method, 'GET')
+    assert.equal(r.path, '/api/v1/status/Med12345')
+    assert.equal(r.query.get('kind'), 'transcript')
+    const bare = await run('status', 'Abc12345-2', '--no-wait')
+    assert.equal(bare.path, '/api/v1/status/Abc12345-2')
+    assert.equal(bare.query.get('kind'), null)
+  } finally {
+    // This server's canned answer carries no state, which the command reads as still running (exit 4).
+    process.exitCode = exitBefore
+  }
+})

@@ -26,7 +26,7 @@ import { useApp } from '@modelcontextprotocol/ext-apps/react'
 import { ModelGlyph } from './model-icon.js'
 import { canHover, composerBand, insetsOf, themeOf, type HostLayout } from './host.js'
 import { ZOOM_SCALE, clampPan, classifyRelease, isDoubleTap, zoomAt, type Point } from './gestures.js'
-import { cardKey, isUnfinished, loadCard, mergePoll, preferSaved, saveCard } from './persist.js'
+import { cardKey, isUnfinished, loadCard, mergePoll, preferSaved, saveCard, statusPollCall } from './persist.js'
 import {
   columnsForAspect,
   masonryColumns,
@@ -1389,13 +1389,13 @@ function Widget() {
    * ⭐⭐⭐ **THE WIDGET POLLS ITSELF WHILE A GENERATION IS STILL RUNNING.**
    *
    * The server answers a slow job with `status: 'processing'` and no urls, and calls
-   * `get_generation_status` from in here until the outputs arrive. Without this the placeholders would sit
+   * `get_status` from in here until the outputs arrive. Without this the placeholders would sit
    * there forever waiting for a human to ask the agent to check.
    *
    * ⚠️ **THE AGENT IS STILL TOLD TO POLL, IN THE TEXT BLOCK.** These two are not redundant: the text is
    * what a host without app support renders and what the model reads, and an agent that stopped polling
    * because prose was swapped for a payload it cannot see would leave the generation unclaimed. Both
-   * converge on the same completed row, and `get_generation_status` is a read, so the duplicate costs a
+   * converge on the same completed row, and `get_status` is a read, so the duplicate costs a
    * request and nothing else.
    *
    * ⚠️ **BOUNDED.** A job that never finishes must not poll forever in someone's chat window. Twenty
@@ -1412,6 +1412,9 @@ function Widget() {
      * the card at two tiles forever. `status` is the only thing that says whether more is coming.
      */
     if (!app || !data || !isUnfinished(data)) return
+    // A job is polled by its id; a payload without one has nothing to ask about.
+    const outputId = data.outputId
+    if (!outputId) return
     const everySeconds = Math.max(3, data.pollAfterSeconds ?? 10)
     const deadline = 20 * 60
     let cancelled = false
@@ -1421,11 +1424,8 @@ function Widget() {
     const tick = async () => {
       if (cancelled) return
       try {
-        const res = await app.callServerTool({
-          name: 'get_generation_status',
-          // ⚠️ `outputIds`, PLURAL, and an array even for one. The singular spelling is a validation error.
-          arguments: { outputIds: [data.outputId] },
-        })
+        // One builder for the call, shared with the test that runs it against the real tool's schema.
+        const res = await app.callServerTool(statusPollCall(outputId))
         if (cancelled) return
         const sc = (res as { structuredContent?: WidgetData }).structuredContent
         /**

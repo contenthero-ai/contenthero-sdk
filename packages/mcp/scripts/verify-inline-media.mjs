@@ -148,7 +148,7 @@ try {
      * This asked `get_media` for everything, which worked while that tool both saw and showed. It does not
      * any more: `get_media` is the agent's eyes and renders nothing, `show_media` is the card. Asking one
      * tool about the other's job is exactly the mistake this harness already made once, when it asked
-     * `get_generation_status` for a widget and reported FAIL on three correct mediums.
+     * the status tool for a widget and reported FAIL on three correct mediums.
      *
      * ⚠️ BOTH CALLS, EVERY RUN. Checking only the one that changed is how the other silently rots, and the
      * pair is the actual contract: an agent can see it AND a person can see it.

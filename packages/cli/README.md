@@ -62,8 +62,8 @@ contenthero generate image "a red ceramic cube on white" --model <imageModelId>
 
 # Submit without blocking, then poll
 ID=$(contenthero generate video "drone shot over a canyon" --model <videoModelId> --no-wait | jq -r .outputId)
-contenthero generation-status get "$ID" --no-wait
-contenthero generation-status get "$ID" --timeout 300
+contenthero status "$ID" --no-wait
+contenthero status "$ID" --timeout 300
 
 # Chain: feed a previous output id straight in as a reference (URL or output id)
 contenthero generate video "slow zoom in" --model <videoModelId> --start-frame "$ID"
@@ -87,7 +87,7 @@ contenthero project            list | get | create | update | duplicate | share 
                                | export | export get|list | transcript get | edit undo|redo
                                | settings get|update | version list|save|restore|update|delete
 contenthero media              list | search | get | zoom | upload | share | import
-contenthero generation-status  get
+contenthero status             <ids...> [--kind <kind>]: where any background job is
 contenthero card               list | get | create | update
 contenthero post               publish
 contenthero tag                list | create | update | delete

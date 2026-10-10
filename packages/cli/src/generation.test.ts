@@ -109,12 +109,19 @@ test('runGeneration wait-to-timeout emits a snapshot and sets exit 4', async () 
   }
 })
 
+/** A generation as the status route answers for it; `waitForGeneration` reads `GET /api/v1/status/{id}?kind=output`. */
+function asStatus(gen: { outputId: string; status: string; error: string | null }) {
+  const state = gen.status === 'completed' ? 'completed' : gen.status === 'failed' ? 'failed' : 'processing'
+  return { kind: 'output', id: gen.outputId, state, reason: gen.error, appUrl: null, progress: null, detail: gen }
+}
+
 test('runGeneration wait-to-complete emits the finished generation, exit unchanged', async () => {
   let polls = 0
   const client = fakeClient((path, method) => {
     if (method === 'POST') return { outputId: 'abc', status: 'processing' }
     polls += 1
-    return {
+    assert.match(path, /^\/api\/v1\/status\/abc\?kind=output$/)
+    return asStatus({
       outputId: 'abc',
       status: 'completed',
       contentType: 'image',
@@ -123,7 +130,7 @@ test('runGeneration wait-to-complete emits the finished generation, exit unchang
       error: null,
       createdAt: 'now',
       completedAt: 'now',
-    }
+    } as { outputId: string; status: string; error: string | null })
   })
   const out = await capture(() =>
     runGeneration(client, jsonCtx, { modelId: 'm', contentType: 'image' }, { cost: false, wait: true, timeoutSec: 5 }),
@@ -190,7 +197,7 @@ test('runGeneration emits the outputId and exit 4 when polling breaks, rather th
 test('a genuinely FAILED generation still propagates as an error', async () => {
   const client = fakeClient((path, method) => {
     if (method === 'POST') return { outputId: 'abc', status: 'processing' }
-    return {
+    return asStatus({
       outputId: 'abc',
       status: 'failed',
       contentType: 'image',
@@ -199,7 +206,7 @@ test('a genuinely FAILED generation still propagates as an error', async () => {
       error: 'the model rejected it',
       createdAt: 'now',
       completedAt: null,
-    }
+    } as { outputId: string; status: string; error: string | null })
   })
   await assert.rejects(() =>
     capture(() =>
@@ -236,7 +243,7 @@ test('generationHuman lists urls that have already landed while still processing
   assert.match(out, /Abc12345-2:\s+pending/)
   assert.match(out, /processing/)
   // The poll hint must survive: a partial render is not a finished one.
-  assert.match(out, /contenthero generation-status get abc/)
+  assert.match(out, /contenthero status abc/)
 })
 
 test('generationHuman on a processing generation with no urls yet shows none', () => {
@@ -251,5 +258,5 @@ test('generationHuman on a processing generation with no urls yet shows none', (
     completedAt: null,
   })
   assert.doesNotMatch(out, /URL 1/)
-  assert.match(out, /contenthero generation-status get abc/)
+  assert.match(out, /contenthero status abc/)
 })

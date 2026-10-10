@@ -244,7 +244,7 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   // Async effect ops (remove_background) dispatch a job and return its outputId; name it so the reader can poll.
   const generating = r.results.map((x) => x.generatingOutputId).filter((id): id is string => !!id)
   if (generating.length) {
-    lines.push(`Dispatched ${generating.length} async job(s); get_generation_status on: ${generating.join(', ')}.`)
+    lines.push(`Dispatched ${generating.length} async job(s); get_status on: ${generating.join(', ')}.`)
   }
   if (failures.length) {
     lines.push('Failed ops:')

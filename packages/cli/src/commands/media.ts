@@ -118,7 +118,7 @@ export function importStartedHuman(m: Pick<ImportStarted, 'outputId' | 'status'>
   return keyValues([
     ['Output id', m.outputId],
     ['Status', m.status],
-    ['Next', `contenthero generation-status get ${m.outputId}`],
+    ['Next', `contenthero status ${m.outputId}`],
   ])
 }
 

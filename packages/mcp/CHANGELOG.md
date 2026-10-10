@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Breaking (hard cutover, no alias): `get_generation_status` is `get_status`. It checks any background job
+  (generations and edits, exports, brand kit reads, avatars, content analysis, transcripts) and takes `ids`, each the
+  id its starting call returned, with `kind` only for a full UUID, a transcript, or an id the server says is
+  ambiguous. It still blocks up to about 40 seconds by default, `wait: false` still snapshots, and a generation still
+  answers with its files. The generation card polls it.
+
 ## 0.4.33
 
 - Breaking: a project's settings are read by `get_project` and changed by `update_project`. `update_project` takes
