@@ -60,7 +60,8 @@ import {
   type CardAssetInput,
   type NotesEdit,
   type UpdateAvatarRequest,
-
+  type ShareInput,
+  type MediaShare,
   type Generation,
   type GenerateResult,
   LIST_SORTS,
@@ -182,7 +183,7 @@ import {
   editorTranscriptResult,
   exportJobResult,
   projectShareResult,
-  projectExportListResult,
+  exportListResult,
   mediaShareResult,
   completedExportResult,
   exportFormatsResult,
@@ -3053,38 +3054,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- share_media ----------------------------------------------------------
-  // shareUrl inputs.
-  server.registerTool(
-    'share_media',
-    {
-      title: 'Share Media',
-      annotations: WRITE,
-      description:
-        "A public link to media made in Studio: outputs of your finished generations, by the media ids list_media, search_media and get_folder print. One output gives its generation's link, opened at that output; a generation keeps one link, so sharing it again returns the same page. Several give a new link to them as a set, leaving out any that cannot be shared. Anyone with the link sees the media, with no sign-in. Pass shared:false to stop sharing, naming a generation by one media id or any media link as shareUrl; a stopped link never opens again, and sharing again makes a new one. An export's share page comes with get_export. Requires the studio:write scope.",
-      inputSchema: {
-        mediaIds: z.array(z.string()).min(1).optional().describe('One or more media ids of outputs of your finished generations. To stop sharing, one.'),
-        title: z.string().optional().describe('A title for a set of two or more.'),
-        shared: z.boolean().optional().describe('Default true. Pass false to stop sharing.'),
-        shareUrl: z.string().optional().describe('With shared:false, the media link to stop.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        const input = {
-          ...(args.mediaIds !== undefined ? { mediaIds: args.mediaIds } : {}),
-          ...(args.title !== undefined ? { title: args.title } : {}),
-          ...(args.shared !== undefined ? { shared: args.shared } : {}),
-          ...(args.shareUrl !== undefined ? { shareUrl: args.shareUrl } : {}),
-        }
-        return mediaShareResult(await client.shareMedia(input), args.mediaIds ?? [])
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
   // -- list_models ----------------------------------------------------------
   server.registerTool(
     'list_models',
@@ -3370,7 +3339,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        */
       title: 'Get Status',
       annotations: READ,
-      // DRAFT for Taylan's approval (2026-10-10).
       description:
         "Check any background job: generations and edits, exports, brand kit reads, avatars, a post's analysis or scenes, and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Pass kind only for a full UUID, for scenes or a transcript (the id is the post or media it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs.",
       inputSchema: {
@@ -4416,6 +4384,45 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- share ----------------------------------------------------------------
+  // One tool for every shareable kind, as favorite and archive are: the target names the kind, and each kind keeps the
+  // scope of the surface that owns it. The route refuses a call naming two targets, so nothing here checks it again.
+  server.registerTool(
+    'share',
+    {
+      title: 'Share',
+      annotations: WRITE,
+      description:
+        "Make an item's public link, or stop sharing it with shared:false. Anyone with the link sees the item with no sign-in; a stopped link never opens again, and sharing again makes a new one. For media made in Studio, pass mediaIds: outputs of your finished generations, as list_media, search_media and get_folder print them. One output gives its generation's link, opened at that output; a generation keeps one link, so sharing it again returns the same page. Several give a new link to them as a set, leaving out any that cannot be shared. To stop a media link, name a generation by one media id or any media link as shareUrl. For anything else, pass assetType + id: a project's live link shows the project as it is now, a project has one link, and get_project reports it. An export's share page comes with get_export. Requires studio:write for media and editor:write for a project.",
+      inputSchema: {
+        mediaIds: z.array(z.string()).min(1).optional().describe('For media: one or more media ids of outputs of your finished generations. To stop sharing, one.'),
+        assetType: z.enum(['project']).optional().describe('The kind of item, for anything that is not media. Pass with id.'),
+        id: z.string().optional().describe("The item's id, with assetType."),
+        title: z.string().optional().describe('For media: a title for a set of two or more.'),
+        shared: z.boolean().optional().describe('Default true. Pass false to stop sharing.'),
+        shareUrl: z.string().optional().describe('For media, with shared:false: the media link to stop.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const input = {
+          ...(args.mediaIds !== undefined ? { mediaIds: args.mediaIds } : {}),
+          ...(args.assetType !== undefined ? { assetType: args.assetType } : {}),
+          ...(args.id !== undefined ? { id: args.id } : {}),
+          ...(args.title !== undefined ? { title: args.title } : {}),
+          ...(args.shared !== undefined ? { shared: args.shared } : {}),
+          ...(args.shareUrl !== undefined ? { shareUrl: args.shareUrl } : {}),
+        } as ShareInput
+        const share = await client.share(input)
+        if (args.assetType !== undefined || args.id !== undefined) return projectShareResult(share)
+        return mediaShareResult(share as MediaShare, args.mediaIds ?? [])
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // -- unarchive ------------------------------------------------------------
   server.registerTool(
     'list_projects',
@@ -4695,9 +4702,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   server.registerTool(
-    'list_project_exports',
+    'list_exports',
     {
-      title: 'List Project Exports',
+      title: 'List Exports',
       annotations: READ,
       description:
         "List a project's exports, newest first, as the editor's Exports tab shows them: each finished one with its download and public share page, and the ones still running with their status (wait for one with get_status, kind export). A failed export is not listed. Requires the editor:read scope.",
@@ -4709,9 +4716,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return projectExportListResult(
+        return exportListResult(
           args.projectId,
-          await client.listProjectExports(args.projectId, { limit: args.limit, cursor: args.cursor }),
+          await client.listExports(args.projectId, { limit: args.limit, cursor: args.cursor }),
         )
       } catch (err) {
         return errorResult(err)
@@ -4842,28 +4849,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
-    'share_project',
-    {
-      title: 'Share Project',
-      annotations: WRITE,
-      description:
-        "Make a project's public live link, or revoke it with shared:false. Anyone with the link sees the project as it is now, with no sign-in, until it is revoked; a revoked link stays dead, and sharing again makes a new one. A project has one link, so sharing a shared project returns it. get_project reports the link. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        shared: z.boolean().optional().describe('Default true. Pass false to revoke the link.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        const client = await getClient(extra)
-        return projectShareResult(await client.shareProject(args.projectId, args.shared === undefined ? {} : { shared: args.shared }))
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
   // -- version history (premium, as in the editor) -----------------------------
   server.registerTool(
     'list_project_versions',
@@ -4891,9 +4876,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   server.registerTool(
-    'save_project_version',
+    'create_project_version',
     {
-      title: 'Save Project Version',
+      title: 'Create Project Version',
       annotations: WRITE,
       description:
         "Save the project's current state as a version, optionally named, so it can be brought back later. Requires the editor:write scope.",
@@ -4905,7 +4890,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return projectVersionSavedResult(args.projectId, await client.saveProjectVersion(args.projectId, { label: args.label }))
+        return projectVersionSavedResult(args.projectId, await client.createProjectVersion(args.projectId, { label: args.label }))
       } catch (err) {
         return errorResult(err)
       }

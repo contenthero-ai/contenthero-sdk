@@ -10,8 +10,17 @@
 - Breaking: `waitForGenerations` is removed; `waitForStatus` replaces it. `waitForGeneration` (behind
   `generateAndWait`, `generateBoardAndWait` and `importMedia`) now reads the status route, so the server alone
   decides when a generation is done.
-- Docs: `startExport`, `listProjectExports`, `exportProjectAndWait` and `analyzeContent` name `getStatus` for waiting;
+- Docs: `startExport`, `listExports`, `exportProjectAndWait` and `analyzeContent` name `getStatus` for waiting;
   `getExport` reads one export.
+- Breaking (hard cutover, no alias): `shareMedia` and `shareProject` are one `share(input)`, reaching
+  `POST /api/v1/share` (was `/api/v1/media/share` and `/api/v1/projects/{projectId}/share`). Media is named by
+  `mediaIds` (with `title`, or `shareUrl` to stop a link); anything else by `assetType` and `id`, today `'project'`.
+  `shared: false` stops sharing either. Each kind keeps its scope: `studio:write` for media, `editor:write` for a
+  project. `ShareInput`, `ShareItemInput` and `ShareAssetType` are exported; `ShareProjectInput` is removed.
+- Breaking (hard cutover, no alias): `saveProjectVersion` is `createProjectVersion`, and `SavedProjectVersion` is
+  `CreatedProjectVersion`.
+- Breaking (hard cutover, no alias): `listProjectExports(projectId, page)` is `listExports(projectId, page)`, and
+  `ProjectExportListResult` is `ExportListResult`. It still pages by cursor.
 
 ## 0.4.26
 

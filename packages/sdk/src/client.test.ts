@@ -1409,7 +1409,7 @@ test("a project's fields and settings are read by getProject and changed by upda
 test("a project's exports are read a page at a time", async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { exports: [{ exportId: 'e1', status: 'completed' }], nextCursor: 'n' } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  const page = await client.listProjectExports('p 1', { limit: 5, cursor: 'c' })
+  const page = await client.listExports('p 1', { limit: 5, cursor: 'c' })
   assert.equal(page.exports[0]?.exportId, 'e1')
   assert.equal(page.nextCursor, 'n')
   const url = new URL(calls[0]!.url)
@@ -1418,23 +1418,26 @@ test("a project's exports are read a page at a time", async () => {
   assert.equal(url.searchParams.get('cursor'), 'c')
 })
 
-test('share links reach their routes: a project by its id, media by their media ids', async () => {
+test('share reaches one route: a project by its kind and id, media by their media ids', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { shared: true, shareUrl: 'https://share.example/p' } },
     { status: 200, body: { shared: false, shareUrl: null } },
     { status: 200, body: { shareUrl: 'https://pages.example/s', mediaIds: ['m-1', 'm-2'] } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  assert.deepEqual(await client.shareProject('p 1'), { shared: true, shareUrl: 'https://share.example/p' })
-  assert.equal((await client.shareProject('p 1', { shared: false })).shareUrl, null)
-  assert.deepEqual((await client.shareMedia({ mediaIds: ['m-1', 'm-2'], title: 'Set' })).mediaIds, ['m-1', 'm-2'])
+  assert.deepEqual(await client.share({ assetType: 'project', id: 'p 1' }), { shared: true, shareUrl: 'https://share.example/p' })
+  assert.equal((await client.share({ assetType: 'project', id: 'p 1', shared: false })).shareUrl, null)
+  assert.deepEqual((await client.share({ mediaIds: ['m-1', 'm-2'], title: 'Set' })).mediaIds, ['m-1', 'm-2'])
   assert.deepEqual(
     calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname}`),
-    ['POST /api/v1/projects/p%201/share', 'POST /api/v1/projects/p%201/share', 'POST /api/v1/media/share'],
+    ['POST /api/v1/share', 'POST /api/v1/share', 'POST /api/v1/share'],
   )
   // No `shared` when sharing: the server defaults it to true.
-  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), {})
-  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), { shared: false })
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { assetType: 'project', id: 'p 1' })
+  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)), { assetType: 'project', id: 'p 1', shared: false })
+  // The two old methods are gone: one call shares every kind.
+  assert.equal('shareProject' in client, false)
+  assert.equal('shareMedia' in client, false)
   assert.deepEqual(JSON.parse(String(calls[2]!.init?.body)), { mediaIds: ['m-1', 'm-2'], title: 'Set' })
 })
 
@@ -1450,7 +1453,7 @@ test('version history, undo and redo reach their routes with the bodies the API 
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
   assert.equal((await client.listProjectVersions('p1')).versions[0]?.id, 'v1')
-  assert.equal((await client.saveProjectVersion('p1', { label: 'Before' })).id, 'v2')
+  assert.equal((await client.createProjectVersion('p1', { label: 'Before' })).id, 'v2')
   assert.deepEqual(await client.restoreProjectVersion('p1', 'v1'), { revision: 9, kind: 'tracks' })
   assert.deepEqual(await client.updateProjectVersion('p1', 'v1', { label: 'Final' }), { id: 'v1', label: 'Final' })
   await client.deleteProjectVersion('p1', 'v1')
@@ -1494,7 +1497,7 @@ test('responses are read camelCase: templates, brand kit media, versions', async
   const kit = await client.getBrandKit('bk1')
   assert.equal(kit.logos[0]?.isPrimary, true)
   assert.equal(kit.socialAccounts[0]?.avatarUrl, 'p')
-  const v = await client.saveProjectVersion('p1')
+  const v = await client.createProjectVersion('p1')
   assert.equal(v.triggerReason, 'manual')
 })
 

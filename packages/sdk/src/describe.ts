@@ -261,7 +261,7 @@ export function describeEditorOps(r: ApplyEditorOpsResult): string {
   return lines.join('\n')
 }
 
-/** A project's live link after `shareProject`: where anyone sees it, or that its old link is dead. */
+/** A project's live link after `share`: where anyone sees it, or that its old link is dead. */
 export function describeProjectShare(share: ProjectShare): string {
   return share.shared && share.shareUrl
     ? `Shared. Anyone with this link sees the project as it is now: ${share.shareUrl}`

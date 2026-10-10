@@ -71,7 +71,8 @@ import type {
   ListCardsOptions,
   ListStagesOptions,
   FavoriteInput,
-  ShareProjectInput,
+  ShareInput,
+  ShareItemInput,
   ProjectShare,
   ShareMediaInput,
   MediaShare,
@@ -155,8 +156,8 @@ import type {
   UpdateProjectInput,
   ProjectWithSettings,
   ProjectVersionListResult,
-  ProjectExportListResult,
-  SavedProjectVersion,
+  ExportListResult,
+  CreatedProjectVersion,
   RestoredProjectVersion,
   UndoInput,
   RedoInput,
@@ -1683,13 +1684,21 @@ export class ContentHero {
   }
 
   /**
-   * A public link to media made in Studio: outputs of the caller's finished generations, by media id. One output is its
-   * generation's link, opened at that output (a generation keeps one link); several are a new link to them as a set,
-   * leaving out any that cannot be shared (`mediaIds` in the answer says which are in). `shared: false` stops sharing a
-   * generation's link (one media id) or any media link (`shareUrl`): it never opens again. Requires `studio:write`.
+   * Make an item's public link, or stop sharing it with `shared: false` (a stopped link never opens again, and sharing
+   * again makes a new one). One call for every shareable kind, as `favorite` is: the target names the kind.
+   *
+   * - Media made in Studio, by `mediaIds` (outputs of the caller's finished generations). One output is its
+   *   generation's link, opened at that output (a generation keeps one link); several are a new link to them as a set,
+   *   leaving out any that cannot be shared (`mediaIds` in the answer says which are in). To stop, name a generation by
+   *   one media id or any media link by `shareUrl`. Requires `studio:write`.
+   * - Anything else, by `assetType` and `id`: today a project's live link, which shows the project as it is now. A
+   *   project has one link, so sharing a shared project returns it; `getProject` reads it too. Requires `editor:write`.
    */
-  async shareMedia(input: ShareMediaInput): Promise<MediaShare> {
-    return this.request<MediaShare>('POST', '/api/v1/media/share', input)
+  share(input: ShareMediaInput): Promise<MediaShare>
+  share(input: ShareItemInput): Promise<ProjectShare>
+  share(input: ShareInput): Promise<MediaShare | ProjectShare>
+  async share(input: ShareInput): Promise<MediaShare | ProjectShare> {
+    return this.request<MediaShare | ProjectShare>('POST', '/api/v1/share', input)
   }
 
   /**
@@ -1872,15 +1881,6 @@ export class ContentHero {
     return project
   }
 
-  /**
-   * Make a project's public live link, or revoke it with `shared: false` (a revoked link stays dead). The link shows the
-   * project as it is now, and a project has one: sharing a shared project returns its link. Idempotent both ways.
-   * `getProject` reads the link too. Requires `editor:write`.
-   */
-  async shareProject(projectId: string, input: ShareProjectInput = {}): Promise<ProjectShare> {
-    return this.request<ProjectShare>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/share`, input)
-  }
-
   // ─── Version history (premium, as in the editor) ───────────────────────────
 
   /** A project's saved versions, newest first, a page at a time. Requires `editor:read`. */
@@ -1893,9 +1893,9 @@ export class ContentHero {
     )
   }
 
-  /** Save the project's current state as a version, optionally named. Requires `editor:write`. */
-  async saveProjectVersion(projectId: string, options: { label?: string } = {}): Promise<SavedProjectVersion> {
-    const { version } = await this.request<{ version: SavedProjectVersion }>(
+  /** Save the project's current state as a new version, optionally named. Requires `editor:write`. */
+  async createProjectVersion(projectId: string, options: { label?: string } = {}): Promise<CreatedProjectVersion> {
+    const { version } = await this.request<{ version: CreatedProjectVersion }>(
       'POST',
       `/api/v1/projects/${encodeURIComponent(projectId)}/versions`,
       options.label !== undefined ? { label: options.label } : {},
@@ -1981,10 +1981,10 @@ export class ContentHero {
    * still running, each with its `status` (wait for one with `getStatus`, kind `'export'`). A failed export is not
    * listed. Requires `editor:read`.
    */
-  async listProjectExports(projectId: string, options: PageOptions = {}): Promise<ProjectExportListResult> {
+  async listExports(projectId: string, options: PageOptions = {}): Promise<ExportListResult> {
     const q = new URLSearchParams()
     setPage(q, options)
-    return this.request<ProjectExportListResult>(
+    return this.request<ExportListResult>(
       'GET',
       `/api/v1/projects/${encodeURIComponent(projectId)}/exports${queryOf(q)}`,
     )

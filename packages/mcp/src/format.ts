@@ -42,8 +42,8 @@ import type {
   ProjectShare,
   MediaShare,
   ProjectVersionListResult,
-  ProjectExportListResult,
-  SavedProjectVersion,
+  ExportListResult,
+  CreatedProjectVersion,
   RestoredProjectVersion,
   ProjectSettings,
   UndoResult,
@@ -2937,7 +2937,7 @@ export function projectVersionListResult(projectId: string, { versions, nextCurs
 }
 
 /** A page of a project's exports, newest first: one row each, with its download and share page once finished. */
-export function projectExportListResult(projectId: string, { exports, nextCursor }: ProjectExportListResult): CallToolResult {
+export function exportListResult(projectId: string, { exports, nextCursor }: ExportListResult): CallToolResult {
   if (!exports.length) return text(`Project ${projectId} has no exports.`)
   const rows = exports.map((e) => {
     const done = e.status === 'completed'
@@ -2950,7 +2950,7 @@ export function projectExportListResult(projectId: string, { exports, nextCursor
 }
 
 /** A version just saved. */
-export function projectVersionSavedResult(projectId: string, v: SavedProjectVersion): CallToolResult {
+export function projectVersionSavedResult(projectId: string, v: CreatedProjectVersion): CallToolResult {
   return text(`Saved version ${v.id}${v.label ? ` "${v.label}"` : ''} of project ${projectId}.`)
 }
 
@@ -3087,7 +3087,7 @@ export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { a
   )
 }
 
-/** A project's live link after share_project, in the SDK's one wording. */
+/** A project's live link after share, in the SDK's one wording. */
 export function projectShareResult(share: ProjectShare): CallToolResult {
   return text(describeProjectShare(share))
 }

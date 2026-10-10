@@ -34,6 +34,7 @@ import { registerContent, registerTrackedAccount } from './commands/content.js'
 import { registerConnectedAccount } from './commands/connected.js'
 import { registerSchema } from './commands/schema.js'
 import { registerFavorites } from './commands/favorites.js'
+import { registerShare } from './commands/share.js'
 import { registerProject } from './commands/project.js'
 import { registerView } from './commands/view.js'
 
@@ -91,6 +92,7 @@ export function buildProgram(): Command {
   registerConnectedAccount(program)
   registerSchema(program)
   registerFavorites(program)
+  registerShare(program)
   registerProject(program)
   registerView(program)
 

@@ -41,6 +41,7 @@ test('every top-level command group is registered', () => {
     'schema',
     'favorite',
     'archive',
+    'share',
     'project',
   ]) {
     assert.ok(names.includes(expected), `missing top-level command: ${expected}`)

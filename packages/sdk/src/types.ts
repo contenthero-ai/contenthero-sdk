@@ -3002,8 +3002,14 @@ export type FavoriteInput = ({ mediaId: string } | { assetType: FavoriteAssetTyp
   favorited?: boolean
 }
 
-/** Make a project's public live link, or revoke it (`shareProject`). */
-export interface ShareProjectInput {
+/** The kinds `share` names by `assetType` and `id`. Media is named by its media ids instead. */
+export type ShareAssetType = 'project'
+
+/** Make an item's public link, or revoke it (`share`), named by its `assetType` and `id`. Today a project's live link. */
+export interface ShareItemInput {
+  assetType: ShareAssetType
+  /** The item's id. */
+  id: string
   /** Defaults to true. Pass false to revoke the link; a revoked link stays dead. */
   shared?: boolean
 }
@@ -3015,7 +3021,7 @@ export interface ProjectShare {
   shareUrl: string | null
 }
 
-/** Share media made in Studio as one public link (`shareMedia`). */
+/** Share media made in Studio as one public link (`share`). */
 export interface ShareMediaInput {
   /**
    * One or more outputs of the caller's finished generations, by the media ids every media read prints. One output
@@ -3030,6 +3036,9 @@ export interface ShareMediaInput {
   /** With `shared: false`, the media link to stop: a generation's page or a set's. */
   shareUrl?: string
 }
+
+/** The target of a `share` call: media by its media ids (or a media link to stop), or any other item by `assetType` and `id`. */
+export type ShareInput = ShareMediaInput | ShareItemInput
 
 /** A public link to media made in Studio, or that it stopped. */
 export interface MediaShare {
@@ -3201,7 +3210,7 @@ export interface ProjectDetail extends ProjectSummary, ProjectSettings {
   exportedCardId: string | null
   exportedUrl: string | null
   shareId: string | null
-  /** The project's public live link, which shows the project as it is now; null when it is not shared (`shareProject`). */
+  /** The project's public live link, which shows the project as it is now; null when it is not shared (`share`). */
   shareUrl: string | null
   favoritedAt: string | null
   archivedAt: string | null
@@ -3542,7 +3551,7 @@ export interface ProjectVersionListResult extends Paged {
   versions: ProjectVersion[]
 }
 
-/** One export of a project, as `listProjectExports` gives it. */
+/** One export of a project, as `listExports` gives it. */
 export interface ProjectExport {
   exportId: string
   /** The export's 8-character public id; `exportId` stays the UUID. */
@@ -3570,12 +3579,12 @@ export interface ProjectExport {
 }
 
 /** A page of a project's exports, newest first. */
-export interface ProjectExportListResult extends Paged {
+export interface ExportListResult extends Paged {
   exports: ProjectExport[]
 }
 
-/** The version `saveProjectVersion` stored, in the shape a list gives it. */
-export type SavedProjectVersion = ProjectVersion
+/** The version `createProjectVersion` stored, in the shape a list gives it. */
+export type CreatedProjectVersion = ProjectVersion
 
 /** Result of `restoreProjectVersion`: the project's new revision, and the document shape restored. */
 export interface RestoredProjectVersion {

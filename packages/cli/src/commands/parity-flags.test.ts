@@ -265,7 +265,7 @@ test('project update sends the settings named, on and off, to the project', asyn
 })
 
 /**
- * `project export` runs an export AND parents `get` and `list` (get_export, list_project_exports). Commander
+ * `project export` runs an export AND parents `get` and `list` (get_export, list_exports). Commander
  * dispatches to a subcommand when the first operand names one, and otherwise runs the export with it as the project
  * id. Break-verified: renaming the `get` subcommand turns this red (the export then ran with `get` as its project id).
  */
@@ -291,7 +291,7 @@ test("project export sends this export's loudness only when it is named", async 
 
 test('project version commands reach the version routes with the bodies the API reads', async () => {
   const cases: Array<[string[], string, unknown]> = [
-    [['project', 'version', 'save', 'p1', '--label', 'Before'], 'POST /api/v1/projects/p1/versions', { label: 'Before' }],
+    [['project', 'version', 'create', 'p1', '--label', 'Before'], 'POST /api/v1/projects/p1/versions', { label: 'Before' }],
     [['project', 'version', 'restore', 'p1', 'v1'], 'POST /api/v1/projects/p1/versions/v1', null],
     [['project', 'version', 'update', 'p1', 'v1', '--label', 'Final'], 'PATCH /api/v1/projects/p1/versions/v1', { label: 'Final' }],
     [['project', 'version', 'update', 'p1', 'v1', '--label', ''], 'PATCH /api/v1/projects/p1/versions/v1', { label: '' }],

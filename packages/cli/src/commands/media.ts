@@ -4,7 +4,6 @@
  *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
  *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
- *   media share <mediaIds...> [--title]                      a public link to outputs of finished generations
  *
  * Spans creations, reference boards, and looks; filter with --kind. Every item is named by its media id: the short
  * id, plus "-N" for output N of a generation with several, exactly as these commands print it.
@@ -15,7 +14,6 @@ import { basename, extname, join } from 'node:path'
 import type { Command } from 'commander'
 import {
   LIST_SORTS,
-  describeMediaShare,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
   describeFileSize,
@@ -388,28 +386,6 @@ export function registerMedia(program: Command): void {
       const { client, ctx } = makeClient(command)
       const m = await client.uploadMedia(bytes, { fileName, contentType })
       emit(m, ctx, uploadedHuman)
-    })
-
-  media
-    .command('share')
-    .description(
-      "A public link to outputs of your finished generations: one gives its generation's link, opened at that output; several give a new link to them as a set (requires studio:write)",
-    )
-    .argument('[mediaIds...]', 'one or more media ids, as these commands print them; with --off, one')
-    .option('--title <title>', 'a title for a set of two or more')
-    .option('--off', 'stop sharing: one media id, or the link with --link; a stopped link never opens again')
-    .option('--link <shareUrl>', 'with --off, the media link to stop')
-    .action(async (mediaIds: string[], opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const title = opts.title as string | undefined
-      const link = opts.link as string | undefined
-      const share = await client.shareMedia({
-        ...(mediaIds.length ? { mediaIds } : {}),
-        ...(title !== undefined ? { title } : {}),
-        ...(opts.off ? { shared: false } : {}),
-        ...(link !== undefined ? { shareUrl: link } : {}),
-      })
-      emit(share, ctx, () => describeMediaShare(share, mediaIds))
     })
 
   media

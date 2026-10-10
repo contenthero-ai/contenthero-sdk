@@ -7,9 +7,7 @@
  *   project update <projectId> [--title] [--orientation] [--width] [--height] [--brand-kit] [--cover] [--cover-position]
  *                  [--fps] [--loudness] [--magnetic-track|--no-magnetic-track] [--linkage|--no-linkage] [--linked-tracks]
  *   project duplicate <projectId> [versionId]                            a copy, of a saved version when named (editor:write)
- *   project share <projectId> [--off]                                    its public live link, or revoke it (editor:write)
-
- *   project version list|save|restore|update|delete <projectId>          its version history (premium)
+ *   project version list|create|restore|update|delete <projectId>        its version history (premium)
  *   project edit undo|redo <projectId> [--expected-revision <n>]         the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
@@ -36,7 +34,6 @@ import {
   describeEditorOps,
   describeExportShareLink,
   describeLoudness,
-  describeProjectShare,
   describeProjectShareLink,
   describeScope,
   withCodeWarnings,
@@ -49,7 +46,7 @@ import {
   type ProjectSort,
   type ProjectSummary,
   type ProjectVersionListResult,
-  type ProjectExportListResult,
+  type ExportListResult,
   type SortOrder,
   type ProjectSettings,
   type ProjectWithSettings,
@@ -292,17 +289,6 @@ export function registerProject(program: Command): void {
       )
     })
 
-  project
-    .command('share')
-    .description("Make the project's public live link, or revoke it with --off; anyone with the link sees the project as it is now (requires editor:write)")
-    .argument('<projectId>', 'the project id')
-    .option('--off', 'revoke the link; a revoked link stays dead')
-    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const share = await client.shareProject(projectId, opts.off ? { shared: false } : {})
-      emit(share, ctx, () => describeProjectShare(share))
-    })
-
   registerVersions(project)
 
   const edit = project.command('edit').description("The editor's own undo and redo")
@@ -419,7 +405,7 @@ export function registerProject(program: Command): void {
 
   /*
     `project export <projectId>` runs the export, and `project export get` / `project export list` are its subcommands
-    (get_export and list_project_exports). Commander dispatches to a subcommand when the first operand names one, and
+    (get_export and list_exports). Commander dispatches to a subcommand when the first operand names one, and
     otherwise runs the export with it as the project id.
   */
   exportCommand
@@ -444,8 +430,8 @@ export function registerProject(program: Command): void {
       .argument('<projectId>', 'the project id'),
   ).action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
-    const page = await client.listProjectExports(projectId, { limit: opts.limit as number | undefined, cursor: opts.cursor as string | undefined })
-    emit(page, ctx, (p: ProjectExportListResult) =>
+    const page = await client.listExports(projectId, { limit: opts.limit as number | undefined, cursor: opts.cursor as string | undefined })
+    emit(page, ctx, (p: ExportListResult) =>
       p.exports.length === 0
         ? 'No exports.'
         : withMore(
@@ -545,13 +531,13 @@ function registerVersions(project: Command): void {
   })
 
   version
-    .command('save')
-    .description("Save the project's current state as a version (requires editor:write)")
+    .command('create')
+    .description("Save the project's current state as a new version (requires editor:write)")
     .argument('<projectId>', 'the project id')
     .option('--label <text>', 'a name for the version')
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
-      const v = await client.saveProjectVersion(projectId, { label: opts.label as string | undefined })
+      const v = await client.createProjectVersion(projectId, { label: opts.label as string | undefined })
       emit(v, ctx, () => `Saved version ${v.id}${v.label ? ` "${v.label}"` : ''}.`)
     })
 

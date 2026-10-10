@@ -7,9 +7,17 @@
   id its starting call returned, with `kind` only for a full UUID, a transcript, or an id the server says is
   ambiguous. It still blocks up to about 40 seconds by default, `wait: false` still snapshots, and a generation still
   answers with its files. The generation card polls it.
-- Waiting is `get_status`'s, everywhere: `export_project`, `list_project_exports` and a running export name
+- Waiting is `get_status`'s, everywhere: `export_project`, `list_exports` and a running export name
   `get_status` with kind `export` for the wait, and `get_export` reads one export (its file, state and details). A
   Break It Down still running names `get_status` with kind `content`, then `analyze_content` reads it at no charge.
+- Breaking (hard cutover, no alias): `share_media` and `share_project` are one `share` tool, as `favorite` and
+  `archive` are. Media is named by `mediaIds` (with `title`, or `shareUrl` to stop a link); anything else by
+  `assetType` and `id`, today `project`. `shared: false` stops sharing either. Each kind keeps its scope:
+  `studio:write` for media, `editor:write` for a project. It is in the media group, beside `favorite` and `archive`.
+- Breaking (hard cutover, no alias): `save_project_version` is `create_project_version`, the verb every tool that
+  makes a new item uses.
+- Breaking (hard cutover, no alias): `list_project_exports` is `list_exports`, pairing with `get_export`. It takes
+  `projectId` as an input, as `list_stages` takes `spaceId`, and still pages by cursor.
 
 ## 0.4.33
 

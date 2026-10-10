@@ -519,7 +519,7 @@ test('every tool input parameter is camelCase', async () => {
  * ended up taking `id` while its five sibling deletes each took a named one.
  */
 test('single-resource tools name their id parameter after the resource', async () => {
-  const UNIVERSAL = new Set(['favorite', 'archive'])
+  const UNIVERSAL = new Set(['favorite', 'archive', 'share'])
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const offenders = tools
@@ -4842,7 +4842,7 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
       getProject: async (id) => (calls.push(`get ${id}`), { ...summary, ...settings, revision: 3, state: {}, groups: [] }),
       duplicateProject: async (id, o) => (calls.push(`duplicate ${id} ${JSON.stringify(o)}`), summary),
       listProjectVersions: async (id, page) => (calls.push(`versions ${id} ${JSON.stringify(page)}`), { versions: [{ id: 'v1', createdAt: 't', label: 'Final', triggerReason: 'manual', authorName: 'Taylan', revision: 4, kind: 'tracks', createdBy: 'u', sizeBytes: 1 }], nextCursor: null }),
-      saveProjectVersion: async (id, o) => (calls.push(`save ${id} ${JSON.stringify(o)}`), { id: 'v2', label: o.label }),
+      createProjectVersion: async (id, o) => (calls.push(`save ${id} ${JSON.stringify(o)}`), { id: 'v2', label: o.label }),
       restoreProjectVersion: async (id, v) => (calls.push(`restore ${id} ${v}`), { revision: 9, kind: 'tracks' }),
       updateProjectVersion: async (id, v, change) => (calls.push(`rename ${id} ${v} ${JSON.stringify(change)}`), { id: v, label: change.label }),
       deleteProjectVersion: async (id, v) => void calls.push(`delete ${id} ${v}`),
@@ -4869,7 +4869,7 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
   await call('duplicate_project', { projectId: 'p1', versionId: 'v1' })
   const listed = await call('list_project_versions', { projectId: 'p1', limit: 10 })
   assert.match(listed.content[0].text, /v1 \| t \| "Final" \| manual \| by Taylan \| revision 4/)
-  await call('save_project_version', { projectId: 'p1', label: 'Before' })
+  await call('create_project_version', { projectId: 'p1', label: 'Before' })
   const restored = await call('restore_project_version', { projectId: 'p1', versionId: 'v1' })
   assert.match(restored.content[0].text, /revision 9/)
   await call('update_project_version', { projectId: 'p1', versionId: 'v1', label: 'Final' })
@@ -5009,64 +5009,71 @@ test('every hand-arranged list tool takes afterId, beforeId and position, and fo
   assert.equal(kit.orderedIds, undefined)
 })
 
-test('share_project makes or revokes a project link, and get_project reports it', async () => {
+test('one share tool, a version is created and exports are listed: the old names are gone, with no alias', async () => {
+  const names = (await (await connect(fakeClient())).listTools()).tools.map((t) => t.name)
+  for (const name of ['share', 'create_project_version', 'list_exports']) assert.ok(names.includes(name), name)
+  const gone = ['share' + '_media', 'share' + '_project', 'save' + '_project_version', 'list_project' + '_exports']
+  assert.deepEqual(names.filter((n) => gone.includes(n)), [])
+})
+
+test('share makes or revokes a project link by assetType and id, and get_project reports it', async () => {
   const calls = []
   const mcp = await connect(
     fakeClient({
-      shareProject: async (projectId, input) => {
-        calls.push([projectId, input])
+      share: async (input) => {
+        calls.push(input)
         return input.shared === false ? { shared: false, shareUrl: null } : { shared: true, shareUrl: 'https://share.example/t' }
       },
       getProject: async (projectId) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'T', orientation: '16:9', width: 1920, height: 1080, revision: 1, state: { tracks: [] }, shareUrl: 'https://share.example/t', shareId: 't' }),
     }),
   )
-  const made = await mcp.callTool({ name: 'share_project', arguments: { projectId: 'p1' } })
+  const made = await mcp.callTool({ name: 'share', arguments: { assetType: 'project', id: 'p1' } })
   assert.match(made.content[0].text, /https:\/\/share\.example\/t/)
-  const revoked = await mcp.callTool({ name: 'share_project', arguments: { projectId: 'p1', shared: false } })
+  const revoked = await mcp.callTool({ name: 'share', arguments: { assetType: 'project', id: 'p1', shared: false } })
   assert.doesNotMatch(revoked.content[0].text, /https:/)
-  assert.deepEqual(calls, [['p1', {}], ['p1', { shared: false }]])
+  assert.deepEqual(calls, [{ assetType: 'project', id: 'p1' }, { assetType: 'project', id: 'p1', shared: false }])
   const read = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
   assert.match(read.content[0].text, /Shared at https:\/\/share\.example\/t/)
 })
 
-test('share_media shares media ids and names any the link leaves out', async () => {
+test('share shares media ids and names any the link leaves out', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      shareMedia: async (input) => {
+      share: async (input) => {
         captured = input
         return { shared: true, shareUrl: 'https://pages.example/s', mediaIds: ['m-1'] }
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'share_media', arguments: { mediaIds: ['m-1', 'm-2'], title: 'Set' } })
+  const res = await mcp.callTool({ name: 'share', arguments: { mediaIds: ['m-1', 'm-2'], title: 'Set' } })
   assert.deepEqual(captured, { mediaIds: ['m-1', 'm-2'], title: 'Set' })
   assert.match(res.content[0].text, /https:\/\/pages\.example\/s/)
   assert.match(res.content[0].text, /m-2/)
 })
 
-test('share_media stops a share by a media id or by its link', async () => {
+test('share stops a media share by a media id or by its link', async () => {
   const asked = []
   const mcp = await connect(
     fakeClient({
-      shareMedia: async (input) => {
+      share: async (input) => {
         asked.push(input)
         return { shared: false, shareUrl: null, mediaIds: [] }
       },
     }),
   )
-  const byId = await mcp.callTool({ name: 'share_media', arguments: { mediaIds: ['m-1'], shared: false } })
-  const byLink = await mcp.callTool({ name: 'share_media', arguments: { shareUrl: 'https://pages.example/s', shared: false } })
+  const byId = await mcp.callTool({ name: 'share', arguments: { mediaIds: ['m-1'], shared: false } })
+  const byLink = await mcp.callTool({ name: 'share', arguments: { shareUrl: 'https://pages.example/s', shared: false } })
   assert.deepEqual(asked, [{ mediaIds: ['m-1'], shared: false }, { shared: false, shareUrl: 'https://pages.example/s' }])
   assert.match(byId.content[0].text, /Stopped sharing/)
   assert.match(byLink.content[0].text, /Stopped sharing/)
 })
 
-test("list_project_exports lists a project's exports with their links and status", async () => {
+test("list_exports lists a project's exports with their links and status", async () => {
   let asked
   const mcp = await connect(
     fakeClient({
-      listProjectExports: async (projectId, page) => {
+      listExports: async (projectId, page) => {
         asked = [projectId, page]
         return {
           exports: [
@@ -5078,7 +5085,7 @@ test("list_project_exports lists a project's exports with their links and status
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'list_project_exports', arguments: { projectId: 'p1', limit: 2 } })
+  const res = await mcp.callTool({ name: 'list_exports', arguments: { projectId: 'p1', limit: 2 } })
   assert.deepEqual(asked, ['p1', { limit: 2, cursor: undefined }])
   assert.match(res.content[0].text, /e2.*rendering/)
   assert.match(res.content[0].text, /share page: https:\/\/pages\.example\/e1 \| Exported as mixed\./)

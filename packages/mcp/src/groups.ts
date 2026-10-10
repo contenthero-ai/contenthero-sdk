@@ -4,9 +4,9 @@
  * WHY THIS LIVES HERE, in the package that owns the tools, and not in a consumer.
  *
  * Three artifacts need to talk about the tool surface in domains rather than as a flat
- * list of 88 names: the published documentation (docs.contenthero.ai), the ContentHero
+ * list of every name: the published documentation (docs.contenthero.ai), the ContentHero
  * agent skill, and this package's own "advertises exactly the v1 tools" test. Before this
- * file there were going to be three separate lists of the same 88 names, which is three
+ * file there were going to be three separate lists of the same names, which is three
  * chances to disagree and no mechanism that would notice. Grouping is EDITORIAL, so it
  * cannot be derived from tool names (a rename would silently reshuffle the docs), but it
  * can have exactly one home, and the home is next to the definitions it describes.
@@ -41,12 +41,12 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
   {
     slug: 'media',
     title: 'Media',
-    blurb: 'The library: browse, search, import and upload the media an account owns.',
+    blurb: 'The library: browse, search, import and upload the media an account owns, and favorite, archive or share any item.',
     tools: [
-      'list_media', 'get_media', 'show_media', 'search_media', 'import_media', 'share_media',
+      'list_media', 'get_media', 'show_media', 'search_media', 'import_media',
       'create_media_upload', 'complete_media_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
-      'favorite', 'archive',
+      'favorite', 'archive', 'share',
     ],
   },
   {
@@ -94,9 +94,8 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb: 'Projects, their timelines and canvases, the templates you place on them, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'update_project', 'duplicate_project', 'delete_project',
-      'share_project',
-      'import_project', 'export_project', 'get_export', 'list_project_exports',
-      'list_project_versions', 'save_project_version', 'restore_project_version', 'update_project_version',
+      'import_project', 'export_project', 'get_export', 'list_exports',
+      'list_project_versions', 'create_project_version', 'restore_project_version', 'update_project_version',
       'delete_project_version', 'undo_project_edit', 'redo_project_edit',
       'update_timeline', 'update_canvas', 'get_transcript',
       'list_templates', 'get_template', 'create_template', 'update_template', 'delete_template',

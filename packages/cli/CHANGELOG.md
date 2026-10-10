@@ -9,6 +9,12 @@
   running).
 - A running export and a running Break It Down name `contenthero status <id> --kind export|content` for the wait;
   `project export get` reads one export.
+- Breaking (hard cutover, no hidden alias): `media share` and `project share` are one `share <assetType> [ids...]`,
+  named after the MCP's `share`: `share media <mediaIds...>` (with `--title`, or `--off` and `--link` to stop a
+  link) and `share project <id>` (with `--off` to revoke). Each kind keeps its scope: `studio:write` for media,
+  `editor:write` for a project.
+- Breaking (hard cutover, no hidden alias): `project version save` is `project version create`, named after the MCP's
+  `create_project_version`.
 
 ## 0.3.23
 
