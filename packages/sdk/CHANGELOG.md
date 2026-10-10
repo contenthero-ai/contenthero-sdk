@@ -10,6 +10,8 @@
 - Breaking: `waitForGenerations` is removed; `waitForStatus` replaces it. `waitForGeneration` (behind
   `generateAndWait`, `generateBoardAndWait` and `importMedia`) now reads the status route, so the server alone
   decides when a generation is done.
+- Docs: `startExport`, `listProjectExports`, `exportProjectAndWait` and `analyzeContent` name `getStatus` for waiting;
+  `getExport` reads one export.
 
 ## 0.4.26
 

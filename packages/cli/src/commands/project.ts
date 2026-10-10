@@ -14,7 +14,7 @@
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
  *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--loudness <lufs|off>] [--wait]
- *   project export get <exportId>                                        poll an export (requires editor:read)
+ *   project export get <exportId>                                        one export: its file, state and details (requires editor:read)
  *   project export list <projectId> [--limit] [--cursor]                 its exports, newest first (requires editor:read)
  *   project transcript get <projectId> [--search] [--granularity] ...    its transcript (requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
@@ -411,7 +411,7 @@ export function registerProject(program: Command): void {
         withCodeWarnings(
           job.status === 'completed'
             ? withExportLoudness(`Export ${job.exportId} completed: ${job.outputUrl}${describeExportShareLink(job.shareUrl) ? `\n${describeExportShareLink(job.shareUrl)}` : ''}`, job.loudness)
-            : `Export ${job.exportId} is ${job.status}. Poll: contenthero project export get ${job.exportId}`,
+            : `Export ${job.exportId} is ${job.status}. Wait: contenthero status ${job.exportId} --kind export`,
           job.warnings,
         ),
       )
@@ -424,7 +424,7 @@ export function registerProject(program: Command): void {
   */
   exportCommand
     .command('get')
-    .description('Poll an export job by id (requires editor:read)')
+    .description('Read one export by id: its file, state and details; wait for one with `contenthero status --kind export` (requires editor:read)')
     .argument('<exportId>', 'the export id')
     .action(async (exportId: string, _opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)

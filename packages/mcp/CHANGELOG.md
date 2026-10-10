@@ -7,6 +7,9 @@
   id its starting call returned, with `kind` only for a full UUID, a transcript, or an id the server says is
   ambiguous. It still blocks up to about 40 seconds by default, `wait: false` still snapshots, and a generation still
   answers with its files. The generation card polls it.
+- Waiting is `get_status`'s, everywhere: `export_project`, `list_project_exports` and a running export name
+  `get_status` with kind `export` for the wait, and `get_export` reads one export (its file, state and details). A
+  Break It Down still running names `get_status` with kind `content`, then `analyze_content` reads it at no charge.
 
 ## 0.4.33
 

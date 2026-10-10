@@ -286,7 +286,7 @@ export function registerContent(program: Command): void {
           }
         }
         // Availability always prints: the section names are the vocabulary --analysis-sections accepts.
-        if (c.analysis) out += `\n\n${analysisText(c.analysis)}`
+        if (c.analysis) out += `\n\n${analysisText(c.id, c.analysis)}`
         if (c.scenes) out += `\n\n${scenesText(c.scenes)}`
         return out
       })
@@ -334,7 +334,7 @@ export function registerContent(program: Command): void {
         // final charge (taking the analysis from the post dropped the charge).
         if (post.analysis.status !== 'running') result = await client.analyzeContent(id)
       }
-      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${r.contentId}\n\n${analysisText(r.analysis)}${costAfter(r.charge)}`)
+      emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${r.contentId}\n\n${analysisText(r.contentId, r.analysis)}${costAfter(r.charge)}`)
     })
 }
 
@@ -368,8 +368,10 @@ function scenesText(sc: ContentScenes): string {
 }
 
 /** A post's Break It Down: its status always, and the sections when they were returned. */
-function analysisText(an: ContentAnalysis): string {
-  if (an.status === 'running') return 'Analysis: running (run content analyze again for the result)'
+function analysisText(contentId: string, an: ContentAnalysis): string {
+  if (an.status === 'running') {
+    return `Analysis: running (wait with contenthero status ${contentId} --kind content, then content analyze reads it at no charge)`
+  }
   if (an.status === 'failed') return `Analysis: failed (${an.error ?? 'no reason recorded'}); content analyze tries it again`
   if (an.status !== 'complete') return 'Analysis: absent (content analyze creates one)'
   const provenance = [an.model, an.analyzedAt?.slice(0, 10)].filter(Boolean).join(', ')

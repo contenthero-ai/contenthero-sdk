@@ -358,7 +358,7 @@ const WRITE = { readOnlyHint: false } as const
 
 /**
  * How long a tool that starts a background job (analyze_content, import_media) waits for it within one call, and how
- * often it looks. The hosted route allows 60s; past this the tool answers pending and the agent asks again.
+ * often it looks. The hosted route allows 60s; past this the tool answers pending and the agent waits with get_status.
  */
 const JOB_WAIT_MS = 40_000
 const JOB_POLL_MS = 4_000
@@ -4212,7 +4212,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
       description:
-        'Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. If it returns pending, call it again for the result.',
+        "Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. A breakdown still running returns pending: wait for it with get_status (kind content, by the post's id), then call this again to read it at no charge. Scenes still being prepared have no status of their own, so call this again for them.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         kind: z
@@ -4242,7 +4242,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         }
         let result = await client.analyzeContent(args.contentId)
         // The analysis runs as a job. Wait a while within this call (the hosted route allows 60s), reading the
-        // post's analysis status, which starts nothing; past that the agent calls again, which is also free.
+        // post's analysis status, which starts nothing; past that the agent waits with get_status and calls again,
+        // which is also free.
         const deadline = Date.now() + jobWait.waitMs
         while (result.analysis.status === 'running' && Date.now() + jobWait.pollMs < deadline) {
           await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
@@ -4659,7 +4660,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Exporting the project'),
       annotations: WRITE,
       description:
-        "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use view with render (ephemeral, stored nowhere). The formats, what each makes and the options each takes are listed by get_schema kind 'export'; read it before choosing one. format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both project types too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. An editor project also exports its sound (mp3, aac, wav), its subtitles (srt, vtt) and its transcript (txt, docx, rtf, md, html). Resolution and watermark apply to every picture format: a free account never exports above 720p and never removes the watermark. `quality` is mp4 only. Returns the download URL when the export finishes in time, otherwise an exportId to poll with get_export. Requires the editor:write scope.",
+        "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use view with render (ephemeral, stored nowhere). The formats, what each makes and the options each takes are listed by get_schema kind 'export'; read it before choosing one. format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both project types too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. An editor project also exports its sound (mp3, aac, wav), its subtitles (srt, vtt) and its transcript (txt, docx, rtf, md, html). Resolution and watermark apply to every picture format: a free account never exports above 720p and never removes the watermark. `quality` is mp4 only. Returns the download URL when the export finishes in time, otherwise an exportId: wait for it with get_status (kind export), then read its file with get_export. Requires the editor:write scope.",
       inputSchema: {
         projectId: z.string().describe('The project to export.'),
         // A string the server validates against its catalog (7.67), so a new format needs no release of this tool.
@@ -4681,7 +4682,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const { projectId, ...input } = args
         const job = await client.exportProjectAndWait(projectId, input, { timeoutMs: WAIT_MS })
         // ⚠️ The FORMAT is what makes an export renderable, and only this handler knows it: `get_export`
-        // polls by exportId alone, so a poll legitimately reports rather than displays.
+        // reads by exportId alone, so a later read legitimately reports rather than displays.
         return completedExportResult(job, input.format ?? 'mp4')
       } catch (err) {
         if (err instanceof GenerationTimeoutError) {
@@ -4698,7 +4699,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Project Exports',
       annotations: READ,
       description:
-        "List a project's exports, newest first, as the editor's Exports tab shows them: each finished one with its download and public share page, and the ones still running with their status (poll one with get_export). A failed export is not listed. Requires the editor:read scope.",
+        "List a project's exports, newest first, as the editor's Exports tab shows them: each finished one with its download and public share page, and the ones still running with their status (wait for one with get_status, kind export). A failed export is not listed. Requires the editor:read scope.",
       inputSchema: {
         projectId: z.string().describe('The project id.'),
         ...pageInput(),
@@ -4723,7 +4724,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Export',
       annotations: READ,
       description:
-        'Poll an export job started by export_project. Returns its status and, when done, the download URL. Requires the editor:read scope.',
+        'Read one export started by export_project: its file, state and details, with the download URL and public share page once it finishes. To wait for one still running, use get_status with kind export. Requires the editor:read scope.',
       inputSchema: {
         exportId: z.string().describe('The export id returned by export_project.'),
       },

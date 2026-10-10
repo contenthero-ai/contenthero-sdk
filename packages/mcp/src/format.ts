@@ -525,10 +525,11 @@ export function pollAfterSecondsFor(contentType: string): number {
  * ⚠️ THE ARGUMENT IS `ids` AND IT IS AN ARRAY, ALWAYS, even for one job. Every handoff here used to say "call the
  * status tool with this outputId", which names a parameter that does not exist: an agent following the sentence
  * literally sends the singular and the schema rejects it. Naming the shape in prose is what drifted, so these
- * messages now print the call instead, and every site shares this one function.
+ * messages now print the call instead, and every site shares this one function. `kind` is printed for an id the
+ * status route cannot place alone: a full UUID, or a post's id, which names its analysis.
  */
-export function getStatusCall(ids: readonly string[]): string {
-  return `get_status { ids: [${ids.map((id) => `"${id}"`).join(', ')}] }`
+export function getStatusCall(ids: readonly string[], kind?: JobKind): string {
+  return `get_status { ids: [${ids.map((id) => `"${id}"`).join(', ')}]${kind ? `, kind: "${kind}"` : ''} }`
 }
 
 /** What a still-running generation already knows about the shape of its own result. */
@@ -2370,7 +2371,7 @@ export function inspirationContentResult(c: ContentDetail, frames: InlinedImageS
       c.hashtags.length ? `hashtags: ${c.hashtags.join(' ')}` : null,
       c.description ? `description: ${c.description}` : null,
       ...(c.transcript ? transcriptLines(c.transcript) : []),
-      ...analysisLines(c.analysis),
+      ...analysisLines(c.id, c.analysis),
       ...scenesLines(c.scenes, frames),
     ]),
   )
@@ -2424,8 +2425,8 @@ function scenesLines(scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]
  * names are printed because they are the vocabulary `analysisSections` accepts; hiding them would
  * make the surgical pull undiscoverable.
  */
-function analysisLines(analysis: ContentDetail['analysis']): Array<string | null> {
-  if (analysis?.status === 'running') return ['analysis: running (call analyze_content again for the result)']
+function analysisLines(contentId: string, analysis: ContentDetail['analysis']): Array<string | null> {
+  if (analysis?.status === 'running') return [`analysis: running (${analysisWait(contentId)})`]
   if (analysis?.status === 'failed') {
     return [`analysis: failed (${analysis.error ?? 'no reason recorded'}); analyze_content tries it again`]
   }
@@ -2442,6 +2443,14 @@ function analysisLines(analysis: ContentDetail['analysis']): Array<string | null
       )
     : []
   return [head, ...body]
+}
+
+/**
+ * How to wait for a running Break It Down: get_status follows it by the post's id, and analyze_content then reads the
+ * finished analysis at no charge. Scenes have no status of their own, so a running scene map is asked for again.
+ */
+function analysisWait(contentId: string): string {
+  return `wait with ${getStatusCall([contentId], 'content')}, then analyze_content reads it at no charge`
 }
 
 /** analyze_content's price check: nothing ran and nothing was charged. */
@@ -2480,8 +2489,8 @@ export function contentAnalysisResult(r: ContentAnalysisResult): CallToolResult 
   // "pending" is the word the tool's description uses for a run still going.
   const body =
     r.analysis.status === 'running'
-      ? ['analysis: pending, still running (call analyze_content again for the result)']
-      : analysisLines(r.analysis)
+      ? [`analysis: pending, still running (${analysisWait(r.contentId)})`]
+      : analysisLines(r.contentId, r.analysis)
   return {
     content: [{ type: 'text', text: lines([`Break It Down for post ${r.contentId}`, ...body, chargeLine(r.charge)]) }],
     structuredContent: {
@@ -2927,7 +2936,7 @@ export function projectExportListResult(projectId: string, { exports, nextCursor
     const done = e.status === 'completed'
     const kind = e.exportType ? ` | ${e.exportType}` : ''
     const loudness = describeExportLoudness(e.loudness)
-    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}${loudness ? ` | ${loudness}` : ''}` : ` | ${e.status} (poll get_export)`
+    const files = done ? `${e.outputUrl ? ` | download: ${e.outputUrl}` : ''}${e.shareUrl ? ` | share page: ${e.shareUrl}` : ''}${loudness ? ` | ${loudness}` : ''}` : ` | ${e.status} (wait with ${getStatusCall([e.exportId], 'export')})`
     return `- ${e.exportId}${linkAfter(e.appUrl)} | ${e.createdAt}${kind}${e.title ? ` | "${e.title}"` : ''}${files}`
   })
   return text(lines([`${exports.length} export(s) of project ${projectId}, newest first:`, ...rows, moreLine(nextCursor)]))
@@ -3016,7 +3025,7 @@ const EXPORT_MEDIUM: Record<string, 'image' | 'video' | 'audio'> = { mp4: 'video
  *
  * ## ⛔⛔ ONLY THE TOOL THAT STARTED THE EXPORT KNOWS ITS FORMAT
  *
- * `get_export` polls by exportId alone, so it cannot know whether the file is an mp4 or a pptx and can
+ * `get_export` reads by exportId alone, so it cannot know whether the file is an mp4 or a pptx and can
  * never render one. Leaving both paths inside one builder made the completeness guard read `get_export` as
  * a tool that emits a widget, which it does not, and an invariant that has to be argued with is not one.
  * Two names, each true on its own.
@@ -3051,7 +3060,7 @@ export function completedExportResult(
   }
 }
 
-/** An export, REPORTED. No widget: a poll does not know the format, so it cannot draw the file. */
+/** An export, REPORTED. No widget: a read by id does not know the format, so it cannot draw the file. */
 /** `appUrl` and `shortId` are optional here: a timed-out wait knows only the export's id and status. */
 export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { appUrl?: string; shortId?: string }): CallToolResult {
   if (job.status === 'completed') {
@@ -3065,7 +3074,7 @@ export function exportJobResult(job: Omit<ExportJob, 'appUrl' | 'shortId'> & { a
   const where = [done, job.stage].filter(Boolean).join(', ')
   return text(
     withCodeWarnings(
-      `Export ${job.exportId} is ${job.status}${where ? ` (${where})` : ''}. Still working. Poll get_export with this exportId for the download URL.`,
+      `Export ${job.exportId} is ${job.status}${where ? ` (${where})` : ''}. Still working. Wait with ${getStatusCall([job.exportId], 'export')}, then get_export reads its download URL.`,
       job.warnings,
     ),
   )

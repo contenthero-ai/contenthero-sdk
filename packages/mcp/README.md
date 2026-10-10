@@ -9,7 +9,7 @@ Official [ContentHero](https://contenthero.ai) MCP server. Generate images, vide
 | `generate_image` | Generate images from a prompt (or image-to-image). Waits for the result and returns the URLs. |
 | `generate_video` | Generate video from a prompt (or start/end frame, references). Returns at once with an `outputId`; `get_status` waits for the render. |
 | `generate_audio` | ElevenLabs speech (TTS), music, or sound effects. Synchronous: returns the audio URL directly. |
-| `check_generation` | Poll an image/video `outputId` to its final URLs. |
+| `get_status` | Wait for any background job by the id that started it (a generation's `outputId` gives its final URLs). |
 | `get_account` | Your ContentHero account: balance, spend this month, the monthly spend cap, plan and auto top-up. |
 | `update_account` | Change an account setting (today: the monthly spend cap). |
 
@@ -56,7 +56,7 @@ Once connected, just ask in natural language. The agent picks the tool and model
 
 > "Read this script aloud with ElevenLabs voice `<id>`."
 
-Images return in one turn (~15s). Video either returns inline or hands back an `outputId`; the agent then calls `check_generation` to fetch the final URLs. Insufficient credits, invalid parameters, and unknown models come back as readable tool errors.
+Images return in one turn (~15s). Video either returns inline or hands back an `outputId`; the agent then calls `get_status` to fetch the final URLs. Insufficient credits, invalid parameters, and unknown models come back as readable tool errors.
 
 ## How it works
 

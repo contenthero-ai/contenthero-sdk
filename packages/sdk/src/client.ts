@@ -1616,9 +1616,10 @@ export class ContentHero {
 
   /**
    * Run Break It Down on a post. One analysis per post, read by everyone: when the post has one it is returned
-   * at no charge. Otherwise this starts one and returns `analysis.status: 'running'`; calling again is safe (a
-   * running post starts nothing and charges nothing) and returns the analysis once it is stored, which is when
-   * the credits are charged, once. Price it first with `estimateAnalysisCost`.
+   * at no charge. Otherwise this starts one and returns `analysis.status: 'running'`: wait for it with `getStatus`
+   * (kind `'content'`, the post's id), then call this again, which starts nothing and charges nothing for a running
+   * post and returns the analysis once it is stored, which is when the credits are charged, once. Price it first
+   * with `estimateAnalysisCost`.
    *
    * `kind: 'scenes'` prepares the post to be seen instead: its scene map and a frame per scene, read afterwards
    * with `getContent`, priced per started minute of video. Same rules: free when it exists, charged once when
@@ -1966,8 +1967,8 @@ export class ContentHero {
 
   /**
    * Start an export (render) of a project's saved composition. `mp4` returns a job with status 'rendering'
-   * (poll with getExport or use exportProjectAndWait); canvas still/document formats (png/jpg/pdf/pptx) run
-   * synchronously and return 'completed' with the outputUrl. Requires the `editor:write` scope.
+   * (wait for it with getStatus, kind 'export', or use exportProjectAndWait); canvas still/document formats
+   * (png/jpg/pdf/pptx) run synchronously and return 'completed' with the outputUrl. Requires the `editor:write` scope.
    */
   async startExport(projectId: string, input: StartExportInput = {}): Promise<ExportJob> {
     return this.request<ExportJob>('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/export`, input)
@@ -1975,8 +1976,8 @@ export class ContentHero {
 
   /**
    * A project's exports, newest first, a page at a time: every finished one with its file and share page, and the ones
-   * still running, each with its `status` (poll one with `getExport`). A failed export is not listed. Requires
-   * `editor:read`.
+   * still running, each with its `status` (wait for one with `getStatus`, kind `'export'`). A failed export is not
+   * listed. Requires `editor:read`.
    */
   async listProjectExports(projectId: string, options: PageOptions = {}): Promise<ProjectExportListResult> {
     const q = new URLSearchParams()
@@ -1987,7 +1988,10 @@ export class ContentHero {
     )
   }
 
-  /** Poll an export job by id. Requires the `editor:read` scope. */
+  /**
+   * Read one export by id: its file, state and details, with the download URL and share page once it finishes. To
+   * wait for one still running, use `getStatus` with kind `'export'`. Requires the `editor:read` scope.
+   */
   async getExport(exportId: string, init: { signal?: AbortSignal } = {}): Promise<ExportJob> {
     return this.request<ExportJob>('GET', `/api/v1/exports/${encodeURIComponent(exportId)}`, undefined, init)
   }
@@ -2030,7 +2034,7 @@ export class ContentHero {
   /**
    * Start an export and poll until it completes. Resolves with the completed job (outputUrl set), throws
    * `GenerationFailedError` on failure, or `GenerationTimeoutError` if it does not finish within `timeoutMs`
-   * (the server job may still complete; re-poll with getExport).
+   * (the server job may still complete; wait for it with getStatus, kind 'export').
    */
   async exportProjectAndWait(
     projectId: string,

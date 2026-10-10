@@ -7,6 +7,8 @@
   avatar, a content analysis, a transcript) by its id alone; `--kind` is for a full UUID, a transcript, or an id the
   server says is ambiguous. `--no-wait` and `--timeout` are unchanged, and so are the exit codes (1 failed, 4 still
   running).
+- A running export and a running Break It Down name `contenthero status <id> --kind export|content` for the wait;
+  `project export get` reads one export.
 
 ## 0.3.23
 

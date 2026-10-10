@@ -618,7 +618,7 @@ test('formats the widget cannot draw stay text', () => {
 })
 
 /**
- * ⛔ `get_export` POLLS BY ID ALONE, so it cannot know the format and can never render. That is why the two
+ * ⛔ `get_export` READS BY ID ALONE, so it cannot know the format and can never render. That is why the two
  * builders are separate names rather than one with a flag: the completeness guard reads a shared builder as
  * "this tool emits a widget", and an invariant that has to be argued with is not one.
  */
@@ -634,6 +634,8 @@ test('an unfinished export reports its overall progress and its stage', () => {
   assert.match((res.content[0] as { text: string }).text, /^Export exp-1 is transferring \(87%, leveling\)\. Still working\./)
   const bare = exportJobResult({ exportId: 'exp-1', status: 'rendering' })
   assert.match((bare.content[0] as { text: string }).text, /^Export exp-1 is rendering\. Still working\./)
+  // The wait is get_status's; get_export reads the file once it is done.
+  assert.match((bare.content[0] as { text: string }).text, /Wait with get_status \{ ids: \["exp-1"\], kind: "export" \}, then get_export reads its download URL\./)
 })
 
 /**

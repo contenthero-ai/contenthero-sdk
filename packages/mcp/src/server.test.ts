@@ -2543,7 +2543,7 @@ test('analyze_content says pending when the analysis outlasts the call', async (
     }),
   )
   const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1' } })
-  assert.match(res.content[0].text, /pending, still running \(call analyze_content again for the result\)/)
+  assert.match(res.content[0].text, /pending, still running \(wait with get_status \{ ids: \["c1"\], kind: "content" \}, then analyze_content reads it at no charge\)/)
   assert.equal(res.structuredContent.status, 'pending')
 })
 
@@ -3533,7 +3533,7 @@ test("export_project passes this export's loudness through, and the result says 
   assert.ok(refused.isError)
 })
 
-test('get_export polls an export job', async () => {
+test('get_export reads one export', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'get_export', arguments: { exportId: 'exp1' } })
   assert.match((res.content[0]).text, /exp1/)
