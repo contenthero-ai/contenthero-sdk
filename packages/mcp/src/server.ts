@@ -269,7 +269,7 @@ function pendingShapeFrom(
    * The submit response, which names the model from the registry. Absent on a path that never got one (a submit
    * that timed out with its outputId), where the card shows no chip rather than the id.
    */
-  submitted?: Pick<GenerateResult, 'modelDisplayName' | 'modelBrandColor' | 'modelIconKey'>,
+  submitted?: Pick<GenerateResult, 'modelDisplayName' | 'modelBrandColor' | 'modelIconKey' | 'displayAspect'>,
 ): PendingShape {
   const a = (args ?? {}) as {
     modelId?: string
@@ -279,8 +279,11 @@ function pendingShapeFrom(
     prompt?: string
     script?: string
   }
+  // The shape the server recorded wins: it follows the input on a model whose output does. The ratio asked for is
+  // only a stand-in on a path that never got a submit response.
   const ar = a.aspectRatio
-  const displayAspect = !ar || ar === 'auto' || ar === 'adaptive' || !ar.includes(':') ? null : ar
+  const asked = !ar || ar === 'auto' || ar === 'adaptive' || !ar.includes(':') ? null : ar
+  const displayAspect = submitted?.displayAspect ?? asked
   return {
     contentType,
     modelId: a.modelId ?? '',

@@ -563,6 +563,11 @@ export interface GenerateResult {
   modelDisplayName?: string | null
   modelBrandColor?: string | null
   modelIconKey?: string | null
+  /**
+   * The shape ("W:H") the output was recorded at on submit, the value every surface draws its placeholder from. It
+   * follows the driving input on a model whose output does, whatever ratio was asked for. Null when not yet known.
+   */
+  displayAspect?: string | null
   /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
   idempotentReplay?: boolean
   /** Where the asset is being placed (present only when `projectId` was supplied). Lets a caller chain further
