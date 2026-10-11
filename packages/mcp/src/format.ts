@@ -121,7 +121,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1984,6 +1984,7 @@ export function modelResult(m: ModelInfo): CallToolResult {
       cap(m, 'negativePrompt') ? '  negativePrompt: supported' : null,
       gen ? `  generations: ${gen.min}-${gen.max} (default ${gen.default})` : null,
       ...refLines.map((l) => `  ${l}`),
+      ...describeInputLimits(m.capabilities).map((l) => `  ${l}`),
       ...shotLines(m),
       enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
       ...promptReferenceLines(m.promptReferences),

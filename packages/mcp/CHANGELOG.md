@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `get_model` lists the model's input limits (file sizes, reference lengths, and reference video plus output
+  together), which it left out, so a request is shaped within them instead of refused.
 - Fixed: `list_content` says each `accountIds` entry that named no account of yours, one line each, instead of
   silently matching nothing for it; the posts the other ids matched still list.
 - Fixed: every tool that starts or finishes a background job names the job by an id `get_status` takes, with its

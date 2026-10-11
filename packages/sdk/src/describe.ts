@@ -36,6 +36,31 @@ export function describeReferences(references: readonly GenerationReference[] | 
   return (references ?? []).map((r) => `${r.label} (${r.type}): ${r.url}`)
 }
 
+/**
+ * A model's input limits, one line per limit it declares (`capabilities.inputLimits`), so the MCP's get_model and the
+ * CLI's `model get` state them in the same words (approved 2026-10-11). Empty when the model declares none. The numbers
+ * are the registry's; only the words live here.
+ */
+export function describeInputLimits(capabilities: Record<string, unknown> | null | undefined): string[] {
+  const l = (capabilities?.inputLimits ?? {}) as Record<string, number | undefined>
+  const out: string[] = []
+  if (l.imageMaxMB != null) out.push(`image files: up to ${l.imageMaxMB} MB each`)
+  if (l.videoMaxMB != null) out.push(`video files: up to ${l.videoMaxMB} MB each`)
+  if (l.videoMaxDurationSec != null) out.push(`input video: up to ${l.videoMaxDurationSec}s`)
+  if (l.videoTrimMaxSec != null) out.push(`input video: the first ${l.videoTrimMaxSec}s are used`)
+  if (l.audioMinDurationSec != null && l.audioMaxDurationSec != null) {
+    out.push(`audio references: each ${l.audioMinDurationSec} to ${l.audioMaxDurationSec}s`)
+  } else if (l.audioMinDurationSec != null) {
+    out.push(`audio references: each at least ${l.audioMinDurationSec}s`)
+  } else if (l.audioMaxDurationSec != null) {
+    out.push(`audio references: each up to ${l.audioMaxDurationSec}s`)
+  }
+  if (l.audioTotalMaxSec != null) out.push(`audio references: up to ${l.audioTotalMaxSec}s together`)
+  if (l.videoTotalMaxSec != null) out.push(`video references: up to ${l.videoTotalMaxSec}s together`)
+  if (l.videoPlusOutputMaxSec != null) out.push(`video references plus output: up to ${l.videoPlusOutputMaxSec}s together`)
+  return out
+}
+
 /** The same, as one line ("Cost: 7 credits charged. ..."). */
 export function chargeSentence(charge: Charge | null | undefined): string | null {
   const d = describeCharge(charge)

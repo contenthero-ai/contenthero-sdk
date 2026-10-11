@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New: `describeInputLimits(capabilities)`, one line per input limit a model declares (file sizes, reference
+  lengths, and reference video plus output together), so the MCP and the CLI state them in the same words.
 - New: `ContentListResult.accountIdsNotFound`, each `accountIds` entry that named none of your tracked accounts in
   the view, with the server's reason (the list still answers with the rest), and `describeAccountIdsNotFound` to say
   them. `AccountIdNotFound` is exported.

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeClip, describeCrop, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, withExportLoudness } from './describe.js'
+import { describeClip, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -179,4 +179,20 @@ test('describeClip says the region each frame was cut to, or why it could not be
     'Raw source clip: https://media.test/c.mp4',
     'Zoom not shown: The region is outside the clip.',
   ])
+})
+
+test('describeInputLimits states each limit a model declares, and nothing for one that declares none', () => {
+  assert.deepEqual(
+    describeInputLimits({
+      inputLimits: { imageMaxMB: 20, videoTotalMaxSec: 15, audioMinDurationSec: 1, audioMaxDurationSec: 15, videoPlusOutputMaxSec: 30 },
+    }),
+    [
+      'image files: up to 20 MB each',
+      'audio references: each 1 to 15s',
+      'video references: up to 15s together',
+      'video references plus output: up to 30s together',
+    ],
+  )
+  assert.deepEqual(describeInputLimits({}), [])
+  assert.deepEqual(describeInputLimits(null), [])
 })
