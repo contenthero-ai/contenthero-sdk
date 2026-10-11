@@ -44,11 +44,13 @@ test('the frames of a range that did not render are named', () => {
 })
 
 let body: unknown = {}
+let lastUrl = ''
 let server: Server
 let baseUrl = ''
 
 before(async () => {
-  server = createServer((_req, res) => {
+  server = createServer((req, res) => {
+    lastUrl = req.url ?? ''
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify(body))
   })
@@ -122,4 +124,79 @@ test("--save writes a clip's keyframes, numbered in order", async () => {
   await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--asset', 'a1', '--save', path], { from: 'user' })
   assert.deepEqual([...readFileSync(path.replace('clip.jpg', 'clip-1.jpg'))], [1])
   assert.deepEqual([...readFileSync(path.replace('clip.jpg', 'clip-2.jpg'))], [2])
+})
+
+/**
+ * A tracked post is a source: --content-id names it and --slide, beside it, its carousel's video slide (not a canvas
+ * slide), --at-sec names the seconds, and --sound measures the window beside the frames; the summary names the post
+ * rather than an address, reads its sound, and --save writes its keyframes then its sound's picture. Break-verified:
+ * sending --slide as slideId with a post turns the first red; dropping sourceSoundLines from the summary, the second;
+ * dropping the sound's picture from viewImages, the third.
+ */
+test('--content-id and --slide name a post, --at-sec the seconds, and --sound comes beside the frames', async () => {
+  body = { context: null, participant: null, participants: [] }
+  await buildProgram().parseAsync(
+    ['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--content-id', 'post-1', '--slide', '4', '--at-sec', '1,3.5', '--sound'],
+    { from: 'user' },
+  )
+  const q = new URL(lastUrl, 'http://x').searchParams
+  assert.equal(q.get('contentId'), 'post-1')
+  assert.equal(q.get('slide'), '4')
+  assert.equal(q.get('slideId'), null)
+  assert.equal(q.get('atSec'), '1,3.5')
+  assert.equal(q.get('sound'), 'true')
+  assert.equal(q.get('render'), null)
+  await buildProgram().parseAsync(
+    ['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--asset', 'a1', '--from-sec', '2', '--to-sec', '4', '--per-second', '2'],
+    { from: 'user' },
+  )
+  const r = new URL(lastUrl, 'http://x').searchParams
+  assert.deepEqual([r.get('assetId'), r.get('perSecond'), r.get('render')], ['a1', '2', null])
+})
+
+test("a post's summary names it and reads its sound, or says why it could not be heard", () => {
+  const out = viewSummary(
+    {
+      context: {
+        clip: {
+          contentId: 'post-1', slide: 4, type: 'video', fromSec: 2, toSec: 4,
+          sound: {
+            kind: 'sound', fromSec: 2, toSec: 4, loudness: { integratedLufs: -14, truePeakDbtp: -1 }, onsets: [{ seconds: 2.5 }],
+            stereo: null, audioUrl: 'https://media.test/w.wav',
+          },
+        },
+      },
+      participant: null,
+      participants: [],
+    },
+    nothingSaved,
+  )
+  assert.match(out, /Tracked post post-1, its video \(slide 4\), from 2s to 4s/)
+  assert.doesNotMatch(out, /undefined/)
+  assert.match(out, /Its sound from 2s to 4s, as it is: Integrated loudness -14 LUFS/)
+  assert.match(out, /Sounds start at 2\.5s, in the source's own seconds\./)
+  assert.match(out, /The audio, for a short while: https:\/\/media\.test\/w\.wav/)
+  const silent = viewSummary(
+    { context: { clip: { contentId: 'post-1', type: 'video', sound: { kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } } } }, participant: null, participants: [] },
+    nothingSaved,
+  )
+  assert.match(silent, /The sound could not be heard\. no_sound: This video has no sound\./)
+})
+
+test("--save writes a source's keyframes, then its sound's picture", async () => {
+  body = {
+    context: {
+      clip: {
+        contentId: 'post-1', type: 'video',
+        keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AQ==' }],
+        sound: { kind: 'sound', loudness: {}, onsets: [], stereo: null, picture: { width: 2, height: 2, dataUrl: 'data:image/webp;base64,Aw==' } },
+      },
+    },
+    participant: null,
+    participants: [],
+  }
+  const path = join(mkdtempSync(join(tmpdir(), 'ch-view-')), 'post.jpg')
+  await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--content-id', 'post-1', '--count', '1', '--sound', '--save', path], { from: 'user' })
+  assert.deepEqual([...readFileSync(path.replace('post.jpg', 'post-1.jpg'))], [1])
+  assert.deepEqual([...readFileSync(path.replace('post.jpg', 'post-2.jpg'))], [3])
 })

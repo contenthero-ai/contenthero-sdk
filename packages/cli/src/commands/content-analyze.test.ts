@@ -40,6 +40,13 @@ before(async () => {
       res.end(JSON.stringify({ kind: 'content', id: POST.shortId, state: 'completed', reason: null, appUrl: POST.appUrl, progress: null, detail: { status: 'complete' } }))
       return
     }
+    if (req.method === 'GET' && url.pathname === `/api/v1/content/${POST.shortId}`) {
+      res.end(JSON.stringify({
+        id: POST.contentId, shortId: POST.shortId, title: 'Post', hashtags: [], analysis: { status: 'absent' },
+        video: { copy: { status: 'ready' }, videos: [{ copy: { status: 'ready' }, cuts: { boundaries: [2.5], scores: [0.8], durationSec: 9 } }] },
+      }))
+      return
+    }
     if (req.method === 'GET' && url.pathname === '/api/v1/content') {
       res.end(JSON.stringify({
         content: [], total: 0, nextCursor: null,
@@ -105,7 +112,23 @@ test('content analyze --kind video on a carousel prints each video slide, by sli
     ],
     charge,
   })
-  assert.match(out, /Slide 1:\s+ready; cut list \(free\): no cuts in 4\.0s\./)
-  assert.match(out, /Slide 3:\s+still downloading\./)
+  assert.match(out, /Slide 1 \(slide: 0\):\s+ready; cut list \(free\): no cuts in 4\.0s\./)
+  assert.match(out, /Slide 3 \(slide: 2\):\s+still downloading\./)
   assert.match(out, /--kind video \(free\)/)
+})
+
+/**
+ * `content get --cuts` asks for each downloaded video's cut list, and a window then narrows the lists rather than
+ * asking for transcript segments; the post's videos print with their states. Break-verified: dropping postVideosText
+ * from the output turns it red; letting the window imply segments with --cuts, the request assertion.
+ */
+test('content get --cuts asks for the cut lists, and its window does not imply transcript segments', async () => {
+  requests.length = 0
+  const out = await printed(['content', 'get', POST.shortId, '--cuts', '--start-ms', '1000'])
+  const asked = requests.find((r) => r.startsWith(`GET /api/v1/content/${POST.shortId}`)) ?? ''
+  assert.match(asked, /cuts=true/)
+  assert.match(asked, /startMs=1000/)
+  assert.doesNotMatch(asked, /transcript=/)
+  assert.match(out, /Videos: ready/)
+  assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s\./)
 })

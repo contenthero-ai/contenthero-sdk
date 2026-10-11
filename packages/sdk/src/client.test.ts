@@ -670,6 +670,20 @@ test('view sends video, and a raw clip by asset id or media URL with its window'
   assert.equal(calls[2]?.url, 'https://example.test/api/v1/view?mediaUrl=https%3A%2F%2Fmedia.test%2Fa%20b.mp4&fromSec=0')
 })
 
+// A tracked post's video is a source too, named by contentId and slide, and frames come at named seconds.
+// Break-verified: dropping the contentId, slide or atSec line from view turns this red.
+test('view sends a tracked post by contentId and slide, frames at named seconds, and sound on a source', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.view({ contentId: 'post-1', slide: 0, atSec: [1, 3.5, 7], sound: true })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?sound=true&contentId=post-1&slide=0&atSec=1%2C3.5%2C7')
+  await client.view({ assetId: 'a1', fromSec: 2, toSec: 4, perSecond: 2 })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/view?perSecond=2&assetId=a1&fromSec=2&toSec=4')
+})
+
 // The server honors `sound` on its own (it no longer needs `render`), so the SDK sends what it is given.
 test('view sends sound without render', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { context: null, participant: null, participants: [] } }])

@@ -1627,7 +1627,9 @@ export class ContentHero {
    *
    * The transcript is OPT-IN and windowable, because a sixty-minute video is a large document: ask for
    * `text` or `segments`, and narrow segments with `startMs`/`endMs` or `transcriptSearch`. Throws
-   * NotFoundError both when the post does not exist and when the caller has no relationship to it.
+   * NotFoundError both when the post does not exist and when the caller has no relationship to it. Each of the post's
+   * videos is reported with its state (`video`); once `analyzeContent` kind `video` has downloaded one, `cuts` adds
+   * where its picture changes.
    */
   async getContent(contentId: string, options: GetContentOptions = {}): Promise<ContentDetail> {
     const q = new URLSearchParams()
@@ -1640,6 +1642,7 @@ export class ContentHero {
     // refuses with a 400 naming this spelling (the app's check-wire-vocabulary rule).
     if (options.analysisSections?.length) q.set('analysisSections', options.analysisSections.join(','))
     if (options.scenes && options.scenes !== 'none') q.set('scenes', options.scenes)
+    if (options.cuts) q.set('cuts', 'true')
     const qs = q.toString()
     return this.request<ContentDetail>(
       'GET',
@@ -1829,8 +1832,11 @@ export class ContentHero {
    * for a fresh viewport screenshot (returned as a short-lived `snapshotUrl`) when you need the user's screen as
    * shown. To see the COMPOSED OUTPUT itself, pass `render: true` with the frames to draw, `sound: true` to measure a
    * range's mix, or `video: true` to watch a range play (`ViewInput`); the render is a job whose answer carries its
-   * images inline as data URLs and a `renderId` to read the rest with. To see a raw source clip rather than your
-   * edit, name it with `assetId` or `mediaUrl` and window it with `fromSec` and `toSec`. Renders are ephemeral and
+   * images inline as data URLs and a `renderId` to read the rest with. To see and hear a source rather than your
+   * edit, name a clip of yours with `assetId` or `mediaUrl`, or a tracked post's video with `contentId` (and `slide`
+   * for a carousel) once `analyzeContent` kind `video` has downloaded it, and window it with `fromSec` and `toSec`;
+   * its frames come spread across the window, at the seconds `atSec` names, or `perSecond` across it, and `sound`
+   * measures the window as it is (`ViewResult.context.clip`). Renders are ephemeral and
    * do not need a live tab. Returns the most-recent-active session's context plus the full live participant set
    * (`ViewResult`). Optionally scope to one project. Requires the `context:read` scope.
    */
@@ -1860,8 +1866,11 @@ export class ContentHero {
     }
     if (input.assetId) params.set('assetId', input.assetId)
     if (input.mediaUrl) params.set('mediaUrl', input.mediaUrl)
+    if (input.contentId) params.set('contentId', input.contentId)
+    if (typeof input.slide === 'number') params.set('slide', String(input.slide))
     if (typeof input.fromSec === 'number') params.set('fromSec', String(input.fromSec))
     if (typeof input.toSec === 'number') params.set('toSec', String(input.toSec))
+    if (input.atSec?.length) params.set('atSec', input.atSec.join(','))
     // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the
     // RFC-3986 query encoding; emit %20 so the URL is canonical (both decode to a space server-side).
     const query = params.toString().replace(/\+/g, '%20')

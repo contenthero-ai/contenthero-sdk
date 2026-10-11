@@ -122,7 +122,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2447,6 +2447,7 @@ export function inspirationContentResult(c: ContentDetail, frames: InlinedImageS
       ...(c.transcript ? transcriptLines(c.transcript) : []),
       ...analysisLines(c.id, c.analysis),
       ...scenesLines(c.id, c.scenes, frames),
+      ...postVideoLines(c.video),
     ]),
   )
   // Each shown frame follows its label, so the picture and the scene it belongs to cannot be mismatched.
@@ -2462,6 +2463,26 @@ export function inspirationContentResult(c: ContentDetail, frames: InlinedImageS
 
 function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
+}
+
+/**
+ * The post's videos (`analyze_content` kind video), always: where they stand together, then each video with its state
+ * and, when cuts was asked, its cut list, in the words analyze_content uses for them.
+ */
+function postVideoLines(video: ContentDetail['video']): string[] {
+  if (!video) return []
+  const c = video.copy
+  const head =
+    c.status === 'ready'
+      ? `videos: ready${video.videos.some((v) => v.cuts) ? '' : " (pass cuts to read where each one's picture changes)"}`
+      : c.status === 'pending'
+        ? 'videos: still downloading (analyze_content with kind video follows them, free)'
+        : c.status === 'failed'
+          ? `videos: a download failed (${c.error.trim().replace(/\.+$/, '')}); analyze_content with kind video tries again`
+          : c.status === 'unavailable'
+            ? `videos: none (${c.reason.trim().replace(/\.+$/, '')})`
+            : 'videos: not downloaded (analyze_content with kind video downloads them)'
+  return [head, ...video.videos.map((v) => `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`)]
 }
 
 /**
@@ -2583,7 +2604,9 @@ export function contentVideoResult(r: ContentVideoResult): CallToolResult {
         ? `${its} still downloading into the post's shared analysis copies. Follow them with ${again} again, which is free.`
         : copy.status === 'failed'
           ? `A download failed: ${copy.error.trim().replace(/\.+$/, '')}. Asking again tries once more.`
-          : `This post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}.`
+          : copy.status === 'unavailable'
+            ? `This post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}.`
+            : `${its} not downloaded yet. ${again} downloads ${many ? 'them' : 'it'}.`
   const videoLines = r.videos.map((v) => `${contentVideoLabel(v)}: ${describeContentVideo(v)}`)
   return {
     content: [{ type: 'text', text: lines([`Post ${post}`, body, ...videoLines, chargeLine(r.charge)]) }],
@@ -2851,9 +2874,11 @@ function renderedSection(
 }
 
 /**
- * A raw source clip named by assetId or mediaUrl (`context.clip`): what it is and which window was read, its
- * keyframes as image blocks each labeled with its time in the clip, within
- * what is left of the result's allowance, and why it or its keyframes could not be read.
+ * A source a view read (`context.clip`): a clip of the user's by assetId or mediaUrl, or a tracked post's video by
+ * contentId and slide. What it is and which window was read, its keyframes as image blocks each labeled with its time
+ * in the source, then its sound when asked (its measurement and where its sounds start, `describeSourceSound`, and its
+ * picture as an image, as the edit's sound render is shown), within what is left of the result's allowance, and why
+ * it, its keyframes or its sound could not be read.
  */
 function clipSection(
   clip: Record<string, unknown>,
@@ -2861,31 +2886,47 @@ function clipSection(
 ): { json: Record<string, unknown>; lines: string[]; blocks: CallToolResult['content'] } {
   const keyframes = parseKeyframes(clip.keyframes)
   const spent = admitWithinBudget(keyframes, budget)
+  const sound = isPlainRecord(clip.sound) ? clip.sound : null
+  const soundPicture = sound && isPlainRecord(sound.picture) ? parseDataUrl(sound.picture.dataUrl) : null
+  const heard = admitWithinBudget(soundPicture ? [soundPicture] : [], spent.remaining)
   const [what, ...why] = describeClip(clip)
   const lines: string[] = what ? [what] : []
   if (spent.admitted.length > 0) {
-    lines.push(`${spent.admitted.length} keyframe(s) of the clip are attached below, in order, each labeled with its time in the clip.`)
+    lines.push(`${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`)
   }
   if (spent.dropped > 0) lines.push(keyframesNotShown(spent.dropped))
   lines.push(...why)
-  const json =
-    keyframes.length > 0 && Array.isArray(clip.keyframes)
-      ? {
-          ...clip,
-          keyframes: (clip.keyframes as Array<Record<string, unknown>>).map((kf) => {
-            const { dataUrl: _drop, ...rest } = isPlainRecord(kf) ? kf : {}
-            return rest
-          }),
-        }
-      : clip
-  return { json, lines, blocks: keyframeBlocks(spent.admitted) }
+  lines.push(...describeSourceSound(sound))
+  if (heard.admitted.length > 0) {
+    lines.push("A picture of the sound is attached below: its waveform above its spectrogram, on one time axis in seconds from the start of the window.")
+  }
+  if (heard.dropped > 0) lines.push("The picture of the sound was not attached: over this result's size limit. Ask for fewer frames or a narrower window.")
+  let json: Record<string, unknown> = clip
+  if (keyframes.length > 0 && Array.isArray(clip.keyframes)) {
+    json = {
+      ...json,
+      keyframes: (clip.keyframes as Array<Record<string, unknown>>).map((kf) => {
+        const { dataUrl: _drop, ...rest } = isPlainRecord(kf) ? kf : {}
+        return rest
+      }),
+    }
+  }
+  if (sound && soundPicture && isPlainRecord(sound.picture)) {
+    json = { ...json, sound: { ...sound, picture: { ...sound.picture, dataUrl: '[attached as an image below]' } } }
+  }
+  const blocks: CallToolResult['content'] = keyframeBlocks(spent.admitted)
+  if (heard.admitted.length > 0) {
+    blocks.push({ type: 'text', text: 'Its sound:' })
+    for (const img of heard.admitted) blocks.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  }
+  return { json, lines, blocks }
 }
 
 /**
  * The view tool. Returns a text summary + the discriminated context JSON, plus IMAGE content block(s) so the calling
  * model can actually SEE: the viewport `snapshot` (capture) when the user's screen was requested, the composed-output
  * render (`context.rendered`), the range's sound beside frames when video could not be received
- * (`context.renderedSound`, formatted exactly as a sound `rendered`), and a raw source clip's keyframes
+ * (`context.renderedSound`, formatted exactly as a sound `rendered`), and a source's keyframes and sound
  * (`context.clip`). The heavy data URLs are stripped from the JSON text (they ride only as image blocks).
  */
 export function viewResult(

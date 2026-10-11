@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeClip, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, withExportLoudness } from './describe.js'
+import { describeClip, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -195,4 +195,35 @@ test('describeInputLimits states each limit a model declares, and nothing for on
   )
   assert.deepEqual(describeInputLimits({}), [])
   assert.deepEqual(describeInputLimits(null), [])
+})
+
+/**
+ * A tracked post is named by its contentId and slide, never by its copy's address, and its sound reads as the edit's
+ * sound render does, with where its sounds start in the source's own seconds. Break-verified: printing the url for a
+ * post turns the first red; keeping the state check in describeSoundMeasurement, or dropping the onset line, the second.
+ */
+test('describeClip names a post by contentId and slide, and describeSourceSound reads its window', () => {
+  assert.deepEqual(
+    describeClip({ contentId: 'post-1', slide: 4, type: 'video', durationSeconds: 10, fromSec: 2, toSec: 4 }),
+    ['Tracked post post-1, its video (slide 4) (10.00s long), from 2s to 4s'],
+  )
+  assert.deepEqual(describeClip({ contentId: 'post-1', error: { code: 'slide_required', message: 'Name one with slide (2, 4).' } }), [
+    'Tracked post post-1, its video',
+    "The post's video could not be read. slide_required: Name one with slide (2, 4).",
+  ])
+  assert.deepEqual(
+    describeSourceSound({
+      kind: 'sound', fromSec: 2, toSec: 4,
+      loudness: { integratedLufs: -14, truePeakDbtp: -1, loudnessRangeLu: 3, samplePeakDbfs: -1.2 },
+      onsets: [{ seconds: 2.25 }, { seconds: 3.5 }], stereo: null,
+    }),
+    [
+      'Its sound from 2s to 4s, as it is: Integrated loudness -14 LUFS, true peak -1 dBTP, loudness range 3 LU, sample peak -1.2 dBFS. 2 sounds start in it. Mono.',
+      "Sounds start at 2.25s, 3.5s, in the source's own seconds.",
+    ],
+  )
+  assert.deepEqual(describeSourceSound({ kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } }), [
+    'The sound could not be heard. no_sound: This video has no sound.',
+  ])
+  assert.deepEqual(describeSourceSound(null), [])
 })

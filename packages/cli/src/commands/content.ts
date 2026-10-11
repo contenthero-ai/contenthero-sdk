@@ -22,6 +22,7 @@ import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describe
 import type { Command } from 'commander'
 import type {
   ContentScenes,
+  ContentVideos,
   ContentScenesResult,
   ContentVideoResult,
   TrackedAccountDetail,
@@ -225,12 +226,13 @@ export function registerContent(program: Command): void {
     .description('Get one tracked post in full (engagement, hashtags, optional transcript and Break It Down analysis)')
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
     .option('--transcript [grain]', `include the transcript: ${GRAINS.join(', ')} (default none)`)
-    .option('--start-ms <n>', 'transcript window start, ms into the media', toInt)
-    .option('--end-ms <n>', 'transcript window end, ms into the media', toInt)
+    .option('--start-ms <n>', 'window start, ms into the media: narrows transcript segments, scenes and cut lists', toInt)
+    .option('--end-ms <n>', 'window end, ms into the media: narrows transcript segments, scenes and cut lists', toInt)
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
     .option('--analysis', 'include the full Break It Down analysis (availability always reports)')
     .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)', toList)
     .option('--scenes <grain>', "the post's scenes: map, or frames (the same map with each scene's frame url); --start-ms/--end-ms narrow them")
+    .option('--cuts', "add each downloaded video's cut list: the seconds where its picture changes, measured once and free; --start-ms/--end-ms narrow the lists")
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const scenes = opts.scenes as string | undefined
       if (scenes != null && !['none', 'map', 'frames'].includes(scenes)) {
@@ -238,7 +240,7 @@ export function registerContent(program: Command): void {
       }
       const wantsScenes = scenes === 'map' || scenes === 'frames'
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
-      // be honored against flat text. With --scenes, a window narrows the scenes instead.
+      // be honored against flat text. With --scenes or --cuts, a window narrows those instead.
       const raw = opts.transcript
       let grain: 'none' | 'text' | 'segments' | undefined
       if (raw === true) grain = 'segments'
@@ -247,7 +249,7 @@ export function registerContent(program: Command): void {
           throw new CliError(`Invalid --transcript "${raw}". Expected one of: ${GRAINS.join(', ')}.`, EXIT.USAGE)
         }
         grain = raw as 'none' | 'text' | 'segments'
-      } else if (opts.transcriptSearch || (!wantsScenes && (opts.startMs != null || opts.endMs != null))) {
+      } else if (opts.transcriptSearch || (!wantsScenes && !opts.cuts && (opts.startMs != null || opts.endMs != null))) {
         grain = 'segments'
       }
 
@@ -260,6 +262,7 @@ export function registerContent(program: Command): void {
         analysis: opts.analysis ? 'full' : undefined,
         analysisSections: opts.analysisSections as string[] | undefined,
         scenes: wantsScenes ? (scenes as 'map' | 'frames') : undefined,
+        cuts: opts.cuts ? true : undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
         const pairs: Array<[string, string | number]> = [
@@ -292,6 +295,7 @@ export function registerContent(program: Command): void {
         const post = { contentId: c.id, shortId: c.shortId ?? undefined }
         if (c.analysis) out += `\n\n${analysisText(post, c.analysis)}`
         if (c.scenes) out += `\n\n${scenesText(c.scenes, post)}`
+        if (c.video) out += `\n\n${postVideosText(c.video)}`
         return out
       })
     })
@@ -370,7 +374,9 @@ export function contentVideoHuman(r: ContentVideoResult): string {
         ? "still downloading into the post's shared analysis copies"
         : copy.status === 'failed'
           ? `a download failed: ${copy.error.trim().replace(/\.+$/, '')}. Asking again tries once more.`
-          : `this post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}`
+          : copy.status === 'unavailable'
+            ? `this post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}`
+            : 'not downloaded yet'
   return keyValues([
     ['Post', displayId({ id: r.contentId, shortId: r.shortId })],
     ...linkRow(r),
@@ -391,6 +397,25 @@ function collectAccount(value: string, previous: string[] = []): string[] {
 /** How long `content analyze` waits for a running analysis by default, and how often it looks. */
 const ANALYZE_TIMEOUT_SEC = 600
 const ANALYZE_POLL_MS = 5_000
+
+/**
+ * A post's videos as content get reports them, always: where they stand together, then each video with its state and,
+ * with --cuts, its cut list, in the words content analyze --kind video uses.
+ */
+function postVideosText(video: ContentVideos): string {
+  const c = video.copy
+  const head =
+    c.status === 'ready'
+      ? `Videos: ready${video.videos.some((v) => v.cuts) ? '' : " (--cuts reads where each one's picture changes)"}`
+      : c.status === 'pending'
+        ? 'Videos: still downloading (content analyze --kind video follows them, free)'
+        : c.status === 'failed'
+          ? `Videos: a download failed (${c.error.trim().replace(/\.+$/, '')}); content analyze --kind video tries again`
+          : c.status === 'unavailable'
+            ? `Videos: none (${c.reason.trim().replace(/\.+$/, '')})`
+            : 'Videos: not downloaded (content analyze --kind video downloads them)'
+  return [head, ...video.videos.map((v) => `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`)].join('\n')
+}
 
 /** A post's scenes: whether they exist, and how to read them. */
 /** A post an analysis answer is about: the id its job is followed by, and its page. */

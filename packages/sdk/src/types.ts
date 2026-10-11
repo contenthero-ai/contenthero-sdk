@@ -2801,6 +2801,19 @@ export interface ContentDetail extends ContentSummary {
   analysis: ContentAnalysis
   /** Whether the post's scenes exist (`analyzeContent` kind `scenes`). Availability only. Absent on older servers. */
   scenes?: ContentScenes
+  /**
+   * The post's videos (`analyzeContent` kind `video`), in the shape that answers with: where they stand together and
+   * each video with its state, plus its cut list when `getContent` was asked for `cuts`. Absent on older servers.
+   */
+  video?: ContentVideos
+}
+
+/** A post's videos, as `analyzeContent` kind `video` and `getContent` report them. */
+export interface ContentVideos {
+  /** Where the post's videos stand together. */
+  copy: ContentVideoCopy
+  /** Each video, in slide order. */
+  videos: ContentVideo[]
 }
 
 /**
@@ -2848,13 +2861,15 @@ export type ContentAnalysisKind = 'breakdown' | 'scenes' | 'video'
 
 /**
  * Where a post's video copy stands: `ready` to read, `pending` while it downloads (ask again with kind `video` to
- * follow it, free), `failed` with why, `unavailable` with why there is no video to copy.
+ * follow it, free), `failed` with why, `unavailable` with why there is no video to copy, `absent` when it was never
+ * downloaded (`analyzeContent` kind `video` downloads it).
  */
 export type ContentVideoCopy =
   | { status: 'ready' }
   | { status: 'pending' }
   | { status: 'failed'; error: string }
   | { status: 'unavailable'; reason: string }
+  | { status: 'absent' }
 
 /** Where a video changes scene: each boundary in seconds, its strength, and the length measured. */
 export interface ContentVideoCuts {
@@ -2868,7 +2883,10 @@ export interface ContentVideo {
   /** The carousel slide it is, by 0-based slide order. Absent for a post's one video (a reel, a YouTube video). */
   slide?: number
   copy: ContentVideoCopy
-  /** Its cut list, free, once its copy is stored. Absent while it downloads, or when it could not be measured yet. */
+  /**
+   * Its cut list, free, once its copy is stored. Absent while it downloads, when it could not be measured yet, and from
+   * `getContent` unless `cuts` was asked.
+   */
   cuts?: ContentVideoCuts
 }
 
@@ -2878,16 +2896,12 @@ export interface ContentVideo {
  * caller's library and nothing counts against their storage. A post with no video is refused with why (its images
  * are already stored and readable).
  */
-export interface ContentVideoResult {
+export interface ContentVideoResult extends ContentVideos {
   contentId: string
   /** The post's short id and its page in the app. */
   shortId: string
   appUrl: string
   kind: 'video'
-  /** Where the post's videos stand together. */
-  copy: ContentVideoCopy
-  /** Each video, in slide order. */
-  videos: ContentVideo[]
   /** What it cost: held on the most the downloads may move, charged for what arrived. */
   charge: Charge
 }
@@ -3011,6 +3025,12 @@ export interface GetContentOptions {
    * that will show the frames. `startMs`/`endMs` narrow the scenes (and then do not imply transcript segments).
    */
   scenes?: 'none' | 'map' | 'frames'
+  /**
+   * Add each downloaded video's cut list (`ContentDetail.video`): the seconds where its picture changes, measured once
+   * and free. `startMs`/`endMs` narrow the lists (and then do not imply transcript segments). Each video's state is
+   * reported either way.
+   */
+  cuts?: boolean
 }
 
 /** Options for `listTrackedAccounts`. */
@@ -3410,8 +3430,16 @@ export interface ViewResult {
    * - `rendered`: the picture or sound job answer, when the read rendered or read a render.
    * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
    *   `rendered` and its sound measurement here, a sound answer of the same shape as a sound `rendered`.
-   * - `clip`: a raw source clip named by `assetId` or `mediaUrl`: `{ url, type: 'video' | 'image', fromSec?, toSec?,
-   *   durationSeconds?, keyframes?: [{ atSec, dataUrl }], keyframeError?, crop?, cropError?, error?: { code, message } }`.
+   * - `clip`: a source named by `assetId` or `mediaUrl` (a clip of yours), or by `contentId` (a tracked post's video):
+   *   `{ url | contentId and slide?, type: 'video' | 'image', fromSec?, toSec?, durationSeconds?,
+   *   keyframes?: [{ atSec, dataUrl }], keyframeError?, crop?, cropError?, sound?, error?: { code, message } }`. A post
+   *   is named by its `contentId` (and `slide`) in place of a `url`: its copy's address is never handed out. A post that
+   *   cannot be read says why in `error`: `post_not_found`, `no_video`, `slide_required`, `not_a_carousel`,
+   *   `not_a_video_slide`, `video_not_downloaded`, `video_downloading` or `video_failed`. `sound`, when asked, is the
+   *   window measured as it is: `{ kind: 'sound', fromSec, toSec, sampleRate, channels, durationSeconds, loudness,
+   *   stereo, bands, onsets: [{ seconds }] (in the source's own seconds), picture: { width, height, dataUrl } (its
+   *   waveform above its spectrogram), audioUrl (short-lived) }`, or `{ kind: 'sound', error: { code, message } }`
+   *   (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`).
    * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
    */
   context: Record<string, unknown> | null
@@ -3438,8 +3466,9 @@ export interface ViewInput {
    * frames you name. Frames that fit one response come back one by one; more come back as contact sheets, each frame
    * numbered under its tile, split into pages. Set `sound` to render a range's mix and measure it instead. A render is a
    * job: the answer carries `rendered.renderId`, what finished within the wait, and which pages are ready; read the
-   * rest with `renderId` and `page`. Ephemeral (counts against no quota) and does not need a live tab. To see a RAW
-   * source clip rather than your edit, name it with `assetId` or `mediaUrl`.
+   * rest with `renderId` and `page`. Ephemeral (counts against no quota) and does not need a live tab. To see and hear
+   * a source rather than your edit, name a clip of yours with `assetId` or `mediaUrl`, or a tracked post's video with
+   * `contentId` (and `slide` for a carousel).
    */
   render?: boolean
   /** Editor: which single timeline frame. Omit to render the current playhead frame. */
@@ -3453,26 +3482,27 @@ export interface ViewInput {
   /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
   /**
-   * How many frames to spread evenly across the range, or across a clip's window. Omit for one frame at the focus
+   * How many frames to spread evenly across the range, or across a source's window. Omit for one frame at the focus
    * point, or about one a second of a range.
    */
   count?: number
   /** Editor: exactly these timeline frames, in this order. */
   frames?: number[]
-  /** How many frames to take per second of the range, up to every frame. */
+  /** How many frames to take per second of the range, up to every frame, or of a source's window. */
   perSecond?: number
   /** `frames` returns each frame as its own image; `sheets` tiles them into contact sheets. Omit to choose by how many fit one response. */
   layout?: 'frames' | 'sheets'
   /**
-   * Render the range's sound (`fromFrame` to `toFrame`, the whole timeline when neither is named) instead of its
-   * picture, mixed as an export mixes it, and measure it: integrated loudness, true peak, loudness range, sample peak,
-   * where sounds start, stereo width and band balance, with a waveform and spectrogram picture and a link to the audio
-   * that expires with the render.
+   * Hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by fromFrame and
+   * toFrame; or a source's window as it is, by fromSec and toSec, beside any frames asked for. Either is measured the
+   * same way (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band
+   * balance), with a waveform and spectrogram picture and a short-lived link to the audio. A source's sound comes back
+   * as `clip.sound`; alone, it returns no frames unless `atSec`, `count` or `perSecond` names some.
    */
   sound?: boolean
   /**
-   * Watch the range (`fromFrame` to `toFrame`) play with its sound, to judge motion, timing, transitions and pacing,
-   * or a clip's window. Where video cannot be received, the range's frames come back in `rendered` and its sound
+   * Watch the range play with its sound, to judge motion, timing, transitions and pacing. Takes fromFrame and toFrame,
+   * or a source's window. Where video cannot be received, the range's frames come back in `rendered` and its sound
    * measurement in `renderedSound`.
    */
   video?: boolean
@@ -3483,25 +3513,36 @@ export interface ViewInput {
   /** How long to wait for results before answering, in seconds. What is not ready by then is read later with `renderId`. */
   wait?: number
   /**
-   * The width in pixels to render at, or of a clip's frames, to check legibility at the size it will be seen (a
+   * The width in pixels to render at, or of a source's frames, to check legibility at the size it will be seen (a
    * thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
    */
   width?: number
   /**
    * Render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect
    * detail at full resolution. Without `width`, it renders at native scale; `rendered` reports
-   * `pixelsPerCompositionUnit`. For a source clip, the rectangle is in the clip's own pixels, and each of its frames
-   * is cut to it.
+   * `pixelsPerCompositionUnit`. For a source, the rectangle is in its own pixels, and each of its frames is cut to it.
    */
   region?: CompositionRegion
-  /** A raw source clip to see, by its asset id, rather than your edit. Or pass `mediaUrl`. */
+  /** A clip of yours to see and hear, by its asset id, rather than your edit. Or pass `mediaUrl` or `contentId`. */
   assetId?: string
-  /** A raw source clip to see, by its media URL, rather than your edit. Or pass `assetId`. */
+  /** A clip of yours to see and hear, by its media URL, rather than your edit. Or pass `assetId` or `contentId`. */
   mediaUrl?: string
-  /** Start of the clip's window, in its own seconds. Omit to start at its beginning. */
+  /**
+   * A tracked post's video to see and hear, by its content id, once `analyzeContent` kind `video` has downloaded it.
+   * Or pass `assetId` or `mediaUrl`.
+   */
+  contentId?: string
+  /** Which video of a carousel post, by the slide `analyzeContent` reports for it. Only with `contentId`. */
+  slide?: number
+  /** Start of a source's window, in its own seconds. Omit to start at its beginning. */
   fromSec?: number
-  /** End of the clip's window, in its own seconds. Omit to run to its end. */
+  /** End of a source's window, in its own seconds. Omit to run to its end. */
   toSec?: number
+  /**
+   * Frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window. Not
+   * with `count` or `perSecond`.
+   */
+  atSec?: number[]
 }
 
 /** A rectangle in composition units: the space layer geometry is expressed in (`ProjectDetail.compositionSpace`). */

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `view --content-id <id>` sees and hears a tracked post's video once `content analyze --kind video` has downloaded it;
+  beside it, `--slide <n>` names the carousel's video slide (0-based, as content analyze reports it), where without a
+  post it stays a canvas slide id. `--at-sec <list>` takes frames at named seconds of any source, `--per-second`
+  spreads them across a source's window, and `--sound` measures a source's window as it is, beside any frames: its
+  measurement, where its sounds start, and its audio link print, and `--save` writes its picture after the keyframes.
+- `content get` prints the post's videos with their states, and `--cuts` adds each downloaded video's cut list,
+  measured once and free (`--start-ms`/`--end-ms` narrow the lists and then do not imply transcript segments).
+- A carousel video is labeled with the 0-based `slide` that `view` takes beside its count from 1.
+
 ## 0.3.25
 
 - Breaking (hard cutover, no alias): one command `import` replaces `media import` and `project import`, named after

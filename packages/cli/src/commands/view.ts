@@ -5,19 +5,22 @@
  *   view [--project <id>] [--capture] [--render] [--frame <n>] [--slide <id>] [--slide-index <n>]
  *        [--frames <list>] [--from-frame <n>] [--to-frame <n>] [--count <n>] [--per-second <n>]
  *        [--layout <frames|sheets>] [--sound] [--video] [--render-id <id>] [--page <n>] [--wait <seconds>]
- *        [--width <n>] [--region <x,y,w,h>] [--asset <id> | --media-url <url>] [--from-sec <n>] [--to-sec <n>]
- *        [--save <path>]
+ *        [--width <n>] [--region <x,y,w,h>] [--asset <id> | --media-url <url> | --content-id <id> [--slide <n>]]
+ *        [--from-sec <n>] [--to-sec <n>] [--at-sec <list>] [--save <path>]
  *
  * Returns the most-recent-active session's surface + focus + selection, plus the live participant set.
  * Structured by default. `--capture` pings the live tab for a fresh viewport screenshot (the user's SCREEN).
  * `--render` renders the COMPOSED OUTPUT (the editor frames / canvas slide), ephemeral and stored nowhere;
  * `--sound` renders and measures a range's mix instead, and `--video` watches a range play: a terminal cannot take
  * video, so it comes back as the range's frames and its sound measured. A render is a job: what is not ready within
- * `--wait` is read with `--render-id` and `--page`. `--asset` or `--media-url` names a raw source clip instead, windowed
- * by `--from-sec` and `--to-sec`, and it comes back as keyframes. `--width` and `--region` say what the MCP's `view`
- * fields say (copied by hand until one source holds every field's description). `--save` writes whichever images
- * were produced (render preferred over snapshot: frames, contact sheets, a sound's picture, or a clip's keyframes) to
- * files.
+ * `--wait` is read with `--render-id` and `--page`. `--asset` or `--media-url` names a clip of the user's instead, and
+ * `--content-id` a tracked post's video (with `--slide`, the carousel's video slide, which with a post names that
+ * rather than a canvas slide: a source takes no canvas slide, and the edit no post's). A source is windowed by
+ * `--from-sec` and `--to-sec`; its frames come spread across the window (`--count`), at named seconds (`--at-sec`) or
+ * per second (`--per-second`), and `--sound` measures the window as it is, beside any frames. `--width` and `--region`
+ * say what the MCP's `view` fields say (copied by hand until one source holds every field's description). `--save`
+ * writes whichever images were produced (render preferred over snapshot: frames, contact sheets, a sound's picture,
+ * or a source's keyframes and its sound's picture) to files.
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
@@ -31,6 +34,7 @@ import {
   describeRenderFailure,
   describeRenderProgress,
   describeSoundMeasurement,
+  describeSourceSound,
   type CodeDiagnostic,
 } from '@contenthero/sdk'
 
@@ -50,6 +54,15 @@ function parseRegion(value: string): CompositionRegion {
     throw new CliError("--region takes four numbers: x,y,width,height (composition units, or a source clip's own pixels).", EXIT.USAGE)
   }
   return { x, y, width, height }
+}
+
+/** A comma-separated list of seconds of a source, as the API's `atSec` takes them. */
+function parseSeconds(value: string): number[] {
+  const seconds = value.split(',').map((v) => Number(v.trim()))
+  if (seconds.length === 0 || !seconds.every((t) => Number.isFinite(t) && t >= 0)) {
+    throw new CliError("--at-sec takes seconds of the source, zero or more, separated by commas.", EXIT.USAGE)
+  }
+  return seconds
 }
 
 /** A comma-separated list of whole frame numbers, as the API's `frames` takes them. */
@@ -74,13 +87,24 @@ function renderedImages(rendered: Record<string, unknown> | null): Buffer[] {
   return [bufferFromDataUrl(rendered.dataUrl), ...listed, picture].filter((b): b is Buffer => b !== null)
 }
 
-/** Every image a view returned, in order: the render, the range's sound beside it, then a clip's keyframes. */
+/** Every image a view returned, in order: the render, the range's sound beside it, then a source's keyframes and its sound's picture. */
 function viewImages(context: Record<string, unknown> | null): Buffer[] {
   const clip = record(context?.clip)
   const keyframes = Array.isArray(clip?.keyframes)
     ? (clip.keyframes as Array<Record<string, unknown>>).map((kf) => bufferFromDataUrl(kf.dataUrl)).filter((b): b is Buffer => b !== null)
     : []
-  return [...renderedImages(record(context?.rendered)), ...renderedImages(record(context?.renderedSound)), ...keyframes]
+  return [
+    ...renderedImages(record(context?.rendered)),
+    ...renderedImages(record(context?.renderedSound)),
+    ...keyframes,
+    ...renderedImages(record(clip?.sound)),
+  ]
+}
+
+/** A source's sound in lines: its measurement and where its sounds start, or why it could not be heard, and its audio. */
+function sourceSoundLines(sound: Record<string, unknown> | null): string[] {
+  const audio = sound && typeof sound.audioUrl === 'string' ? [`The audio, for a short while: ${sound.audioUrl}`] : []
+  return [...describeSourceSound(sound), ...audio]
 }
 
 /** Insert `-N` before a path's extension, so multi-frame renders save as file-1.jpg, file-2.jpg, ... */
@@ -116,7 +140,14 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
       ? ['No one is viewing this in the app right now; the render is from the saved project.']
       : []
   const savedLine = saved.count > 0 ? [`${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}`] : []
-  return [...head, ...renderedLines(rendered), ...renderedLines(renderedSound), ...describeClip(clip), ...savedLine].join('\n')
+  return [
+    ...head,
+    ...renderedLines(rendered),
+    ...renderedLines(renderedSound),
+    ...describeClip(clip),
+    ...sourceSoundLines(record(clip?.sound)),
+    ...savedLine,
+  ].join('\n')
 }
 
 export function registerView(program: Command): void {
@@ -128,36 +159,47 @@ export function registerView(program: Command): void {
     .option('--render', 'also render your work (images); ephemeral. Name several frames with --frames, --per-second or --count. Frames across a range are how you judge motion, timing and pacing: the closer together they are, the finer the motion they show.')
     // ⛔ NO `--mode`. The render takes no mode on any layer: `--sound` and `--video` name what else to render.
     .option('--frame <n>', 'image: which single timeline frame (omit for the current playhead)', (v) => parseInt(v, 10))
-    .option('--slide <id>', 'image (canvas): which slide id (omit for the focused slide)')
+    .option('--slide <id|n>', "image (canvas): which slide id (omit for the focused slide). With --content-id: which video of a carousel post, by the slide content analyze reports for it")
     .option('--slide-index <n>', 'image (canvas): 1-based slide index (alternative to --slide)', (v) => parseInt(v, 10))
     .option('--frames <list>', 'image (editor): exactly these timeline frames, in this order, separated by commas', parseFrames)
     .option('--from-frame <n>', 'start timeline frame of the range (several frames, sound or video)', (v) => parseInt(v, 10))
     .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
-    .option('--count <n>', "how many frames to spread evenly across the range, or across a clip's window (omit for one at the focus point)", (v) => parseInt(v, 10))
-    .option('--per-second <n>', 'how many frames to take per second of the range, up to every frame', (v) => Number(v))
+    .option('--count <n>', "how many frames to spread evenly across the range, or across a source's window (omit for one at the focus point, or about one a second of a range)", (v) => parseInt(v, 10))
+    .option('--per-second <n>', "how many frames to take per second of the range, up to every frame, or of a source's window", (v) => Number(v))
     .option('--layout <layout>', "'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, each frame numbered under its tile (omit to choose by how many fit one response)")
-    .option('--sound', "render the range's sound instead of its picture, mixed as an export mixes it, and measure it")
-    .option('--video', "watch the range play with its sound, to judge motion, timing, transitions and pacing; a terminal cannot take video, so it returns frames across the range and the sound measured. Takes --from-frame and --to-frame, or a clip's window")
+    .option('--sound', "hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by --from-frame and --to-frame; or a source's window as it is, by --from-sec and --to-sec, beside any frames asked for")
+    .option('--video', "watch the range play with its sound, to judge motion, timing, transitions and pacing; a terminal cannot take video, so it returns frames across the range and the sound measured. Takes --from-frame and --to-frame, or a source's window")
     .option('--render-id <id>', 'read a render already started, by the renderId it returned')
     .option('--page <n>', 'which page of the render to read, starting at 1', (v) => parseInt(v, 10))
     .option('--wait <seconds>', 'how long to wait for results before answering; what is not ready is read later with --render-id', (v) => Number(v))
-    .option('--width <n>', "image: the width in pixels to render at, or of a clip's frames, to check legibility at the size it will be seen. Height follows the aspect ratio. The size used is reported with the result.", (v) => parseInt(v, 10))
-    .option('--region <x,y,w,h>', "image: render only this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without --width, it renders at native scale; rendered reports pixelsPerCompositionUnit. For a source clip, the rectangle is in the clip's own pixels, and each of its frames is cut to it.", parseRegion)
-    .option('--asset <id>', 'a raw source clip to see, by its asset id, rather than your edit (or --media-url)')
-    .option('--media-url <url>', 'a raw source clip to see, by its media URL, rather than your edit (or --asset)')
-    .option('--from-sec <n>', "start of the clip's window, in its own seconds (omit to start at its beginning)", (v) => Number(v))
-    .option('--to-sec <n>', "end of the clip's window, in its own seconds (omit to run to its end)", (v) => Number(v))
-    .option('--save <path>', "write the produced image(s), a render's or a clip's keyframes, to this file (several append -1, -2, ...)")
+    .option('--width <n>', "image: the width in pixels to render at, or of a source's frames, to check legibility at the size it will be seen. Height follows the aspect ratio. The size used is reported with the result.", (v) => parseInt(v, 10))
+    .option('--region <x,y,w,h>', "image: render only this rectangle, x,y,width,height in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without --width, it renders at native scale. For a source, the rectangle is in its own pixels, and each of its frames is cut to it.", parseRegion)
+    .option('--asset <id>', "a clip of the user's to see and hear, by its asset id, rather than your edit (or --media-url or --content-id)")
+    .option('--media-url <url>', "a clip of the user's to see and hear, by its media URL, rather than your edit (or --asset or --content-id)")
+    .option('--content-id <id>', "a tracked post's video to see and hear, by its content id, once content analyze --kind video has downloaded it (or --asset or --media-url); --slide names a carousel's video")
+    .option('--from-sec <n>', "start of a source's window, in its own seconds (omit to start at its beginning)", (v) => Number(v))
+    .option('--to-sec <n>', "end of a source's window, in its own seconds (omit to run to its end)", (v) => Number(v))
+    .option('--at-sec <list>', "frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window, separated by commas", parseSeconds)
+    .option('--save <path>', "write the produced image(s), a render's, or a source's keyframes and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const sound = Boolean(opts.sound)
       const video = Boolean(opts.video)
-      const clip = opts.asset != null || opts.mediaUrl != null
+      const post = opts.contentId != null
+      const clip = opts.asset != null || opts.mediaUrl != null || post
+      // With a post, --slide is the carousel's video slide, a 0-based order; otherwise it is a canvas slide's id.
+      let postSlide: number | undefined
+      if (post && opts.slide != null) {
+        postSlide = Number(opts.slide)
+        if (!Number.isInteger(postSlide) || postSlide < 0) {
+          throw new CliError("--slide with --content-id is a carousel slide's 0-based order, as content analyze reports it.", EXIT.USAGE)
+        }
+      }
       // A picture flag implies a render, unless it shapes a sound, a video or a clip, which are renders of their own.
       const render =
         Boolean(opts.render) ||
         (!sound && !video && !clip &&
-          (opts.frame != null || opts.slide != null || opts.slideIndex != null ||
+          (opts.frame != null || (opts.slide != null && !post) || opts.slideIndex != null ||
             opts.fromFrame != null || opts.toFrame != null || opts.width != null || opts.region != null ||
             opts.frames != null || opts.perSecond != null || opts.layout != null || opts.count != null))
       if (opts.layout != null && opts.layout !== 'frames' && opts.layout !== 'sheets') {
@@ -173,7 +215,7 @@ export function registerView(program: Command): void {
         // A render read by its id is a render too; the request names which.
         render: (render && !reading) || undefined,
         frame: opts.frame as number | undefined,
-        slideId: opts.slide as string | undefined,
+        slideId: post ? undefined : (opts.slide as string | undefined),
         slideIndex: opts.slideIndex as number | undefined,
         frames: opts.frames as number[] | undefined,
         fromFrame: opts.fromFrame as number | undefined,
@@ -190,8 +232,11 @@ export function registerView(program: Command): void {
         region: opts.region as CompositionRegion | undefined,
         assetId: opts.asset as string | undefined,
         mediaUrl: opts.mediaUrl as string | undefined,
+        contentId: opts.contentId as string | undefined,
+        slide: postSlide,
         fromSec: opts.fromSec as number | undefined,
         toSec: opts.toSec as number | undefined,
+        atSec: opts.atSec as number[] | undefined,
       })
 
       const c = result.context as Record<string, unknown> | null
@@ -214,7 +259,7 @@ export function registerView(program: Command): void {
           // The render was asked for and said why it has no image: that is the answer, not a missing snapshot.
           throw new CliError(failure, EXIT.GENERAL)
         } else if (clip) {
-          // A clip with no keyframes: the summary says why, and there is nothing to save.
+          // A source with no keyframes and no sound picture: the summary says why, and there is nothing to save.
         } else {
           const url = typeof c?.snapshotUrl === 'string' ? c.snapshotUrl : null
           if (!url) throw new CliError('No image available for the current context (try --render or --capture).', EXIT.USAGE)

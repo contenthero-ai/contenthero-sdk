@@ -4181,15 +4181,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Tracked Content',
       annotations: READ,
       description:
-        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said, or scenes='frames' to also see a frame of each scene. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
+        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said, or scenes='frames' to also see a frame of each scene. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         transcript: z
           .enum(['none', 'text', 'segments'])
           .optional()
           .describe("How much transcript to include. Default 'none'."),
-        startMs: z.number().optional().describe('Window start, ms from the start of the media. Narrows transcript segments and scenes.'),
-        endMs: z.number().optional().describe('Window end, ms from the start of the media. Narrows transcript segments and scenes.'),
+        startMs: z.number().optional().describe('Window start, ms from the start of the media. Narrows transcript segments, scenes and cut lists.'),
+        endMs: z.number().optional().describe('Window end, ms from the start of the media. Narrows transcript segments, scenes and cut lists.'),
         transcriptSearch: z
           .string()
           .optional()
@@ -4206,6 +4206,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .enum(['none', 'map', 'frames'])
           .optional()
           .describe("How much of the post's scene map to include. Default 'none' (availability still reports). 'frames' adds an image of each scene, as many as fit this result; the rest are listed as links."),
+        cuts: z.boolean().optional().describe("Add each downloaded video's cut list: the seconds where its picture changes, measured once and free. startMs and endMs narrow the lists."),
       },
     },
     async (args, extra) => {
@@ -4554,7 +4555,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'View',
       annotations: READ,
       description:
-        "See what the user is looking at, and see or hear your own work. With no render input it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. It is fast and does not disturb the page. Set capture to also get a picture of the user's screen as shown now, including unsaved and transient state; capturing takes a moment and briefly interrupts the page. To see your work as it will play, rendered from the saved project: render shows one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for an editor timeline, frames, perSecond over a range, or count over a range name several frames, which come back one by one when they fit one result and otherwise as contact sheets with each frame's number under its tile, in pages. sound renders a range of the mix as an export mixes it and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured. To see a raw source clip rather than your edit, name it with assetId or mediaUrl and window it with fromSec and toSec. A render is a job: what finishes within the call comes back with a renderId, and the rest is read by calling again with renderId and page. Renders are ephemeral, count against nothing and need no live tab, only a projectId when no one is viewing. Check your work here, never with export_project, which makes a file the user keeps. Requires the context:read scope.",
+        "See what the user is looking at, and see or hear your own work. With no render input it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. It is fast and does not disturb the page. Set capture to also get a picture of the user's screen as shown now, including unsaved and transient state; capturing takes a moment and briefly interrupts the page. To see your work as it will play, rendered from the saved project: render shows one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for an editor timeline, frames, perSecond over a range, or count over a range name several frames, which come back one by one when they fit one result and otherwise as contact sheets with each frame's number under its tile, in pages. sound renders a range of the mix as an export mixes it and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured. To see and hear a source rather than your edit, name a clip of the user's with assetId or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec. Its frames come spread across the window, at the seconds atSec names, or perSecond across it; sound measures the window as it is, beside any frames; with video you watch it play. A render is a job: what finishes within the call comes back with a renderId, and the rest is read by calling again with renderId and page. Renders are ephemeral, count against nothing and need no live tab, only a projectId when no one is viewing. Check your work here, never with export_project, which makes a file the user keeps. Requires the context:read scope.",
       inputSchema: {
         projectId: z.string().optional().describe("The project to view or render. Omit for the surface the user is on now. Needed to render when no one is viewing."),
         capture: z.boolean().optional().describe("Also return a picture of the user's screen as shown now, including unsaved and transient state. Use it only when the task depends on what the screen shows; to see your work, render it instead."),
@@ -4565,11 +4566,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         frames: z.array(z.number().int().min(0)).min(1).optional().describe('Editor: exactly these timeline frames, in this order.'),
         fromFrame: z.number().int().min(0).optional().describe("Start timeline frame of the range, for several frames, sound or video. Omit to start at the beginning."),
         toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
-        count: z.number().int().min(1).optional().describe("How many frames to spread evenly across the range, or across a clip's window. Omit for one frame at the focus point, or about one a second of a range."),
-        perSecond: z.number().positive().optional().describe('How many frames to take per second of the range, up to every frame.'),
+        count: z.number().int().min(1).optional().describe("How many frames to spread evenly across the range, or across a source's window. Omit for one frame at the focus point, or about one a second of a range."),
+        perSecond: z.number().positive().optional().describe("How many frames to take per second of the range, up to every frame, or of a source's window."),
         layout: z.enum(['frames', 'sheets']).optional().describe("'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, each frame numbered under its tile. Omit to choose by how many fit one result."),
-        video: z.boolean().optional().describe("Watch the range play with its sound, to judge motion, timing, transitions and pacing. Where video cannot be received, as here, it returns frames across the range and the sound measured. Takes fromFrame and toFrame, or a clip's window."),
-        sound: z.boolean().optional().describe("Render the range's sound instead of its picture, mixed as an export mixes it, and measure it. Takes fromFrame and toFrame only."),
+        video: z.boolean().optional().describe("Watch the range play with its sound, to judge motion, timing, transitions and pacing. Takes fromFrame and toFrame, or a source's window."),
+        sound: z.boolean().optional().describe("Hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by fromFrame and toFrame; or a source's window as it is, by fromSec and toSec, beside any frames asked for."),
         renderId: z.string().optional().describe('Read a render already started, by the renderId it returned. Pass only page with it.'),
         page: z.number().int().min(1).optional().describe('Which page of the render to read, starting at 1.'),
         /*
@@ -4577,7 +4578,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
           per project and per plan (native width, the plan's export ceiling), so the schema only bounds the absurd.
         */
-        width: z.number().int().min(48).max(3840).optional().describe("The width in pixels to render at, or of a clip's frames, to check legibility at the size it will be seen. Height follows the aspect ratio. The size used is reported with the result."),
+        width: z.number().int().min(48).max(3840).optional().describe("The width in pixels to render at, or of a source's frames, to check legibility at the size it will be seen. Height follows the aspect ratio. The size used is reported with the result."),
         region: z
           .object({
             x: z.number().min(0),
@@ -4586,11 +4587,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             height: z.number().positive(),
           })
           .optional()
-          .describe("Render only this rectangle, in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without width, it renders at native scale; rendered reports pixelsPerCompositionUnit. For a source clip, the rectangle is in the clip's own pixels, and each of its frames is cut to it."),
-        assetId: z.string().optional().describe('A raw source clip to see, by its asset id, rather than your edit. Or pass mediaUrl.'),
-        mediaUrl: z.string().optional().describe('A raw source clip to see, by its media URL, rather than your edit. Or pass assetId.'),
-        fromSec: z.number().min(0).optional().describe("Start of the clip's window, in its own seconds. Omit to start at its beginning."),
-        toSec: z.number().min(0).optional().describe("End of the clip's window, in its own seconds. Omit to run to its end."),
+          .describe("Render only this rectangle, { x, y, width, height } in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without width, it renders at native scale. For a source, the rectangle is in its own pixels, and each of its frames is cut to it."),
+        assetId: z.string().optional().describe("A clip of the user's to see and hear, by its asset id, rather than your edit. Or pass mediaUrl or contentId."),
+        mediaUrl: z.string().optional().describe("A clip of the user's to see and hear, by its media URL, rather than your edit. Or pass assetId or contentId."),
+        contentId: z.string().optional().describe("A tracked post's video to see and hear, by its content id, once analyze_content kind video has downloaded it. Or pass assetId or mediaUrl."),
+        slide: z.number().int().min(0).optional().describe('Which video of a carousel post, by the slide analyze_content reports for it. Only with contentId.'),
+        fromSec: z.number().min(0).optional().describe("Start of a source's window, in its own seconds. Omit to start at its beginning."),
+        toSec: z.number().min(0).optional().describe("End of a source's window, in its own seconds. Omit to run to its end."),
+        atSec: z.array(z.number().min(0)).min(1).optional().describe("Frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window."),
       },
     },
     async (args, extra) => {
@@ -4619,8 +4623,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           region: args.region,
           assetId: args.assetId,
           mediaUrl: args.mediaUrl,
+          contentId: args.contentId,
+          slide: args.slide,
           fromSec: args.fromSec,
           toSec: args.toSec,
+          atSec: args.atSec,
         })
         const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null

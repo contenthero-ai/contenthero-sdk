@@ -139,9 +139,11 @@ export function describeCrop(
 }
 
 /**
- * A raw source clip a view read (`context.clip`), in words: what it is, how long, which window was read and its url,
- * the region each frame was cut to, then why its keyframes, the region or the clip itself could not be read. Empty for
- * no clip. The keyframes themselves are images, so each surface says how it shows them.
+ * A source a view read (`context.clip`), in words: what it is (a clip of yours by its url, or a tracked post's video by
+ * its contentId and slide, whose copy's address is never handed out), how long, which window was read, the region each
+ * frame was cut to, then why its keyframes, the region or the source itself could not be read. Empty for no source.
+ * The keyframes themselves are images, so each surface says how it shows them; its sound reads with
+ * `describeSourceSound`.
  */
 export function describeClip(clip: Record<string, unknown> | null | undefined): string[] {
   if (!clip) return []
@@ -149,7 +151,13 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
   const to = typeof clip.toSec === 'number' ? clip.toSec : null
   const window = from !== null || to !== null ? `, from ${from ?? 0}s to ${to !== null ? `${to}s` : 'its end'}` : ''
   const length = typeof clip.durationSeconds === 'number' ? ` (${clip.durationSeconds.toFixed(2)}s long)` : ''
-  const lines = [`Raw source clip${typeof clip.type === 'string' ? ` (${clip.type})` : ''}${length}${window}: ${String(clip.url ?? '')}`]
+  const post = typeof clip.contentId === 'string' ? clip.contentId : null
+  const slide = typeof clip.slide === 'number' ? ` (slide ${clip.slide})` : ''
+  const lines = [
+    post !== null
+      ? `Tracked post ${post}, its video${slide}${length}${window}`
+      : `Raw source clip${typeof clip.type === 'string' ? ` (${clip.type})` : ''}${length}${window}: ${String(clip.url ?? '')}`,
+  ]
   const crop = clip.crop && typeof clip.crop === 'object' && !Array.isArray(clip.crop) ? (clip.crop as ResolvedMediaBatchItem['crop']) : null
   const zoom = describeCrop(crop, typeof clip.cropError === 'string' ? clip.cropError : null)
   if (zoom) lines.push(`${zoom[0]!.toUpperCase()}${zoom.slice(1)}`)
@@ -157,8 +165,33 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
   const error = clip.error
   if (error && typeof error === 'object' && !Array.isArray(error)) {
     const { code, message } = error as { code?: unknown; message?: unknown }
-    lines.push(`The clip could not be read. ${typeof code === 'string' ? code : 'clip_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`)
+    lines.push(
+      `${post !== null ? "The post's video" : 'The clip'} could not be read. ${typeof code === 'string' ? code : 'clip_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`,
+    )
   }
+  return lines
+}
+
+/**
+ * A source's sound a view heard (`context.clip.sound`), in words: the window it measured and its measurement (the
+ * edit's sound render's wording, `describeSoundMeasurement`), then where its sounds start, in the source's own seconds
+ * so they line up with its frames; or why it could not be heard. Empty for no sound. Its picture is an image and its
+ * audio a link, so each surface says how it shows them.
+ */
+export function describeSourceSound(sound: Record<string, unknown> | null | undefined): string[] {
+  if (!sound) return []
+  const error = sound.error
+  if (error && typeof error === 'object' && !Array.isArray(error)) {
+    const { code, message } = error as { code?: unknown; message?: unknown }
+    return [`The sound could not be heard. ${typeof code === 'string' ? code : 'sound_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`]
+  }
+  const window = typeof sound.fromSec === 'number' && typeof sound.toSec === 'number' ? ` from ${sound.fromSec}s to ${sound.toSec}s` : ''
+  const measurement = describeSoundMeasurement(sound)
+  const lines = [`Its sound${window}, as it is: ${measurement ?? 'nothing measurable.'}`]
+  const onsets = Array.isArray(sound.onsets)
+    ? (sound.onsets as unknown[]).flatMap((o) => (o && typeof o === 'object' && typeof (o as { seconds?: unknown }).seconds === 'number' ? [(o as { seconds: number }).seconds] : []))
+    : []
+  if (onsets.length > 0) lines.push(`Sounds start at ${onsets.map((t) => `${t}s`).join(', ')}, in the source's own seconds.`)
   return lines
 }
 
@@ -166,12 +199,14 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
 const measured = (value: unknown, unit: string) => (typeof value === 'number' ? `${value} ${unit}` : 'nothing measurable')
 
 /**
- * A sound render's measurement in one paragraph, for a person reading a summary: loudness, peaks, range, how many
- * sounds start in it, and its stereo width. Null for a render that is not a finished sound. Every value is also in the
- * render's own fields.
+ * A sound's measurement in one paragraph, for a person reading a summary: loudness, peaks, range, how many sounds
+ * start in it, and its stereo width. The same reading for a finished sound render of your edit and for a source's
+ * sound (which is not a job, so it carries no state). Null for anything else, a render still running, or a sound that
+ * could not be measured. Every value is also in the sound's own fields.
  */
 export function describeSoundMeasurement(rendered: Record<string, unknown> | null | undefined): string | null {
-  if (!rendered || rendered.kind !== 'sound' || rendered.state !== 'done') return null
+  if (!rendered || rendered.kind !== 'sound' || rendered.error) return null
+  if (rendered.state !== undefined && rendered.state !== 'done') return null
   const loudness = (rendered.loudness ?? {}) as Record<string, unknown>
   const onsets = Array.isArray(rendered.onsets) ? rendered.onsets.length : 0
   const stereo = rendered.stereo as { sideToMid?: unknown; correlation?: unknown } | null | undefined
@@ -358,9 +393,12 @@ export function describeFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
-/** Which video of a post this is: the post's one video, or a carousel slide counted from 1. */
+/**
+ * Which video of a post this is: the post's one video, or a carousel slide counted from 1 with the 0-based `slide`
+ * that `view` and the API take for it, so the number to pass is never worked out by hand.
+ */
 export function contentVideoLabel(video: ContentVideo): string {
-  return video.slide === undefined ? 'Video' : `Slide ${video.slide + 1}`
+  return video.slide === undefined ? 'Video' : `Slide ${video.slide + 1} (slide: ${video.slide})`
 }
 
 /** A video's cut list, free: how many cuts in how long, and where. */
@@ -384,6 +422,8 @@ export function describeContentVideo(video: ContentVideo): string {
         ? 'still downloading'
         : c.status === 'failed'
           ? `the download failed: ${c.error.trim().replace(/\.+$/, '')}`
-          : `unavailable: ${c.reason.trim().replace(/\.+$/, '')}`
+          : c.status === 'unavailable'
+            ? `unavailable: ${c.reason.trim().replace(/\.+$/, '')}`
+            : 'not downloaded yet'
   return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}.`
 }

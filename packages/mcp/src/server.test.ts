@@ -2600,6 +2600,33 @@ test('get_content without scenes reports only whether they exist', async () => {
   assert.match(res.content[0].text, /scenes: complete \(4; pass scenes='map' or 'frames' to read them\)/)
 })
 
+/**
+ * get_content always reports the post's videos with their states, and cuts adds each downloaded one's cut list, in
+ * analyze_content's words; a video never downloaded says how to download it. Break-verified: dropping postVideoLines
+ * from inspirationContentResult turns this red; dropping cuts from the schema, the first assertion.
+ */
+test("get_content reports each video's state, and cuts adds its cut list", async () => {
+  let asked
+  const video = {
+    copy: { status: 'absent' },
+    videos: [
+      { slide: 1, copy: { status: 'ready' }, cuts: { boundaries: [1.5, 4], scores: [0.9, 0.7], durationSec: 6 } },
+      { slide: 3, copy: { status: 'absent' } },
+    ],
+  }
+  const mcp = await connect(
+    fakeClient({ getContent: async (_id, opts) => ((asked = opts), { title: 'x', hashtags: [], analysis: { status: 'absent' }, video }) }),
+  )
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', cuts: true, startMs: 1000 } })
+  assert.deepEqual(asked, { cuts: true, startMs: 1000 })
+  const body = res.content[0].text
+  assert.match(body, /videos: not downloaded \(analyze_content with kind video downloads them\)/)
+  assert.match(body, /Slide 2 \(slide: 1\): ready; cut list \(free\): 2 cuts in 6\.0s, at 1\.50s, 4\.00s\./)
+  assert.match(body, /Slide 4 \(slide: 3\): not downloaded yet\./)
+  const { tools } = await mcp.listTools()
+  assert.match(tools.find((t) => t.name === 'get_content').description, /Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes\./)
+})
+
 test('analyze_content says pending when the analysis outlasts the call', async () => {
   const mcp = await connect(
     fakeClient({
@@ -3153,6 +3180,58 @@ test('view forwards video and a raw clip, and waits for video', async () => {
   assert.equal(seen[2].mediaUrl, 'https://media.contenthero.ai/c.mp4')
 })
 
+// A tracked post's video is a source named by contentId and slide, and frames come at named seconds. Break-verified:
+// dropping contentId, slide or atSec from the forwarded input turns this red.
+test('view forwards a tracked post, its slide, frames at named seconds and sound on a source', async () => {
+  const seen = []
+  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', slide: 4, atSec: [1, 3.5], sound: true } })
+  await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 2, toSec: 4, perSecond: 2 } })
+  assert.deepEqual(
+    { contentId: seen[0].contentId, slide: seen[0].slide, atSec: seen[0].atSec, sound: seen[0].sound },
+    { contentId: 'post-1', slide: 4, atSec: [1, 3.5], sound: true },
+  )
+  assert.deepEqual({ assetId: seen[1].assetId, fromSec: seen[1].fromSec, toSec: seen[1].toSec, perSecond: seen[1].perSecond }, { assetId: 'a1', fromSec: 2, toSec: 4, perSecond: 2 })
+  const { tools } = await mcp.listTools()
+  const view = tools.find((t) => t.name === 'view')
+  assert.match(view.description, /a tracked post's video with contentId \(and slide for a carousel\) once analyze_content kind video has downloaded it/)
+  assert.ok(['contentId', 'slide', 'atSec'].every((k) => k in view.inputSchema.properties))
+})
+
+/**
+ * A post is named by its contentId and slide, never by its copy's address; its frames come as images labeled with their
+ * time, and its sound as the edit's sound render is shown: the measurement, where its sounds start, and its picture as
+ * an image, its data kept out of the JSON. A sound that could not be heard says why. Break-verified: dropping the
+ * sound picture from clipSection turns the first red; dropping describeSourceSound, the onset and error assertions.
+ */
+test("view shows a post's frames and its sound, with the picture as an image", async () => {
+  const clip = {
+    contentId: 'post-1', slide: 4, type: 'video', fromSec: 2, toSec: 4, durationSeconds: 10,
+    keyframes: [{ atSec: 2, dataUrl: 'data:image/jpeg;base64,SzE=' }],
+    sound: {
+      kind: 'sound', fromSec: 2, toSec: 4, sampleRate: 48000, channels: 2, durationSeconds: 2,
+      loudness: { integratedLufs: -14, truePeakDbtp: -1, loudnessRangeLu: 3, samplePeakDbfs: -1.2 },
+      stereo: { sideToMid: 0.2, correlation: 0.9 }, bands: {}, onsets: [{ seconds: 2.25 }, { seconds: 3.5 }],
+      picture: { width: 1240, height: 402, dataUrl: 'data:image/webp;base64,U05E' }, audioUrl: 'https://media.test/w.wav',
+    },
+  }
+  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', slide: 4, fromSec: 2, toSec: 4, count: 1, sound: true } })
+  const text = res.content[0].text
+  assert.match(text, /Tracked post post-1, its video \(slide 4\) \(10\.00s long\), from 2s to 4s/)
+  assert.match(text, /Its sound from 2s to 4s, as it is: Integrated loudness -14 LUFS/)
+  assert.match(text, /Sounds start at 2\.25s, 3\.5s, in the source's own seconds\./)
+  assert.match(text, /A picture of the sound is attached below/)
+  assert.doesNotMatch(text, /U05E|SzE=/)
+  assert.deepEqual(res.content.slice(1).map((c) => (c.type === 'image' ? c.data : c.text)), ['At 2s:', 'SzE=', 'Its sound:', 'U05E'])
+
+  const silent = await connect(
+    fakeClient({ view: async () => ({ context: { clip: { contentId: 'post-1', type: 'video', sound: { kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } } } }, participant: null, participants: [] }) }),
+  )
+  const quiet = await silent.callTool({ name: 'view', arguments: { contentId: 'post-1', sound: true } })
+  assert.match(quiet.content[0].text, /The sound could not be heard\. no_sound: This video has no sound\./)
+})
+
 /**
  * Where video cannot be received, the server renders the range's frames into `rendered` and its sound into
  * `renderedSound`, and the sound reads exactly as a sound render does. Break-verified: dropping the renderedSound
@@ -3193,7 +3272,7 @@ test('view shows a raw clip by its keyframes, each labeled with its time', async
   const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 1, toSec: 3 } })
   assert.doesNotMatch(res.content[0].text, /No live context/)
   assert.match(res.content[0].text, /Raw source clip \(video\) \(12\.00s long\), from 1s to 3s: https:\/\/media\.contenthero\.ai\/c\.mp4/)
-  assert.match(res.content[0].text, /2 keyframe\(s\) of the clip are attached below/)
+  assert.match(res.content[0].text, /2 keyframe\(s\) of the source are attached below/)
   assert.doesNotMatch(res.content[0].text, /SzE=/)
   assert.deepEqual(
     res.content.slice(1).map((c) => (c.type === 'image' ? c.data : c.text)),
@@ -3223,7 +3302,7 @@ test("view cuts a clip's frames to a region and says how they map back", async (
   )
   const { tools } = await mcp.listTools()
   const region = tools.find((t) => t.name === 'view').inputSchema.properties.region
-  assert.match(region.description, /For a source clip, the rectangle is in the clip's own pixels, and each of its frames is cut to it\.$/)
+  assert.match(region.description, /For a source, the rectangle is in its own pixels, and each of its frames is cut to it\.$/)
   const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', region: { x: 960, y: 540, width: 960, height: 540 } } })
   assert.match(res.content[0].text, /Zoom: 960x540 at \(960, 540\) in the file's pixels, shown at 640x360 \(0\.6667 px per file px\)/)
   const failed = await connect(
@@ -3661,8 +3740,8 @@ test('analyze_content kind video on a carousel reports each video slide, by slid
   assert.ok(!res.isError)
   const text = res.content[0].text
   assert.match(text, /A download failed: one slide could not be read\. Asking again tries once more\./)
-  assert.match(text, /Slide 2: ready; cut list \(free\): 1 cut in 6\.0s, at 2\.00s\./)
-  assert.match(text, /Slide 4: the download failed: the page listed no file\./)
+  assert.match(text, /Slide 2 \(slide: 1\): ready; cut list \(free\): 1 cut in 6\.0s, at 2\.00s\./)
+  assert.match(text, /Slide 4 \(slide: 3\): the download failed: the page listed no file\./)
   assert.deepEqual(res.structuredContent.videos.map((v) => v.slide), [1, 3])
 })
 

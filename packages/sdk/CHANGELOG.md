@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- `view` sees and hears a tracked post's video as a source: `contentId` (and `slide`, the carousel's 0-based video
+  slide, as `analyzeContent` reports it) once `analyzeContent` kind `video` has downloaded it. Frames of any source
+  come at named seconds (`atSec`), spread across the window (`count`), or `perSecond` across it (with `fromSec` and
+  `toSec`). `sound` works on any source: `context.clip.sound` measures the window as it is (loudness, stereo, bands,
+  onsets in the source's own seconds, a waveform and spectrogram picture, a short-lived audio link), or says why it
+  could not (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`). A post comes back named by
+  `contentId` and `slide`, never its copy's address, and a post that cannot be read says why in `clip.error`.
+- New: `describeSourceSound(sound)`, a source's sound in the words the MCP and the CLI print. `describeClip` names a
+  post by its contentId and slide. `describeSoundMeasurement` also reads a source's sound, which carries no job state.
+- `getContent` reports the post's videos (`ContentDetail.video`, the `ContentVideos` shape `analyzeContent` kind
+  `video` answers with), and `cuts: true` adds each downloaded video's cut list, measured once and free;
+  `startMs`/`endMs` narrow the lists (and then do not imply transcript segments). `ContentVideos` is exported.
+- `ContentVideoCopy` gains `absent`: never downloaded (`analyzeContent` kind `video` downloads it).
+- `contentVideoLabel` gives a carousel video's 0-based `slide` beside its count from 1 (`Slide 3 (slide: 2)`), the
+  number `view` takes.
+
 ## 0.4.28
 
 - New: `analyzeContent(contentId, { kind: 'video' })` downloads every video a tracked post holds, its one video or

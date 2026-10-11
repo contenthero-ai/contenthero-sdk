@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `view` sees and hears a tracked post's video: `contentId` (and `slide` for a carousel) once `analyze_content` kind
+  `video` has downloaded it. `atSec` takes frames at named seconds of any source, `perSecond` spreads them across a
+  source's window, and `sound` measures a source's window as it is, beside any frames. The answer names a post by its
+  contentId and slide, shows its frames as images labeled with their time, and its sound as the edit's sound render
+  is shown: its measurement, where its sounds start in the source's own seconds, and its waveform and spectrogram as
+  an image. A post or a sound that cannot be read says why.
+- `get_content` reports each of the post's videos with its state, and `cuts` adds each downloaded video's cut list,
+  measured once and free (`startMs`/`endMs` narrow the lists). A video never downloaded says analyze_content kind
+  video downloads it.
+- A carousel video is labeled with the 0-based `slide` that `view` takes beside its count from 1.
+
 ## 0.4.35
 
 - Breaking (hard cutover, no alias): one tool `import` replaces `import_media` and `import_project`, and always brings
