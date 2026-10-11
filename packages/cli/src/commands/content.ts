@@ -18,7 +18,7 @@
  * Reads only.
  */
 
-import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describeContentVideo, statusTarget, type Charge } from '@contenthero/sdk'
+import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describeAudioMapWindow, describeContentVideo, statusTarget, type Charge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -233,6 +233,7 @@ export function registerContent(program: Command): void {
     .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)', toList)
     .option('--scenes <grain>', "the post's scenes: map, each scene's range, what happens and what is said (view --content-id --at-sec shows its frames); --start-ms/--end-ms narrow them")
     .option('--cuts', "add each downloaded video's cut list: the seconds where its picture changes, measured once and free; --start-ms/--end-ms narrow the lists")
+    .option('--audio-map', "add each video's audio map window: speech, sound events, music and levels, measured once and free; each video's summary reports either way; --start-ms/--end-ms narrow the window")
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const scenes = opts.scenes as string | undefined
       if (scenes === 'frames') {
@@ -243,7 +244,7 @@ export function registerContent(program: Command): void {
       }
       const wantsScenes = scenes === 'map'
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
-      // be honored against flat text. With --scenes or --cuts, a window narrows those instead.
+      // be honored against flat text. With --scenes, --cuts or --audio-map, a window narrows those instead.
       const raw = opts.transcript
       let grain: 'none' | 'text' | 'segments' | undefined
       if (raw === true) grain = 'segments'
@@ -252,7 +253,7 @@ export function registerContent(program: Command): void {
           throw new CliError(`Invalid --transcript "${raw}". Expected one of: ${GRAINS.join(', ')}.`, EXIT.USAGE)
         }
         grain = raw as 'none' | 'text' | 'segments'
-      } else if (opts.transcriptSearch || (!wantsScenes && !opts.cuts && (opts.startMs != null || opts.endMs != null))) {
+      } else if (opts.transcriptSearch || (!wantsScenes && !opts.cuts && !opts.audioMap && (opts.startMs != null || opts.endMs != null))) {
         grain = 'segments'
       }
 
@@ -266,6 +267,7 @@ export function registerContent(program: Command): void {
         analysisSections: opts.analysisSections as string[] | undefined,
         scenes: wantsScenes ? 'map' : undefined,
         cuts: opts.cuts ? true : undefined,
+        audioMap: opts.audioMap ? true : undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
         const pairs: Array<[string, string | number]> = [
@@ -402,8 +404,9 @@ const ANALYZE_TIMEOUT_SEC = 600
 const ANALYZE_POLL_MS = 5_000
 
 /**
- * A post's videos as content get reports them, always: where they stand together, then each video with its state and,
- * with --cuts, its cut list, in the words content analyze --kind video uses.
+ * A post's videos as content get reports them, always: where they stand together, then each video with its state and
+ * its audio map summary and, with --cuts, its cut list, in the words content analyze --kind video uses; with
+ * --audio-map, each video's audio map window below it.
  */
 function postVideosText(video: ContentVideos): string {
   const c = video.copy
@@ -417,7 +420,13 @@ function postVideosText(video: ContentVideos): string {
           : c.status === 'unavailable'
             ? `Videos: none (${c.reason.trim().replace(/\.+$/, '')})`
             : 'Videos: not downloaded (content analyze --kind video downloads them)'
-  return [head, ...video.videos.map((v) => `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`)].join('\n')
+  return [
+    head,
+    ...video.videos.flatMap((v) => [
+      `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`,
+      ...(v.audioMap?.status === 'ready' && v.audioMap.window ? describeAudioMapWindow(v.audioMap.window).map((l) => `    ${l}`) : []),
+    ]),
+  ].join('\n')
 }
 
 /** A post an analysis answer is about: the id its job is followed by, and its page. */

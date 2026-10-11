@@ -2874,7 +2874,8 @@ export interface ContentDetail extends ContentSummary {
   scenes?: ContentScenes
   /**
    * The post's videos (`analyzeContent` kind `video`), in the shape that answers with: where they stand together and
-   * each video with its state, plus its cut list when `getContent` was asked for `cuts`. Absent on older servers.
+   * each video with its state and its audio map summary, plus its cut list when `getContent` was asked for `cuts`
+   * and its audio map window when asked for `audioMap`. Absent on older servers.
    */
   video?: ContentVideos
 }
@@ -2961,7 +2962,86 @@ export interface ContentVideo {
    * `getContent` unless `cuts` was asked.
    */
   cuts?: ContentVideoCuts
+  /**
+   * Its audio map, free, made once its copy is stored: `pending` while it is being made, `unavailable` with why. Ready,
+   * it always carries `summary`, and `window` when `getContent` was asked for `audioMap`. Absent while the video has
+   * no stored copy and no map.
+   */
+  audioMap?: AudioMapAnswer
 }
+
+export interface AudioMapSpan {
+  fromSec: number
+  toSec: number
+}
+
+/** One sound event: its AudioSet class, its closest sound-design name, and how loud it is, alone and against the voice. */
+export interface AudioMapEvent extends AudioMapSpan {
+  class: string
+  classScore: number
+  name: string
+  nameScore: number
+  levelDb: number
+  /** Its level minus the voice's around it; null when no one speaks near it. */
+  vsVoiceDb: number | null
+}
+
+export interface AudioMapMusic {
+  present: boolean
+  tempoBpm: number | null
+  beatsSec: number[]
+  key: string | null
+  mode: 'major' | 'minor' | null
+  levelDb: number | null
+}
+
+/** How the music sits under the voice: its level with and without speech, and how far it drops under speech. */
+export interface AudioMapDucking {
+  musicUnderSpeechDb: number
+  musicWithoutSpeechDb: number
+  dropDb: number
+}
+
+/** Each stem's level across the video; null for a stem that holds no sound. */
+export interface AudioMapLevels {
+  voiceDb: number | null
+  musicDb: number | null
+  effectsDb: number | null
+}
+
+/**
+ * A stretch of a post video's audio map, in the video's own seconds: speech clipped to it, events overlapping it (at
+ * their own times), beats inside it; music, ducking and levels are whole-video facts. `durationSec` is the video's.
+ */
+export interface AudioMapWindow {
+  fromSec: number
+  toSec: number
+  durationSec: number
+  speech: AudioMapSpan[]
+  events: AudioMapEvent[]
+  music: AudioMapMusic
+  ducking: AudioMapDucking | null
+  levels: AudioMapLevels
+}
+
+/** A post video's audio map in a line: how much speech, how many sound events, its music and how far it ducks. */
+export interface AudioMapSummary {
+  durationSec: number
+  speechSec: number
+  eventCount: number
+  music: { present: boolean; tempoBpm: number | null; key: string | null; mode: 'major' | 'minor' | null }
+  /** How far music drops under speech; null without music under speech. */
+  duckingDropDb: number | null
+}
+
+/**
+ * A post video's audio map as a reader gets it: `view` carries `window` only, `getContent` always `summary` (and
+ * `window` when asked). Made automatically and free once the video's copy is stored; `pending` while it is made.
+ */
+export type AudioMapAnswer =
+  | { status: 'ready'; summary?: AudioMapSummary; window?: AudioMapWindow }
+  | { status: 'pending' }
+  | { status: 'unavailable'; reason: string }
 
 /**
  * Result of `analyzeContent` with `kind: 'video'`: every video the post holds (its one video, or each video slide of a
@@ -3104,6 +3184,11 @@ export interface GetContentOptions {
    * reported either way.
    */
   cuts?: boolean
+  /**
+   * Add each video's audio map window (`ContentVideo.audioMap.window`): speech, sound events, music and levels. Its
+   * summary is reported either way. `startMs`/`endMs` narrow the window (and then do not imply transcript segments).
+   */
+  audioMap?: boolean
 }
 
 /** Options for `listTrackedAccounts`. */
@@ -3512,7 +3597,9 @@ export interface ViewResult {
    *   window measured as it is: `{ kind: 'sound', fromSec, toSec, sampleRate, channels, durationSeconds, loudness,
    *   stereo, bands, onsets: [{ seconds }] (in the source's own seconds), picture: { width, height, dataUrl } (its
    *   waveform above its spectrogram), audioUrl (short-lived) }`, or `{ kind: 'sound', error: { code, message } }`
-   *   (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`).
+   *   (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`). A post's video also carries `audioMap`
+   *   (`AudioMapAnswer`) on every view of it, frames or sound: ready, its `window` is the window read (an open end
+   *   runs to the video's edge). A clip of yours has none.
    * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
    */
   context: Record<string, unknown> | null

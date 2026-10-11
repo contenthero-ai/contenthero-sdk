@@ -123,8 +123,9 @@ import type {
   EffectList,
   EffectDetail,
   CodeDiagnostic,
-  BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+  BrandImportOutcome,
+  AudioMapAnswer,} from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeAudioMapWindow, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2487,7 +2488,8 @@ function seconds(ms: number): string {
 
 /**
  * The post's videos (`analyze_content` kind video), always: where they stand together, then each video with its state
- * and, when cuts was asked, its cut list, in the words analyze_content uses for them.
+ * and its audio map summary and, when cuts was asked, its cut list, in the words analyze_content uses for them; when
+ * audioMap was asked, each video's audio map window below it.
  */
 function postVideoLines(video: ContentDetail['video']): string[] {
   if (!video) return []
@@ -2502,7 +2504,13 @@ function postVideoLines(video: ContentDetail['video']): string[] {
           : c.status === 'unavailable'
             ? `videos: none (${c.reason.trim().replace(/\.+$/, '')})`
             : 'videos: not downloaded (analyze_content with kind video downloads them)'
-  return [head, ...video.videos.map((v) => `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`)]
+  return [
+    head,
+    ...video.videos.flatMap((v) => [
+      `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`,
+      ...(v.audioMap?.status === 'ready' && v.audioMap.window ? describeAudioMapWindow(v.audioMap.window).map((l) => `    ${l}`) : []),
+    ]),
+  ]
 }
 
 /**
@@ -2893,7 +2901,7 @@ function renderedSection(
  * A source a view read (`context.clip`): a clip of the user's by assetId or mediaUrl, or a tracked post's video by
  * contentId and slide. What it is and which window was read, its keyframes as image blocks each labeled with its time
  * in the source, then its sound when asked (its measurement and where its sounds start, `describeSourceSound`, and its
- * picture as an image, as the edit's sound render is shown), within what is left of the result's allowance, and why
+ * picture as an image, as the edit's sound render is shown), a post's audio map for the window (`describeAudioMap`), within what is left of the result's allowance, and why
  * it, its keyframes or its sound could not be read.
  */
 function clipSection(
@@ -2913,6 +2921,7 @@ function clipSection(
   if (spent.dropped > 0) lines.push(keyframesNotShown(spent.dropped))
   lines.push(...why)
   lines.push(...describeSourceSound(sound))
+  lines.push(...describeAudioMap(isPlainRecord(clip.audioMap) ? (clip.audioMap as unknown as AudioMapAnswer) : null))
   if (heard.admitted.length > 0) {
     lines.push("A picture of the sound is attached below: its waveform above its spectrogram, on one time axis in seconds from the start of the window.")
   }

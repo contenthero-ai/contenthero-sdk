@@ -4257,6 +4257,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("How much of the post's scene map to include. Default 'none' (availability still reports). 'map' adds each scene's range, what happens and what is said; view shows its frames."),
         cuts: z.boolean().optional().describe("Add each downloaded video's cut list: the seconds where its picture changes, measured once and free. startMs and endMs narrow the lists."),
+        audioMap: z.boolean().optional().describe("Add each video's audio map window: speech, sound events, music and levels, measured once and free. Each video's summary reports either way. startMs and endMs narrow the window."),
       },
     },
     async (args, extra) => {

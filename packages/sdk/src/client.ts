@@ -1663,7 +1663,7 @@ export class ContentHero {
    * `text` or `segments`, and narrow segments with `startMs`/`endMs` or `transcriptSearch`. Throws
    * NotFoundError both when the post does not exist and when the caller has no relationship to it. Each of the post's
    * videos is reported with its state (`video`); once `analyzeContent` kind `video` has downloaded one, `cuts` adds
-   * where its picture changes.
+   * where its picture changes, and `audioMap` adds its audio map window to the summary each video reports.
    */
   async getContent(contentId: string, options: GetContentOptions = {}): Promise<ContentDetail> {
     const q = new URLSearchParams()
@@ -1677,6 +1677,7 @@ export class ContentHero {
     if (options.analysisSections?.length) q.set('analysisSections', options.analysisSections.join(','))
     if (options.scenes && options.scenes !== 'none') q.set('scenes', options.scenes)
     if (options.cuts) q.set('cuts', 'true')
+    if (options.audioMap) q.set('audioMap', 'true')
     const qs = q.toString()
     return this.request<ContentDetail>(
       'GET',

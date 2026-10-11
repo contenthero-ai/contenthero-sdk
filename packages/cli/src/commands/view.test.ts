@@ -114,6 +114,18 @@ test('a raw clip says what it is and which window was read, with no live tab', (
   assert.match(out, /Keyframes not shown: The video service is unavailable\./)
 })
 
+/** A post's video carries its audio map for the window read. Break-verified: dropping describeAudioMap from viewSummary turns this red. */
+test("a post's video says its audio map for the window, or that it is being measured", () => {
+  const window = {
+    fromSec: 0, toSec: 3, durationSec: 9, speech: [], events: [{ fromSec: 0.5, toSec: 1, class: 'swoosh', classScore: 0.8, name: 'whoosh', nameScore: 0.7, levelDb: -20, vsVoiceDb: null }],
+    music: { present: true, tempoBpm: 120, beatsSec: [0.5], key: 'C', mode: 'major', levelDb: -22 }, ducking: null, levels: { voiceDb: null, musicDb: -22, effectsDb: -20 },
+  }
+  const ready = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'ready', window } } }, participant: null, participants: [] }, nothingSaved)
+  assert.match(ready, /audio map \(free\), 0\.0s to 3\.0s of 9\.0s:\n  speech: none\n  sound events: 0\.5s whoosh \(swoosh, -20 dB\)\n  music: 120 BPM, C major, 1 beat in this window/)
+  const pending = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'pending' } } }, participant: null, participants: [] }, nothingSaved)
+  assert.match(pending, /audio map: being measured \(free; ask again shortly\)/)
+})
+
 test("--save writes a clip's keyframes, numbered in order", async () => {
   body = {
     context: { clip: { url: 'https://media.test/c.mp4', type: 'video', keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AQ==' }, { atSec: 1, dataUrl: 'data:image/jpeg;base64,Ag==' }] } },

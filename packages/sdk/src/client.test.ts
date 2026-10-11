@@ -1237,6 +1237,15 @@ test('getContent asks for scenes on the wire only when a grain is named', async 
   assert.equal(new URL(calls[1]!.url).search, '')
 })
 
+test('getContent asks for the audio map window on the wire only when asked', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: {} }, { status: 200, body: {} }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getContent('c1', { audioMap: true, startMs: 2000 })
+  await client.getContent('c1', { audioMap: false })
+  assert.equal(new URL(calls[0]!.url).search, '?startMs=2000&audioMap=true')
+  assert.equal(new URL(calls[1]!.url).search, '')
+})
+
 test('every listProjects filter reaches the request, aliases included', async () => {
   // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
   // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both

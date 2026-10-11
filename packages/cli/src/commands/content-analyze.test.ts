@@ -43,7 +43,25 @@ before(async () => {
     if (req.method === 'GET' && url.pathname === `/api/v1/content/${POST.shortId}`) {
       res.end(JSON.stringify({
         id: POST.contentId, shortId: POST.shortId, title: 'Post', hashtags: [], analysis: { status: 'absent' },
-        video: { copy: { status: 'ready' }, videos: [{ copy: { status: 'ready' }, cuts: { boundaries: [2.5], scores: [0.8], durationSec: 9 } }] },
+        video: {
+          copy: { status: 'ready' },
+          videos: [{
+            copy: { status: 'ready' }, cuts: { boundaries: [2.5], scores: [0.8], durationSec: 9 },
+            audioMap: {
+              status: 'ready',
+              summary: { durationSec: 9, speechSec: 4, eventCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null },
+              ...(url.searchParams.get('audioMap') === 'true'
+                ? {
+                    window: {
+                      fromSec: 1, toSec: 9, durationSec: 9, speech: [{ fromSec: 1, toSec: 5 }], events: [],
+                      music: { present: false, tempoBpm: null, beatsSec: [], key: null, mode: null, levelDb: null },
+                      ducking: null, levels: { voiceDb: -16, musicDb: null, effectsDb: null },
+                    },
+                  }
+                : {}),
+            },
+          }],
+        },
         ...(url.searchParams.get('scenes') === 'map'
           ? {
               scenes: {
@@ -138,7 +156,23 @@ test('content get --cuts asks for the cut lists, and its window does not imply t
   assert.match(asked, /startMs=1000/)
   assert.doesNotMatch(asked, /transcript=/)
   assert.match(out, /Videos: ready/)
-  assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s\./)
+  assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s; audio map \(free\)/)
+})
+
+/**
+ * `content get` always prints each video's audio map summary; `--audio-map` asks for its window, which a window then
+ * narrows rather than asking for transcript segments. Break-verified: letting the window imply segments with
+ * --audio-map turns the request assertion red; dropping the window lines from postVideosText, the output one.
+ */
+test('content get --audio-map asks for the audio map window, and its window does not imply transcript segments', async () => {
+  requests.length = 0
+  const out = await printed(['content', 'get', POST.shortId, '--audio-map', '--start-ms', '1000'])
+  const asked = requests.find((r) => r.startsWith(`GET /api/v1/content/${POST.shortId}`)) ?? ''
+  assert.match(asked, /audioMap=true/)
+  assert.match(asked, /startMs=1000/)
+  assert.doesNotMatch(asked, /transcript=/)
+  assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s; audio map \(free\): 4\.0s of speech in 9\.0s, no sound events, no music\./)
+  assert.match(out, /\n {4}audio map \(free\), 1\.0s to 9\.0s of 9\.0s:\n {6}speech: 1\.0-5\.0s\n {6}sound events: none\n {6}music: none\n {6}levels: voice -16 dB, music silent, effects silent/)
 })
 
 /**

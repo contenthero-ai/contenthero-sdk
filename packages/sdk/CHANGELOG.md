@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- New: a post video's audio map, made automatically and free once its copy is stored (`analyzeContent` kind
+  `video`): where speech is, each sound event with its AudioSet class and closest sound-design name, its level and its
+  level against the voice, the music's tempo, beats and key, how far the music drops under speech, and each stem's
+  level. `getContent` reports each video's `audioMap` summary on `ContentVideo` (so does `analyzeContent` kind
+  `video`); `GetContentOptions.audioMap` adds its window, narrowed by `startMs`/`endMs` like `cuts`. `view` on a
+  post's video carries `context.clip.audioMap` with the window read. Types: `AudioMapAnswer`, `AudioMapSummary`,
+  `AudioMapWindow`, `AudioMapEvent`, `AudioMapMusic`, `AudioMapDucking`, `AudioMapLevels`, `AudioMapSpan`. Renderers:
+  `describeAudioMap`, `describeAudioMapSummary`, `describeAudioMapWindow`; `describeContentVideo` appends the summary.
+
 ## 0.4.29
 
 - Breaking: a post's scenes are descriptions only. `GetContentOptions.scenes` is `'none' | 'map'`; `'frames'` is

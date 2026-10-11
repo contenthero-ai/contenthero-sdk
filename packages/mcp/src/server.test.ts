@@ -2708,6 +2708,55 @@ test("get_content reports each video's state, and cuts adds its cut list", async
   assert.match(tools.find((t) => t.name === 'get_content').description, /Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes\./)
 })
 
+const AUDIO_WINDOW = {
+  fromSec: 1, toSec: 4, durationSec: 6,
+  speech: [{ fromSec: 1, toSec: 2.5 }],
+  events: [{ fromSec: 1.2, toSec: 1.6, class: 'swoosh', classScore: 0.8, name: 'whoosh', nameScore: 0.7, levelDb: -18, vsVoiceDb: 3 }],
+  music: { present: true, tempoBpm: 118, beatsSec: [1.5, 2], key: 'A', mode: 'minor', levelDb: -24 },
+  ducking: { musicUnderSpeechDb: -30, musicWithoutSpeechDb: -21, dropDb: 9 },
+  levels: { voiceDb: -16, musicDb: -24, effectsDb: -30 },
+}
+
+/**
+ * Each video's audio map summary reports on every get_content, and audioMap adds its window below it, narrowed by the
+ * window. Break-verified: dropping audioMap from the schema turns the first assertion red; dropping the window lines
+ * from postVideoLines, the window assertion.
+ */
+test("get_content reports each video's audio map summary, and audioMap adds its window", async () => {
+  let asked
+  const summary = { durationSec: 6, speechSec: 1.5, eventCount: 1, music: { present: true, tempoBpm: 118, key: 'A', mode: 'minor' }, duckingDropDb: 9 }
+  const video = {
+    copy: { status: 'ready' },
+    videos: [
+      { slide: 0, copy: { status: 'ready' }, audioMap: { status: 'ready', summary, window: AUDIO_WINDOW } },
+      { slide: 2, copy: { status: 'ready' }, audioMap: { status: 'pending' } },
+    ],
+  }
+  const mcp = await connect(
+    fakeClient({ getContent: async (_id, opts) => ((asked = opts), { title: 'x', hashtags: [], analysis: { status: 'absent' }, video }) }),
+  )
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', audioMap: true, startMs: 1000, endMs: 4000 } })
+  assert.deepEqual(asked, { audioMap: true, startMs: 1000, endMs: 4000 })
+  const body = res.content[0].text
+  assert.match(body, /Slide 1 \(slide: 0\): ready; audio map \(free\): 1\.5s of speech in 6\.0s, 1 sound event, music 118 BPM, A minor, drops 9 dB under speech\./)
+  assert.match(body, /\n {4}audio map \(free\), 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound events: 1\.2s whoosh \(swoosh, -18 dB, \+3 vs voice\)/)
+  assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: being measured \(free; ask again shortly\)\./)
+})
+
+/**
+ * view on a post's video carries its audio map for the window read, whatever was asked of it. Break-verified: dropping
+ * describeAudioMap from clipSection turns this red.
+ */
+test("view on a post's video shows its audio map for the window", async () => {
+  const clip = { contentId: 'post-1', type: 'video', fromSec: 1, toSec: 4, durationSeconds: 6, audioMap: { status: 'ready', window: AUDIO_WINDOW } }
+  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, count: 1 } })
+  const text = res.content[0].text
+  assert.match(text, /audio map \(free\), 1\.0s to 4\.0s of 6\.0s:/)
+  assert.match(text, /music: 118 BPM, A minor, drops 9 dB under speech, 2 beats in this window/)
+  assert.match(text, /levels: voice -16 dB, music -24 dB, effects -30 dB/)
+})
+
 test('analyze_content says pending when the analysis outlasts the call', async () => {
   const mcp = await connect(
     fakeClient({

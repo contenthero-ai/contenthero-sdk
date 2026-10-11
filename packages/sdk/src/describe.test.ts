@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeClip, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -243,4 +243,64 @@ test('a transcription names its post and slide, prices it, and says where it sta
     'This video could not be transcribed. Please contact support. Nothing was charged for it.',
   )
   assert.equal(describeTranscriptionState({ status: 'completed', transcript: '', wordCount: 0, durationSeconds: 1 }), null)
+})
+
+/**
+ * A video's audio map reads the same on every surface: a one-line summary, a window in lines, and the pending and
+ * unavailable states. Break-verified: dropping the vs-voice null check gives an event no one speaks near a vs-voice
+ * clause; dropping the summary from describeContentVideo, the last assertion.
+ */
+test('describeAudioMap reads a summary, a window, and the pending and unavailable states', () => {
+  const summary = {
+    durationSec: 30,
+    speechSec: 12.34,
+    eventCount: 7,
+    music: { present: true, tempoBpm: 118.4, key: 'A', mode: 'minor' as const },
+    duckingDropDb: 9.2,
+  }
+  assert.equal(describeAudioMapSummary(summary), 'audio map (free): 12.3s of speech in 30.0s, 7 sound events, music 118 BPM, A minor, drops 9 dB under speech')
+  assert.equal(
+    describeAudioMapSummary({ ...summary, eventCount: 1, music: { present: true, tempoBpm: null, key: null, mode: null }, duckingDropDb: null }),
+    'audio map (free): 12.3s of speech in 30.0s, 1 sound event, music',
+  )
+  assert.equal(
+    describeAudioMapSummary({ ...summary, eventCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null }),
+    'audio map (free): 12.3s of speech in 30.0s, no sound events, no music',
+  )
+
+  const window = {
+    fromSec: 0,
+    toSec: 6,
+    durationSec: 30,
+    speech: [{ fromSec: 0, toSec: 3.44 }, { fromSec: 4.1, toSec: 6 }],
+    events: [
+      { fromSec: 1.24, toSec: 1.8, class: 'swoosh', classScore: 0.8, name: 'whoosh', nameScore: 0.7, levelDb: -18.3, vsVoiceDb: 2.6 },
+      { fromSec: 5, toSec: 5.5, class: 'Clapping', classScore: 0.6, name: 'clap', nameScore: 0.5, levelDb: -22, vsVoiceDb: null },
+    ],
+    music: { present: true, tempoBpm: 118, beatsSec: [0.5, 1, 1.5], key: 'A', mode: 'minor' as const, levelDb: -24 },
+    ducking: { musicUnderSpeechDb: -30, musicWithoutSpeechDb: -21, dropDb: 9 },
+    levels: { voiceDb: -16.2, musicDb: -24, effectsDb: null },
+  }
+  assert.deepEqual(describeAudioMapWindow(window), [
+    'audio map (free), 0.0s to 6.0s of 30.0s:',
+    '  speech: 0.0-3.4s, 4.1-6.0s',
+    '  sound events: 1.2s whoosh (swoosh, -18 dB, +3 vs voice); 5.0s clap (Clapping, -22 dB)',
+    '  music: 118 BPM, A minor, drops 9 dB under speech, 3 beats in this window',
+    '  levels: voice -16 dB, music -24 dB, effects silent',
+  ])
+  assert.deepEqual(
+    describeAudioMapWindow({ ...window, speech: [], events: [], music: { ...window.music, present: false }, ducking: null }).slice(1, 4),
+    ['  speech: none', '  sound events: none', '  music: none'],
+  )
+
+  assert.deepEqual(describeAudioMap({ status: 'pending' }), ['audio map: being measured (free; ask again shortly)'])
+  assert.deepEqual(describeAudioMap({ status: 'unavailable', reason: 'The audio map could not be measured just now.' }), [
+    'audio map: unavailable (The audio map could not be measured just now)',
+  ])
+  assert.equal(describeAudioMap({ status: 'ready', summary, window }).length, 6)
+  assert.deepEqual(describeAudioMap(undefined), [])
+  assert.equal(
+    describeContentVideo({ copy: { status: 'ready' }, audioMap: { status: 'ready', summary } }),
+    'ready; audio map (free): 12.3s of speech in 30.0s, 7 sound events, music 118 BPM, A minor, drops 9 dB under speech.',
+  )
 })

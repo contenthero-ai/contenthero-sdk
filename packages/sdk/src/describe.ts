@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, ApplyEditorOpsResult, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSummary, AudioMapWindow, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -409,9 +409,75 @@ export function describeContentVideoCuts(cuts: ContentVideoCuts): string {
   return `cut list (free): ${n} cut${n === 1 ? '' : 's'} in ${length}, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}`
 }
 
+/** Seconds to a tenth and decibels whole: the audio map's precision in words, finer than any ear or edit needs. */
+const sec1 = (s: number) => `${s.toFixed(1)}s`
+const db = (v: number) => `${Math.round(v)} dB`
+const signedDb = (v: number) => {
+  const r = Math.round(v)
+  return r > 0 ? `+${r}` : `${r}`
+}
+
+/** Music in words: its tempo and key when known, and how far it drops under speech when it does. */
+function audioMapMusicWords(music: { tempoBpm: number | null; key: string | null; mode: 'major' | 'minor' | null }, dropDb: number | null): string[] {
+  const parts: string[] = []
+  if (music.tempoBpm !== null) parts.push(`${Math.round(music.tempoBpm)} BPM`)
+  if (music.key) parts.push(music.mode ? `${music.key} ${music.mode}` : music.key)
+  if (dropDb !== null) parts.push(`drops ${Math.round(dropDb)} dB under speech`)
+  return parts
+}
+
+/** A video's audio map in one line, free: how much speech in how long, how many sound events, and its music. */
+export function describeAudioMapSummary(summary: AudioMapSummary): string {
+  const n = summary.eventCount
+  const events = n === 0 ? 'no sound events' : `${n} sound event${n === 1 ? '' : 's'}`
+  const words = audioMapMusicWords(summary.music, summary.duckingDropDb)
+  const music = !summary.music.present ? 'no music' : words.length ? `music ${words.join(', ')}` : 'music'
+  return `audio map (free): ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${events}, ${music}`
+}
+
 /**
- * One video of `analyzeContent` kind `video`: where its copy stands and, once stored, its cut list, as one sentence
- * that every surface prints after `contentVideoLabel`.
+ * A stretch of a video's audio map in lines, in the video's own seconds: where speech is, each sound event (its
+ * sound-design name, its AudioSet class, its level and, with someone speaking near it, its level against the voice),
+ * the music with how many beats fall in the stretch, and each stem's level across the whole video.
+ */
+export function describeAudioMapWindow(window: AudioMapWindow): string[] {
+  const speech = window.speech.length ? window.speech.map((s) => `${s.fromSec.toFixed(1)}-${sec1(s.toSec)}`).join(', ') : 'none'
+  const events = window.events.length
+    ? window.events
+        .map((e) => `${sec1(e.fromSec)} ${e.name} (${e.class}, ${db(e.levelDb)}${e.vsVoiceDb !== null ? `, ${signedDb(e.vsVoiceDb)} vs voice` : ''})`)
+        .join('; ')
+    : 'none'
+  const m = window.music
+  const beats = m.beatsSec.length
+  const music = m.present
+    ? [...audioMapMusicWords(m, window.ducking ? window.ducking.dropDb : null), `${beats} beat${beats === 1 ? '' : 's'} in this window`].join(', ')
+    : 'none'
+  const level = (v: number | null) => (v === null ? 'silent' : db(v))
+  const l = window.levels
+  return [
+    `audio map (free), ${sec1(window.fromSec)} to ${sec1(window.toSec)} of ${sec1(window.durationSec)}:`,
+    `  speech: ${speech}`,
+    `  sound events: ${events}`,
+    `  music: ${music}`,
+    `  levels: voice ${level(l.voiceDb)}, music ${level(l.musicDb)}, effects ${level(l.effectsDb)}`,
+  ]
+}
+
+/**
+ * A video's audio map as a reader got it, in lines: being measured (free, so asking again costs nothing), why it is
+ * unavailable, or its summary and the window read, whichever came back.
+ */
+export function describeAudioMap(answer: AudioMapAnswer | null | undefined): string[] {
+  if (!answer) return []
+  if (answer.status === 'pending') return ['audio map: being measured (free; ask again shortly)']
+  if (answer.status === 'unavailable') return [`audio map: unavailable (${answer.reason.trim().replace(/\.+$/, '')})`]
+  return [...(answer.summary ? [describeAudioMapSummary(answer.summary)] : []), ...(answer.window ? describeAudioMapWindow(answer.window) : [])]
+}
+
+/**
+ * One video of `analyzeContent` kind `video`: where its copy stands and, once stored, its cut list and its audio map
+ * summary (or that the map is being measured, or why it cannot be), as one sentence that every surface prints after
+ * `contentVideoLabel`. The map's window is lines of its own (`describeAudioMapWindow`).
  */
 export function describeContentVideo(video: ContentVideo): string {
   const c = video.copy
@@ -425,7 +491,9 @@ export function describeContentVideo(video: ContentVideo): string {
           : c.status === 'unavailable'
             ? `unavailable: ${c.reason.trim().replace(/\.+$/, '')}`
             : 'not downloaded yet'
-  return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}.`
+  const map = video.audioMap
+  const mapLine = !map ? null : map.status === 'ready' ? (map.summary ? describeAudioMapSummary(map.summary) : null) : describeAudioMap(map)[0]!
+  return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}${mapLine ? `; ${mapLine}` : ''}.`
 }
 
 /** The post a transcription (or its price) names, with the carousel slide when there is one; null for an audio file. */

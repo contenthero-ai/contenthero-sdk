@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- New: a post video's audio map, made automatically and free once `content analyze --kind video` has stored its
+  copy: speech, sound events (AudioSet class, sound-design name, level and level against the voice), music tempo,
+  beats and key, how far the music drops under speech, and each stem's level. `content get` and `content analyze
+  --kind video` print each video's summary; `content get --audio-map` adds its window, narrowed by
+  `--start-ms`/`--end-ms` (which then do not imply transcript segments). `view --content-id` prints the map for the
+  window read, or that it is still being measured.
+
 ## 0.3.26
 
 - Breaking: a post's scenes are descriptions only. `content get --scenes` takes `map`; `frames` is refused with the

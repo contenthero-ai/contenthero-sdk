@@ -29,12 +29,14 @@ import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import {
+  describeAudioMap,
   describeClip,
   describeCodeWarnings,
   describeRenderFailure,
   describeRenderProgress,
   describeSoundMeasurement,
   describeSourceSound,
+  type AudioMapAnswer,
   type CodeDiagnostic,
 } from '@contenthero/sdk'
 
@@ -124,7 +126,10 @@ function renderedLines(rendered: Record<string, unknown> | null): string[] {
   return [sound, audio, progress, failure, warned].filter((line): line is string => Boolean(line))
 }
 
-/** The human summary of a view: who is viewing, what a render measured or why it has no image, a clip, and what was saved. */
+/**
+ * The human summary of a view: who is viewing, what a render measured or why it has no image, a clip with its sound and
+ * a post's audio map for the window, and what was saved.
+ */
 export function viewSummary(result: ViewResult, saved: { count: number; path: string }): string {
   const c = result.context
   const rendered = record(c?.rendered)
@@ -146,6 +151,7 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
     ...renderedLines(renderedSound),
     ...describeClip(clip),
     ...sourceSoundLines(record(clip?.sound)),
+    ...describeAudioMap(record(clip?.audioMap) as AudioMapAnswer | null),
     ...savedLine,
   ].join('\n')
 }

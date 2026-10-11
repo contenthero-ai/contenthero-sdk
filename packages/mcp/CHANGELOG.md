@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- New: a post video's audio map, made automatically and free once `analyze_content` kind `video` has stored its
+  copy: speech, sound events (AudioSet class, sound-design name, level and level against the voice), music tempo,
+  beats and key, how far the music drops under speech, and each stem's level. `get_content` and `analyze_content`
+  kind `video` print each video's summary; `get_content` `audioMap` adds its window, narrowed by `startMs`/`endMs`.
+  `view` on a post's video prints the map for the window read, or that it is still being measured.
+
 ## 0.4.36
 
 - Breaking: a post's scenes are descriptions only. `get_content` `scenes` takes `'none'` or `'map'`; `'frames'` is
