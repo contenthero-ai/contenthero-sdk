@@ -2995,8 +2995,9 @@ export interface AudioMapSpan {
 export interface AudioMapEvent extends AudioMapSpan {
   class: string
   classScore: number
-  name: string
-  nameScore: number
+  /** Null, with `nameScore`, when no sound-design name fits clearly enough. */
+  name: string | null
+  nameScore: number | null
   levelDb: number
   /** Its level minus the voice's around it; null when no one speaks near it. */
   vsVoiceDb: number | null
