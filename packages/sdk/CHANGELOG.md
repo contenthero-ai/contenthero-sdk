@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.29
+
 - Breaking: a post's scenes are descriptions only. `GetContentOptions.scenes` is `'none' | 'map'`; `'frames'` is
   gone, and the API refuses it (400) with the step that replaces it. `ContentScene` loses `frameUrl`: each scene is its
   range, what happens and what is said. See a scene's frames with `view` (`contentId`, and `atSec` at its start or

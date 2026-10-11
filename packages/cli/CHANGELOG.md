@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.26
+
 - Breaking: a post's scenes are descriptions only. `content get --scenes` takes `map`; `frames` is refused with the
   step that replaces it, and the map prints no frame urls. It names `contenthero view --content-id <id> --at-sec
   <seconds>` for a scene's frames. `content analyze --kind scenes` maps the post's scenes.

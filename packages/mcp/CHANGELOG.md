@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.36
+
 - Breaking: a post's scenes are descriptions only. `get_content` `scenes` takes `'none'` or `'map'`; `'frames'` is
   gone, with its inlined frame images. The map shows each scene's range, what happens and what is said, and names
   `view` (`contentId`, `atSec` in the scene's range) for its frames. `analyze_content` kind `scenes` maps the post's
