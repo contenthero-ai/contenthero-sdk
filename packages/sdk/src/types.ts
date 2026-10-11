@@ -2181,6 +2181,8 @@ export interface ImportDuplicate {
 /** A finalized upload/import: a first-class media output (referenceable by outputId). */
 export interface UploadedMedia {
   outputId: string
+  /** The name the file was uploaded with, as the library shows it. Absent from older servers. */
+  fileName?: string | null
   /** The upload's 8-character public id, used in app links and shown to people; `outputId` stays the UUID. */
   shortId: string
   url: string

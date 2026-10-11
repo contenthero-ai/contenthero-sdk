@@ -4939,6 +4939,7 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
     shortId: `s-${id}`,
     url: `https://media.contenthero.ai/${id}/original.png?t=tok`,
     contentType: 'image',
+    fileName: id === 'one' ? 'Cover shot.png' : null,
     appUrl: `https://app.contenthero.ai/media/s-${id}`,
   })
   const mcp = await connect(
@@ -4976,6 +4977,9 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
   assert.ok(done._meta, 'the batch mounts a card')
   const items = (done.structuredContent as { items: Array<{ reference: string }> }).items
   assert.deepEqual(items.map((i) => i.reference), ['one', 'two'], 'one card, one tile per finalized file')
+  // A file is shown by the name it was uploaded with, falling back to its id when it has none (gap found 2026-10-12).
+  assert.match(doneText, /\[1\] Cover shot\.png, /)
+  assert.deepEqual((done.structuredContent as { items: Array<{ name: string }> }).items.map((i) => i.name), ['Cover shot.png', 'two'])
 })
 
 /**

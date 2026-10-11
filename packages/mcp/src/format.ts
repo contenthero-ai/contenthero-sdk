@@ -1684,14 +1684,14 @@ export function uploadedMediaBatchResult(outcomes: UploadedMediaOutcome[]): Call
     `Media ready (${done.length === outcomes.length ? done.length : `${done.length} of ${outcomes.length}`}):`,
     ...outcomes.map((o, i) =>
       'media' in o
-        ? `[${i + 1}] ${idOf({ id: o.media.outputId, appUrl: o.media.appUrl })}: ${o.media.url}`
+        ? `[${i + 1}] ${o.media.fileName ? `${o.media.fileName}, ` : ''}${idOf({ id: o.media.outputId, appUrl: o.media.appUrl })}: ${o.media.url}`
         : `[${i + 1}] ${o.outputId}: could not finalize: ${o.error}`,
     ),
     done.length > 0 ? 'Reference each by outputId in generate_* or add_post_asset, or find it via list_media / get_media.' : null,
   ])
   if (done.length === 0) return text(prose, true)
   const tiles = done.flatMap((m) => {
-    const tile = libraryItemTile(m.outputId, m.url, m.contentType, m.appUrl)
+    const tile = libraryItemTile(m.outputId, m.url, m.contentType, m.appUrl, m.fileName)
     return tile ? [tile] : []
   })
   if (tiles.length === 0) return text(prose)
@@ -1704,10 +1704,12 @@ function libraryItemTile(
   url: string,
   contentType: string | undefined,
   appUrl: string | null | undefined,
+  name?: string | null,
 ): MediaWidgetItem | null {
   const medium = contentType === 'image' || contentType === 'video' || contentType === 'audio' ? contentType : undefined
   if (!medium) return null
-  return { url, name: outputId, contentType: medium, reference: outputId, openUrl: appUrl ?? undefined }
+  // The tile is labeled with the file's own name when it has one; the id stays the reference.
+  return { url, name: name || outputId, contentType: medium, reference: outputId, openUrl: appUrl ?? undefined }
 }
 
 /**
