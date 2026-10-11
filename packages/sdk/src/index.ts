@@ -27,7 +27,7 @@ export type {
   GenerateResult,
   EditAudioRequest,
   EditAudioResult,
-  EnhanceClipsJob,
+  InPlaceAudioJob,
   PlacementIntent,
   CostEstimate,
   GenerateBoardRequest,

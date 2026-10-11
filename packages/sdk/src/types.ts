@@ -699,7 +699,7 @@ export interface EditAudioRequest {
    *
    * Requires `projectId`; the operation is `enhance` (implied) or `split`. A split mutes each clip and places its voice,
    * music and effects under it, each stem on a track of its own. Omitting `clipIds` while passing
-   * `enhanceClips: true` means every audible clip on the timeline, the same whole-timeline default the sibling
+   * `inPlace: true` means every audible clip on the timeline, the same whole-timeline default the sibling
    * timeline ops use. Silenced clips are excluded automatically; enhancing audio nobody can hear would spend
    * credits and then overwrite something the user deliberately muted.
    *
@@ -711,14 +711,14 @@ export interface EditAudioRequest {
    */
   clipIds?: string[]
   /** Opt in to in-place mode without naming clips (whole timeline). Implied when `clipIds` is present. */
-  enhanceClips?: boolean
+  inPlace?: boolean
 }
 
 /**
  * One in-place job: the clips of a single source, concatenated and enhanced together, or (a split) separated once and
  * given their stems.
  */
-export interface EnhanceClipsJob {
+export interface InPlaceAudioJob {
   outputId: string
   /**
    * Its short id: the id `getStatus` and `get_status` follow it by with no kind (the UUID needs kind `'output'`).
@@ -746,7 +746,7 @@ export interface EnhanceClipsJob {
 export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
   status: 'processing' | 'completed' | 'noop'
   /** In-place mode only: one job per source. (`outputs` names a generation's own outputs, as in file mode.) */
-  jobs?: EnhanceClipsJob[]
+  jobs?: InPlaceAudioJob[]
   /** In-place mode only: the project the results are applied to. */
   projectId?: string
   /** In-place mode only: selected clips skipped because they are silenced. */

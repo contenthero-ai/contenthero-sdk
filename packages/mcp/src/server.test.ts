@@ -5510,6 +5510,8 @@ test('edit_audio splits a file or clips in place, and its outputs name their ste
   const { tools } = await mcp.listTools()
   const editAudio = tools.find((t) => t.name === 'edit_audio')
   assert.deepEqual(editAudio.inputSchema.properties.operation.enum, ['isolate', 'enhance', 'split'])
+  assert.ok(editAudio.inputSchema.properties.inPlace)
+  assert.equal(editAudio.inputSchema.properties.enhanceClips, undefined)
 
   const file = await mcp.callTool({ name: 'edit_audio', arguments: { operation: 'split', sourceUrl: 'aB3dE5fG' } })
   assert.deepEqual(sent[0], { operation: 'split', sourceUrl: 'aB3dE5fG' })

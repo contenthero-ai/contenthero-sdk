@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Breaking: `edit_audio`'s `enhanceClips` input is now `inPlace`, since it starts a split as well as an enhancement.
+  No alias: `enhanceClips` is no longer read.
 - New: `add_tracked_account` tracks social accounts by handle or profile URL (a list, with `accountType` and
   `brandKitId`), and `remove_tracked_account` stops tracking one and keeps its posts. Inspiration accounts count toward
   the plan's limit: the ones past it are listed as not tracked, with the refusal and the ways to continue. Both

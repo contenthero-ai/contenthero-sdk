@@ -601,7 +601,7 @@ export class ContentHero {
    * synchronous and the processed URL comes back inline on `outputUrls`; enhancement is asynchronous and
    * returns an `outputId` to poll.
    *
-   * IN-PLACE mode (`projectId` + `clipIds` / `enhanceClips`): enhance the audio OF EXISTING CLIPS on a
+   * IN-PLACE mode (`projectId` + `clipIds` / `inPlace`): enhance the audio OF EXISTING CLIPS on a
    * timeline. Returns one job per SOURCE on `outputs`, because the vendor estimates a noise profile per
    * production, so a source's clips are concatenated and enhanced together while separate recordings stay
    * separate jobs.

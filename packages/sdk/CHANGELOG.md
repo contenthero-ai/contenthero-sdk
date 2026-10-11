@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Breaking: `EditAudioRequest.enhanceClips` is now `inPlace`, since it starts a split as well as an enhancement, and
+  `EnhanceClipsJob` is now `InPlaceAudioJob`. No alias: the API no longer reads `enhanceClips`.
 - New: `addTrackedAccounts({ accounts, accountType?, brandKitId? })` tracks social accounts by handle or profile URL
   (`TrackAccountInput`; `TRACKABLE_PLATFORMS` names the platforms), in the `inspiration` list by default or the owner's
   own (`brand`). Inspiration accounts count toward the plan's limit: as many as fit are tracked, the rest come back in
@@ -12,7 +14,7 @@
 - New: `editAudio` operation `split` (`EditAudioOperation` gains `'split'`): voice, music and effects. On a file
   (`sourceUrl`, one of your stored audio or video files) it answers `processing`, and the finished generation has three
   `outputs`, each naming its `stem` (`GenerationOutput.stem`: `voice`, `music` or `effects`). In place (`projectId`
-  with `clipIds` or `enhanceClips`), one job per source recording: each clip is muted and its stems are placed under
+  with `clipIds` or `inPlace`), one job per source recording: each clip is muted and its stems are placed under
   it, each on its own track. Free today (`estimateEditAudioCost` asks the registry). A file split refuses a `projectId`.
 - New: a post video's audio map, made automatically and free once its copy is stored (`analyzeContent` kind
   `video`): where speech is, each sound event with its AudioSet class and closest sound-design name, its level and its

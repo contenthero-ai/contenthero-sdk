@@ -97,7 +97,7 @@ function server(path: Path) {
       return { outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, status: 'processing' }
     }
     if (method === 'POST' && p === '/api/v1/studio/audio/edit') {
-      if (body.clipIds || body.enhanceClips) {
+      if (body.clipIds || body.inPlace) {
         return {
           outputId: OUTPUT.id,
           status: 'processing',
@@ -208,7 +208,7 @@ const CASES: Case[] = [
   { tool: 'generate_audio', args: { modelId: 'test-model', text: 'hello' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished'] },
   { tool: 'generate_board', args: { boardType: 'character', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'edit_audio', args: { operation: 'enhance', sourceUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
-  { tool: 'edit_audio', args: { projectId: 'p1', enhanceClips: true }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'edit_audio', args: { projectId: 'p1', inPlace: true }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'import', args: { url: 'https://example.com/a.png' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'transcribe', args: { audioUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: TRANSCRIPT.shortId, appUrl: TRANSCRIPT.appUrl }, paths: ['finished'] },
   // The 2026-10-10 case: a picture or sound export that finished inside the call is drawn by the card, and still named.

@@ -12,7 +12,7 @@
 import type { Command } from 'commander'
 import type { EditAudioRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { compact, runEditAudio, renderEnhanceClips, DEFAULT_TIMEOUT_SEC } from '../generation.js'
+import { compact, runEditAudio, renderInPlaceAudio, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { toFloat, toInt, toJson } from '../args.js'
 
 // Each subcommand names its OPERATION; the server picks the model that performs it from its registry, so no model
@@ -89,10 +89,10 @@ export function registerAudio(program: Command): void {
           clipIds: opts.clips as string[] | undefined,
           // Explicit even when clip ids are given, so the request states its MODE rather than leaving the
           // server to infer it from which optional fields happen to be present.
-          enhanceClips: true,
+          inPlace: true,
         }),
       )
-      await renderEnhanceClips(client, ctx, result, {
+      await renderInPlaceAudio(client, ctx, result, {
         wait: opts.wait !== false,
         timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
       })
@@ -137,10 +137,10 @@ export function registerAudio(program: Command): void {
           projectId,
           clipIds: opts.clips as string[] | undefined,
           // In-place mode stated explicitly, as `enhance-clips` states it.
-          enhanceClips: true,
+          inPlace: true,
         }),
       )
-      await renderEnhanceClips(client, ctx, result, {
+      await renderInPlaceAudio(client, ctx, result, {
         wait: opts.wait !== false,
         timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
         operation: 'split',

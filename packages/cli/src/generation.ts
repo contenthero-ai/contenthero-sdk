@@ -178,7 +178,7 @@ async function renderSubmission(
  * A `noop` is emitted as-is rather than treated as an error: a selection with no audible audio is a real,
  * correct answer, and the server explains which case it was.
  */
-export async function renderEnhanceClips(
+export async function renderInPlaceAudio(
   client: ContentHero,
   ctx: Context,
   result: EditAudioResult,

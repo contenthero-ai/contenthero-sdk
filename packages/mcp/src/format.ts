@@ -709,7 +709,7 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
  * other recordings were still running. The applied-automatically note matters too: unlike every other async
  * tool here, the caller does NOT place the result, so without saying so an agent would reasonably try to.
  */
-export function enhanceClipsResult(result: EditAudioResult, operation: 'enhance' | 'split' = 'enhance'): CallToolResult {
+export function inPlaceAudioResult(result: EditAudioResult, operation: 'enhance' | 'split' = 'enhance'): CallToolResult {
   const jobs = result.jobs ?? []
   const split = operation === 'split'
   if (jobs.length === 0) {

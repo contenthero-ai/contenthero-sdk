@@ -7,7 +7,7 @@ import {
   generationBatchResult,
   getStatusCall,
   pendingResult,
-  enhanceClipsResult,
+  inPlaceAudioResult,
   completedResult,
   generationWidgetData,
   pollAfterSecondsFor,
@@ -137,7 +137,7 @@ test('a still-rendering job hands back a callable get_status', () => {
 
 test('in-place enhancement hands back every outputId in one callable form', () => {
   const out = body(
-    enhanceClipsResult({
+    inPlaceAudioResult({
       jobs: [
         { outputId: 'j1', clipIds: ['c1', 'c2'], windows: 2 },
         { outputId: 'j2', clipIds: ['c3'], windows: 1 },

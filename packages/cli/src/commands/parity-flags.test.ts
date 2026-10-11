@@ -423,5 +423,5 @@ test('audio split sends operation split on a file, and split-clips sends it in p
   assert.deepEqual(file.body, { operation: 'split', sourceUrl: 'abc12345' })
 
   const clips = await run('audio', 'split-clips', 'p1', '--clips', 'c1', 'c2', '--no-wait')
-  assert.deepEqual(clips.body, { operation: 'split', projectId: 'p1', clipIds: ['c1', 'c2'], enhanceClips: true })
+  assert.deepEqual(clips.body, { operation: 'split', projectId: 'p1', clipIds: ['c1', 'c2'], inPlace: true })
 })

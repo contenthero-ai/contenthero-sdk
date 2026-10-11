@@ -259,7 +259,7 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   edit_audio: {
     operation: 'the subcommand names it: `audio isolate`, `audio enhance` or `audio split`',
     modelId: 'the subcommand names the operation, and the server picks the model',
-    enhanceClips: 'the `audio enhance-clips` and `audio split-clips` subcommands',
+    inPlace: 'the `audio enhance-clips` and `audio split-clips` subcommands',
   },
   update_avatar: { ops: '`avatar look add` / `avatar look remove`' },
   update_brand_kit: { extract: 'the `brand-kit extract` subcommand' },

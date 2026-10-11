@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking: `audio enhance-clips` and `audio split-clips` send the in-place flag by its new API name, `inPlace`
+  (their flags are unchanged). Earlier CLI versions' in-place commands no longer work, since the API no longer reads
+  `enhanceClips`.
 - New: `contenthero tracked-account add <profile...>` tracks social accounts (a profile url, or `platform:handle`
   for a bare handle; `--kind`, `--brand-kit`), printing each with how it came to be tracked and any the plan's limit
   refused, with the ways to continue. `contenthero tracked-account remove <id>` stops tracking one and keeps its
