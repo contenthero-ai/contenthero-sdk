@@ -7,9 +7,11 @@
   supported site, which spends) becomes library media; `pptxUrl` or `canvaDesignId` becomes a new canvas project
   (free; `title`, `cardId`). `getCost` prices either first. A media import still running is followed with
   `get_status`. A page address import reports what it cost.
-- `analyze_content` gains kind `video`: it downloads a tracked post's video into its shared analysis copy, which the
-  reading tools use (never your library or your storage), charged for what the download moved, free when the copy
-  exists or is being made, and answers with the free cut list once stored. A copy still downloading is followed by
+- `analyze_content` gains kind `video`: it downloads every video a tracked post holds, its one video or each video
+  slide of a carousel, into shared analysis copies, which the reading tools use (never your library or your
+  storage), charged for what the downloads moved, free when the copies exist or are being made. It reports each
+  video, by slide for a carousel, with its state and its free cut list once stored (`structuredContent.videos`). A
+  post with no video says so: its images are already stored and readable. A copy still downloading is followed by
   asking again with the same kind, which is free. `getCost` prices it.
 - `get_model` lists the model's input limits (file sizes, reference lengths, and reference video plus output
   together), which it left out, so a request is shaped within them instead of refused.

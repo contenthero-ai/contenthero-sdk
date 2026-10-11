@@ -3629,8 +3629,8 @@ test('import getCost prices a url through the SDK, and a project as free without
 
 test('analyze_content kind video asks again while its copy downloads, then names where it stands and its cut list', async () => {
   const answers = [
-    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, charge: null },
-    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'ready' }, cuts: { boundaries: [1.5, 4.25], scores: [0.9, 0.7], durationSec: 9 }, charge: null },
+    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, videos: [{ copy: { status: 'pending' } }], charge: null },
+    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'ready' }, videos: [{ copy: { status: 'ready' }, cuts: { boundaries: [1.5, 4.25], scores: [0.9, 0.7], durationSec: 9 } }], charge: null },
   ]
   let asked = 0
   const mcp = await connect(fakeClient({
@@ -3640,14 +3640,34 @@ test('analyze_content kind video asks again while its copy downloads, then names
   assert.ok(!res.isError)
   assert.equal(asked, 2)
   assert.match(res.content[0].text, /Con00001/)
-  assert.match(res.content[0].text, /ready in the post's shared analysis copy/)
-  assert.match(res.content[0].text, /2 cuts in 9\.0s, at 1\.50s, 4\.25s/)
+  assert.match(res.content[0].text, /Its video is ready in the post's shared analysis copies/)
+  assert.match(res.content[0].text, /Video: ready; cut list \(free\): 2 cuts in 9\.0s, at 1\.50s, 4\.25s\./)
   assert.equal(res.structuredContent.status, 'ready')
-  assert.deepEqual(res.structuredContent.cuts.boundaries, [1.5, 4.25])
+  assert.deepEqual(res.structuredContent.videos[0].cuts.boundaries, [1.5, 4.25])
+  assert.equal(res.structuredContent.cuts, undefined)
+})
+
+test('analyze_content kind video on a carousel reports each video slide, by slide, with its state and cut list', async () => {
+  const carousel = {
+    contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'failed', error: 'one slide could not be read.' },
+    videos: [
+      { slide: 1, copy: { status: 'ready' }, cuts: { boundaries: [2], scores: [0.8], durationSec: 6 } },
+      { slide: 3, copy: { status: 'failed', error: 'the page listed no file.' } },
+    ],
+    charge: null,
+  }
+  const mcp = await connect(fakeClient({ analyzeContent: async () => carousel }))
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video' } })
+  assert.ok(!res.isError)
+  const text = res.content[0].text
+  assert.match(text, /A download failed: one slide could not be read\. Asking again tries once more\./)
+  assert.match(text, /Slide 2: ready; cut list \(free\): 1 cut in 6\.0s, at 2\.00s\./)
+  assert.match(text, /Slide 4: the download failed: the page listed no file\./)
+  assert.deepEqual(res.structuredContent.videos.map((v) => v.slide), [1, 3])
 })
 
 test('analyze_content kind video still downloading at the end of the call says to ask again with the same kind', async () => {
-  const pending = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, charge: null }
+  const pending = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, videos: [{ copy: { status: 'pending' } }], charge: null }
   const mcp = await connect(fakeClient({ analyzeContent: async () => pending }))
   const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video' } })
   assert.ok(!res.isError)

@@ -2,12 +2,17 @@
 
 ## Unreleased
 
-- New: `analyzeContent(contentId, { kind: 'video' })` downloads a tracked post's video into its shared,
-  platform-owned analysis copy, which the reading tools use; nothing lands in the library or counts against storage.
-  It answers where the copy stands (`ready`, `pending`, `failed`, `unavailable`) with the charge (held on the most the
-  download may move, charged for what arrived) and, once stored, the free cut list. Asking again with the same kind
-  follows a pending copy and is free. `estimateAnalysisCost(contentId, { kind: 'video' })` prices it.
-  `ContentAnalysisKind` gains `'video'`; `ContentVideoResult`, `ContentVideoCopy` and `ContentVideoCuts` are exported.
+- New: `analyzeContent(contentId, { kind: 'video' })` downloads every video a tracked post holds, its one video or
+  each video slide of a carousel, into shared, platform-owned analysis copies, which the reading tools use; nothing
+  lands in the library or counts against storage. It answers where the videos stand together (`copy`: `ready`,
+  `pending`, `failed`, `unavailable`) and `videos`, each video in slide order (`slide`, 0-based, absent for a post's
+  one video) with its own `copy` and, once stored, its free cut list (`cuts`), with the charge (held on the most the
+  downloads may move, charged for what arrived). A post with no video is refused with why: its images are already
+  stored and readable. Asking again with the same kind follows a pending copy and is free.
+  `estimateAnalysisCost(contentId, { kind: 'video' })` prices it. `ContentAnalysisKind` gains `'video'`;
+  `ContentVideoResult`, `ContentVideo`, `ContentVideoCopy` and `ContentVideoCuts` are exported, and
+  `contentVideoLabel`, `describeContentVideo` and `describeContentVideoCuts` say each video in the words the MCP and
+  the CLI print.
 - New: `estimateImportCost(url)` prices a url import and runs nothing, as `importMedia` takes it (0 for a file
   address).
 - `importMedia` takes a video page address on a supported site as well as a file address: the page's video is

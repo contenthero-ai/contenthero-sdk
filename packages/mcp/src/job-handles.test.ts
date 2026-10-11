@@ -122,6 +122,12 @@ function server(path: Path) {
     if (method === 'GET' && p.startsWith('/api/v1/exports/')) return exportJob(done ? 'completed' : 'rendering')
     if (method === 'POST' && /^\/api\/v1\/content\/[^/]+\/analysis$/.test(p)) {
       const handle = { contentId: POST.id, shortId: POST.shortId, appUrl: POST.appUrl }
+      if (body.kind === 'video') {
+        // A carousel: each video slide its own copy, each with its cut list once stored.
+        const copy = done ? { status: 'ready' } : { status: 'pending' }
+        const cuts = done ? { boundaries: [1], scores: [0.9], durationSec: 3 } : undefined
+        return { ...handle, kind: 'video', copy, videos: [{ slide: 0, copy, cuts }, { slide: 2, copy, cuts }], charge: null }
+      }
       if (body.kind === 'scenes') return { ...handle, kind: 'scenes', scenes: done ? { status: 'complete', sceneCount: 3 } : { status: 'running' } }
       return { ...handle, analysis: done ? { status: 'complete', sections: [], data: {} } : { status: 'running' } }
     }
@@ -211,6 +217,8 @@ const CASES: Case[] = [
   { tool: 'get_export', args: { exportId: EXPORT.shortId }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'analyze_content', args: { contentId: POST.shortId }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'analyze_content', args: { contentId: POST.shortId, kind: 'scenes' }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished', 'pending'] },
+  // A post's video copies have no job get_status reads (asking again follows them), so only the finished answer is named here.
+  { tool: 'analyze_content', args: { contentId: POST.shortId, kind: 'video' }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished'] },
   { tool: 'create_avatar', args: { name: 'Mika', age: '20s', gender: 'female' }, names: { id: AVATAR.shortId, appUrl: AVATAR.appUrl }, paths: ['pending'] },
   { tool: 'create_brand_kit', args: { name: 'Kit', websiteUrls: ['https://example.com'], extract: true }, names: { id: KIT.shortId, appUrl: KIT.appUrl }, paths: ['pending'] },
   // An editor effect's job has no record, and so no short id, until it runs: its full id with kind output names it.

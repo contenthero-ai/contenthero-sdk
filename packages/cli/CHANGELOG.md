@@ -7,9 +7,11 @@
   brings a file (free) or a video page on a supported site (spends) into the library; `--pptx <url>` or
   `--canva <id>` makes a new canvas project (with `--title`, `--card`). `--cost` prints what either would spend and
   runs nothing.
-- `content analyze --kind video` downloads a tracked post's video into its shared analysis copy (never your library),
-  charged for what the download moved, prints its cut list once stored, and waits while it downloads (exit 4 when
-  still downloading; `--no-wait` returns at once). `--cost` prices it.
+- `content analyze --kind video` downloads every video a tracked post holds, its one video or each video slide of a
+  carousel, into shared analysis copies (never your library), charged for what the downloads moved, prints each
+  video (by slide for a carousel) with its state and its cut list once stored, and waits while they download (exit 4
+  when still downloading; `--no-wait` returns at once). A post with no video says so: its images are already stored
+  and readable. `--cost` prices it.
 - `model get` prints the model's input limits (file sizes, reference lengths, and reference video plus output
   together).
 - `content analyze` waits through the SDK's one wait (`waitForStatus`) instead of a loop of its own, and exits 4 when

@@ -2,7 +2,7 @@
  * `contenthero content` / `tracked-account` - the research surface.
  *   content list                  tracked social posts, ranked by outlier score (by relevance with --search)
  *   content get <id>              one post in full, transcript optional
- *   content analyze <id>          Break It Down, the scenes (--kind scenes), or the post's video (--kind video)
+ *   content analyze <id>          Break It Down, the scenes (--kind scenes), or the post's videos (--kind video)
  *   tracked-account list          the social accounts this account tracks
  *   tracked-account get <id>      one account with its performance
  *
@@ -18,7 +18,7 @@
  * Reads only.
  */
 
-import { chargeSentence, describeAccountIdsNotFound, statusTarget, type Charge } from '@contenthero/sdk'
+import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describeContentVideo, statusTarget, type Charge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -298,9 +298,9 @@ export function registerContent(program: Command): void {
 
   content
     .command('analyze')
-    .description("Analyze a tracked post: Break It Down, its scenes with --kind scenes, or its video with --kind video (downloaded into the post's shared analysis copy with its cut list, never your library). Free when the result exists, otherwise it spends credits (see --cost)")
+    .description("Analyze a tracked post: Break It Down, its scenes with --kind scenes, or its videos with --kind video (every video the post holds, its one video or each video slide of a carousel, downloaded into shared analysis copies, each with its cut list once stored, never your library). Free when the result exists, otherwise it spends credits (see --cost)")
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
-    .option('--kind <kind>', "breakdown (default), scenes (the scene map and a frame of each scene, priced per minute of video), or video (the post's video in its shared analysis copy, with its cut list once stored, charged for what the download moved)")
+    .option('--kind <kind>', "breakdown (default), scenes (the scene map and a frame of each scene, priced per minute of video), or video (every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved)")
     .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
     .option('--no-wait', 'return at once instead of waiting for a running analysis')
     .option('--timeout <sec>', `how long to wait for a running analysis (default ${ANALYZE_TIMEOUT_SEC})`, toInt)
@@ -315,8 +315,8 @@ export function registerContent(program: Command): void {
         emit(est, ctx, (e: CostEstimate) =>
           kind === 'video'
             ? e.creditsEstimate === 0
-              ? "This post's video is already in its analysis copy or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
-              : `Downloading this post's video for analysis costs at most ${e.creditsEstimate} credits: the most its download may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`
+              ? "This post's videos are already in their analysis copies or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
+              : `Downloading this post's videos for analysis costs at most ${e.creditsEstimate} credits: the most the downloads may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`
             : kind === 'scenes'
               ? `Preparing this post's scenes costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`
               : `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`,
@@ -360,26 +360,22 @@ export function registerContent(program: Command): void {
     })
 }
 
-/** Where a post's shared analysis copy stands, its cut list once stored, and how to follow it while it downloads. */
+/** Where a post's videos stand, each with its cut list once stored, and how to follow them while they download. */
 export function contentVideoHuman(r: ContentVideoResult): string {
   const copy = r.copy
   const status =
     copy.status === 'ready'
-      ? "ready in the post's shared analysis copy, which the reading tools use. Nothing was added to your library."
+      ? "ready in the post's shared analysis copies, which the reading tools use. Nothing was added to your library."
       : copy.status === 'pending'
-        ? "still downloading into the post's shared analysis copy"
+        ? "still downloading into the post's shared analysis copies"
         : copy.status === 'failed'
-          ? `the download failed: ${copy.error}. Asking again tries once more.`
-          : `this post has no video to analyze: ${copy.reason}`
-  const cuts = r.cuts
-  const cutRow: Array<[string, string]> = cuts
-    ? [['Cuts (free)', cuts.boundaries.length ? `${cuts.boundaries.length} in ${cuts.durationSec.toFixed(1)}s, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}` : `none in ${cuts.durationSec.toFixed(1)}s`]]
-    : []
+          ? `a download failed: ${copy.error.trim().replace(/\.+$/, '')}. Asking again tries once more.`
+          : `this post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}`
   return keyValues([
     ['Post', displayId({ id: r.contentId, shortId: r.shortId })],
     ...linkRow(r),
-    ['Video', status],
-    ...cutRow,
+    ['Status', status],
+    ...r.videos.map((v): [string, string] => [contentVideoLabel(v), describeContentVideo(v)]),
     ...costRows(r.charge),
     ...(copy.status === 'pending'
       ? [['Next', `contenthero content analyze ${r.shortId || r.contentId} --kind video (free)`] as [string, string]]

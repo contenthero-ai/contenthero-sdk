@@ -122,7 +122,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2533,8 +2533,8 @@ export function analysisCostResult(est: CostEstimate, kind: ContentAnalysisKind 
   if (kind === 'video') {
     return text(
       est.creditsEstimate === 0
-        ? "This post's video is already in its analysis copy or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
-        : `Downloading this post's video for analysis costs at most ${credits}: the most its download may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`,
+        ? "This post's videos are already in their analysis copies or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
+        : `Downloading this post's videos for analysis costs at most ${credits}: the most the downloads may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`,
     )
   }
   if (kind === 'scenes') {
@@ -2566,35 +2566,32 @@ export function contentScenesResult(r: ContentScenesResult): CallToolResult {
 }
 
 /**
- * analyze_content's answer for kind video: where the post's shared analysis copy stands, with its cut list once
- * stored. A copy still downloading is followed by asking again with kind video, which is free, since a post's copy has
- * no job of its own for get_status to read.
+ * analyze_content's answer for kind video: where the post's videos stand (its one video, or each video slide of a
+ * carousel), each with its cut list once stored. A copy still downloading is followed by asking again with kind
+ * video, which is free, since a post's copies have no job of their own for get_status to read.
  */
 export function contentVideoResult(r: ContentVideoResult): CallToolResult {
   const post = jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })
   const again = `analyze_content { contentId: "${r.shortId || r.contentId}", kind: "video" }`
   const copy = r.copy
+  const many = r.videos.length > 1
+  const its = many ? `Its ${r.videos.length} videos are` : 'Its video is'
   const body =
     copy.status === 'ready'
-      ? "Its video is ready in the post's shared analysis copy, which the reading tools use. Nothing was added to your library."
+      ? `${its} ready in the post's shared analysis copies, which the reading tools use. Nothing was added to your library.`
       : copy.status === 'pending'
-        ? `Its video is still downloading into the post's shared analysis copy. Follow it with ${again} again, which is free.`
+        ? `${its} still downloading into the post's shared analysis copies. Follow them with ${again} again, which is free.`
         : copy.status === 'failed'
-          ? `The download failed: ${copy.error}. Asking again tries once more.`
-          : `This post has no video to analyze: ${copy.reason}.`
-  const cuts = r.cuts
-  const cutLine = cuts
-    ? cuts.boundaries.length
-      ? `Cut list (free): ${cuts.boundaries.length} cut${cuts.boundaries.length === 1 ? '' : 's'} in ${cuts.durationSec.toFixed(1)}s, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}.`
-      : `Cut list (free): no cuts in ${cuts.durationSec.toFixed(1)}s.`
-    : null
+          ? `A download failed: ${copy.error.trim().replace(/\.+$/, '')}. Asking again tries once more.`
+          : `This post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}.`
+  const videoLines = r.videos.map((v) => `${contentVideoLabel(v)}: ${describeContentVideo(v)}`)
   return {
-    content: [{ type: 'text', text: lines([`Post ${post}`, body, cutLine, chargeLine(r.charge)]) }],
+    content: [{ type: 'text', text: lines([`Post ${post}`, body, ...videoLines, chargeLine(r.charge)]) }],
     structuredContent: {
       contentId: r.contentId,
       appUrl: r.appUrl ?? null,
       status: copy.status,
-      ...(cuts ? { cuts } : {}),
+      videos: r.videos,
       ...chargeData(r.charge),
     },
   }

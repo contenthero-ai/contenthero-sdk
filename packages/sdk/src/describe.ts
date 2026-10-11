@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, ApplyEditorOpsResult, Charge, CodeDiagnostic, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
+import type { AccountIdNotFound, ApplyEditorOpsResult, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -356,4 +356,34 @@ export function describeFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+/** Which video of a post this is: the post's one video, or a carousel slide counted from 1. */
+export function contentVideoLabel(video: ContentVideo): string {
+  return video.slide === undefined ? 'Video' : `Slide ${video.slide + 1}`
+}
+
+/** A video's cut list, free: how many cuts in how long, and where. */
+export function describeContentVideoCuts(cuts: ContentVideoCuts): string {
+  const length = `${cuts.durationSec.toFixed(1)}s`
+  if (!cuts.boundaries.length) return `cut list (free): no cuts in ${length}`
+  const n = cuts.boundaries.length
+  return `cut list (free): ${n} cut${n === 1 ? '' : 's'} in ${length}, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}`
+}
+
+/**
+ * One video of `analyzeContent` kind `video`: where its copy stands and, once stored, its cut list, as one sentence
+ * that every surface prints after `contentVideoLabel`.
+ */
+export function describeContentVideo(video: ContentVideo): string {
+  const c = video.copy
+  const state =
+    c.status === 'ready'
+      ? 'ready'
+      : c.status === 'pending'
+        ? 'still downloading'
+        : c.status === 'failed'
+          ? `the download failed: ${c.error.trim().replace(/\.+$/, '')}`
+          : `unavailable: ${c.reason.trim().replace(/\.+$/, '')}`
+  return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}.`
 }

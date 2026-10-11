@@ -2847,8 +2847,8 @@ export interface ContentScene {
 export type ContentAnalysisKind = 'breakdown' | 'scenes' | 'video'
 
 /**
- * Where a tracked post's shared analysis copy stands: `ready` to read, `pending` while it downloads (ask again with
- * kind `video` to follow it, free), `failed` with why, `unavailable` with why the post has no video to copy.
+ * Where a post's video copy stands: `ready` to read, `pending` while it downloads (ask again with kind `video` to
+ * follow it, free), `failed` with why, `unavailable` with why there is no video to copy.
  */
 export type ContentVideoCopy =
   | { status: 'ready' }
@@ -2856,16 +2856,27 @@ export type ContentVideoCopy =
   | { status: 'failed'; error: string }
   | { status: 'unavailable'; reason: string }
 
-/** Where a post's video changes scene: each boundary in seconds, its strength, and the length measured. */
+/** Where a video changes scene: each boundary in seconds, its strength, and the length measured. */
 export interface ContentVideoCuts {
   boundaries: number[]
   scores: number[]
   durationSec: number
 }
 
+/** One video a post holds, in its own shared analysis copy. */
+export interface ContentVideo {
+  /** The carousel slide it is, by 0-based slide order. Absent for a post's one video (a reel, a YouTube video). */
+  slide?: number
+  copy: ContentVideoCopy
+  /** Its cut list, free, once its copy is stored. Absent while it downloads, or when it could not be measured yet. */
+  cuts?: ContentVideoCuts
+}
+
 /**
- * Result of `analyzeContent` with `kind: 'video'`: the post's video in its shared, platform-owned analysis copy, which
- * the reading tools use. Nothing lands in the caller's library and nothing counts against their storage.
+ * Result of `analyzeContent` with `kind: 'video'`: every video the post holds (its one video, or each video slide of a
+ * carousel), each in its own shared, platform-owned analysis copy, which the reading tools use. Nothing lands in the
+ * caller's library and nothing counts against their storage. A post with no video is refused with why (its images
+ * are already stored and readable).
  */
 export interface ContentVideoResult {
   contentId: string
@@ -2873,10 +2884,11 @@ export interface ContentVideoResult {
   shortId: string
   appUrl: string
   kind: 'video'
+  /** Where the post's videos stand together. */
   copy: ContentVideoCopy
-  /** The cut list, free, once the copy is stored. Absent while it downloads, or when it could not be measured yet. */
-  cuts?: ContentVideoCuts
-  /** What it cost: held on the most the download may move, charged for what arrived. */
+  /** Each video, in slide order. */
+  videos: ContentVideo[]
+  /** What it cost: held on the most the downloads may move, charged for what arrived. */
   charge: Charge
 }
 

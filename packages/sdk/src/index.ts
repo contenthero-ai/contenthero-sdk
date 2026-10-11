@@ -218,6 +218,7 @@ export type {
   ContentScenes,
   ContentScenesResult,
   ContentVideoResult,
+  ContentVideo,
   ContentVideoCopy,
   ContentVideoCuts,
   ContentScenesDetail,
@@ -324,4 +325,4 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings, withExportLoudness } from './describe.js'
+export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, withCodeWarnings, withExportLoudness } from './describe.js'

@@ -1659,12 +1659,14 @@ export class ContentHero {
    * stored, safe to call again while it runs: wait for it with `getStatus` (kind `'scenes'`, the post's id). A post
    * with no video is refused with the reason.
    *
-   * `kind: 'video'` downloads the post's video into its shared, platform-owned analysis copy, which the reading tools
-   * use (frames, sound, the transcript). Nothing lands in the caller's library and nothing counts against their
-   * storage. A copy that exists answers `ready` at no charge, with its cut list (where the video changes scene,
-   * measured once and free); one being made answers `pending`, also free; otherwise the most the download may cost is
-   * held and the copy starts, charged for what arrived. Call this again with the same kind to follow a pending copy,
-   * which is free (`getStatus` has no kind for it). A post with no video is refused with the reason.
+   * `kind: 'video'` downloads every video the post holds, its one video or each video slide of a carousel, into
+   * shared, platform-owned analysis copies, which the reading tools use (frames, sound, the transcript). Nothing lands
+   * in the caller's library and nothing counts against their storage. `videos` lists each, in slide order: stored
+   * copies answer `ready` at no charge, each with its cut list (where it changes scene, measured once and free); ones
+   * being made answer `pending`, also free; otherwise the most the downloads may cost is held and the missing copies
+   * start, charged for what arrived. Call this again with the same kind to follow a pending copy, which is free
+   * (`getStatus` has no kind for it). A post with no video is refused with the reason: its images are already stored
+   * and readable.
    */
   async analyzeContent(contentId: string, options?: { kind?: 'breakdown' }): Promise<ContentAnalysisResult>
   async analyzeContent(contentId: string, options: { kind: 'scenes' }): Promise<ContentScenesResult>
@@ -1686,7 +1688,7 @@ export class ContentHero {
 
   /**
    * What `analyzeContent` would charge for this post and kind: 0 when the result already exists (or, for `video`, is
-   * being made). For `video` it is the most the download may cost; it is charged for what arrives. Runs nothing.
+   * being made). For `video` it is the most the downloads may cost; it is charged for what arrives. Runs nothing.
    */
   async estimateAnalysisCost(contentId: string, options: { kind?: ContentAnalysisKind } = {}): Promise<CostEstimate> {
     return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
