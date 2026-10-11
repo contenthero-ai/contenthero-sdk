@@ -2888,7 +2888,7 @@ export interface ContentVideos {
 }
 
 /**
- * Whether a post's scenes (its scene map and a frame per scene) exist. `complete` when stored, `running` while
+ * Whether a post's scenes (its scene map) exist. `complete` when stored, `running` while
  * being prepared, `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
  * them (`reason` says why: no video, or longer than the 4-hour limit), `absent` when none was asked for.
  */
@@ -2899,7 +2899,7 @@ export type ContentScenes =
   | { status: 'unavailable'; reason: string }
   | { status: 'absent' }
 
-/** A post's scenes, when `getContent` was asked for them with `scenes: 'map'` or `'frames'`. */
+/** A post's scenes, when `getContent` was asked for them with `scenes: 'map'`. */
 export interface ContentScenesDetail {
   /** What the whole post shows, in a sentence or two. */
   summary: string | null
@@ -2916,7 +2916,10 @@ export interface ContentScenesDetail {
   scenes: ContentScene[]
 }
 
-/** One scene: its range, what happens in it, what is said, and its frame when one is stored. */
+/**
+ * One scene: its range, what happens in it, and what is said. Descriptions only: see a scene's frames with `view`
+ * (`contentId`, and `atSec` at its start or anywhere in its range).
+ */
 export interface ContentScene {
   index: number
   startMs: number
@@ -2924,7 +2927,6 @@ export interface ContentScene {
   description: string
   /** What is said in this scene, joined; null without a timed transcript (see `saidTiming`). */
   said: string | null
-  frameUrl?: string
 }
 
 /** What `analyzeContent` makes: `breakdown` (the default), `scenes`, or `video` (the post's video for analysis). */
@@ -3092,10 +3094,10 @@ export interface GetContentOptions {
   analysisSections?: string[]
   /**
    * The post's scenes (made by `analyzeContent` kind `scenes`). `none` (default) reports availability; `map` adds
-   * each scene's range, what happens, what is said and its frame's url; `frames` is the same data for a caller
-   * that will show the frames. `startMs`/`endMs` narrow the scenes (and then do not imply transcript segments).
+   * each scene's range, what happens and what is said. Scenes are descriptions only: a scene's frames come from
+   * `view`. `startMs`/`endMs` narrow the scenes (and then do not imply transcript segments).
    */
-  scenes?: 'none' | 'map' | 'frames'
+  scenes?: 'none' | 'map'
   /**
    * Add each downloaded video's cut list (`ContentDetail.video`): the seconds where its picture changes, measured once
    * and free. `startMs`/`endMs` narrow the lists (and then do not imply transcript segments). Each video's state is

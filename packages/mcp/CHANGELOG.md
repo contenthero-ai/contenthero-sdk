@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Breaking: a post's scenes are descriptions only. `get_content` `scenes` takes `'none'` or `'map'`; `'frames'` is
+  gone, with its inlined frame images. The map shows each scene's range, what happens and what is said, and names
+  `view` (`contentId`, `atSec` in the scene's range) for its frames. `analyze_content` kind `scenes` maps the post's
+  scenes: each one's range, what happens and what is said in it.
 - Breaking (hard cutover, no alias): the tool `export_project` is `export`, the counterpart of `import`: a project
   into a file. Its inputs and answers are unchanged; its title is Export.
 - `transcribe` takes a tracked post's video: `contentId` (and `slide` for a carousel's video) instead of `audioUrl`,

@@ -4231,7 +4231,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Tracked Content',
       annotations: READ,
       description:
-        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said, or scenes='frames' to also see a frame of each scene. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
+        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said. Scenes are descriptions only: see a scene's frames with view, by contentId and atSec in its range. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         transcript: z
@@ -4253,9 +4253,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Only these analysis sections. The names differ by format, so take them from the availability line.'),
         scenes: z
-          .enum(['none', 'map', 'frames'])
+          .enum(['none', 'map'])
           .optional()
-          .describe("How much of the post's scene map to include. Default 'none' (availability still reports). 'frames' adds an image of each scene, as many as fit this result; the rest are listed as links."),
+          .describe("How much of the post's scene map to include. Default 'none' (availability still reports). 'map' adds each scene's range, what happens and what is said; view shows its frames."),
         cuts: z.boolean().optional().describe("Add each downloaded video's cut list: the seconds where its picture changes, measured once and free. startMs and endMs narrow the lists."),
       },
     },
@@ -4263,14 +4263,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         const { contentId, ...options } = args
-        const post = await client.getContent(contentId, options)
-        // Frames are small agent-sized images, inlined in scene order within the result's one byte budget.
-        const detail = post.scenes?.status === 'complete' ? post.scenes.detail : undefined
-        const frames =
-          args.scenes === 'frames' && detail
-            ? await inlineImagesWithinBudget(detail.scenes.map((sc) => ({ url: sc.frameUrl ?? null })))
-            : []
-        return inspirationContentResult(post, frames)
+        return inspirationContentResult(await client.getContent(contentId, options))
       } catch (err) {
         return errorResult(err)
       }
@@ -4285,13 +4278,13 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
       description:
-        "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. video downloads every video the post holds, its one video or each video slide of a carousel, into shared analysis copies, which the reading tools use; nothing lands in your library or counts against your storage. Once stored, each video answers with its cut list, where it changes scene, free. A post with no video says so: its images are already stored and readable. Viewing an existing result is free; creating one spends credits (video is charged for what its downloads moved, holding the most they may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
+        "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes maps the post's scenes: each one's range, what happens and what is said in it; see a scene's frames with view. video downloads every video the post holds, its one video or each video slide of a carousel, into shared analysis copies, which the reading tools use; nothing lands in your library or counts against your storage. Once stored, each video answers with its cut list, where it changes scene, free. A post with no video says so: its images are already stored and readable. Viewing an existing result is free; creating one spends credits (video is charged for what its downloads moved, holding the most they may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         kind: z
           .enum(['breakdown', 'scenes', 'video'])
           .optional()
-          .describe("breakdown (default): the Break It Down analysis. scenes: the scene map and a frame of each scene, priced per minute of video. video: every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved."),
+          .describe("breakdown (default): the Break It Down analysis. scenes: the scene map, each scene's range, what happens and what is said, priced per minute of video. video: every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved."),
         getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists, or for video when its copies are being made.'),
       },
     },

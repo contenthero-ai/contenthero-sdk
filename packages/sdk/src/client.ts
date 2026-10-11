@@ -1691,8 +1691,8 @@ export class ContentHero {
    * post and returns the analysis once it is stored, which is when the credits are charged, once. Price it first
    * with `estimateAnalysisCost`.
    *
-   * `kind: 'scenes'` prepares the post to be seen instead: its scene map and a frame per scene, read afterwards
-   * with `getContent`, priced per started minute of video. Same rules: free when it exists, charged once when
+   * `kind: 'scenes'` maps the post's scenes instead: each one's range, what happens and what is said in it, read
+   * afterwards with `getContent` (a scene's frames come from `view`), priced per started minute of video. Same rules: free when it exists, charged once when
    * stored, safe to call again while it runs: wait for it with `getStatus` (kind `'scenes'`, the post's id). A post
    * with no video is refused with the reason.
    *

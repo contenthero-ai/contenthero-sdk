@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Breaking: a post's scenes are descriptions only. `GetContentOptions.scenes` is `'none' | 'map'`; `'frames'` is
+  gone, and the API refuses it (400) with the step that replaces it. `ContentScene` loses `frameUrl`: each scene is its
+  range, what happens and what is said. See a scene's frames with `view` (`contentId`, and `atSec` at its start or
+  anywhere in its range). `analyzeContent` kind `scenes` maps the post's scenes and stores no frames.
 - `transcribe` takes a tracked post: `contentId` (and `slide`, a carousel's 0-based video slide) instead of
   `audioUrl`, once `analyzeContent` kind `video` has downloaded its video. It is transcribed word by word: the post's
   one video becomes its live transcript, which `getContent` then reads word-timed; a carousel slide's stays with that

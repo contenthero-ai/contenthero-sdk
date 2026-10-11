@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking: a post's scenes are descriptions only. `content get --scenes` takes `map`; `frames` is refused with the
+  step that replaces it, and the map prints no frame urls. It names `contenthero view --content-id <id> --at-sec
+  <seconds>` for a scene's frames. `content analyze --kind scenes` maps the post's scenes.
 - Breaking (hard cutover, no hidden alias): `project export <projectId>` is the top-level `contenthero export
   <projectId>`, the counterpart of `contenthero import`, named after the MCP's `export`. Its options are unchanged;
   `project export get` and `project export list` are `export get` and `export list`.

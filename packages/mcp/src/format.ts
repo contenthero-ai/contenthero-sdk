@@ -2461,10 +2461,10 @@ function transcriptLines(t: NonNullable<ContentDetail['transcript']>): string[] 
 }
 
 /** One tracked post in full, with its transcript when it was asked for. */
-export function inspirationContentResult(c: ContentDetail, frames: InlinedImageSlot[] = []): CallToolResult {
+export function inspirationContentResult(c: ContentDetail): CallToolResult {
   const stats = `${compactNum(c.viewCount)} views, ${compactNum(c.likeCount)} likes, ${compactNum(c.commentCount)} comments`
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
-  const body = text(
+  return text(
     lines([
       `${c.title ?? '(untitled)'} (${idOf(c)})${c.isOwn ? ' [yours]' : ''}`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
@@ -2475,19 +2475,10 @@ export function inspirationContentResult(c: ContentDetail, frames: InlinedImageS
       c.description ? `description: ${c.description}` : null,
       ...(c.transcript ? transcriptLines(c.transcript) : []),
       ...analysisLines(c.id, c.analysis),
-      ...scenesLines(c.id, c.scenes, frames),
+      ...scenesLines(c.id, c.scenes, c.shortId || c.id),
       ...postVideoLines(c.video),
     ]),
   )
-  // Each shown frame follows its label, so the picture and the scene it belongs to cannot be mismatched.
-  const detail = c.scenes?.status === 'complete' ? c.scenes.detail : undefined
-  frames.forEach((slot, i) => {
-    const scene = detail?.scenes[i]
-    if (!slot?.image || !scene) return
-    body.content.push({ type: 'text', text: `scene ${scene.index + 1} frame (${seconds(scene.startMs)} to ${seconds(scene.endMs)}):` })
-    body.content.push({ type: 'image', data: slot.image.data, mimeType: slot.image.mimeType })
-  })
-  return body
 }
 
 function seconds(ms: number): string {
@@ -2515,32 +2506,28 @@ function postVideoLines(video: ContentDetail['video']): string[] {
 }
 
 /**
- * The scenes availability line, always, and the scene map when it was asked for. A frame that was shown says so; one
- * that did not fit this result is given as its link, with the reason, so nothing is silently missing.
+ * The scenes availability line, always, and the scene map when it was asked for: each scene's range, what happens and
+ * what is said. Scenes are descriptions only, so the map says once how to see a scene's frames: view, at a second in
+ * its range.
  */
-function scenesLines(contentId: string, scenes: ContentDetail['scenes'], frames: InlinedImageSlot[]): Array<string | null> {
+function scenesLines(contentId: string, scenes: ContentDetail['scenes'], name: string): Array<string | null> {
   if (!scenes) return []
   if (scenes.status === 'running') return [`scenes: running (${analysisWait({ contentId }, 'scenes')})`]
   if (scenes.status === 'failed') return [`scenes: failed (${scenes.error}); analyze_content with kind scenes tries them again`]
   if (scenes.status === 'unavailable') return [`scenes: unavailable (${scenes.reason})`]
   if (scenes.status !== 'complete') return ['scenes: absent (analyze_content with kind scenes prepares them)']
   const detail = scenes.detail
-  if (!detail) return [`scenes: complete (${scenes.sceneCount}; pass scenes='map' or 'frames' to read them)`]
+  if (!detail) return [`scenes: complete (${scenes.sceneCount}; pass scenes='map' to read them)`]
   const out: Array<string | null> = [
     `scenes: complete (${scenes.sceneCount}${detail.windowed ? `, ${detail.scenes.length} in this window` : ''})`,
     detail.summary ? `scenes.summary: ${detail.summary}` : null,
     detail.timedTranscript ? null : 'scenes.said: this post has no timed transcript, so what is said in each scene is unknown',
+    detail.scenes.length ? `scenes.frames: see a scene with view { contentId: ${JSON.stringify(name)}, atSec } at a second in its range` : null,
   ]
-  detail.scenes.forEach((sc, i) => {
-    const slot = frames[i]
-    const frame = slot?.image
-      ? 'frame: shown below'
-      : sc.frameUrl
-        ? `frame: ${sc.frameUrl}${slot?.skipped ? ` (not shown: ${slot.skipped})` : ''}`
-        : 'frame: none'
+  for (const sc of detail.scenes) {
     const said = sc.said === null ? null : `said: ${sc.said ? JSON.stringify(sc.said) : '(nothing)'}`
-    out.push(`scene ${sc.index + 1} [${seconds(sc.startMs)} to ${seconds(sc.endMs)}] ${sc.description}${said ? ` | ${said}` : ''} | ${frame}`)
-  })
+    out.push(`scene ${sc.index + 1} [${seconds(sc.startMs)} to ${seconds(sc.endMs)}] ${sc.description}${said ? ` | ${said}` : ''}`)
+  }
   return out
 }
 
@@ -2607,7 +2594,7 @@ export function contentScenesResult(r: ContentScenesResult): CallToolResult {
   const body = running
     ? `scenes: pending, still being prepared (${analysisWait(r, 'scenes')})`
     : r.scenes.status === 'complete'
-      ? `${r.scenes.sceneCount} scene${r.scenes.sceneCount === 1 ? '' : 's'} ready. Read them with get_content scenes='map', or scenes='frames' to see them.`
+      ? `${r.scenes.sceneCount} scene${r.scenes.sceneCount === 1 ? '' : 's'} ready. Read them with get_content scenes='map', and see a scene's frames with view.`
       : `scenes: ${r.scenes.status}`
   return {
     content: [{ type: 'text', text: lines([`Scenes for post ${jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })}`, body, chargeLine(r.charge)]) }],

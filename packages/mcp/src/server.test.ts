@@ -2632,11 +2632,11 @@ test('analyze_content kind scenes prices by kind, waits through get_status as sc
   const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes' } })
   assert.deepEqual(seen.analyze, { kind: 'scenes' })
   assert.deepEqual(seen.waited, [{ id: 'c1', kind: 'scenes' }])
-  assert.match(res.content[0].text, /7 scenes ready\. Read them with get_content scenes='map'/)
+  assert.match(res.content[0].text, /7 scenes ready\. Read them with get_content scenes='map', and see a scene's frames with view\./)
   assert.equal(res.structuredContent.status, 'complete')
 })
 
-test('get_content scenes: the map always names each scene, frames are shown inline, and one that does not load is a link', async () => {
+test('get_content scenes: the map names each scene in words, points to view for its frames, and frames is refused', async () => {
   const scenes = {
     status: 'complete',
     sceneCount: 2,
@@ -2645,40 +2645,32 @@ test('get_content scenes: the map always names each scene, frames are shown inli
       timedTranscript: true,
       windowed: false,
       scenes: [
-        { index: 0, startMs: 0, endMs: 3000, description: 'box on a desk', said: 'Look at this.', frameUrl: 'https://media.contenthero.ai/a1/scenes/1500.webp' },
-        { index: 1, startMs: 3000, endMs: 8000, description: 'phone lifted out', said: '', frameUrl: 'https://media.contenthero.ai/a1/scenes/5500.webp' },
+        { index: 0, startMs: 0, endMs: 3000, description: 'box on a desk', said: 'Look at this.' },
+        { index: 1, startMs: 3000, endMs: 8000, description: 'phone lifted out', said: '' },
       ],
     },
   }
   let asked
-  const origFetch = globalThis.fetch
-  globalThis.fetch = (async (input) =>
-    String(input).includes('5500')
-      ? new Response('gone', { status: 404 })
-      : new Response(new Uint8Array([1, 2, 3, 4]), { headers: { 'content-type': 'image/webp' } })) as typeof fetch
-  try {
-    const mcp = await connect(
-      fakeClient({
-        getContent: async (_id, opts) => ((asked = opts), { title: 'Unboxing', hashtags: [], analysis: { status: 'absent' }, scenes }),
-      }),
-    )
-    const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', scenes: 'frames', startMs: 0 } })
-    assert.deepEqual(asked, { scenes: 'frames', startMs: 0 })
-    const body = res.content[0].text
-    assert.match(body, /scenes: complete \(2\)/)
-    assert.match(body, /scene 1 \[0\.0s to 3\.0s\] box on a desk \| said: "Look at this\." \| frame: shown below/)
-    assert.match(body, /scene 2 \[3\.0s to 8\.0s\] phone lifted out \| said: \(nothing\) \| frame: https:\/\/media\.contenthero\.ai\/a1\/scenes\/5500\.webp \(not shown/)
-    const images = res.content.filter((c) => c.type === 'image')
-    assert.equal(images.length, 1)
-    assert.match(res.content[1].text, /scene 1 frame/)
+  const mcp = await connect(
+    fakeClient({
+      getContent: async (_id, opts) => ((asked = opts), { id: 'c1', shortId: 'Pc4tSc3n', title: 'Unboxing', hashtags: [], analysis: { status: 'absent' }, scenes }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', scenes: 'map', startMs: 0 } })
+  assert.deepEqual(asked, { scenes: 'map', startMs: 0 })
+  assert.equal(res.content.length, 1)
+  const body = res.content[0].text
+  assert.match(body, /scenes: complete \(2\)/)
+  assert.match(body, /scenes\.frames: see a scene with view \{ contentId: "Pc4tSc3n", atSec \} at a second in its range/)
+  assert.match(body, /scene 1 \[0\.0s to 3\.0s\] box on a desk \| said: "Look at this\."$/m)
+  assert.match(body, /scene 2 \[3\.0s to 8\.0s\] phone lifted out \| said: \(nothing\)$/m)
+  assert.doesNotMatch(body, /frame:/)
 
-    // 'map' names the same scenes and shows no images.
-    const map = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', scenes: 'map' } })
-    assert.equal(map.content.filter((c) => c.type === 'image').length, 0)
-    assert.match(map.content[0].text, /frame: https:\/\/media\.contenthero\.ai\/a1\/scenes\/1500\.webp/)
-  } finally {
-    globalThis.fetch = origFetch
-  }
+  // 'frames' is no longer a value: the schema refuses it before the API is asked.
+  asked = undefined
+  const frames = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', scenes: 'frames' } })
+  assert.equal(frames.isError, true)
+  assert.equal(asked, undefined)
 })
 
 test('get_content without scenes reports only whether they exist', async () => {
@@ -2686,7 +2678,7 @@ test('get_content without scenes reports only whether they exist', async () => {
     fakeClient({ getContent: async () => ({ title: 'x', hashtags: [], analysis: { status: 'absent' }, scenes: { status: 'complete', sceneCount: 4 } }) }),
   )
   const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
-  assert.match(res.content[0].text, /scenes: complete \(4; pass scenes='map' or 'frames' to read them\)/)
+  assert.match(res.content[0].text, /scenes: complete \(4; pass scenes='map' to read them\)/)
 })
 
 /**

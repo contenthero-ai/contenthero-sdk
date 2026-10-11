@@ -231,14 +231,17 @@ export function registerContent(program: Command): void {
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
     .option('--analysis', 'include the full Break It Down analysis (availability always reports)')
     .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)', toList)
-    .option('--scenes <grain>', "the post's scenes: map, or frames (the same map with each scene's frame url); --start-ms/--end-ms narrow them")
+    .option('--scenes <grain>', "the post's scenes: map, each scene's range, what happens and what is said (view --content-id --at-sec shows its frames); --start-ms/--end-ms narrow them")
     .option('--cuts', "add each downloaded video's cut list: the seconds where its picture changes, measured once and free; --start-ms/--end-ms narrow the lists")
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const scenes = opts.scenes as string | undefined
-      if (scenes != null && !['none', 'map', 'frames'].includes(scenes)) {
-        throw new CliError(`Invalid --scenes "${scenes}". Expected one of: none, map, frames.`, EXIT.USAGE)
+      if (scenes === 'frames') {
+        throw new CliError("Scenes are descriptions only: use --scenes map, and see a scene's frames with view --content-id <id> --at-sec <seconds in its range>.", EXIT.USAGE)
       }
-      const wantsScenes = scenes === 'map' || scenes === 'frames'
+      if (scenes != null && !['none', 'map'].includes(scenes)) {
+        throw new CliError(`Invalid --scenes "${scenes}". Expected one of: none, map.`, EXIT.USAGE)
+      }
+      const wantsScenes = scenes === 'map'
       // `--transcript` with no value means "yes"; a window or a search implies segments, since neither can
       // be honored against flat text. With --scenes or --cuts, a window narrows those instead.
       const raw = opts.transcript
@@ -261,7 +264,7 @@ export function registerContent(program: Command): void {
         transcriptSearch: opts.transcriptSearch as string | undefined,
         analysis: opts.analysis ? 'full' : undefined,
         analysisSections: opts.analysisSections as string[] | undefined,
-        scenes: wantsScenes ? (scenes as 'map' | 'frames') : undefined,
+        scenes: wantsScenes ? 'map' : undefined,
         cuts: opts.cuts ? true : undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
@@ -304,7 +307,7 @@ export function registerContent(program: Command): void {
     .command('analyze')
     .description("Analyze a tracked post: Break It Down, its scenes with --kind scenes, or its videos with --kind video (every video the post holds, its one video or each video slide of a carousel, downloaded into shared analysis copies, each with its cut list once stored, never your library). Free when the result exists, otherwise it spends credits (see --cost)")
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
-    .option('--kind <kind>', "breakdown (default), scenes (the scene map and a frame of each scene, priced per minute of video), or video (every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved)")
+    .option('--kind <kind>', "breakdown (default), scenes (the scene map, each scene's range, what happens and what is said, priced per minute of video), or video (every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved)")
     .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
     .option('--no-wait', 'return at once instead of waiting for a running analysis')
     .option('--timeout <sec>', `how long to wait for a running analysis (default ${ANALYZE_TIMEOUT_SEC})`, toInt)
@@ -417,12 +420,12 @@ function postVideosText(video: ContentVideos): string {
   return [head, ...video.videos.map((v) => `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`)].join('\n')
 }
 
-/** A post's scenes: whether they exist, and how to read them. */
 /** A post an analysis answer is about: the id its job is followed by, and its page. */
 function postName(r: { contentId: string; shortId?: string; appUrl?: string }): string {
   return `${displayId({ id: r.contentId, shortId: r.shortId })}${r.appUrl ? ` (${r.appUrl})` : ''}`
 }
 
+/** A post's scenes: whether they exist, and how to read them. */
 function scenesText(sc: ContentScenes, post: { contentId: string; shortId?: string }): string {
   if (sc.status === 'running') {
     return `Scenes: running (wait with ${statusCommand([{ id: post.contentId, shortId: post.shortId, kind: 'scenes' }])}, then content analyze --kind scenes reads them at no charge)`
@@ -432,13 +435,14 @@ function scenesText(sc: ContentScenes, post: { contentId: string; shortId?: stri
     const head = `Scenes: ${sc.sceneCount}${d.windowed ? ` (${d.scenes.length} in this window)` : ''}`
     const rows = d.scenes.map((s) => {
       const said = s.said === null ? '' : `\n    said: ${s.said || '(nothing)'}`
-      return `  ${s.index + 1}. [${(s.startMs / 1000).toFixed(1)}s to ${(s.endMs / 1000).toFixed(1)}s] ${s.description}${said}${s.frameUrl ? `\n    frame: ${s.frameUrl}` : ''}`
+      return `  ${s.index + 1}. [${(s.startMs / 1000).toFixed(1)}s to ${(s.endMs / 1000).toFixed(1)}s] ${s.description}${said}`
     })
-    return [head, d.summary ? `  ${d.summary}` : null, d.timedTranscript ? null : '  (no timed transcript: what is said per scene is unknown)', ...rows]
+    const frames = d.scenes.length ? `  (see a scene's frames with contenthero view --content-id ${displayId({ id: post.contentId, shortId: post.shortId })} --at-sec <seconds in its range>)` : null
+    return [head, d.summary ? `  ${d.summary}` : null, d.timedTranscript ? null : '  (no timed transcript: what is said per scene is unknown)', frames, ...rows]
       .filter(Boolean)
       .join('\n')
   }
-  if (sc.status === 'complete') return `Scenes: ${sc.sceneCount} ready (read them with content get <id> --scenes map, or --scenes frames)`
+  if (sc.status === 'complete') return `Scenes: ${sc.sceneCount} ready (read them with content get <id> --scenes map)`
   if (sc.status === 'failed') return `Scenes: failed (${sc.error}); content analyze --kind scenes tries it again`
   if (sc.status === 'unavailable') return `Scenes: unavailable (${sc.reason})`
   return 'Scenes: absent (content analyze --kind scenes prepares them)'

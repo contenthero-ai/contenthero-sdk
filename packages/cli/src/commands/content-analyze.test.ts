@@ -44,6 +44,14 @@ before(async () => {
       res.end(JSON.stringify({
         id: POST.contentId, shortId: POST.shortId, title: 'Post', hashtags: [], analysis: { status: 'absent' },
         video: { copy: { status: 'ready' }, videos: [{ copy: { status: 'ready' }, cuts: { boundaries: [2.5], scores: [0.8], durationSec: 9 } }] },
+        ...(url.searchParams.get('scenes') === 'map'
+          ? {
+              scenes: {
+                status: 'complete', sceneCount: 1,
+                detail: { summary: null, timedTranscript: true, saidTiming: 'word', windowed: false, scenes: [{ index: 0, startMs: 0, endMs: 2500, description: 'box on a desk', said: 'Look.' }] },
+              },
+            }
+          : {}),
       }))
       return
     }
@@ -131,4 +139,25 @@ test('content get --cuts asks for the cut lists, and its window does not imply t
   assert.doesNotMatch(asked, /transcript=/)
   assert.match(out, /Videos: ready/)
   assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s\./)
+})
+
+/**
+ * Scenes are descriptions only: `content get --scenes map` prints each scene's range, what happens and what is said,
+ * and names view for its frames; `--scenes frames` is refused before anything is asked, with the step that replaces
+ * it. Break-verified: dropping the view line from scenesText turns the first red; accepting frames, the second.
+ */
+test('content get --scenes map prints the scenes in words and names view for frames; --scenes frames is refused', async () => {
+  requests.length = 0
+  const out = await printed(['content', 'get', POST.shortId, '--scenes', 'map'])
+  assert.match(requests.find((r) => r.startsWith(`GET /api/v1/content/${POST.shortId}`)) ?? '', /scenes=map/)
+  assert.match(out, /1\. \[0\.0s to 2\.5s\] box on a desk\n\s+said: Look\./)
+  assert.match(out, /see a scene's frames with contenthero view --content-id Pst12345 --at-sec <seconds in its range>/)
+  assert.doesNotMatch(out, /frame:/)
+
+  requests.length = 0
+  await assert.rejects(printed(['content', 'get', POST.shortId, '--scenes', 'frames']), (err: { stderr?: string }) => {
+    assert.match(String(err.stderr), /Scenes are descriptions only: use --scenes map, and see a scene's frames with view --content-id <id> --at-sec/)
+    return true
+  })
+  assert.equal(requests.length, 0)
 })

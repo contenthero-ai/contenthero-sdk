@@ -1231,9 +1231,9 @@ test('analyzeContent and its price check carry kind scenes when asked, and nothi
 test('getContent asks for scenes on the wire only when a grain is named', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: {} }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.getContent('c1', { scenes: 'frames', startMs: 2000 })
+  await client.getContent('c1', { scenes: 'map', startMs: 2000 })
   await client.getContent('c1', { scenes: 'none' })
-  assert.equal(new URL(calls[0]!.url).search, '?startMs=2000&scenes=frames')
+  assert.equal(new URL(calls[0]!.url).search, '?startMs=2000&scenes=map')
   assert.equal(new URL(calls[1]!.url).search, '')
 })
 
