@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.25
+
 - Breaking (hard cutover, no alias): one command `import` replaces `media import` and `project import`, named after
   the MCP's `import`, and always brings something into your own library or a new project. `contenthero import <url>`
   brings a file (free) or a video page on a supported site (spends) into the library; `--pptx <url>` or

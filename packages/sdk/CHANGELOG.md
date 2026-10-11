@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.28
+
 - New: `analyzeContent(contentId, { kind: 'video' })` downloads every video a tracked post holds, its one video or
   each video slide of a carousel, into shared, platform-owned analysis copies, which the reading tools use; nothing
   lands in the library or counts against storage. It answers where the videos stand together (`copy`: `ready`,
