@@ -307,6 +307,7 @@ test('the old command names are gone', () => {
     'generation-status',
     'project export-status',
     'project exports',
+    'project export',
     'project undo',
     'project redo',
     'project version copy',
@@ -320,7 +321,7 @@ test('the old command names are gone', () => {
   for (const group of ['schema', 'project transcript', 'project edit', 'post']) {
     assert.equal(isRunnable(find(group)!), false, `${group} runs on its own`)
   }
-  for (const current of ['view', 'status', 'project export', 'project export get', 'project export list', 'project transcript get', 'project edit undo', 'project edit redo', 'project version update', 'tag delete', 'post publish', 'schema get']) {
+  for (const current of ['view', 'status', 'export', 'export get', 'export list', 'project transcript get', 'project edit undo', 'project edit redo', 'project version update', 'tag delete', 'post publish', 'schema get']) {
     assert.ok(find(current) && isRunnable(find(current)!), current)
   }
 })

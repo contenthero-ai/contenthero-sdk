@@ -3,7 +3,7 @@
  *
  * ## The defect class this holds (found live 2026-10-10)
  *
- * `export_project`, when the export finished inside the call, answered with the delivered file and nothing that named
+ * `export`, when the export finished inside the call, answered with the delivered file and nothing that named
  * the export: an agent could not follow it up, link it or read it with `get_export`. The survey behind this test found
  * the same class wider: a still-running generation, import, edit or editor effect named its job by a full UUID in a
  * `get_status` call with no kind, which the status route refuses, and most pending answers dropped the job's link even
@@ -212,8 +212,8 @@ const CASES: Case[] = [
   { tool: 'import', args: { url: 'https://example.com/a.png' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'transcribe', args: { audioUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: TRANSCRIPT.shortId, appUrl: TRANSCRIPT.appUrl }, paths: ['finished'] },
   // The 2026-10-10 case: a picture or sound export that finished inside the call is drawn by the card, and still named.
-  { tool: 'export_project', args: { projectId: 'p1', format: 'mp4' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
-  { tool: 'export_project', args: { projectId: 'p1', format: 'srt' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished'] },
+  { tool: 'export', args: { projectId: 'p1', format: 'mp4' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
+  { tool: 'export', args: { projectId: 'p1', format: 'srt' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished'] },
   { tool: 'get_export', args: { exportId: EXPORT.shortId }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'analyze_content', args: { contentId: POST.shortId }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'analyze_content', args: { contentId: POST.shortId, kind: 'scenes' }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished', 'pending'] },

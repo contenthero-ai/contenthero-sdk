@@ -78,16 +78,17 @@ Exit code 4 means a render was accepted but did not finish before the timeout. T
 
 ## The rest of the surface
 
-Each command is named after the MCP tool it runs (`project export get` is `get_export`, `post publish` is
+Each command is named after the MCP tool it runs (`export get` is `get_export`, `post publish` is
 `publish_post`), so what an agent learns on one surface reads the same on the other.
 
 ```
 contenthero view               see what the user is looking at; render, hear or watch your work; see a raw clip
 contenthero project            list | get | create | update | duplicate | share | delete | apply
-                               | export | export get|list | transcript get | edit undo|redo
+                               | transcript get | edit undo|redo
                                | settings get|update | version list|save|restore|update|delete
 contenthero media              list | search | get | zoom | upload | share
 contenthero import             <url> | --pptx <url> | --canva <id>: bring a file, video page or deck in
+contenthero export             <projectId> | get | list: render a project into a file
 contenthero download           <id> [path]: write any file of yours, or an export, to disk (free)
 contenthero transcribe         [audioUrl] | --content-id <id> [--slide <n>]: speech to text
 contenthero status             <ids...> [--kind <kind>]: where any background job is

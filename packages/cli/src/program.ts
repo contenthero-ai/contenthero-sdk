@@ -26,6 +26,7 @@ import { registerDownload } from './commands/download.js'
 import { registerStatus } from './commands/status.js'
 import { registerMedia } from './commands/media.js'
 import { registerImport } from './commands/import.js'
+import { registerExport } from './commands/export.js'
 import { registerFolder } from './commands/folder.js'
 import { registerCard, registerPost } from './commands/card.js'
 import { registerStage } from './commands/stage.js'
@@ -83,6 +84,7 @@ export function buildProgram(): Command {
   registerStatus(program)
   registerMedia(program)
   registerImport(program)
+  registerExport(program)
   registerFolder(program)
   registerCard(program)
   registerPost(program)

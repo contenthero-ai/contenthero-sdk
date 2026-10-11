@@ -279,28 +279,28 @@ test('project update sends the settings named, on and off, to the project', asyn
 })
 
 /**
- * `project export` runs an export AND parents `get` and `list` (get_export, list_exports). Commander
+ * `export` runs an export AND parents `get` and `list` (get_export, list_exports). Commander
  * dispatches to a subcommand when the first operand names one, and otherwise runs the export with it as the project
  * id. Break-verified: renaming the `get` subcommand turns this red (the export then ran with `get` as its project id).
  */
-test('project export runs an export, and dispatches get and list to their own commands', async () => {
-  const started = await run('project', 'export', 'p1', '--format', 'mp4')
+test('export runs an export, and dispatches get and list to their own commands', async () => {
+  const started = await run('export', 'p1', '--format', 'mp4')
   assert.equal(`${started.method} ${started.path}`, 'POST /api/v1/projects/p1/export')
   assert.equal(started.body?.format, 'mp4')
-  const polled = await run('project', 'export', 'get', 'e1')
+  const polled = await run('export', 'get', 'e1')
   assert.equal(`${polled.method} ${polled.path}`, 'GET /api/v1/exports/e1')
-  const listed = await run('project', 'export', 'list', 'p1', '--limit', '5')
+  const listed = await run('export', 'list', 'p1', '--limit', '5')
   assert.equal(`${listed.method} ${listed.path}`, 'GET /api/v1/projects/p1/exports')
   assert.equal(listed.query.get('limit'), '5')
 })
 
-test("project export sends this export's loudness only when it is named", async () => {
-  const leveled = await run('project', 'export', 'p1', '--loudness', '-16')
+test("export sends this export's loudness only when it is named", async () => {
+  const leveled = await run('export', 'p1', '--loudness', '-16')
   assert.equal(`${leveled.method} ${leveled.path}`, 'POST /api/v1/projects/p1/export')
   assert.equal(leveled.body?.loudness, -16)
-  assert.equal((await run('project', 'export', 'p1', '--loudness', 'OFF')).body?.loudness, 'off')
-  assert.equal('loudness' in ((await run('project', 'export', 'p1')).body ?? {}), false)
-  await assert.rejects(run('project', 'export', 'p1', '--loudness', 'loud'), /Expected a loudness in LUFS or "off"/)
+  assert.equal((await run('export', 'p1', '--loudness', 'OFF')).body?.loudness, 'off')
+  assert.equal('loudness' in ((await run('export', 'p1')).body ?? {}), false)
+  await assert.rejects(run('export', 'p1', '--loudness', 'loud'), /Expected a loudness in LUFS or "off"/)
 })
 
 test('project version commands reach the version routes with the bodies the API reads', async () => {

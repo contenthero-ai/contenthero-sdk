@@ -3853,15 +3853,15 @@ test('analyze_content getCost for kind video prices the download', async () => {
   assert.deepEqual(asked, [['c1', { kind: 'video' }]])
 })
 
-test('export_project returns the download URL when it finishes in time', async () => {
+test('export returns the download URL when it finishes in time', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', format: 'mp4' } })
+  const res = await mcp.callTool({ name: 'export', arguments: { projectId: 'p1', format: 'mp4' } })
   assert.ok(!res.isError)
   assert.match((res.content[0]).text, /completed/)
   assert.match((res.content[0]).text, /out\.mp4/)
 })
 
-test("export_project passes this export's loudness through, and the result says how it came out", async () => {
+test("export passes this export's loudness through, and the result says how it came out", async () => {
   let asked
   const mcp = await connect(
     fakeClient({
@@ -3871,13 +3871,13 @@ test("export_project passes this export's loudness through, and the result says 
       ),
     }),
   )
-  const res = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', format: 'mp4', loudness: -16 } })
+  const res = await mcp.callTool({ name: 'export', arguments: { projectId: 'p1', format: 'mp4', loudness: -16 } })
   assert.deepEqual(asked, ['p1', { format: 'mp4', loudness: -16 }])
   assert.match(res.content[0].text, /Download: https:\/\/x\/out\.mp4\nLeveled to the project loudness\./)
-  const off = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', loudness: 'off' } })
+  const off = await mcp.callTool({ name: 'export', arguments: { projectId: 'p1', loudness: 'off' } })
   assert.ok(!off.isError)
   assert.deepEqual(asked, ['p1', { loudness: 'off' }])
-  const refused = await mcp.callTool({ name: 'export_project', arguments: { projectId: 'p1', loudness: 'loud' } })
+  const refused = await mcp.callTool({ name: 'export', arguments: { projectId: 'p1', loudness: 'loud' } })
   assert.ok(refused.isError)
 })
 

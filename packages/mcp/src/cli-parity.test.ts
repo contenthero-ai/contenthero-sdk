@@ -120,9 +120,9 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   list_projects: ['project list'],
   get_project: ['project get'],
   create_project: ['project create'],
-  export_project: ['project export'],
-  get_export: ['project export get'],
-  list_exports: ['project export list'],
+  export: ['export'],
+  get_export: ['export get'],
+  list_exports: ['export list'],
   delete_project: ['project delete'],
   get_transcript: ['project transcript get'],
   update_project: ['project update'],
@@ -244,7 +244,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   archive: { mediaId: '<id>', archived: '--off' },
   share: { mediaIds: '<ids>', id: '<ids>', shared: '--off', shareUrl: '--link' },
   get_project: { fromFrame: '--from', toFrame: '--to' },
-  export_project: { watermark: '--no-watermark' },
+  export: { watermark: '--no-watermark' },
   delete_project: { confirm: '--yes' },
   update_timeline: { userIntent: '--intent' },
   update_canvas: { userIntent: '--intent' },
@@ -288,7 +288,7 @@ async function mcpTools(): Promise<Map<string, string[]>> {
 function cliLeaves(): Map<string, Leaf> {
   const out = new Map<string, Leaf>()
   // A leaf is hidden when it, or any command above it, is left out of its parent's help. A leaf is any command that
-  // runs on its own, which includes one that also parents subcommands (`project export` and its `get` and `list`).
+  // runs on its own, which includes one that also parents subcommands (`export` and its `get` and `list`).
   const walk = (cmd: Command, path: string[], hidden: boolean) => {
     if (path.length && isRunnable(cmd)) {
       const flags = new Set<string>([

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking (hard cutover, no hidden alias): `project export <projectId>` is the top-level `contenthero export
+  <projectId>`, the counterpart of `contenthero import`, named after the MCP's `export`. Its options are unchanged;
+  `project export get` and `project export list` are `export get` and `export list`.
 - `transcribe --content-id <id>` transcribes a tracked post's video word by word once `content analyze --kind video`
   has downloaded it (`--slide <n>` for a carousel's video, 0-based); `--cost` prices it first. It waits while a long
   video runs by asking again, which is free (exit 4 when still running at the end of the wait; `--no-wait` returns at

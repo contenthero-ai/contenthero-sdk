@@ -74,8 +74,8 @@ function describe(cmd: Command, path: string): CommandSchema {
 }
 
 /**
- * Whether a command runs on its own: it has an action, or nothing under it. `project export <projectId>` is both a
- * command and the parent of `project export get` and `project export list`, so having subcommands does not make a
+ * Whether a command runs on its own: it has an action, or nothing under it. `export <projectId>` is both a
+ * command and the parent of `export get` and `export list`, so having subcommands does not make a
  * command a group. Commander keeps the action private; this is the one place that reads it.
  */
 export function isRunnable(cmd: Command): boolean {

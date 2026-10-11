@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Breaking (hard cutover, no alias): the tool `export_project` is `export`, the counterpart of `import`: a project
+  into a file. Its inputs and answers are unchanged; its title is Export.
 - `transcribe` takes a tracked post's video: `contentId` (and `slide` for a carousel's video) instead of `audioUrl`,
   once `analyze_content` kind `video` has downloaded it, transcribed word by word. `getCost` prices a post first; an
   audio file still cannot be priced in advance. The post's one video becomes its transcript, which `get_content` then

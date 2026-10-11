@@ -94,7 +94,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb: 'Projects, their timelines and canvases, the templates you place on them, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'update_project', 'duplicate_project', 'delete_project',
-      'export_project', 'get_export', 'list_exports',
+      'export', 'get_export', 'list_exports',
       'list_project_versions', 'create_project_version', 'restore_project_version', 'update_project_version',
       'delete_project_version', 'undo_project_edit', 'redo_project_edit',
       'update_timeline', 'update_canvas', 'get_transcript',
