@@ -31,7 +31,7 @@ import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
-import { collect, isClear, placementFrom, toInt, toJson, toList, withPageFlags, withPlacementFlags } from '../args.js'
+import { collect, isClear, placementFrom, toInt, toJson, toList, withPageFlags, withPlacementFlags, profileRef } from '../args.js'
 
 /**
  * Turn repeated `--logo` / `--asset` refs into the declarative media list the API takes.
@@ -64,12 +64,7 @@ function accountRefs(refs: string[] | undefined) {
   if (!refs?.length) return undefined
   return refs.map((raw) => {
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return raw
-    if (/^https?:\/\//i.test(raw)) return { handleOrUrl: raw }
-    const [platform, ...rest] = raw.split(':')
-    if (!rest.length) {
-      throw new CliError(`"${raw}" needs a platform: pass a profile url, or platform:handle.`, EXIT.USAGE)
-    }
-    return { platform, handleOrUrl: rest.join(':') }
+    return profileRef(raw)
   })
 }
 

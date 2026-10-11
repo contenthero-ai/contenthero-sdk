@@ -1619,3 +1619,35 @@ test('every hand-arranged list takes afterId, beforeId and position, on the rout
   // The whole-list reorder is retired: no method sends orderedIds.
   assert.equal('reorderBrandKits' in client, false)
 })
+
+// Tracked accounts (plan tracked-accounts-api-v1): add takes a list on POST /api/v1/accounts, remove is a DELETE by id.
+test('addTrackedAccounts posts the list; removeTrackedAccount deletes by id', async () => {
+  const added = {
+    trackedAccounts: [{ id: 'ta1', shortId: 'abcd1234', appUrl: 'u', platform: 'youtube', accountId: 'UC1', handle: 'mrbeast', name: 'MrBeast', avatarUrl: null, followerCount: 1, lastSyncedAt: null, syncStatus: 'pending', accountType: 'inspiration', outcome: 'added' }],
+    refused: [{ platform: 'instagram', handleOrUrl: 'rival' }],
+    refusal: { code: 'plan_limit', error: 'Tracking more than 3 accounts is part of the Hero plan. Upgrade to unlock it.', feature: 'inspiration_accounts', current: 3, limit: 3, plan: 'hero', actions: [] },
+  }
+  const { fetch, calls } = stubFetch([{ status: 201, body: added }, { status: 200, body: { id: 'ta1' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const result = await client.addTrackedAccounts({
+    accounts: [{ handleOrUrl: 'https://youtube.com/@mrbeast' }, { platform: 'instagram', handleOrUrl: 'rival' }],
+    brandKitId: 'bk1',
+  })
+  assert.equal(result.trackedAccounts[0].outcome, 'added')
+  assert.equal(result.refusal?.limit, 3)
+  assert.deepEqual(await client.removeTrackedAccount('ta1'), { id: 'ta1' })
+  const sent = calls.map((c) => `${c.init?.method} ${new URL(c.url).pathname} ${c.init?.body ?? ''}`)
+  assert.deepEqual(sent, [
+    'POST /api/v1/accounts {"accounts":[{"handleOrUrl":"https://youtube.com/@mrbeast"},{"platform":"instagram","handleOrUrl":"rival"}],"brandKitId":"bk1"}',
+    'DELETE /api/v1/accounts/ta1 ',
+  ])
+})
+
+test('addTrackedAccounts throws PlanLimitError when none could be tracked', async () => {
+  const { fetch } = stubFetch([{ status: 402, body: { code: 'plan_limit', error: 'Tracking more than 3 accounts is part of the Hero plan. Upgrade to unlock it.', feature: 'inspiration_accounts', current: 3, limit: 3, plan: 'hero', actions: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await assert.rejects(
+    client.addTrackedAccounts({ accounts: [{ platform: 'instagram', handleOrUrl: 'rival' }] }),
+    (err: unknown) => err instanceof PlanLimitError && err.feature === 'inspiration_accounts' && err.limit === 3,
+  )
+})

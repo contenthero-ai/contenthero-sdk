@@ -46,6 +46,8 @@ import type {
   BrandKnowledgeMatch,
   ConnectedAccount,
   ListTrackedAccountsOptions,
+  AddTrackedAccountsInput,
+  AddTrackedAccountsResult,
   ListContentOptions,
   GetContentOptions,
   ContentListResult,
@@ -1621,6 +1623,24 @@ export class ContentHero {
    */
   async updateTrackedAccount(accountId: string, placement: Placement): Promise<TrackedAccountDetail> {
     return this.request<TrackedAccountDetail>('PATCH', `/api/v1/accounts/${encodeURIComponent(accountId)}`, placement)
+  }
+
+  /**
+   * Track social accounts by handle or profile URL, in the `inspiration` list (the default) or the owner's own
+   * (`brand`). Inspiration accounts count toward the plan's limit: as many as fit are tracked, and the rest come back in
+   * `refused` with the `refusal`. When none could be tracked, throws `PlanLimitError`. Each tracked account comes back
+   * as `listTrackedAccounts` shows it, with its `outcome`. Requires `inspiration:write`.
+   */
+  async addTrackedAccounts(input: AddTrackedAccountsInput): Promise<AddTrackedAccountsResult> {
+    return this.request<AddTrackedAccountsResult>('POST', '/api/v1/accounts', input)
+  }
+
+  /**
+   * Stop tracking an account. Its posts and analyses are kept, and adding it again restores it. Requires
+   * `inspiration:write`.
+   */
+  async removeTrackedAccount(accountId: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>('DELETE', `/api/v1/accounts/${encodeURIComponent(accountId)}`)
   }
 
   /**

@@ -9,6 +9,8 @@
  * against the same registry that drives the Studio UI.
  */
 
+import type { LimitAction } from './errors.js'
+
 /**
  * Reference inputs (image-to-image, video-to-video, frame conditioning).
  *
@@ -3203,6 +3205,55 @@ export interface GetContentOptions {
    * summary is reported either way. `startMs`/`endMs` narrow the window (and then do not imply transcript segments).
    */
   audioMap?: boolean
+}
+
+/** The platforms an account can be tracked on (the server's own list, which it validates against). */
+export const TRACKABLE_PLATFORMS = ['youtube', 'instagram', 'facebook', 'tiktok', 'x', 'threads', 'linkedin'] as const
+export type TrackablePlatform = (typeof TRACKABLE_PLATFORMS)[number]
+
+/** One account to track: a handle or a profile URL. A URL states its platform; a bare handle needs one. */
+export interface TrackAccountInput {
+  platform?: TrackablePlatform
+  handleOrUrl: string
+}
+
+/** Input for `addTrackedAccounts`. */
+export interface AddTrackedAccountsInput {
+  /** The accounts to track, in the order they are listed. */
+  accounts: TrackAccountInput[]
+  /** Which list they join: `inspiration` (the default, the creators watched) or `brand` (the owner's own). */
+  accountType?: 'inspiration' | 'brand'
+  /** Also link each account to this brand kit. */
+  brandKitId?: string
+}
+
+/** A tracked account as `addTrackedAccounts` answers it: as the list shows it, with how it came to be tracked. */
+export interface AddedTrackedAccount extends TrackedAccount {
+  /** `added` (new), `restored` (tracked before and stopped), or `alreadyTracked`. */
+  outcome: 'added' | 'restored' | 'alreadyTracked'
+}
+
+/** A plan-limit refusal beside results: the message for a person, its numbers, and the ways out. */
+export interface PlanLimitRefusal {
+  code: 'plan_limit'
+  /** Written for a person: relay it as is. */
+  error: string
+  feature: string
+  current: number
+  limit: number
+  /** The first plan that raises this limit; null at the top plan. */
+  plan: string | null
+  actions: LimitAction[]
+}
+
+/** Result of `addTrackedAccounts`. */
+export interface AddTrackedAccountsResult {
+  /** Every account now tracked, in the order asked. */
+  trackedAccounts: AddedTrackedAccount[]
+  /** The accounts the plan's limit refused, as asked. */
+  refused: Array<{ platform: string; handleOrUrl: string }>
+  /** Why they were refused, when any was; null otherwise. */
+  refusal: PlanLimitRefusal | null
 }
 
 /** Options for `listTrackedAccounts`. */

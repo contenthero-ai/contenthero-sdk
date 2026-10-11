@@ -387,6 +387,14 @@ function fakeClient(overrides = {}) {
       ]
       return { trackedAccounts: options?.accountType ? all.filter((a) => a.accountType === options.accountType) : all, nextCursor: null }
     },
+    addTrackedAccounts: async (input) => ({
+      trackedAccounts: [{ id: 'ta9', platform: 'youtube', accountId: 'UC9', handle: 'mkbhd', name: 'MKBHD', avatarUrl: null, followerCount: 19_000_000, lastSyncedAt: null, syncStatus: 'pending', accountType: input.accountType ?? 'inspiration', outcome: 'added' }],
+      refused: input.accounts.slice(1).map((a) => ({ platform: a.platform ?? 'instagram', handleOrUrl: a.handleOrUrl })),
+      refusal: input.accounts.length > 1
+        ? { code: 'plan_limit', error: 'Tracking more than 3 accounts is part of the Hero plan. Upgrade to unlock it.', feature: 'inspiration_accounts', current: 3, limit: 3, plan: 'hero', actions: [{ id: 'upgrade', label: 'Upgrade', url: 'https://app/billing' }] }
+        : null,
+    }),
+    removeTrackedAccount: async (id) => ({ id }),
     getTrackedAccount: async (id) => ({
       account: { id, platform: 'instagram', accountId: '17841400000', handle: 'contenthero', name: 'ContentHero', avatarUrl: null, followerCount: 12000, lastSyncedAt: 't', syncStatus: 'synced', accountType: 'brand' },
       contentCount: 50,
@@ -2543,6 +2551,26 @@ test('list_tracked_accounts narrows to one kind when asked', async () => {
   const res = await mcp.callTool({ name: 'list_tracked_accounts', arguments: { accountType: 'brand' } })
   assert.match(res.content[0].text, /@contenthero/)
   assert.ok(!/@mrbeast/.test(res.content[0].text))
+})
+
+test('add_tracked_account lists what it tracked, and what the plan refused with the ways to continue', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({
+    name: 'add_tracked_account',
+    arguments: { accounts: [{ handleOrUrl: 'https://youtube.com/@mkbhd' }, { platform: 'instagram', handleOrUrl: 'rival' }] },
+  })
+  const out = res.content[0].text
+  assert.match(out, /1 account\(s\) tracked:/)
+  assert.match(out, /@mkbhd \(id ta9\) \[watching\] .* \| added/)
+  assert.match(out, /1 not tracked:\n- rival \| instagram/)
+  assert.match(out, /Tracking more than 3 accounts is part of the Hero plan/)
+  assert.match(out, /- Upgrade: https:\/\/app\/billing/)
+})
+
+test('remove_tracked_account says the posts are kept', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'remove_tracked_account', arguments: { accountId: 'ta9' } })
+  assert.match(res.content[0].text, /Stopped tracking account ta9\. Its posts are kept\./)
 })
 
 test('list_content ranks content by score with views', async () => {

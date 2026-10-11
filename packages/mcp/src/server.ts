@@ -66,6 +66,7 @@ import {
   type Generation,
   type GenerateResult,
   LIST_SORTS,
+  TRACKABLE_PLATFORMS,
   SORT_ORDERS,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
@@ -110,6 +111,8 @@ import {
   costResult,
   postResult,
   trackedAccountDetailResult,
+  trackedAccountsAddedResult,
+  trackedAccountRemovedResult,
   inspirationContentResult,
   contentAnalysisResult,
   analysisCostResult,
@@ -4165,6 +4168,67 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const client = await getClient(extra)
         const { accountId, ...placement } = args
         return trackedAccountDetailResult(await client.updateTrackedAccount(accountId, placement))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- add_tracked_account --------------------------------------------------
+  // A list, as the API takes it: several accounts resolve together and the answer says which the plan allowed.
+  server.registerTool(
+    'add_tracked_account',
+    {
+      title: 'Add Tracked Account',
+      annotations: WRITE,
+      description:
+        "Track social accounts by handle or profile URL. accountType 'inspiration' (the default) is the creators the user watches, 'brand' is their own profiles. Inspiration accounts count toward the plan's limit: accounts past it are not tracked and come back as not tracked, with the refusal. Each tracked account comes back with its outcome: added, restored or already tracked. Its posts arrive once it syncs. Requires the inspiration:write scope.",
+      inputSchema: {
+        accounts: z
+          .array(
+            z.object({
+              platform: z
+                .enum(TRACKABLE_PLATFORMS)
+                .optional()
+                .describe('The platform. Needed for a bare handle; a profile URL states its own.'),
+              handleOrUrl: z.string().describe('A handle or a profile URL.'),
+            }),
+          )
+          .min(1)
+          .describe('The accounts to track, in the order they are listed.'),
+        accountType: z
+          .enum(['inspiration', 'brand'])
+          .optional()
+          .describe('Which list they join: inspiration (the default) or brand.'),
+        brandKitId: z.string().optional().describe('Also link each account to this brand kit (from list_brand_kits).'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return trackedAccountsAddedResult(await client.addTrackedAccounts(args))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- remove_tracked_account -----------------------------------------------
+  server.registerTool(
+    'remove_tracked_account',
+    {
+      title: 'Remove Tracked Account',
+      annotations: { ...WRITE, idempotentHint: true },
+      description:
+        'Stop tracking a social account. Its posts and analyses are kept, and adding it again restores it. Requires the inspiration:write scope.',
+      inputSchema: {
+        accountId: z.string().describe('The account id from list_tracked_accounts.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return trackedAccountRemovedResult(await client.removeTrackedAccount(args.accountId))
       } catch (err) {
         return errorResult(err)
       }

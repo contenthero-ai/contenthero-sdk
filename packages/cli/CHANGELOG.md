@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: `contenthero tracked-account add <profile...>` tracks social accounts (a profile url, or `platform:handle`
+  for a bare handle; `--kind`, `--brand-kit`), printing each with how it came to be tracked and any the plan's limit
+  refused, with the ways to continue. `contenthero tracked-account remove <id>` stops tracking one and keeps its
+  posts.
 - New: `contenthero audio split <source>` separates a stored audio or video file into voice, music and effects
   (three files; `--duration`, `--cost`, `--no-wait`, `--timeout`, as `audio enhance`), and `contenthero audio
   split-clips <projectId>` does it to clips in place (`--clips`, as `audio enhance-clips`): each clip is muted and its

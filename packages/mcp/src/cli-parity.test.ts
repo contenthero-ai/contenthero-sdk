@@ -107,6 +107,8 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   list_tracked_accounts: ['tracked-account list'],
   get_tracked_account: ['tracked-account get'],
   update_tracked_account: ['tracked-account update'],
+  add_tracked_account: ['tracked-account add'],
+  remove_tracked_account: ['tracked-account remove'],
   list_content: ['content list'],
   get_content: ['content get'],
   analyze_content: ['content analyze'],
@@ -228,6 +230,8 @@ const ALIASES: Record<string, Record<string, string>> = {
   list_tracked_accounts: { accountType: '--kind' },
   get_tracked_account: { accountId: '<id>' },
   update_tracked_account: { accountId: '<id>' },
+  add_tracked_account: { accounts: '<profile>', accountType: '--kind' },
+  remove_tracked_account: { accountId: '<id>' },
   get_connected_account: { accountId: '<id>' },
   list_content: {
     outlierScoreMin: '--min-score',

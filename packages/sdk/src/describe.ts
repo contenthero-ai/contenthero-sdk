@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSummary, AudioMapWindow, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSummary, AudioMapWindow, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -74,9 +74,11 @@ export function describeReserved(held: number): string {
 
 /**
  * A limit refusal for a person: its message as written, then the ways to continue in the order to offer them.
- * Nothing ran and nothing was charged.
+ * Nothing ran and nothing was charged. Takes a thrown `LimitError`, or a refusal that came back beside results
+ * (`PlanLimitRefusal`, whose message is its `error`).
  */
-export function describeLimit(err: LimitError): string {
+export function describeLimit(refusal: Pick<LimitError, 'message' | 'actions'> | Pick<PlanLimitRefusal, 'error' | 'actions'>): string {
+  const err = 'error' in refusal ? { message: refusal.error, actions: refusal.actions } : refusal
   const ways = err.actions.map((a) => `- ${a.label}: ${a.url}`)
   return [err.message, ...(ways.length ? ['Ways to continue:', ...ways] : [])].join('\n')
 }

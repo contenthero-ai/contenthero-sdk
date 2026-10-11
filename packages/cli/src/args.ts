@@ -107,3 +107,17 @@ export function toJson(value: string): unknown {
     throw new CliError(`Expected valid JSON, got "${value}".`, EXIT.USAGE)
   }
 }
+
+/**
+ * A social profile named on the command line: a full profile url (which states its platform), or `platform:handle`
+ * (a bare handle cannot say whether it is instagram or youtube). The form `brand-kit` accounts and `tracked-account add`
+ * share.
+ */
+export function profileRef(raw: string): { platform?: string; handleOrUrl: string } {
+  if (/^https?:\/\//i.test(raw)) return { handleOrUrl: raw }
+  const [platform, ...rest] = raw.split(':')
+  if (!rest.length) {
+    throw new CliError(`"${raw}" needs a platform: pass a profile url, or platform:handle.`, EXIT.USAGE)
+  }
+  return { platform, handleOrUrl: rest.join(':') }
+}

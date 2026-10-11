@@ -105,7 +105,7 @@ contenthero avatar             list | get | create | update | delete | look add|
 contenthero voice              list | get
 contenthero audio              isolate | enhance | enhance-clips | split | split-clips
 contenthero content            list | get | analyze
-contenthero tracked-account    list | get | update
+contenthero tracked-account    list | get | add | update | remove
 contenthero connected-account  list | get
 contenthero account            get | update
 contenthero model              list | get

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: `add_tracked_account` tracks social accounts by handle or profile URL (a list, with `accountType` and
+  `brandKitId`), and `remove_tracked_account` stops tracking one and keeps its posts. Inspiration accounts count toward
+  the plan's limit: the ones past it are listed as not tracked, with the refusal and the ways to continue. Both
+  require the `inspiration:write` scope. An empty `list_tracked_accounts` now points to `add_tracked_account`.
 - New: `edit_audio` operation `split`: voice, music and effects as three files (FILE mode, polled with `get_status`,
   each output named by its stem), or three tracks in place (each clip muted, its stems under it; one job per source,
   every outputId listed). `get_status` names each of a split's outputs by its stem.

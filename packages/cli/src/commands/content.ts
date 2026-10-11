@@ -5,6 +5,8 @@
  *   content analyze <id>          Break It Down, the scenes (--kind scenes), or the post's videos (--kind video)
  *   tracked-account list          the social accounts this account tracks
  *   tracked-account get <id>      one account with its performance
+ *   tracked-account add <p...>    track accounts by profile url or platform:handle
+ *   tracked-account remove <id>   stop tracking an account (its posts are kept)
  *
  * ## Why these names
  *
@@ -15,10 +17,10 @@
  * `tracked-account` rather than `account` because `contenthero account` is already the ContentHero account
  * itself (balance, tier), which is a different thing entirely.
  *
- * Reads only.
+ * Reads, plus tracking and moving accounts.
  */
 
-import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describeAudioMapWindow, describeContentVideo, statusTarget, type Charge } from '@contenthero/sdk'
+import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describeLimit, describeAudioMapWindow, describeContentVideo, statusTarget, type Charge } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -37,12 +39,14 @@ import type {
   ContentSort,
   SortOrder,
   TrackedAccountListResult,
+  AddTrackedAccountsResult,
+  TrackAccountInput,
 } from '@contenthero/sdk'
-import { LIST_SORTS } from '@contenthero/sdk'
+import { LIST_SORTS, TRACKABLE_PLATFORMS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, linkRow, table, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { placementFrom, toFloat, toInt, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
+import { placementFrom, profileRef, toFloat, toInt, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
 
 /** A table of tracked accounts. KIND is present because the list spans both tiers by default. */
 export function trackedAccountsTable(rows: TrackedAccount[]): string {
@@ -97,6 +101,29 @@ function accountDetailHuman(d: TrackedAccountDetail): string {
   return head + top + recent
 }
 
+const OUTCOMES = { added: 'added', restored: 'restored', alreadyTracked: 'already tracked' } as const
+
+/** The accounts tracked, how each came to be, then any the plan refused and the ways to continue. */
+function addedHuman({ trackedAccounts, refused, refusal }: AddTrackedAccountsResult): string {
+  const parts: string[] = []
+  if (trackedAccounts.length) {
+    parts.push(table(
+      ['ID', 'KIND', 'PLATFORM', 'HANDLE', 'NAME', 'OUTCOME'],
+      trackedAccounts.map((a) => [
+        displayId(a),
+        a.accountType === 'brand' ? 'yours' : 'watching',
+        a.platform ?? '',
+        a.handle ?? '',
+        a.name ?? '',
+        OUTCOMES[a.outcome],
+      ]),
+    ))
+  }
+  if (refused.length) parts.push(`Not tracked: ${refused.map((r) => r.handleOrUrl).join(', ')}`)
+  if (refusal) parts.push(describeLimit(refusal))
+  return parts.join('\n\n')
+}
+
 export function registerTrackedAccount(program: Command): void {
   const account = program
     .command('tracked-account')
@@ -138,6 +165,44 @@ export function registerTrackedAccount(program: Command): void {
     const { client, ctx } = makeClient(command)
     emit(await client.updateTrackedAccount(id, placement), ctx, accountDetailHuman)
   })
+
+  account
+    .command('add')
+    .description('Track social accounts by handle or profile URL (requires inspiration:write)')
+    .argument('<profile...>', 'profile urls, or platform:handle for a bare handle, in the order they are listed')
+    .option('--kind <kind>', 'which list they join: inspiration (the default) or brand')
+    .option('--brand-kit <id>', 'also link each account to this brand kit')
+    .action(async (profiles: string[], opts: Record<string, unknown>, command: Command) => {
+      const kind = opts.kind as string | undefined
+      if (kind && kind !== 'inspiration' && kind !== 'brand') {
+        throw new CliError(`Invalid --kind "${kind}". Expected: inspiration, brand.`, EXIT.USAGE)
+      }
+      const accounts = profiles.map(profileRef)
+      for (const a of accounts) {
+        if (a.platform && !(TRACKABLE_PLATFORMS as readonly string[]).includes(a.platform)) {
+          throw new CliError(`Invalid platform "${a.platform}". Expected: ${TRACKABLE_PLATFORMS.join(', ')}.`, EXIT.USAGE)
+        }
+      }
+      const { client, ctx } = makeClient(command)
+      emit(
+        await client.addTrackedAccounts({
+          accounts: accounts as TrackAccountInput[],
+          accountType: kind as 'inspiration' | 'brand' | undefined,
+          brandKitId: opts.brandKit as string | undefined,
+        }),
+        ctx,
+        addedHuman,
+      )
+    })
+
+  account
+    .command('remove')
+    .description('Stop tracking an account; its posts are kept (requires inspiration:write)')
+    .argument('<id>', 'the tracked account id')
+    .action(async (id: string, _opts, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      emit(await client.removeTrackedAccount(id), ctx, (r: { id: string }) => `Stopped tracking ${r.id}. Its posts are kept.`)
+    })
 
   account
     .command('get')

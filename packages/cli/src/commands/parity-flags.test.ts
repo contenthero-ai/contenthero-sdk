@@ -243,6 +243,18 @@ test('tracked-account list sends accountType and brandKitId', async () => {
   assert.equal(r.query.get('brandKitId'), 'bk1')
 })
 
+test('tracked-account add sends each profile, the kind and the brand kit; remove deletes by id', async () => {
+  const add = await run('tracked-account', 'add', 'https://youtube.com/@mkbhd', 'instagram:rival', '--kind', 'brand', '--brand-kit', 'bk1')
+  assert.equal(`${add.method} ${add.path}`, 'POST /api/v1/accounts')
+  assert.deepEqual(add.body, {
+    accounts: [{ handleOrUrl: 'https://youtube.com/@mkbhd' }, { platform: 'instagram', handleOrUrl: 'rival' }],
+    accountType: 'brand',
+    brandKitId: 'bk1',
+  })
+  const remove = await run('tracked-account', 'remove', 'ta1')
+  assert.equal(`${remove.method} ${remove.path}`, 'DELETE /api/v1/accounts/ta1')
+})
+
 test('project update sends its fields, and none clears the brand kit and the cover framing', async () => {
   const set = await run('project', 'update', 'p1', '--title', 'T', '--width', '1080', '--brand-kit', 'bk1', '--cover', 'frame:12', '--cover-position', '50,40')
   assert.equal(set.method, 'PATCH')

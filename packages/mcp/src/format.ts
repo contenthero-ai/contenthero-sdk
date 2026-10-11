@@ -37,6 +37,7 @@ import type {
   SpaceListResult,
   TagListResult,
   TrackedAccountListResult,
+  AddTrackedAccountsResult,
   ConnectedAccountListResult,
   ProjectSummary,
   ProjectShare,
@@ -2407,8 +2408,27 @@ function accountLine(a: TrackedAccount): string {
 
 /** List of tracked accounts, either kind. */
 export function trackedAccountListResult({ trackedAccounts: accounts, nextCursor }: TrackedAccountListResult): CallToolResult {
-  if (!accounts.length) return text('No tracked account(s) found. Add one in the ContentHero app first.')
+  if (!accounts.length) return text('No tracked account(s) found. Add one with add_tracked_account.')
   return text(lines([`${accounts.length} tracked account(s):`, ...accounts.map(accountLine), moreLine(nextCursor)]))
+}
+
+/** Accounts tracked by add_tracked_account: each with how it came to be, then any the plan refused and why. */
+export function trackedAccountsAddedResult({ trackedAccounts, refused, refusal }: AddTrackedAccountsResult): CallToolResult {
+  const outcome = { added: 'added', restored: 'restored', alreadyTracked: 'already tracked' } as const
+  return text(
+    lines([
+      trackedAccounts.length ? `${trackedAccounts.length} account(s) tracked:` : null,
+      ...trackedAccounts.map((a) => `${accountLine(a)} | ${outcome[a.outcome]}`),
+      refused.length ? `${refused.length} not tracked:` : null,
+      ...refused.map((r) => `- ${r.handleOrUrl} | ${r.platform}`),
+      refusal ? describeLimit(refusal) : null,
+    ]),
+  )
+}
+
+/** A tracked account no longer tracked. */
+export function trackedAccountRemovedResult(r: { id: string }): CallToolResult {
+  return text(`Stopped tracking account ${r.id}. Its posts are kept.`)
 }
 
 /** One line summarizing an outlier / content item. */

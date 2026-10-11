@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- New: `addTrackedAccounts({ accounts, accountType?, brandKitId? })` tracks social accounts by handle or profile URL
+  (`TrackAccountInput`; `TRACKABLE_PLATFORMS` names the platforms), in the `inspiration` list by default or the owner's
+  own (`brand`). Inspiration accounts count toward the plan's limit: as many as fit are tracked, the rest come back in
+  `refused` with the `refusal` (`PlanLimitRefusal`), and when none fit it throws `PlanLimitError`. Each tracked account
+  comes back as `listTrackedAccounts` shows it, with its `outcome` (`added`, `restored`, `alreadyTracked`).
+  `removeTrackedAccount(id)` stops tracking one and keeps its posts; adding it again restores it. Both require
+  `inspiration:write`. `describeLimit` also takes a returned refusal.
 - New: `editAudio` operation `split` (`EditAudioOperation` gains `'split'`): voice, music and effects. On a file
   (`sourceUrl`, one of your stored audio or video files) it answers `processing`, and the finished generation has three
   `outputs`, each naming its `stem` (`GenerationOutput.stem`: `voice`, `music` or `effects`). In place (`projectId`
