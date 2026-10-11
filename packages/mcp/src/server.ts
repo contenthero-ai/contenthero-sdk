@@ -124,7 +124,7 @@ import {
   importedMediaResult,
   importPendingResult,
   importCostResult,
-  contentImportResult,
+  contentVideoResult,
   uploadedMediaBatchResult,
   type UploadedMediaOutcome,
   assetOrderResult,
@@ -368,21 +368,19 @@ const JOB_WAIT_MS = 40_000
 const JOB_POLL_MS = 4_000
 const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
 
-/** What one `import` call brings in: library media from a url, a post's analysis copy, or a new canvas project. */
+/** What one `import` call brings in: library media from a url, or a new canvas project. */
 export type ImportSource =
   | { kind: 'url'; url: string }
-  | { kind: 'post'; contentId: string }
   | { kind: 'project'; source: { type: 'pptx'; fileUrl: string } | { type: 'canva'; designId: string } }
 
-const IMPORT_SOURCES = ['url', 'contentId', 'pptxUrl', 'canvaDesignId'] as const
+const IMPORT_SOURCES = ['url', 'pptxUrl', 'canvaDesignId'] as const
 
 /**
- * The one source an `import` call names, or why the call cannot run: exactly one of url, contentId, pptxUrl and
- * canvaDesignId, and each companion input only beside the source it belongs to, so nothing passed is silently ignored.
+ * The one source an `import` call names, or why the call cannot run: exactly one of url, pptxUrl and canvaDesignId,
+ * and each companion input only beside the source it belongs to, so nothing passed is silently ignored.
  */
 export function importSourceOf(args: {
   url?: string
-  contentId?: string
   pptxUrl?: string
   canvaDesignId?: string
   contentType?: string
@@ -391,7 +389,7 @@ export function importSourceOf(args: {
   cardId?: string
 }): ImportSource | string {
   const named = IMPORT_SOURCES.filter((k) => typeof args[k] === 'string' && (args[k] as string).trim() !== '')
-  if (named.length === 0) return 'import needs exactly one source: url, contentId, pptxUrl or canvaDesignId.'
+  if (named.length === 0) return 'import needs exactly one source: url, pptxUrl or canvaDesignId.'
   if (named.length > 1) return `import takes exactly one source per call; got ${named.join(' and ')}.`
   const isProject = named[0] === 'pptxUrl' || named[0] === 'canvaDesignId'
   if (named[0] !== 'url' && (args.contentType !== undefined || args.fileName !== undefined)) {
@@ -401,7 +399,6 @@ export function importSourceOf(args: {
     return 'title and cardId go with pptxUrl or canvaDesignId only.'
   }
   if (named[0] === 'url') return { kind: 'url', url: (args.url as string).trim() }
-  if (named[0] === 'contentId') return { kind: 'post', contentId: (args.contentId as string).trim() }
   if (named[0] === 'pptxUrl') return { kind: 'project', source: { type: 'pptx', fileUrl: (args.pptxUrl as string).trim() } }
   return { kind: 'project', source: { type: 'canva', designId: (args.canvaDesignId as string).trim() } }
 }
@@ -3064,8 +3061,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- import -------------------------------------------------------------------
-  // One verb for everything brought in from outside (Taylan, 2026-10-11; plan source-media-v1). What comes back
-  // follows what came in.
+  // One verb for everything brought into the account's own library or a new project (Taylan, 2026-10-11; plan
+  // source-media-v1). What comes back follows what came in. A tracked post's video is analysis work: analyze_content.
   server.registerTool(
     'import',
     {
@@ -3073,17 +3070,16 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Importing'),
       annotations: WRITE,
       description:
-        "Bring something into ContentHero. Pass exactly one source, and what comes back follows it. url: a file address (an image, video or audio file) becomes library media, free; a video page address on a supported site becomes library media too, and spends credits: the most its download may cost is held and it is charged for what arrived. contentId: a tracked post's video is downloaded into the post's shared analysis copy, which the reading tools use; nothing lands in your library; it spends credits unless the copy already exists or is being made, which is free. pptxUrl (a PowerPoint or Google Slides file) or canvaDesignId (a Canva design, through the account's Canva connection) becomes a new canvas project with editable layers, free; cardId links it to its card in the same call. Pass getCost to see what an import would spend first: nothing runs and nothing is charged. Imported media is referenced by its outputId in generate_* and on a card via update_card. A media import still running at the end of the call returns pending: wait for it with get_status. A post's copy still downloading returns pending: import the same contentId again to follow it, which is free. Scopes: library:write for a url, studio:generate for a post, editor:write for a project (and planner:write with cardId).",
+        "Bring something into your own library or a new project. Pass exactly one source, and what comes back follows it. url: a file address (an image, video or audio file) becomes library media, free; a video page address on a supported site becomes library media too, and spends credits: the most its download may cost is held and it is charged for what arrived. pptxUrl (a PowerPoint or Google Slides file) or canvaDesignId (a Canva design, through the account's Canva connection) becomes a new canvas project with editable layers, free; cardId links it to its card in the same call. Pass getCost to see what an import would spend first: nothing runs and nothing is charged. Imported media is referenced by its outputId in generate_* and on a card via update_card. A media import still running at the end of the call returns pending: wait for it with get_status. A tracked post's video is not imported: analyze_content with kind video downloads it for analysis. Scopes: library:write for a url, editor:write for a project (and planner:write with cardId).",
       inputSchema: {
         url: z.string().optional().describe('A public https address: a file, imported free into the library, or a video page on a supported site, whose video is downloaded into the library and spends.'),
-        contentId: z.string().optional().describe("A tracked post (from list_content, get_tracked_account, or a get_card inspiration asset): its video goes into the post's shared analysis copy, not your library."),
         pptxUrl: z.string().optional().describe('A PowerPoint or Google Slides file address: imported into a new canvas project.'),
         canvaDesignId: z.string().optional().describe("A Canva design id: imported into a new canvas project through the account's Canva connection (fails with canva_not_connected when it is not linked)."),
         contentType: z.string().optional().describe('With url: a MIME override (else taken from the response).'),
         fileName: z.string().optional().describe('With url: a file name (used for its extension).'),
         title: z.string().optional().describe("With pptxUrl or canvaDesignId: the new project's title."),
         cardId: z.string().optional().describe('With pptxUrl or canvaDesignId: the card this project is for. The new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
-        getCost: z.boolean().optional().describe('Return what this import would spend instead of importing (nothing runs, nothing is charged). 0 for a file address, a project, or a post whose copy exists or is being made.'),
+        getCost: z.boolean().optional().describe('Return what this import would spend instead of importing (nothing runs, nothing is charged). 0 for a file address or a project.'),
       },
     },
     async (args, extra) => {
@@ -3097,20 +3093,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           return projectCreatedResult(await client.importProject({ source: source.source, title: args.title, cardId: args.cardId }), args.cardId)
         }
 
-        if (source.kind === 'post') {
-          if (args.getCost) return importCostResult(await client.estimateImportCost({ contentId: source.contentId }), 'post')
-          // A post's copy has no job get_status reads; asking again is how it is followed, and is free. Ask again
-          // within this call while it downloads, then answer pending with how to follow it.
-          let result = await client.importContent(source.contentId)
-          const deadline = Date.now() + jobWait.waitMs
-          while (result.copy.status === 'pending' && Date.now() + jobWait.pollMs <= deadline) {
-            await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
-            result = await client.importContent(source.contentId)
-          }
-          return contentImportResult(result)
-        }
-
-        if (args.getCost) return importCostResult(await client.estimateImportCost({ url: source.url }), 'url')
+        if (args.getCost) return importCostResult(await client.estimateImportCost(source.url), 'url')
         // The server fetches the url in a background job; wait for it within this call, then answer pending.
         return importedMediaResult(
           await client.importMedia(
@@ -4251,14 +4234,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
       description:
-        "Analyze a tracked post, as one of two kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. Viewing an existing result is free; creating one spends credits, so pass getCost to see the price first. Either one still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge.",
+        "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes prepares the post to be seen: a map of every scene with what happens and what is said in it, and a frame of each, which get_content then returns. video downloads the post's video into its shared analysis copy, which the reading tools use; nothing lands in your library or counts against your storage, and once stored it answers with the cut list, where the video changes scene, free. Viewing an existing result is free; creating one spends credits (video is charged for what its download moved, holding the most it may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         kind: z
-          .enum(['breakdown', 'scenes'])
+          .enum(['breakdown', 'scenes', 'video'])
           .optional()
-          .describe('breakdown (default): the Break It Down analysis. scenes: the scene map and a frame of each scene, priced per minute of video.'),
-        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists.'),
+          .describe("breakdown (default): the Break It Down analysis. scenes: the scene map and a frame of each scene, priced per minute of video. video: the post's video in its shared analysis copy, with its cut list once stored, charged for what the download moved."),
+        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists, or for video when its copy is being made.'),
       },
     },
     async (args, extra) => {
@@ -4281,6 +4264,17 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             // The wait is a courtesy: a status read that fails still leaves a true answer, pending with how to wait.
             return false
           }
+        }
+        if (kind === 'video') {
+          // A post's copy has no job get_status reads; asking again is how it is followed, and is free. Ask again
+          // within this call while it downloads, then answer pending with how to follow it.
+          let video = await client.analyzeContent(args.contentId, { kind: 'video' })
+          const deadline = Date.now() + jobWait.waitMs
+          while (video.copy.status === 'pending' && Date.now() + jobWait.pollMs <= deadline) {
+            await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
+            video = await client.analyzeContent(args.contentId, { kind: 'video' })
+          }
+          return contentVideoResult(video)
         }
         if (kind === 'scenes') {
           let scenes = await client.analyzeContent(args.contentId, { kind: 'scenes' })

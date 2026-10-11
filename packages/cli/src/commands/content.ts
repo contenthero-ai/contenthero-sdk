@@ -2,6 +2,7 @@
  * `contenthero content` / `tracked-account` - the research surface.
  *   content list                  tracked social posts, ranked by outlier score (by relevance with --search)
  *   content get <id>              one post in full, transcript optional
+ *   content analyze <id>          Break It Down, the scenes (--kind scenes), or the post's video (--kind video)
  *   tracked-account list          the social accounts this account tracks
  *   tracked-account get <id>      one account with its performance
  *
@@ -22,6 +23,7 @@ import type { Command } from 'commander'
 import type {
   ContentScenes,
   ContentScenesResult,
+  ContentVideoResult,
   TrackedAccountDetail,
   ContentAnalysis,
   ContentAnalysisResult,
@@ -37,7 +39,7 @@ import type {
 } from '@contenthero/sdk'
 import { LIST_SORTS } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, table, displayId, statusCommand, withMore } from '../output.js'
+import { costRows, emit, keyValues, linkRow, table, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { placementFrom, toFloat, toInt, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
 
@@ -296,26 +298,44 @@ export function registerContent(program: Command): void {
 
   content
     .command('analyze')
-    .description('Analyze a tracked post: Break It Down, or its scenes with --kind scenes. Free when the result exists, otherwise it spends credits (see --cost)')
+    .description("Analyze a tracked post: Break It Down, its scenes with --kind scenes, or its video with --kind video (downloaded into the post's shared analysis copy with its cut list, never your library). Free when the result exists, otherwise it spends credits (see --cost)")
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
-    .option('--kind <kind>', 'breakdown (default) or scenes (the scene map and a frame of each scene, priced per minute of video)')
+    .option('--kind <kind>', "breakdown (default), scenes (the scene map and a frame of each scene, priced per minute of video), or video (the post's video in its shared analysis copy, with its cut list once stored, charged for what the download moved)")
     .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
     .option('--no-wait', 'return at once instead of waiting for a running analysis')
     .option('--timeout <sec>', `how long to wait for a running analysis (default ${ANALYZE_TIMEOUT_SEC})`, toInt)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const kind = (opts.kind as string | undefined) ?? 'breakdown'
-      if (kind !== 'breakdown' && kind !== 'scenes') throw new CliError("--kind must be 'breakdown' or 'scenes'", EXIT.USAGE)
+      if (kind !== 'breakdown' && kind !== 'scenes' && kind !== 'video') {
+        throw new CliError("--kind must be 'breakdown', 'scenes' or 'video'", EXIT.USAGE)
+      }
       if (opts.cost) {
         const est = await client.estimateAnalysisCost(id, { kind })
         emit(est, ctx, (e: CostEstimate) =>
-          kind === 'scenes'
-            ? `Preparing this post's scenes costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`
-            : `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`,
+          kind === 'video'
+            ? e.creditsEstimate === 0
+              ? "This post's video is already in its analysis copy or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
+              : `Downloading this post's video for analysis costs at most ${e.creditsEstimate} credits: the most its download may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`
+            : kind === 'scenes'
+              ? `Preparing this post's scenes costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`
+              : `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`,
         )
         return
       }
       const timeoutMs = ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
+      if (kind === 'video') {
+        // A post's copy has no job `status` reads: asking again with the same kind is how it is followed, and is free.
+        let video = await client.analyzeContent(id, { kind: 'video' })
+        const deadline = Date.now() + timeoutMs
+        while (opts.wait !== false && video.copy.status === 'pending' && Date.now() + ANALYZE_POLL_MS <= deadline) {
+          await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
+          video = await client.analyzeContent(id, { kind: 'video' })
+        }
+        emit(video, ctx, contentVideoHuman)
+        if (opts.wait !== false && video.copy.status === 'pending') process.exitCode = EXIT.TIMEOUT
+        return
+      }
       // Either kind runs as a job, waited on through the SDK's one wait (`waitForStatus`), which starts nothing. Done:
       // ask once more, which starts nothing for a finished post and answers with the result and its final charge.
       const waited = async (r: { contentId: string; shortId?: string }, statusKind: 'content' | 'scenes'): Promise<boolean> => {
@@ -338,6 +358,33 @@ export function registerContent(program: Command): void {
       if (opts.wait !== false && result.analysis.status === 'running') process.exitCode = EXIT.TIMEOUT
       emit(result, ctx, (r: ContentAnalysisResult) => `Break It Down for post ${postName(r)}\n\n${analysisText(r, r.analysis)}${costAfter(r.charge)}`)
     })
+}
+
+/** Where a post's shared analysis copy stands, its cut list once stored, and how to follow it while it downloads. */
+export function contentVideoHuman(r: ContentVideoResult): string {
+  const copy = r.copy
+  const status =
+    copy.status === 'ready'
+      ? "ready in the post's shared analysis copy, which the reading tools use. Nothing was added to your library."
+      : copy.status === 'pending'
+        ? "still downloading into the post's shared analysis copy"
+        : copy.status === 'failed'
+          ? `the download failed: ${copy.error}. Asking again tries once more.`
+          : `this post has no video to analyze: ${copy.reason}`
+  const cuts = r.cuts
+  const cutRow: Array<[string, string]> = cuts
+    ? [['Cuts (free)', cuts.boundaries.length ? `${cuts.boundaries.length} in ${cuts.durationSec.toFixed(1)}s, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}` : `none in ${cuts.durationSec.toFixed(1)}s`]]
+    : []
+  return keyValues([
+    ['Post', displayId({ id: r.contentId, shortId: r.shortId })],
+    ...linkRow(r),
+    ['Video', status],
+    ...cutRow,
+    ...costRows(r.charge),
+    ...(copy.status === 'pending'
+      ? [['Next', `contenthero content analyze ${r.shortId || r.contentId} --kind video (free)`] as [string, string]]
+      : []),
+  ])
 }
 
 /** Repeatable --account. */

@@ -3594,10 +3594,10 @@ test('import takes exactly one source, and refuses an input that belongs to anot
   const none = await mcp.callTool({ name: 'import', arguments: {} })
   assert.ok(none.isError)
   assert.match(none.content[0].text, /exactly one source/)
-  const two = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', contentId: 'c1' } })
+  const two = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', pptxUrl: 'https://x/d.pptx' } })
   assert.ok(two.isError)
-  assert.match(two.content[0].text, /got url and contentId/)
-  const stray = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1', fileName: 'a.mp4' } })
+  assert.match(two.content[0].text, /got url and pptxUrl/)
+  const stray = await mcp.callTool({ name: 'import', arguments: { pptxUrl: 'https://x/d.pptx', fileName: 'a.mp4' } })
   assert.ok(stray.isError)
   assert.match(stray.content[0].text, /go with url only/)
   const card = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', cardId: 'c1' } })
@@ -3605,42 +3605,64 @@ test('import takes exactly one source, and refuses an input that belongs to anot
   assert.match(card.content[0].text, /go with pptxUrl or canvaDesignId only/)
 })
 
-test('import of a post asks again while its copy downloads, then names where it stands and what it cost', async () => {
-  const answers = [
-    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null },
-    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'ready' }, charge: null },
-  ]
-  let asked = 0
-  const mcp = await connect(fakeClient({ importContent: async (id) => { assert.equal(id, 'c1'); return answers[Math.min(asked++, 1)] } }))
-  const res = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1' } })
-  assert.ok(!res.isError)
-  assert.equal(asked, 2)
-  assert.match(res.content[0].text, /Con00001/)
-  assert.match(res.content[0].text, /ready in the post's shared analysis copy/)
-  assert.equal(res.structuredContent.status, 'ready')
+test('import takes no contentId: a tracked post\'s video is analyze_content kind video', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const imp = tools.find((t) => t.name === 'import')
+  assert.deepEqual(Object.keys(imp.inputSchema.properties).sort(), ['canvaDesignId', 'cardId', 'contentType', 'fileName', 'getCost', 'pptxUrl', 'title', 'url'])
+  assert.match(imp.description, /analyze_content with kind video/)
+  const analyze = tools.find((t) => t.name === 'analyze_content')
+  assert.deepEqual(analyze.inputSchema.properties.kind.enum, ['breakdown', 'scenes', 'video'])
 })
 
-test('import of a post still downloading at the end of the call says to import it again', async () => {
-  const pending = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null }
-  const mcp = await connect(fakeClient({ importContent: async () => pending }))
-  const res = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1' } })
-  assert.ok(!res.isError)
-  assert.match(res.content[0].text, /import \{ contentId: "Con00001" \} again, which is free/)
-  assert.equal(res.structuredContent.status, 'pending')
-})
-
-test('import getCost prices a post and a url through the SDK, and a project as free without asking', async () => {
+test('import getCost prices a url through the SDK, and a project as free without asking', async () => {
   const asked = []
   const mcp = await connect(fakeClient({
-    estimateImportCost: async (source) => { asked.push(source); return { getCost: true, creditsEstimate: 'contentId' in source ? 9 : 0 } },
+    estimateImportCost: async (url) => { asked.push(url); return { getCost: true, creditsEstimate: 0 } },
   }))
-  const post = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1', getCost: true } })
-  assert.match(post.content[0].text, /at most 9 credits/)
   const file = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', getCost: true } })
   assert.match(file.content[0].text, /costs 0 credits: it is a file/)
   const deck = await mcp.callTool({ name: 'import', arguments: { pptxUrl: 'https://x/d.pptx', getCost: true } })
   assert.match(deck.content[0].text, /canvas project costs 0 credits/)
-  assert.deepEqual(asked, [{ contentId: 'c1' }, { url: 'https://x/a.png' }])
+  assert.deepEqual(asked, ['https://x/a.png'])
+})
+
+test('analyze_content kind video asks again while its copy downloads, then names where it stands and its cut list', async () => {
+  const answers = [
+    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, charge: null },
+    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'ready' }, cuts: { boundaries: [1.5, 4.25], scores: [0.9, 0.7], durationSec: 9 }, charge: null },
+  ]
+  let asked = 0
+  const mcp = await connect(fakeClient({
+    analyzeContent: async (id, opts) => { assert.equal(id, 'c1'); assert.deepEqual(opts, { kind: 'video' }); return answers[Math.min(asked++, 1)] },
+  }))
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video' } })
+  assert.ok(!res.isError)
+  assert.equal(asked, 2)
+  assert.match(res.content[0].text, /Con00001/)
+  assert.match(res.content[0].text, /ready in the post's shared analysis copy/)
+  assert.match(res.content[0].text, /2 cuts in 9\.0s, at 1\.50s, 4\.25s/)
+  assert.equal(res.structuredContent.status, 'ready')
+  assert.deepEqual(res.structuredContent.cuts.boundaries, [1.5, 4.25])
+})
+
+test('analyze_content kind video still downloading at the end of the call says to ask again with the same kind', async () => {
+  const pending = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, charge: null }
+  const mcp = await connect(fakeClient({ analyzeContent: async () => pending }))
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /analyze_content \{ contentId: "Con00001", kind: "video" \} again, which is free/)
+  assert.equal(res.structuredContent.status, 'pending')
+})
+
+test('analyze_content getCost for kind video prices the download', async () => {
+  const asked = []
+  const mcp = await connect(fakeClient({
+    estimateAnalysisCost: async (id, opts) => { asked.push([id, opts]); return { getCost: true, creditsEstimate: 9 } },
+  }))
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video', getCost: true } })
+  assert.match(res.content[0].text, /at most 9 credits/)
+  assert.deepEqual(asked, [['c1', { kind: 'video' }]])
 })
 
 test('export_project returns the download URL when it finishes in time', async () => {
@@ -4458,7 +4480,7 @@ const SPENDING_CALLS = {
   create_avatar: { name: 'Mika', age: '20s', gender: 'female' },
   add_brand_knowledge: { brandKitId: 'bk1', sourceType: 'text', text: 'a note' },
   analyze_content: { contentId: 'c1' },
-  import: { contentId: 'c1' },
+  import: { url: 'https://www.youtube.com/watch?v=x' },
 }
 
 test('every tool that spends reports its cost the same way', async () => {
@@ -4475,7 +4497,7 @@ test('every tool that spends reports its cost the same way', async () => {
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
       analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
       addBrandKnowledge: async () => ({ item: { id: 'kn1', title: 'a note', sourceType: 'text' }, charge: CHARGE }),
-      importContent: async () => ({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'ready' }, charge: CHARGE }),
+      importMedia: async () => ({ outputId: 'im1', shortId: 'Imp00001', appUrl: 'https://app/m/Imp00001', url: 'https://cdn/v.mp4', alreadyExisted: false, contentType: 'video', charge: CHARGE }),
     }),
   )
   const { tools } = await mcp.listTools()

@@ -53,6 +53,7 @@ import type {
   ContentAnalysisResult,
   ContentAnalysisKind,
   ContentScenesResult,
+  ContentVideoResult,
   TrackedAccountDetail,
   SearchBrandKnowledgeOptions,
   CostEstimate,
@@ -112,8 +113,6 @@ import type {
   ImportMediaInput,
   ImportedMedia,
   ImportStarted,
-  ImportCostSource,
-  ContentImportResult,
   UploadedMedia,
   ModelInfo,
   PlatformSummary,
@@ -1659,40 +1658,36 @@ export class ContentHero {
    * with `getContent`, priced per started minute of video. Same rules: free when it exists, charged once when
    * stored, safe to call again while it runs: wait for it with `getStatus` (kind `'scenes'`, the post's id). A post
    * with no video is refused with the reason.
+   *
+   * `kind: 'video'` downloads the post's video into its shared, platform-owned analysis copy, which the reading tools
+   * use (frames, sound, the transcript). Nothing lands in the caller's library and nothing counts against their
+   * storage. A copy that exists answers `ready` at no charge, with its cut list (where the video changes scene,
+   * measured once and free); one being made answers `pending`, also free; otherwise the most the download may cost is
+   * held and the copy starts, charged for what arrived. Call this again with the same kind to follow a pending copy,
+   * which is free (`getStatus` has no kind for it). A post with no video is refused with the reason.
    */
   async analyzeContent(contentId: string, options?: { kind?: 'breakdown' }): Promise<ContentAnalysisResult>
   async analyzeContent(contentId: string, options: { kind: 'scenes' }): Promise<ContentScenesResult>
+  async analyzeContent(contentId: string, options: { kind: 'video' }): Promise<ContentVideoResult>
   async analyzeContent(
     contentId: string,
     options: { kind?: ContentAnalysisKind } = {},
-  ): Promise<ContentAnalysisResult | ContentScenesResult> {
+  ): Promise<ContentAnalysisResult | ContentScenesResult | ContentVideoResult> {
     return this.request('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, options.kind ? { kind: options.kind } : {})
   }
 
   /**
-   * Import a tracked post's video into its shared analysis copy, which the reading tools use (frames, sound, the
-   * transcript). Nothing lands in the caller's library. A copy that exists answers `ready` at no charge; one being
-   * made answers `pending`, also free; otherwise the most the download may cost is held and the copy starts, charged
-   * for what arrives. Call this again to follow a pending copy: asking again is free. A post with no video is refused
-   * with the reason. Price it first with `estimateImportCost({ contentId })`.
+   * The most importing this url may cost, running nothing, as `importMedia` takes it: 0 for a file address. It is
+   * charged for what arrives, never more. A project import (`importProject`) never spends.
    */
-  async importContent(contentId: string): Promise<ContentImportResult> {
-    return this.request<ContentImportResult>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/import`, {})
+  async estimateImportCost(url: string): Promise<CostEstimate> {
+    return this.request<CostEstimate>('POST', '/api/v1/media/imports', { url, getCost: true })
   }
 
   /**
-   * The most an import may cost, running nothing: a url as `importMedia` takes it (0 for a file address), or a tracked
-   * post as `importContent` takes it (0 when its copy exists or is under way). It is charged for what arrives, never
-   * more. A project import (`importProject`) never spends.
+   * What `analyzeContent` would charge for this post and kind: 0 when the result already exists (or, for `video`, is
+   * being made). For `video` it is the most the download may cost; it is charged for what arrives. Runs nothing.
    */
-  async estimateImportCost(source: ImportCostSource): Promise<CostEstimate> {
-    if ('contentId' in source) {
-      return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(source.contentId)}/import`, { getCost: true })
-    }
-    return this.request<CostEstimate>('POST', '/api/v1/media/imports', { url: source.url, getCost: true })
-  }
-
-  /** What `analyzeContent` would charge for this post and kind: 0 when the result already exists. Runs nothing. */
   async estimateAnalysisCost(contentId: string, options: { kind?: ContentAnalysisKind } = {}): Promise<CostEstimate> {
     return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
       getCost: true,

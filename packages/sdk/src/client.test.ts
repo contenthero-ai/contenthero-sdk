@@ -406,26 +406,28 @@ test('importMedia returns an older server\'s finished answer as is', async () =>
   assert.equal(calls.length, 1)
 })
 
-test('importContent POSTs to the post\'s import route and returns where its copy stands', async () => {
-  const answer = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null }
+test('analyzeContent with kind video POSTs to the post\'s analysis route and returns where its copy stands', async () => {
+  const answer = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, charge: { creditsCharged: 0 } }
   const { fetch, calls } = stubFetch([{ status: 202, body: answer }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  assert.deepEqual(await client.importContent('c1'), answer)
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/import')
+  const result = await client.analyzeContent('c1', { kind: 'video' })
+  assert.deepEqual(result, answer)
+  assert.equal(result.copy.status, 'pending')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/analysis')
   assert.equal(calls[0]?.init?.method, 'POST')
-  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), {})
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { kind: 'video' })
 })
 
-test('estimateImportCost prices a post on its import route and a url on the media imports route', async () => {
+test('estimateAnalysisCost prices a post\'s video on its analysis route; estimateImportCost prices a url', async () => {
   const { fetch, calls } = stubFetch([
-    { status: 200, body: { getCost: true, creditsEstimate: 12, contentId: 'c1' } },
+    { status: 200, body: { getCost: true, creditsEstimate: 12, contentId: 'c1', kind: 'video' } },
     { status: 200, body: { getCost: true, creditsEstimate: 0 } },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  assert.equal((await client.estimateImportCost({ contentId: 'c1' })).creditsEstimate, 12)
-  assert.equal((await client.estimateImportCost({ url: 'https://x/a.png' })).creditsEstimate, 0)
-  assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/import')
-  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { getCost: true })
+  assert.equal((await client.estimateAnalysisCost('c1', { kind: 'video' })).creditsEstimate, 12)
+  assert.equal((await client.estimateImportCost('https://x/a.png')).creditsEstimate, 0)
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/analysis')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { getCost: true, kind: 'video' })
   assert.equal(calls[1]?.url, 'https://example.test/api/v1/media/imports')
   assert.deepEqual(JSON.parse(calls[1]?.init?.body as string), { url: 'https://x/a.png', getCost: true })
 })

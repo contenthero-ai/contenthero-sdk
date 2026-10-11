@@ -2068,33 +2068,6 @@ export interface ImportMediaInput {
   fileName?: string
 }
 
-/** What `estimateImportCost` prices: a url as `importMedia` takes it, or a tracked post as `importContent` takes it. */
-export type ImportCostSource = { url: string } | { contentId: string }
-
-/**
- * Where a tracked post's shared analysis copy stands: `ready` to read, `pending` while it downloads (ask again to
- * follow it, free), `failed` with why, `unavailable` with why the post has no video to copy.
- */
-export type ContentImportCopy =
-  | { status: 'ready' }
-  | { status: 'pending' }
-  | { status: 'failed'; error: string }
-  | { status: 'unavailable'; reason: string }
-
-/**
- * Result of `importContent`: a tracked post's video in its shared analysis copy, which the reading tools use. Nothing
- * lands in the caller's library.
- */
-export interface ContentImportResult {
-  contentId: string
-  /** The post's short id and its page in the app. */
-  shortId: string
-  appUrl: string
-  copy: ContentImportCopy
-  /** What it cost: held on the most the download may move, charged for what arrived; null when nothing was charged. */
-  charge: Charge | null
-}
-
 /**
  * An import that has been accepted and is running. The server fetches the url in a background job, so the answer
  * arrives through the generation status: `importMedia` waits for it, `startImport` hands this back at once.
@@ -2870,8 +2843,42 @@ export interface ContentScene {
   frameUrl?: string
 }
 
-/** What `analyzeContent` makes: `breakdown` (the default), or `scenes`. */
-export type ContentAnalysisKind = 'breakdown' | 'scenes'
+/** What `analyzeContent` makes: `breakdown` (the default), `scenes`, or `video` (the post's video for analysis). */
+export type ContentAnalysisKind = 'breakdown' | 'scenes' | 'video'
+
+/**
+ * Where a tracked post's shared analysis copy stands: `ready` to read, `pending` while it downloads (ask again with
+ * kind `video` to follow it, free), `failed` with why, `unavailable` with why the post has no video to copy.
+ */
+export type ContentVideoCopy =
+  | { status: 'ready' }
+  | { status: 'pending' }
+  | { status: 'failed'; error: string }
+  | { status: 'unavailable'; reason: string }
+
+/** Where a post's video changes scene: each boundary in seconds, its strength, and the length measured. */
+export interface ContentVideoCuts {
+  boundaries: number[]
+  scores: number[]
+  durationSec: number
+}
+
+/**
+ * Result of `analyzeContent` with `kind: 'video'`: the post's video in its shared, platform-owned analysis copy, which
+ * the reading tools use. Nothing lands in the caller's library and nothing counts against their storage.
+ */
+export interface ContentVideoResult {
+  contentId: string
+  /** The post's short id and its page in the app. */
+  shortId: string
+  appUrl: string
+  kind: 'video'
+  copy: ContentVideoCopy
+  /** The cut list, free, once the copy is stored. Absent while it downloads, or when it could not be measured yet. */
+  cuts?: ContentVideoCuts
+  /** What it cost: held on the most the download may move, charged for what arrived. */
+  charge: Charge
+}
 
 /** Result of `analyzeContent` with `kind: 'scenes'`. The scenes themselves are read with `getContent`. */
 export interface ContentScenesResult {

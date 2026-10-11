@@ -96,13 +96,14 @@ test('project create and import --card link the new project to that card', async
   assert.deepEqual(imported.body, { source: { type: 'pptx', fileUrl: 'https://x/d.pptx' }, cardId: 'c1' })
 })
 
-test('import sends each source to its route: a Canva design, a post, and a url with --cost', async () => {
+test('import sends each source to its route: a Canva design and a url with --cost; a post\'s video is content analyze', async () => {
   const canva = await run('import', '--canva', 'DAF1', '--title', 'Deck')
   assert.deepEqual(canva.body, { source: { type: 'canva', designId: 'DAF1' }, title: 'Deck' })
-  const post = await run('import', '--content', 'c1', '--no-wait')
-  assert.equal(post.path, '/api/v1/content/c1/import')
-  const postCost = await run('import', '--content', 'c1', '--cost')
-  assert.deepEqual(postCost.body, { getCost: true })
+  const video = await run('content', 'analyze', 'c1', '--kind', 'video', '--no-wait')
+  assert.equal(video.path, '/api/v1/content/c1/analysis')
+  assert.deepEqual(video.body, { kind: 'video' })
+  const videoCost = await run('content', 'analyze', 'c1', '--kind', 'video', '--cost')
+  assert.deepEqual(videoCost.body, { getCost: true, kind: 'video' })
   const urlCost = await run('import', 'https://x/a.png', '--cost')
   assert.equal(urlCost.path, '/api/v1/media/imports')
   assert.deepEqual(urlCost.body, { url: 'https://x/a.png', getCost: true })

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { importedHuman, contentImportHuman } from './import.js'
+import { importedHuman } from './import.js'
 
 /**
  * What `contenthero import` PRINTS for a url when it created nothing.
@@ -52,13 +52,4 @@ test('a duplicate with no role recorded still states the absent id', () => {
   assert.match(out, /an existing file/)
   assert.match(out, /Output id.*none/)
   assert.doesNotMatch(out, /Output id:\s*$/m)
-})
-
-test("a post import still downloading names how to follow it, and a ready one says nothing reached the library", () => {
-  const pending = contentImportHuman({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null })
-  assert.match(pending, /still downloading/)
-  assert.match(pending, /contenthero import --content Con00001/)
-  const ready = contentImportHuman({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'ready' }, charge: null })
-  assert.match(ready, /Nothing was added to your library/)
-  assert.doesNotMatch(ready, /Next/)
 })

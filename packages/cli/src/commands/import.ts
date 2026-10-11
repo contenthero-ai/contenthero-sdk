@@ -1,19 +1,18 @@
 /**
- * `contenthero import` - bring something into ContentHero; what comes back follows what came in (the MCP's `import`).
+ * `contenthero import` - bring something into the account's own library or a new project; what comes back follows what
+ * came in (the MCP's `import`).
  *
  *   import <url> [--content-type <mime>] [--name <name>]      a file (free) or a video page on a supported site (spends)
  *                                                            into the library
- *   import --content <id>                                    a tracked post's video into its shared analysis copy
- *                                                            (spends unless the copy exists or is being made)
  *   import --pptx <url> | --canva <id> [--title] [--card]    a deck into a new canvas project (free)
  *
- * Exactly one source per run. `--cost` prints what it would spend and runs nothing.
+ * Exactly one source per run. `--cost` prints what it would spend and runs nothing. A tracked post's video is not an
+ * import: `content analyze --kind video` downloads it for analysis.
  */
 
 import type { Command } from 'commander'
 import {
   pendingJob,
-  type ContentImportResult,
   type CostEstimate,
   type ImportStarted,
   type ImportedMedia,
@@ -24,9 +23,6 @@ import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { costRows, emit, keyValues, linkRow, displayId, statusCommand } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toInt } from '../args.js'
-
-/** How often a post import asks again while its copy downloads. Asking again is free. */
-const POST_POLL_MS = 5_000
 
 /**
  * An import may have created NOTHING, so it cannot share `uploadedHuman`.
@@ -89,40 +85,13 @@ export function importedHuman(m: ImportedMedia): string {
   ])
 }
 
-/** Where a post's shared analysis copy stands, and how to follow it when it is still downloading. */
-export function contentImportHuman(r: ContentImportResult): string {
-  const copy = r.copy
-  const status =
-    copy.status === 'ready'
-      ? "ready in the post's shared analysis copy, which the reading tools use. Nothing was added to your library."
-      : copy.status === 'pending'
-        ? "still downloading into the post's shared analysis copy"
-        : copy.status === 'failed'
-          ? `the download failed: ${copy.error}. Importing the post again tries once more.`
-          : `this post has no video to import: ${copy.reason}`
-  return keyValues([
-    ['Post', displayId({ id: r.contentId, shortId: r.shortId })],
-    ...linkRow(r),
-    ['Video', status],
-    ...costRows(r.charge),
-    ...(copy.status === 'pending'
-      ? [['Next', `contenthero import --content ${r.shortId || r.contentId} (free)`] as [string, string]]
-      : []),
-  ])
-}
-
 /** What an import would spend, by what it brings in. */
-function importCostHuman(subject: 'url' | 'post' | 'project'): (e: CostEstimate) => string {
+function importCostHuman(subject: 'url' | 'project'): (e: CostEstimate) => string {
   return (e) => {
     const none = 'Nothing ran and nothing was charged.'
     if (subject === 'project') return `Importing into a new canvas project costs 0 credits. ${none}`
-    if (e.creditsEstimate === 0) {
-      return subject === 'post'
-        ? `This post's copy already exists or is being made: importing it costs 0 credits. ${none}`
-        : `Importing this address costs 0 credits: it is a file, which imports free. ${none}`
-    }
-    const what = subject === 'post' ? 'this post' : "this page's video"
-    return `Importing ${what} costs at most ${e.creditsEstimate} credits: the most its download may move is held, and it is charged for what arrives. ${none}`
+    if (e.creditsEstimate === 0) return `Importing this address costs 0 credits: it is a file, which imports free. ${none}`
+    return `Importing this page's video costs at most ${e.creditsEstimate} credits: the most its download may move is held, and it is charged for what arrives. ${none}`
   }
 }
 
@@ -134,10 +103,9 @@ export function registerImport(program: Command): void {
   program
     .command('import')
     .description(
-      'Bring something into ContentHero: a url (a file, free, or a video page on a supported site, which spends) into the library, a tracked post into its shared analysis copy (--content), or a deck into a new canvas project (--pptx, --canva). See --cost',
+      'Bring something into your own library or a new project: a url (a file, free, or a video page on a supported site, which spends) into the library, or a deck into a new canvas project (--pptx, --canva). See --cost. A tracked post\'s video is content analyze --kind video',
     )
     .argument('[url]', 'a public https address: a file, or a video page on a supported site')
-    .option('--content <id>', "a tracked post: its video goes into the post's shared analysis copy, not your library")
     .option('--pptx <url>', 'a PowerPoint or Google Slides file address: imported into a new canvas project')
     .option('--canva <id>', "a Canva design id: imported into a new canvas project through the account's Canva connection")
     .option('--content-type <mime>', 'with a url: MIME type override (else taken from the response)')
@@ -145,16 +113,15 @@ export function registerImport(program: Command): void {
     .option('--title <text>', 'with --pptx or --canva: the new project\'s title')
     .option('--card <id>', 'with --pptx or --canva: link the new project to this card in the same call (also needs planner:write)')
     .option('--cost', 'show what the import would spend instead of importing (nothing runs, nothing is charged)')
-    .option('--no-wait', 'return at once instead of waiting for a url import or a post\'s copy')
+    .option('--no-wait', 'return at once instead of waiting for a url import')
     .option('--timeout <seconds>', 'how long to wait before handing back', toInt, DEFAULT_TIMEOUT_SEC)
     .action(async (url: string | undefined, opts: Record<string, unknown>, command: Command) => {
       const sources = [
         ['a url', url],
-        ['--content', opts.content],
         ['--pptx', opts.pptx],
         ['--canva', opts.canva],
       ].filter(([, v]) => typeof v === 'string' && v !== '') as Array<[string, string]>
-      if (sources.length === 0) throw new CliError('import needs exactly one source: a url, --content, --pptx or --canva.', EXIT.USAGE)
+      if (sources.length === 0) throw new CliError('import needs exactly one source: a url, --pptx or --canva.', EXIT.USAGE)
       if (sources.length > 1) throw new CliError(`import takes exactly one source per run; got ${sources.map(([n]) => n).join(' and ')}.`, EXIT.USAGE)
       const isUrl = url !== undefined && url !== ''
       const isProject = Boolean(opts.pptx || opts.canva)
@@ -181,27 +148,9 @@ export function registerImport(program: Command): void {
         return
       }
 
-      if (opts.content) {
-        const contentId = opts.content as string
-        if (opts.cost) {
-          emit(await client.estimateImportCost({ contentId }), ctx, importCostHuman('post'))
-          return
-        }
-        // A post's copy has no job `status` reads: asking again is how it is followed, and it is free.
-        let result = await client.importContent(contentId)
-        const deadline = Date.now() + timeoutMs
-        while (opts.wait !== false && result.copy.status === 'pending' && Date.now() + POST_POLL_MS <= deadline) {
-          await new Promise((resolve) => setTimeout(resolve, POST_POLL_MS))
-          result = await client.importContent(contentId)
-        }
-        emit(result, ctx, contentImportHuman)
-        if (opts.wait !== false && result.copy.status === 'pending') process.exitCode = EXIT.TIMEOUT
-        return
-      }
-
       const target = url as string
       if (opts.cost) {
-        emit(await client.estimateImportCost({ url: target }), ctx, importCostHuman('url'))
+        emit(await client.estimateImportCost(target), ctx, importCostHuman('url'))
         return
       }
       const input = { url: target, contentType: opts.contentType as string | undefined, fileName: opts.name as string | undefined }

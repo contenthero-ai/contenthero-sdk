@@ -99,7 +99,7 @@ import type {
   ContentAnalysisResult,
   ContentAnalysisKind,
   ContentScenesResult,
-  ContentImportResult,
+  ContentVideoResult,
   ContentListResult,
   TrackedAccountDetail,
   Transcription,
@@ -1737,7 +1737,7 @@ export function importPendingResult(job: { outputId: string; shortId?: string | 
 }
 
 /** What an import would spend, by what it brings in. Nothing ran and nothing was charged. */
-export type ImportCostSubject = 'url' | 'post' | 'project'
+export type ImportCostSubject = 'url' | 'project'
 
 /** import's price check: the most it may spend, and why it is 0 when it is. */
 export function importCostResult(est: { creditsEstimate: number }, subject: ImportCostSubject): CallToolResult {
@@ -1745,40 +1745,11 @@ export function importCostResult(est: { creditsEstimate: number }, subject: Impo
   const credits = `${n} credit${n === 1 ? '' : 's'}`
   const none = 'Nothing ran and nothing was charged.'
   if (subject === 'project') return text(`Importing into a new canvas project costs 0 credits. ${none}`)
-  if (subject === 'post') {
-    return text(
-      n === 0
-        ? `This post's copy already exists or is being made: importing it costs 0 credits. ${none}`
-        : `Importing this post costs at most ${credits}: the most its download may move is held, and it is charged for what arrives. ${none}`,
-    )
-  }
   return text(
     n === 0
       ? `Importing this address costs 0 credits: it is a file, which imports free. ${none}`
       : `Importing this page's video costs at most ${credits}: the most its download may move is held, and it is charged for what arrives. ${none}`,
   )
-}
-
-/**
- * import's answer for a tracked post: where its shared analysis copy stands. A copy still downloading is followed by
- * importing the post again, which is free, since a post's copy has no job of its own for get_status to read.
- */
-export function contentImportResult(r: ContentImportResult): CallToolResult {
-  const post = jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })
-  const again = `import { contentId: "${r.shortId || r.contentId}" }`
-  const copy = r.copy
-  const body =
-    copy.status === 'ready'
-      ? 'Its video is ready in the post\'s shared analysis copy, which the reading tools use. Nothing was added to your library.'
-      : copy.status === 'pending'
-        ? `Its video is still downloading into the post's shared analysis copy. Follow it with ${again} again, which is free.`
-        : copy.status === 'failed'
-          ? `The download failed: ${copy.error}. Importing the post again tries once more.`
-          : `This post has no video to import: ${copy.reason}.`
-  return {
-    content: [{ type: 'text', text: lines([`Post ${post}`, body, chargeLine(r.charge)]) }],
-    structuredContent: { contentId: r.contentId, appUrl: r.appUrl ?? null, status: copy.status, ...chargeData(r.charge) },
-  }
 }
 
 export function accountResult(b: Account): CallToolResult {
@@ -2559,6 +2530,13 @@ function analysisWait(r: { contentId: string; shortId?: string }, kind: 'content
 /** analyze_content's price check: nothing ran and nothing was charged. */
 export function analysisCostResult(est: CostEstimate, kind: ContentAnalysisKind = 'breakdown'): CallToolResult {
   const credits = `${est.creditsEstimate} credit${est.creditsEstimate === 1 ? '' : 's'}`
+  if (kind === 'video') {
+    return text(
+      est.creditsEstimate === 0
+        ? "This post's video is already in its analysis copy or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
+        : `Downloading this post's video for analysis costs at most ${credits}: the most its download may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`,
+    )
+  }
   if (kind === 'scenes') {
     return text(
       est.creditsEstimate === 0
@@ -2584,6 +2562,41 @@ export function contentScenesResult(r: ContentScenesResult): CallToolResult {
   return {
     content: [{ type: 'text', text: lines([`Scenes for post ${jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })}`, body, chargeLine(r.charge)]) }],
     structuredContent: { contentId: r.contentId, appUrl: r.appUrl ?? null, status: running ? 'pending' : r.scenes.status, ...chargeData(r.charge) },
+  }
+}
+
+/**
+ * analyze_content's answer for kind video: where the post's shared analysis copy stands, with its cut list once
+ * stored. A copy still downloading is followed by asking again with kind video, which is free, since a post's copy has
+ * no job of its own for get_status to read.
+ */
+export function contentVideoResult(r: ContentVideoResult): CallToolResult {
+  const post = jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })
+  const again = `analyze_content { contentId: "${r.shortId || r.contentId}", kind: "video" }`
+  const copy = r.copy
+  const body =
+    copy.status === 'ready'
+      ? "Its video is ready in the post's shared analysis copy, which the reading tools use. Nothing was added to your library."
+      : copy.status === 'pending'
+        ? `Its video is still downloading into the post's shared analysis copy. Follow it with ${again} again, which is free.`
+        : copy.status === 'failed'
+          ? `The download failed: ${copy.error}. Asking again tries once more.`
+          : `This post has no video to analyze: ${copy.reason}.`
+  const cuts = r.cuts
+  const cutLine = cuts
+    ? cuts.boundaries.length
+      ? `Cut list (free): ${cuts.boundaries.length} cut${cuts.boundaries.length === 1 ? '' : 's'} in ${cuts.durationSec.toFixed(1)}s, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}.`
+      : `Cut list (free): no cuts in ${cuts.durationSec.toFixed(1)}s.`
+    : null
+  return {
+    content: [{ type: 'text', text: lines([`Post ${post}`, body, cutLine, chargeLine(r.charge)]) }],
+    structuredContent: {
+      contentId: r.contentId,
+      appUrl: r.appUrl ?? null,
+      status: copy.status,
+      ...(cuts ? { cuts } : {}),
+      ...chargeData(r.charge),
+    },
   }
 }
 

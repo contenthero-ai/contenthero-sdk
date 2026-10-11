@@ -78,3 +78,18 @@ test('content list says each account id that named nothing', async () => {
   const out = await printed(['content', 'list', '--account', 'Nope0001'])
   assert.match(out, /Not matched: 'Nope0001' names no tracked account of yours, so it matched nothing\./)
 })
+
+test("content analyze --kind video still downloading names how to follow it; a ready one prints its cuts and says nothing reached the library", async () => {
+  const { contentVideoHuman } = await import('./content.js')
+  const charge = { credits: 0, held: 0, state: 'free' as const, balanceAfter: null }
+  const pending = contentVideoHuman({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'pending' }, charge })
+  assert.match(pending, /still downloading/)
+  assert.match(pending, /contenthero content analyze Con00001 --kind video/)
+  const ready = contentVideoHuman({
+    contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy: { status: 'ready' },
+    cuts: { boundaries: [1.5, 4.25], scores: [0.9, 0.7], durationSec: 9 }, charge,
+  })
+  assert.match(ready, /Nothing was added to your library/)
+  assert.match(ready, /2 in 9\.0s, at 1\.50s, 4\.25s/)
+  assert.doesNotMatch(ready, /Next/)
+})

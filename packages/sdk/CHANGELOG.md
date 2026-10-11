@@ -2,13 +2,14 @@
 
 ## Unreleased
 
-- New: `importContent(contentId)` imports a tracked post's video into its shared analysis copy, which the reading
-  tools use; nothing lands in the library. It answers where the copy stands (`ready`, `pending`, `failed`,
-  `unavailable`) with the charge; asking again follows a pending copy and is free. `ContentImportResult` and
-  `ContentImportCopy` are exported.
-- New: `estimateImportCost(source)` prices an import and runs nothing: `{ url }` as `importMedia` takes it (0 for a
-  file address) or `{ contentId }` as `importContent` takes it (0 when the copy exists or is being made).
-  `ImportCostSource` is exported.
+- New: `analyzeContent(contentId, { kind: 'video' })` downloads a tracked post's video into its shared,
+  platform-owned analysis copy, which the reading tools use; nothing lands in the library or counts against storage.
+  It answers where the copy stands (`ready`, `pending`, `failed`, `unavailable`) with the charge (held on the most the
+  download may move, charged for what arrived) and, once stored, the free cut list. Asking again with the same kind
+  follows a pending copy and is free. `estimateAnalysisCost(contentId, { kind: 'video' })` prices it.
+  `ContentAnalysisKind` gains `'video'`; `ContentVideoResult`, `ContentVideoCopy` and `ContentVideoCuts` are exported.
+- New: `estimateImportCost(url)` prices a url import and runs nothing, as `importMedia` takes it (0 for a file
+  address).
 - `importMedia` takes a video page address on a supported site as well as a file address: the page's video is
   downloaded into the library, holding the most it may cost and charging what arrived. `ImportedMedia.charge` reports
   what it cost.
