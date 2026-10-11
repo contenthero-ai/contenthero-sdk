@@ -4241,7 +4241,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .enum(['breakdown', 'scenes', 'video'])
           .optional()
           .describe("breakdown (default): the Break It Down analysis. scenes: the scene map and a frame of each scene, priced per minute of video. video: every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved."),
-        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists, or for video when its copy is being made.'),
+        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists, or for video when its copies are being made.'),
       },
     },
     async (args, extra) => {
