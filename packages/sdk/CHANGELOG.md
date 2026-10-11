@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- New: `editAudio` operation `split` (`EditAudioOperation` gains `'split'`): voice, music and effects. On a file
+  (`sourceUrl`, one of your stored audio or video files) it answers `processing`, and the finished generation has three
+  `outputs`, each naming its `stem` (`GenerationOutput.stem`: `voice`, `music` or `effects`). In place (`projectId`
+  with `clipIds` or `enhanceClips`), one job per source recording: each clip is muted and its stems are placed under
+  it, each on its own track. Free today (`estimateEditAudioCost` asks the registry). A file split refuses a `projectId`.
 - New: a post video's audio map, made automatically and free once its copy is stored (`analyzeContent` kind
   `video`): where speech is, each sound event with its AudioSet class and closest sound-design name, its level and its
   level against the voice, the music's tempo, beats and key, how far the music drops under speech, and each stem's

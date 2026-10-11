@@ -537,6 +537,8 @@ export interface GenerationOutput {
   previewUrl?: string | null
   /** The 512px derivative of `url`, for inlining bytes; prefer it over `previewUrl` when attaching. Null where none. */
   visionUrl?: string | null
+  /** Which stem this output is (`voice`, `music` or `effects`), for an `editAudio` split; absent for every other output. */
+  stem?: string
 }
 
 /**
@@ -656,8 +658,11 @@ export interface CanvasPlacementIntent {
   asBackground?: boolean
 }
 
-/** What `editAudio` does: isolate the voice, or enhance (level loudness and clean up noise). */
-export type EditAudioOperation = 'isolate' | 'enhance'
+/**
+ * What `editAudio` does: isolate the voice, enhance (level loudness and clean up noise), or split (voice, music and
+ * effects as three files, or three tracks in in-place mode).
+ */
+export type EditAudioOperation = 'isolate' | 'enhance' | 'split'
 
 export interface EditAudioRequest {
   /**
@@ -668,7 +673,8 @@ export interface EditAudioRequest {
   /** A model id instead of an operation; it resolves to the operation that model performs. Prefer `operation`. */
   modelId?: string
   /**
-   * Public URL (or a previous output id) of the source audio to process.
+   * Public URL (or a previous output id) of the source audio to process. A split takes one of your stored files (audio
+   * or video): import an outside file first.
    *
    * Required in FILE mode and must be OMITTED in in-place mode, where the sources come from the clips
    * themselves. The two are mutually exclusive: one produces a new library asset, the other edits a timeline.
@@ -678,16 +684,19 @@ export interface EditAudioRequest {
    *  it refines the estimate (the authoritative charge is the processed duration). */
   durationSeconds?: number
   /** Optional: place the processed audio onto this editor project's timeline in the same call. Omit for a
-   *  standalone library output (today's behavior). */
+   *  standalone library output (today's behavior). A file split makes three files and places none, so it refuses a
+   *  projectId; split clips in place instead. */
   projectId?: string
   /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
   placement?: PlacementIntent
   /** Optional interactive-fallback playhead frame (echo one from view for playhead-relative placement). */
   playheadFrame?: number
   /**
-   * IN-PLACE mode: enhance the audio OF EXISTING CLIPS on `projectId`, rather than processing a standalone file.
+   * IN-PLACE mode: enhance or split the audio OF EXISTING CLIPS on `projectId`, rather than processing a standalone
+   * file.
    *
-   * Requires `projectId`; the operation is `enhance` (implied). Omitting `clipIds` while passing
+   * Requires `projectId`; the operation is `enhance` (implied) or `split`. A split mutes each clip and places its voice,
+   * music and effects under it, each stem on a track of its own. Omitting `clipIds` while passing
    * `enhanceClips: true` means every audible clip on the timeline, the same whole-timeline default the sibling
    * timeline ops use. Silenced clips are excluded automatically; enhancing audio nobody can hear would spend
    * credits and then overwrite something the user deliberately muted.
@@ -695,14 +704,18 @@ export interface EditAudioRequest {
    * ⚠️ RETURNS A LIST on `outputs`. Auphonic estimates a noise profile and picks a loudness target per
    * PRODUCTION, so one source's clips are concatenated and enhanced as a SINGLE job. Grouping stops at the
    * source because a profile spanning two recordings is an average of two rooms and fits neither, so a
-   * selection covering three recordings is three jobs and three outputIds.
+   * selection covering three recordings is three jobs and three outputIds. A split is one job per source too: each
+   * recording is separated once, whole, and every clip of it receives the stems over its own window.
    */
   clipIds?: string[]
   /** Opt in to in-place mode without naming clips (whole timeline). Implied when `clipIds` is present. */
   enhanceClips?: boolean
 }
 
-/** One in-place enhancement job: the clips of a single source, concatenated and enhanced together. */
+/**
+ * One in-place job: the clips of a single source, concatenated and enhanced together, or (a split) separated once and
+ * given their stems.
+ */
 export interface EnhanceClipsJob {
   outputId: string
   /**
@@ -714,16 +727,17 @@ export interface EnhanceClipsJob {
   appUrl?: string
   /** What this job cost (held while it runs). */
   charge?: Charge
-  /** Every clip this job's pieces will be applied to. */
+  /** Every clip this job's result will be applied to. */
   clipIds: string[]
-  /** How many distinct windows were concatenated into this job. */
+  /** How many distinct windows of the source this job covers. */
   windows: number
 }
 
 /**
  * The result of `editAudio`, which serves two shapes.
  *
- * FILE mode returns the `GenerateResult` fields. IN-PLACE mode returns `jobs`, one per source, and echoes
+ * FILE mode returns the `GenerateResult` fields; a split answers `processing`, and once it lands its generation has
+ * three `outputs`, each naming its `stem` (voice, music, effects). IN-PLACE mode returns `jobs`, one per source, and echoes
  * the first on `outputId` so a single-source project can be awaited without unpacking the list. `status` is
  * `'noop'` when the selection contained no audible audio, which is deliberately distinguishable from a failure.
  */
@@ -731,7 +745,7 @@ export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
   status: 'processing' | 'completed' | 'noop'
   /** In-place mode only: one job per source. (`outputs` names a generation's own outputs, as in file mode.) */
   jobs?: EnhanceClipsJob[]
-  /** In-place mode only: the project the pieces are applied to. */
+  /** In-place mode only: the project the results are applied to. */
   projectId?: string
   /** In-place mode only: selected clips skipped because they are silenced. */
   silencedClipsExcluded?: number
