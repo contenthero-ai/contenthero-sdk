@@ -170,7 +170,7 @@ async function renderSubmission(
 }
 
 /**
- * Render an in-place clip enhancement, which is one job per SOURCE rather than one job.
+ * Render an in-place clip enhancement or split, which is one job per SOURCE rather than one job.
  *
  * Waits on EVERY outputId, not just the first. Waiting on one would report the whole edit as finished when a
  * single recording had landed, while the others were still running and their clips still untouched.
@@ -182,37 +182,45 @@ export async function renderEnhanceClips(
   client: ContentHero,
   ctx: Context,
   result: EditAudioResult,
-  opts: { wait: boolean; timeoutSec: number },
+  opts: { wait: boolean; timeoutSec: number; operation?: 'enhance' | 'split' },
 ): Promise<void> {
   const jobs = result.jobs ?? []
+  const human = (r: EditAudioResult) => clipJobsHuman(r, opts.operation ?? 'enhance')
   if (jobs.length === 0 || !opts.wait) {
-    emit(result, ctx, enhanceClipsHuman)
+    emit(result, ctx, human)
     return
   }
-  emit(result, ctx, enhanceClipsHuman)
+  emit(result, ctx, human)
   for (const job of jobs) {
     await waitAndRender(client, ctx, job, opts.timeoutSec)
   }
 }
 
-/** Human rendering for an in-place enhancement submission. */
-function enhanceClipsHuman(result: EditAudioResult): string {
+/** Human rendering for an in-place enhancement or split submission. */
+function clipJobsHuman(result: EditAudioResult, operation: 'enhance' | 'split'): string {
   const jobs = result.jobs ?? []
-  if (jobs.length === 0) return result.note ?? 'Nothing to enhance: no audible clips in that selection.'
+  const split = operation === 'split'
+  if (jobs.length === 0) return result.note ?? `Nothing to ${split ? 'split' : 'enhance'}: no audible clips in that selection.`
   const lines = jobs.map(
     (j, i) =>
       `  ${i + 1}. ${displayId({ id: j.outputId, shortId: j.shortId })}  ${j.clipIds.length} clip${j.clipIds.length === 1 ? '' : 's'}, ` +
       `${j.windows} window${j.windows === 1 ? '' : 's'}${j.appUrl ? `  ${j.appUrl}` : ''}`,
   )
-  const head =
-    jobs.length === 1
+  const head = split
+    ? jobs.length === 1
+      ? 'Splitting 1 source:'
+      : `Splitting ${jobs.length} sources as separate jobs (one per recording):`
+    : jobs.length === 1
       ? 'Enhancing 1 source:'
       : `Enhancing ${jobs.length} sources as separate jobs (a noise profile is estimated per recording):`
   const tail = result.silencedClipsExcluded
     ? `\n${result.silencedClipsExcluded} silenced clip${result.silencedClipsExcluded === 1 ? '' : 's'} skipped.`
     : ''
   const wait = `Wait: ${statusCommand(jobs.map((j) => ({ id: j.outputId, shortId: j.shortId, kind: 'output' as const })))}`
-  return `${head}\n${lines.join('\n')}\nThe enhanced audio is applied to the clips automatically as each job lands.${tail}\n${wait}`
+  const applied = split
+    ? "Each clip is muted and its voice, music and effects are placed under it, each on its own track, as each job lands."
+    : 'The enhanced audio is applied to the clips automatically as each job lands.'
+  return `${head}\n${lines.join('\n')}\n${applied}${tail}\n${wait}`
 }
 
 /** Block on one submitted job to a terminal state and render it; exit 4 on timeout. */

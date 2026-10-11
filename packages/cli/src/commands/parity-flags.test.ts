@@ -404,3 +404,12 @@ test('status sends each id in the path and --kind as the query', async () => {
     process.exitCode = exitBefore
   }
 })
+
+test('audio split sends operation split on a file, and split-clips sends it in place', async () => {
+  const file = await run('audio', 'split', 'abc12345', '--no-wait')
+  assert.equal(file.path, '/api/v1/studio/audio/edit')
+  assert.deepEqual(file.body, { operation: 'split', sourceUrl: 'abc12345' })
+
+  const clips = await run('audio', 'split-clips', 'p1', '--clips', 'c1', 'c2', '--no-wait')
+  assert.deepEqual(clips.body, { operation: 'split', projectId: 'p1', clipIds: ['c1', 'c2'], enhanceClips: true })
+})

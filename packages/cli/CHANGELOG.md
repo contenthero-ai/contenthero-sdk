@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: `contenthero audio split <source>` separates a stored audio or video file into voice, music and effects
+  (three files; `--duration`, `--cost`, `--no-wait`, `--timeout`, as `audio enhance`), and `contenthero audio
+  split-clips <projectId>` does it to clips in place (`--clips`, as `audio enhance-clips`): each clip is muted and its
+  stems are placed under it, each on its own track.
 - New: a post video's audio map, made automatically and free once `content analyze --kind video` has stored its
   copy: speech, sound events (AudioSet class, sound-design name, level and level against the voice), music tempo,
   beats and key, how far the music drops under speech, and each stem's level. `content get` and `content analyze

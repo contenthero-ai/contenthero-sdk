@@ -103,7 +103,7 @@ contenthero template           list | get | create | update | delete
 contenthero kling-element      list | get | create | update | delete
 contenthero avatar             list | get | create | update | delete | look add|remove
 contenthero voice              list | get
-contenthero audio              isolate | enhance | enhance-clips
+contenthero audio              isolate | enhance | enhance-clips | split | split-clips
 contenthero content            list | get | analyze
 contenthero tracked-account    list | get | update
 contenthero connected-account  list | get

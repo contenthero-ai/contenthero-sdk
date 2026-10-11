@@ -4,7 +4,9 @@
  * The sibling of `generate` for the audio-transform shape. `audio isolate`
  * removes background noise and music from a recording, leaving clean speech.
  * Isolation is synchronous (the processed URL comes back inline); --cost previews
- * the credit charge without running.
+ * the credit charge without running. `audio split` separates voice, music and
+ * effects into three files; `audio split-clips` does it to clips on a timeline,
+ * as `audio enhance-clips` enhances them.
  */
 
 import type { Command } from 'commander'
@@ -93,6 +95,55 @@ export function registerAudio(program: Command): void {
       await renderEnhanceClips(client, ctx, result, {
         wait: opts.wait !== false,
         timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
+      })
+    })
+
+  audio
+    .command('split')
+    .description('Split an audio or video file into voice, music and effects (three files). Asynchronous.')
+    .argument('<source>', 'source file (URL or output id) to split: one of your stored files')
+    .option('--duration <seconds>', 'source length in seconds (required for --cost)', toFloat)
+    .option('--cost', 'estimate the credit cost instead of running')
+    .option('--no-wait', 'return the outputId immediately instead of waiting')
+    .option('--timeout <seconds>', 'how long to wait before handing back the outputId', toInt, DEFAULT_TIMEOUT_SEC)
+    .action(async (source: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const request = compact<EditAudioRequest>({
+        operation: 'split',
+        sourceUrl: source,
+        durationSeconds: opts.duration as number | undefined,
+      })
+      await runEditAudio(client, ctx, request, {
+        cost: opts.cost === true,
+        wait: opts.wait !== false,
+        timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
+      })
+    })
+
+  audio
+    .command('split-clips')
+    .description(
+      'Split the audio OF EXISTING CLIPS on an editor timeline into voice, music and effects, in place: each clip is muted and its stems are placed under it, each on its own track. One job per SOURCE recording.',
+    )
+    .argument('<projectId>', 'the editor project whose clips to split')
+    .option('--clips <ids...>', 'clip ids to split (omit for every audible clip on the timeline)')
+    .option('--no-wait', 'return the outputIds immediately instead of waiting')
+    .option('--timeout <seconds>', 'how long to wait before handing back the outputIds', toInt, DEFAULT_TIMEOUT_SEC)
+    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const result = await client.editAudio(
+        compact<EditAudioRequest>({
+          operation: 'split',
+          projectId,
+          clipIds: opts.clips as string[] | undefined,
+          // In-place mode stated explicitly, as `enhance-clips` states it.
+          enhanceClips: true,
+        }),
+      )
+      await renderEnhanceClips(client, ctx, result, {
+        wait: opts.wait !== false,
+        timeoutSec: (opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC,
+        operation: 'split',
       })
     })
 }
