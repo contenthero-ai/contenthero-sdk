@@ -40,7 +40,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   generate_board: ['generate board'],
   generate_video: ['generate video'],
   generate_audio: ['generate audio'],
-  edit_audio: ['audio isolate', 'audio enhance', 'audio enhance-clips'],
+  edit_audio: ['audio isolate', 'audio enhance', 'audio enhance-clips', 'audio split', 'audio split-clips'],
   upscale: ['upscale'],
   generate_lip_sync: ['generate lip-sync'],
   transcribe: ['transcribe'],
@@ -253,9 +253,9 @@ const ALIASES: Record<string, Record<string, string>> = {
 /** Inputs the CLI expresses by STRUCTURE rather than by a flag: a subcommand, or work it does for the caller. */
 const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   edit_audio: {
-    operation: 'the subcommand names it: `audio isolate` or `audio enhance`',
+    operation: 'the subcommand names it: `audio isolate`, `audio enhance` or `audio split`',
     modelId: 'the subcommand names the operation, and the server picks the model',
-    enhanceClips: 'the `audio enhance-clips` subcommand',
+    enhanceClips: 'the `audio enhance-clips` and `audio split-clips` subcommands',
   },
   update_avatar: { ops: '`avatar look add` / `avatar look remove`' },
   update_brand_kit: { extract: 'the `brand-kit extract` subcommand' },

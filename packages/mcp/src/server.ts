@@ -1733,12 +1733,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       ...renders('Editing audio'),
       annotations: WRITE,
       description:
-        'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST of jobs, one per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every job\'s outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. Silenced clips are skipped. In-place mode is enhancement only and needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
+        'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_status. Splitting separates voice, music and effects into three files, is asynchronous, and returns an outputId to poll with get_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or enhanceClips for the whole timeline) to enhance or split the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST of jobs, one per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every job\'s outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. A split mutes each clip and places its voice, music and effects under it, each on its own track. Silenced clips are skipped. In-place mode needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
       inputSchema: {
         operation: z
-          .enum(['isolate', 'enhance'])
+          .enum(['isolate', 'enhance', 'split'])
           .optional()
-          .describe('isolate: voice isolation. enhance: loudness leveling and noise cleanup. The server picks the model that performs it. Omitted: enhance in in-place mode, else isolate.'),
+          .describe('isolate: voice isolation. enhance: loudness leveling and noise cleanup. split: voice, music and effects as three files, or three tracks in in-place mode. The server picks the model that performs it. Omitted: enhance in in-place mode, else isolate.'),
         modelId: z
           .string()
           .optional()
@@ -1751,11 +1751,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .optional()
           .describe('Source audio length in seconds. Required for getCost, and for enhancement pricing when the source is not a stored ContentHero asset.'),
-        projectId: z.string().optional().describe('The editor project: where to PLACE the result in file mode, or which timeline to enhance in in-place mode. Omit for a standalone library output.'),
+        projectId: z.string().optional().describe('The editor project: where to PLACE the result in file mode, or which timeline to edit in in-place mode. Omit for a standalone library output.'),
         clipIds: z
           .array(z.string())
           .optional()
-          .describe('IN-PLACE mode: enhance the audio of these clips on projectId. Omit with enhanceClips:true to enhance every audible clip on the timeline.'),
+          .describe('IN-PLACE mode: enhance or split the audio of these clips on projectId. Omit with enhanceClips:true to edit every audible clip on the timeline.'),
         enhanceClips: z
           .boolean()
           .optional()
@@ -1783,8 +1783,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const result = await client.editAudio(request)
         // IN-PLACE mode returns one job per SOURCE, so the agent is handed every outputId rather than just the
         // first: polling only `outputId` would report the whole edit as done when one recording had finished.
-        if (result.jobs) return enhanceClipsResult(result)
-        // Enhancement is async (status 'processing'); isolation returns URLs inline.
+        if (result.jobs) return enhanceClipsResult(result, args.operation === 'split' ? 'split' : 'enhance')
+        // Enhancement and split are async (status 'processing'); isolation returns URLs inline.
         if (result.status === 'processing') return withCharge(pendingResult(result), result.charge)
         return audioResult(result)
       } catch (err) {

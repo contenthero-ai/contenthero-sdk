@@ -5461,3 +5461,35 @@ test("get_export gives a completed export's share page", async () => {
   const res = await mcp.callTool({ name: 'get_export', arguments: { exportId: 'e1' } })
   assert.match(res.content[0].text, /Share page: https:\/\/pages\.example\/e/)
 })
+
+/**
+ * `edit_audio` operation `split` (source media phase 4): the schema offers it, a file split is followed by its
+ * outputId, an in-place split lists every job and says what lands on the clips, and a finished split names each output
+ * by its stem.
+ */
+test('edit_audio splits a file or clips in place, and its outputs name their stem', async () => {
+  const sent = []
+  const mcp = await connect(
+    fakeClient({
+      editAudio: async (req) => {
+        sent.push(req)
+        return req.clipIds
+          ? { status: 'processing', outputId: 'j1', jobs: [{ outputId: 'j1', clipIds: ['c1'], windows: 1 }, { outputId: 'j2', clipIds: ['c2'], windows: 1 }] }
+          : { status: 'processing', outputId: 'sp1' }
+      },
+    }),
+  )
+  const { tools } = await mcp.listTools()
+  const editAudio = tools.find((t) => t.name === 'edit_audio')
+  assert.deepEqual(editAudio.inputSchema.properties.operation.enum, ['isolate', 'enhance', 'split'])
+
+  const file = await mcp.callTool({ name: 'edit_audio', arguments: { operation: 'split', sourceUrl: 'aB3dE5fG' } })
+  assert.deepEqual(sent[0], { operation: 'split', sourceUrl: 'aB3dE5fG' })
+  assert.match(file.content[0].text, /sp1/)
+
+  const clips = await mcp.callTool({ name: 'edit_audio', arguments: { operation: 'split', projectId: 'p1', clipIds: ['c1', 'c2'] } })
+  const text = clips.content[0].text
+  assert.match(text, /^Splitting 2 sources/)
+  assert.match(text, /get_status \{ ids: \["j1", "j2"\], kind: "output" \}/)
+  assert.match(text, /voice, music and effects are placed under it/)
+})

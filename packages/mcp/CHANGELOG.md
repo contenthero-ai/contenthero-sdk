@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- New: `edit_audio` operation `split`: voice, music and effects as three files (FILE mode, polled with `get_status`,
+  each output named by its stem), or three tracks in place (each clip muted, its stems under it; one job per source,
+  every outputId listed). `get_status` names each of a split's outputs by its stem.
 - New: a post video's audio map, made automatically and free once `analyze_content` kind `video` has stored its
   copy: speech, sound events (AudioSet class, sound-design name, level and level against the voice), music tempo,
   beats and key, how far the music drops under speech, and each stem's level. `get_content` and `analyze_content`

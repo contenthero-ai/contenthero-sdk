@@ -828,3 +828,24 @@ test('list_content says each account id that named nothing, beside what the othe
   assert.match(some, /1 post\(s\)/)
   assert.match(some, /Not matched: 'Nope0001'/)
 })
+
+test("a finished split's outputs are named by their stem", () => {
+  const out = body(
+    completedResult({
+      outputId: 'sp1',
+      appUrl: 'https://app/media/sp1',
+      status: 'completed',
+      contentType: 'audio',
+      modelId: 'contenthero-stem-split',
+      outputs: ['voice', 'music', 'effects'].map((stem, i) => ({
+        mediaId: `sp1-${i + 1}`,
+        status: 'succeeded',
+        url: `https://cdn/sp1-${i + 1}.flac`,
+        appUrl: `https://app/media/sp1-${i + 1}`,
+        stem,
+      })),
+    }),
+  )
+  assert.match(out, /sp1-1 \(voice\)/)
+  assert.match(out, /sp1-3 \(effects\)/)
+})

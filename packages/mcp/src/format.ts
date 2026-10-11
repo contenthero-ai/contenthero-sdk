@@ -394,9 +394,14 @@ function landedOutputs(gen: { outputs?: GenerationOutput[] }): Array<GenerationO
   return (gen.outputs ?? []).filter((o): o is GenerationOutput & { url: string } => typeof o.url === 'string' && o.url.length > 0)
 }
 
+/** An output's name in a line: its media id, and which stem it is when it is one of a split's. */
+function outputName(o: GenerationOutput): string {
+  return o.stem ? `${o.mediaId} (${o.stem})` : o.mediaId
+}
+
 /** One line per output: its media id and file (and link), or its status when it produced nothing. */
 function outputLines(gen: { outputs?: GenerationOutput[] }): string[] {
-  return (gen.outputs ?? []).map((o) => (o.url ? `${o.mediaId}: ${o.url}${linkAfter(o.appUrl)}` : `${o.mediaId}: ${o.status}`))
+  return (gen.outputs ?? []).map((o) => (o.url ? `${outputName(o)}: ${o.url}${linkAfter(o.appUrl)}` : `${outputName(o)}: ${o.status}`))
 }
 
 /** A generation's widget payload. A thin adapter over {@link mediaWidgetData}, not a second builder. */
@@ -697,16 +702,17 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
 }
 
 /**
- * In-place clip enhancement: ONE JOB PER SOURCE, so the agent gets every outputId.
+ * In-place clip enhancement or split: ONE JOB PER SOURCE, so the agent gets every outputId.
  *
  * Reporting only the first would let an agent see one recording finish and call the whole edit done, while the
  * other recordings were still running. The applied-automatically note matters too: unlike every other async
  * tool here, the caller does NOT place the result, so without saying so an agent would reasonably try to.
  */
-export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
+export function enhanceClipsResult(result: EditAudioResult, operation: 'enhance' | 'split' = 'enhance'): CallToolResult {
   const jobs = result.jobs ?? []
+  const split = operation === 'split'
   if (jobs.length === 0) {
-    return text(result.note ?? 'Nothing to enhance: no audible clips in that selection.')
+    return text(result.note ?? `Nothing to ${split ? 'split' : 'enhance'}: no audible clips in that selection.`)
   }
   const handles = jobs.map((j): JobHandle => ({ id: j.outputId, shortId: j.shortId, appUrl: j.appUrl, kind: 'output' }))
   const lines = jobs.map(
@@ -716,12 +722,17 @@ export function enhanceClipsResult(result: EditAudioResult): CallToolResult {
       (chargeLine(j.charge) ? `. ${chargeLine(j.charge)}` : ''),
   )
   const poll = `Poll with ${statusCallFor(handles)}`
-  const header =
-    jobs.length === 1
+  const header = split
+    ? jobs.length === 1
+      ? `Splitting 1 source. ${poll}:`
+      : `Splitting ${jobs.length} sources as separate jobs, one per recording. ${poll} (EVERY id, in one call):`
+    : jobs.length === 1
       ? `Enhancing 1 source. ${poll}:`
       : `Enhancing ${jobs.length} sources as separate jobs, because a noise profile is estimated per recording. ${poll} (EVERY id, in one call):`
   const footer = [
-    'The enhanced audio is applied to the clips automatically when each job lands, so no placement call is needed.',
+    split
+      ? "Each clip is muted and its voice, music and effects are placed under it, each on its own track, automatically when each job lands, so no placement call is needed."
+      : 'The enhanced audio is applied to the clips automatically when each job lands, so no placement call is needed.',
     result.silencedClipsExcluded
       ? `${result.silencedClipsExcluded} silenced clip${result.silencedClipsExcluded === 1 ? ' was' : 's were'} skipped.`
       : null,
@@ -813,7 +824,7 @@ export function generationStatusResult(
   const noun = landed.length === 1 ? gen.contentType : `${gen.contentType}s`
   const prose = [
     `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${name}), more still ${gen.status}:`,
-    ...landed.map((o) => `${o.mediaId}: ${o.url}`),
+    ...landed.map((o) => `${outputName(o)}: ${o.url}`),
     `NOT the full set. ${poll} for the rest.`,
   ].join('\n')
   /**
@@ -852,7 +863,7 @@ function generationRow(gen: Generation): string {
   const name = jobName({ id: gen.outputId, shortId: gen.shortId, appUrl: gen.appUrl })
   if (gen.status === 'completed') {
     const landed = landedOutputs(gen)
-    return `- ${name}: completed | ${landed.map((o) => `${o.mediaId} ${o.url}`).join(', ') || '(no urls)'}`
+    return `- ${name}: completed | ${landed.map((o) => `${outputName(o)} ${o.url}`).join(', ') || '(no urls)'}`
   }
   if (gen.status === 'failed') {
     return `- ${name}: failed | ${gen.error ?? 'unknown error'}`
@@ -863,7 +874,7 @@ function generationRow(gen: Generation): string {
   // mistaken for a finished generation.
   const ready = landedOutputs(gen)
   if (ready.length > 0) {
-    return `- ${name}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${o.mediaId} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
+    return `- ${name}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${outputName(o)} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
   }
   return `- ${name}: ${gen.status} [poll_after_seconds: ${secs}]`
 }
