@@ -18,9 +18,6 @@ import {
   MEDIA_LIST_TYPES,
   describeFileSize,
   describeReferences,
-  pendingJob,
-  type ImportStarted,
-  type ImportedMedia,
   type MediaBatchItem,
   type MediaItem,
   type MediaKind,
@@ -34,10 +31,9 @@ import {
   type UploadedMedia,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { DEFAULT_TIMEOUT_SEC } from '../generation.js'
-import { costRows, emit, keyValues, table, linkRow, displayId, statusCommand, withMore, clip } from '../output.js'
+import { costRows, emit, keyValues, table, linkRow, displayId, withMore, clip } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { toInt, toList, withPageFlags, withSortFlags } from '../args.js'
+import { toList, withPageFlags, withSortFlags } from '../args.js'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: string): Buffer | null {
@@ -81,71 +77,10 @@ function saveExt(url: string, type: string): string {
   return EXT_BY_TYPE[type] ?? ''
 }
 
-
 function uploadedHuman(m: UploadedMedia): string {
   return keyValues([
     ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
     ...linkRow(m),
-    ['URL', m.url],
-  ])
-}
-
-/**
- * An import may have created NOTHING, so it cannot share `uploadedHuman`.
- *
- * ## Why this is not cosmetic
- *
- * `import_media` is idempotent: the same bytes twice give one library item, not two. Rendered through the
- * upload formatter, a duplicate printed `Output id:` followed by nothing, because `outputId` is null in that
- * case. That reads as a broken command rather than a deliberate no-op, which is worse than the behavior it
- * replaced.
- *
- * Three cases, because what the operator can DO next differs:
- *
- *   created            -> an id to reference
- *   duplicate, is a library item -> the EXISTING id, and a note that nothing was imported
- *   duplicate, is not  -> no id at all; the bytes are an export or a look, so say what they ARE
- *
- * The third is the case that caused the incident behind this work: an editor export still was imported and
- * became a row that owned no object. "Already imported" without naming what it is sends the operator hunting
- * for a library item that does not exist.
- *
- * ⚠️ `--json` is unaffected and still emits the full object. This is the HUMAN rendering only, so a script
- * reading `alreadyExisted` keeps working unchanged.
- */
-export function importStartedHuman(m: Pick<ImportStarted, 'outputId' | 'status'> & { shortId?: string | null; appUrl?: string | null }): string {
-  return keyValues([
-    ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
-    ...linkRow(m),
-    ['Status', m.status],
-    ['Next', statusCommand([{ id: m.outputId, shortId: m.shortId, kind: 'output' }])],
-  ])
-}
-
-export function importedHuman(m: ImportedMedia): string {
-  if (!m.alreadyExisted) {
-    // Non-null whenever something was created; the fallback exists so a null can never render as a blank
-    // value, which is the exact failure this function was written to remove.
-    return keyValues([
-      ['Output id', m.outputId ? displayId({ id: m.outputId, shortId: m.shortId }) : 'none'],
-      ...linkRow(m),
-      ['URL', m.url],
-    ])
-  }
-  if (m.outputId) {
-    return keyValues([
-      ['Status', 'Already in your library. Nothing was imported.'],
-      ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
-      ...linkRow(m),
-      ['URL', m.url],
-    ])
-  }
-  return keyValues([
-    ['Status', 'You already have this file. Nothing was imported.'],
-    ['Already stored as', m.existing?.role ?? 'an existing file'],
-    ['Object', m.existing?.objectName ?? ''],
-    // Stated rather than left blank: an absent id is the ANSWER here, not a missing value.
-    ['Output id', 'none (not a library item, reference it by URL)'],
     ['URL', m.url],
   ])
 }
@@ -390,32 +325,5 @@ export function registerMedia(program: Command): void {
       const { client, ctx } = makeClient(command)
       const m = await client.uploadMedia(bytes, { fileName, contentType })
       emit(m, ctx, uploadedHuman)
-    })
-
-  media
-    .command('import')
-    .description('Import a remote URL as first-class media (requires library:write)')
-    .argument('<url>', 'public https URL to fetch and re-host')
-    .option('--content-type <mime>', 'MIME type override (else taken from the response)')
-    .option('--name <name>', 'file name override (used for the extension)')
-    .option('--no-wait', 'return the outputId immediately instead of waiting for the import')
-    .option('--timeout <seconds>', 'how long to wait before handing back the outputId', toInt, DEFAULT_TIMEOUT_SEC)
-    .action(async (url: string, opts: Record<string, unknown>, command: Command) => {
-      const { client, ctx } = makeClient(command)
-      const input = { url, contentType: opts.contentType as string | undefined, fileName: opts.name as string | undefined }
-      if (opts.wait === false) {
-        emit(await client.startImport(input), ctx, importStartedHuman)
-        return
-      }
-      try {
-        emit(await client.importMedia(input, { timeoutMs: ((opts.timeout as number) ?? DEFAULT_TIMEOUT_SEC) * 1000 }), ctx, importedHuman)
-      } catch (err) {
-        // Accepted and still running (or the poll dropped): the import is not lost, so hand back its id and exit
-        // TIMEOUT, never an error that invites running it again. A refused url is terminal and still throws.
-        const pending = pendingJob(err)
-        if (!pending) throw err
-        emit({ ...pending, status: 'processing' as const }, ctx, importStartedHuman)
-        process.exitCode = EXIT.TIMEOUT
-      }
     })
 }

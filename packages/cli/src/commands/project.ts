@@ -10,7 +10,6 @@
  *   project version list|create|restore|update|delete <projectId>        its version history (premium)
  *   project edit undo|redo <projectId> [--expected-revision <n>]         the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
- *   project import --source-type <pptx|canva> [--file-url <url>] [--design-id <id>] [--title <t>]
  *   project export <projectId> [--format mp4|png|jpg|pdf|pptx] [--resolution <r>] [--frame <n>] [--no-watermark] [--loudness <lufs|off>] [--wait]
  *   project export get <exportId>                                        one export: its file, state and details (requires editor:read)
  *   project export list <projectId> [--limit] [--cursor]                 its exports, newest first (requires editor:read)
@@ -41,7 +40,6 @@ import {
   withExportLoudness,
   type EditorOp,
   type Loudness,
-  type ImportProjectSource,
   type ProjectCoverChoice,
   type ProjectListResult,
   type ProjectSort,
@@ -331,34 +329,6 @@ export function registerProject(program: Command): void {
       const { client, ctx } = makeClient(command)
       await client.deleteProject(projectId)
       emit({ success: true, projectId }, ctx, () => `Permanently deleted project ${projectId}.`)
-    })
-
-  project
-    .command('import')
-    .description('Import a PPTX/Slides file URL or a Canva design into a new canvas project (requires editor:write)')
-    .option('--source-type <type>', "pptx | canva")
-    .option('--file-url <url>', "PPTX / slides file URL (when --source-type pptx)")
-    .option('--design-id <id>', "Canva design id (when --source-type canva)")
-    .option('--title <text>', "title for the created project")
-    .option('--card <id>', 'link the new project to this card in the same call (also needs planner:write)')
-    .action(async (opts: Record<string, unknown>, command: Command) => {
-      const sourceType = opts.sourceType as string | undefined
-      let source: ImportProjectSource
-      if (sourceType === 'pptx') {
-        if (!opts.fileUrl) throw new CliError('--file-url is required when --source-type is pptx.', EXIT.USAGE)
-        source = { type: 'pptx', fileUrl: opts.fileUrl as string }
-      } else if (sourceType === 'canva') {
-        if (!opts.designId) throw new CliError('--design-id is required when --source-type is canva.', EXIT.USAGE)
-        source = { type: 'canva', designId: opts.designId as string }
-      } else {
-        throw new CliError('--source-type must be pptx or canva.', EXIT.USAGE)
-      }
-      const { client, ctx } = makeClient(command)
-      const p = await client.importProject({ source, title: opts.title as string | undefined, cardId: opts.card as string | undefined })
-      emit(p, ctx, () =>
-        `Imported ${p.type} project ${p.id} "${p.title}" (${p.orientation}), revision ${p.revision}` +
-        (opts.card ? `, linked to card ${opts.card}` : ''),
-      )
     })
 
   const exportCommand = project

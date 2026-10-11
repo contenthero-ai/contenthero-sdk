@@ -406,6 +406,30 @@ test('importMedia returns an older server\'s finished answer as is', async () =>
   assert.equal(calls.length, 1)
 })
 
+test('importContent POSTs to the post\'s import route and returns where its copy stands', async () => {
+  const answer = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null }
+  const { fetch, calls } = stubFetch([{ status: 202, body: answer }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  assert.deepEqual(await client.importContent('c1'), answer)
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/import')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), {})
+})
+
+test('estimateImportCost prices a post on its import route and a url on the media imports route', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { getCost: true, creditsEstimate: 12, contentId: 'c1' } },
+    { status: 200, body: { getCost: true, creditsEstimate: 0 } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  assert.equal((await client.estimateImportCost({ contentId: 'c1' })).creditsEstimate, 12)
+  assert.equal((await client.estimateImportCost({ url: 'https://x/a.png' })).creditsEstimate, 0)
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/import')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { getCost: true })
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/media/imports')
+  assert.deepEqual(JSON.parse(calls[1]?.init?.body as string), { url: 'https://x/a.png', getCost: true })
+})
+
 test('favorite posts to /api/v1/favorite with the asset target', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { favorited: true } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

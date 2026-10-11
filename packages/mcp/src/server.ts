@@ -123,6 +123,8 @@ import {
   type MediaUploadOutcome,
   importedMediaResult,
   importPendingResult,
+  importCostResult,
+  contentImportResult,
   uploadedMediaBatchResult,
   type UploadedMediaOutcome,
   assetOrderResult,
@@ -358,13 +360,51 @@ const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 
 /**
- * How long a tool that starts a background job (analyze_content, import_media, generate_board, export_project) waits
+ * How long a tool that starts a background job (analyze_content, import, generate_board, export_project) waits
  * for it within one call, and how often it looks. The hosted route allows 60s; past this the tool answers pending and
  * the agent waits with get_status.
  */
 const JOB_WAIT_MS = 40_000
 const JOB_POLL_MS = 4_000
 const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
+
+/** What one `import` call brings in: library media from a url, a post's analysis copy, or a new canvas project. */
+export type ImportSource =
+  | { kind: 'url'; url: string }
+  | { kind: 'post'; contentId: string }
+  | { kind: 'project'; source: { type: 'pptx'; fileUrl: string } | { type: 'canva'; designId: string } }
+
+const IMPORT_SOURCES = ['url', 'contentId', 'pptxUrl', 'canvaDesignId'] as const
+
+/**
+ * The one source an `import` call names, or why the call cannot run: exactly one of url, contentId, pptxUrl and
+ * canvaDesignId, and each companion input only beside the source it belongs to, so nothing passed is silently ignored.
+ */
+export function importSourceOf(args: {
+  url?: string
+  contentId?: string
+  pptxUrl?: string
+  canvaDesignId?: string
+  contentType?: string
+  fileName?: string
+  title?: string
+  cardId?: string
+}): ImportSource | string {
+  const named = IMPORT_SOURCES.filter((k) => typeof args[k] === 'string' && (args[k] as string).trim() !== '')
+  if (named.length === 0) return 'import needs exactly one source: url, contentId, pptxUrl or canvaDesignId.'
+  if (named.length > 1) return `import takes exactly one source per call; got ${named.join(' and ')}.`
+  const isProject = named[0] === 'pptxUrl' || named[0] === 'canvaDesignId'
+  if (named[0] !== 'url' && (args.contentType !== undefined || args.fileName !== undefined)) {
+    return 'contentType and fileName go with url only.'
+  }
+  if (!isProject && (args.title !== undefined || args.cardId !== undefined)) {
+    return 'title and cardId go with pptxUrl or canvaDesignId only.'
+  }
+  if (named[0] === 'url') return { kind: 'url', url: (args.url as string).trim() }
+  if (named[0] === 'contentId') return { kind: 'post', contentId: (args.contentId as string).trim() }
+  if (named[0] === 'pptxUrl') return { kind: 'project', source: { type: 'pptx', fileUrl: (args.pptxUrl as string).trim() } }
+  return { kind: 'project', source: { type: 'canva', designId: (args.canvaDesignId as string).trim() } }
+}
 
 /**
  * Placement intent for the generative tools' optional one-call timeline placement. Mirrors the SDK
@@ -1304,12 +1344,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       .string()
       .optional()
       .describe(
-        'ADD media in ContentHero by its output id: a generation, a file uploaded from a device (create_media_upload then complete_media_upload), or a file imported from a url (import_media). "<id>-2" is variation 2 of a batch.',
+        'ADD media in ContentHero by its output id: a generation, a file uploaded from a device (create_media_upload then complete_media_upload), or a file imported from a url (import). "<id>-2" is variation 2 of a batch.',
       ),
     assetUrl: z
       .string()
       .optional()
-      .describe('ADD a link by its url. Nothing is copied; to keep a copy of a file on the web, import_media it and add the outputId.'),
+      .describe('ADD a link by its url. Nothing is copied; to keep a copy of a file on the web, import it and add the outputId.'),
     contentId: z
       .string()
       .optional()
@@ -2952,7 +2992,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Create Media Upload',
       annotations: WRITE,
       description:
-        'Upload local files as first-class media (phase 1 of 2). Accepts 1-25 files in one call. Returns, for each file, a signed uploadUrl and the exact headers to send; PUT each file\'s bytes to its URL with those headers unchanged, then call complete_media_upload once with every returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import_media instead. Requires the library:write scope.',
+        'Upload local files as first-class media (phase 1 of 2). Accepts 1-25 files in one call. Returns, for each file, a signed uploadUrl and the exact headers to send; PUT each file\'s bytes to its URL with those headers unchanged, then call complete_media_upload once with every returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import instead. Requires the library:write scope.',
       inputSchema: {
         files: z
           .array(
@@ -3023,28 +3063,58 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- import_media ---------------------------------------------------------
+  // -- import -------------------------------------------------------------------
+  // One verb for everything brought in from outside (Taylan, 2026-10-11; plan source-media-v1). What comes back
+  // follows what came in.
   server.registerTool(
-    'import_media',
+    'import',
     {
-      title: 'Import Media',
-      ...renders('Importing media'),
+      title: 'Import',
+      ...renders('Importing'),
       annotations: WRITE,
       description:
-        'Import a remote URL as first-class media: the server fetches and re-hosts it, returning its outputId + public URL (referenceable by outputId in generate_* and as an asset on a card via update_card). Use this for a file already on a public URL, or from a hosted client that cannot read local files. Requires the library:write scope.',
+        "Bring something into ContentHero. Pass exactly one source, and what comes back follows it. url: a file address (an image, video or audio file) becomes library media, free; a video page address on a supported site becomes library media too, and spends credits: the most its download may cost is held and it is charged for what arrived. contentId: a tracked post's video is downloaded into the post's shared analysis copy, which the reading tools use; nothing lands in your library; it spends credits unless the copy already exists or is being made, which is free. pptxUrl (a PowerPoint or Google Slides file) or canvaDesignId (a Canva design, through the account's Canva connection) becomes a new canvas project with editable layers, free; cardId links it to its card in the same call. Pass getCost to see what an import would spend first: nothing runs and nothing is charged. Imported media is referenced by its outputId in generate_* and on a card via update_card. A media import still running at the end of the call returns pending: wait for it with get_status. A post's copy still downloading returns pending: import the same contentId again to follow it, which is free. Scopes: library:write for a url, studio:generate for a post, editor:write for a project (and planner:write with cardId).",
       inputSchema: {
-        url: z.string().describe('A public https URL to fetch and re-host.'),
-        contentType: z.string().optional().describe('Optional MIME override (else taken from the response).'),
-        fileName: z.string().optional().describe('Optional file name (used for its extension).'),
+        url: z.string().optional().describe('A public https address: a file, imported free into the library, or a video page on a supported site, whose video is downloaded into the library and spends.'),
+        contentId: z.string().optional().describe("A tracked post (from list_content, get_tracked_account, or a get_card inspiration asset): its video goes into the post's shared analysis copy, not your library."),
+        pptxUrl: z.string().optional().describe('A PowerPoint or Google Slides file address: imported into a new canvas project.'),
+        canvaDesignId: z.string().optional().describe("A Canva design id: imported into a new canvas project through the account's Canva connection (fails with canva_not_connected when it is not linked)."),
+        contentType: z.string().optional().describe('With url: a MIME override (else taken from the response).'),
+        fileName: z.string().optional().describe('With url: a file name (used for its extension).'),
+        title: z.string().optional().describe("With pptxUrl or canvaDesignId: the new project's title."),
+        cardId: z.string().optional().describe('With pptxUrl or canvaDesignId: the card this project is for. The new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
+        getCost: z.boolean().optional().describe('Return what this import would spend instead of importing (nothing runs, nothing is charged). 0 for a file address, a project, or a post whose copy exists or is being made.'),
       },
     },
     async (args, extra) => {
       try {
+        const source = importSourceOf(args)
+        if (typeof source === 'string') return errorResult(new Error(source))
         const client = await getClient(extra)
+
+        if (source.kind === 'project') {
+          if (args.getCost) return importCostResult({ creditsEstimate: 0 }, 'project')
+          return projectCreatedResult(await client.importProject({ source: source.source, title: args.title, cardId: args.cardId }), args.cardId)
+        }
+
+        if (source.kind === 'post') {
+          if (args.getCost) return importCostResult(await client.estimateImportCost({ contentId: source.contentId }), 'post')
+          // A post's copy has no job get_status reads; asking again is how it is followed, and is free. Ask again
+          // within this call while it downloads, then answer pending with how to follow it.
+          let result = await client.importContent(source.contentId)
+          const deadline = Date.now() + jobWait.waitMs
+          while (result.copy.status === 'pending' && Date.now() + jobWait.pollMs <= deadline) {
+            await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
+            result = await client.importContent(source.contentId)
+          }
+          return contentImportResult(result)
+        }
+
+        if (args.getCost) return importCostResult(await client.estimateImportCost({ url: source.url }), 'url')
         // The server fetches the url in a background job; wait for it within this call, then answer pending.
         return importedMediaResult(
           await client.importMedia(
-            { url: args.url, contentType: args.contentType, fileName: args.fileName },
+            { url: source.url, contentType: args.contentType, fileName: args.fileName },
             { timeoutMs: jobWait.waitMs, pollIntervalMs: jobWait.pollMs },
           ),
         )
@@ -4625,37 +4695,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       try {
         const client = await getClient(extra)
         return projectCreatedResult(await client.createProject(args), args.cardId)
-      } catch (err) {
-        return errorResult(err)
-      }
-    },
-  )
-
-  server.registerTool(
-    'import_project',
-    {
-      title: 'Import Project',
-      annotations: WRITE,
-      description:
-        "Import a PowerPoint / Google Slides file (by URL) or a Canva design (by id) into a NEW canvas project with editable layers. Set sourceType to 'pptx' and pass fileUrl (a URL to a .pptx / slides file), or set sourceType to 'canva' and pass designId (uses the account's Canva connection; fails with canva_not_connected if not linked). Pass cardId to link the new project to its card in the same call. Returns the new project id + revision. Requires the editor:write scope (and planner:write with cardId).",
-      inputSchema: {
-        sourceType: z.enum(['pptx', 'canva']).describe("'pptx' for a file URL, 'canva' for a Canva design id."),
-        fileUrl: z.string().optional().describe("Required when sourceType is 'pptx': a URL to the .pptx / slides file."),
-        designId: z.string().optional().describe("Required when sourceType is 'canva': the Canva design id."),
-        title: z.string().optional().describe("Title for the created project. Defaults to 'Imported deck'."),
-        cardId: z.string().optional().describe('The card this project is for: the new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
-      },
-    },
-    async (args, extra) => {
-      try {
-        if (args.sourceType === 'pptx' && !args.fileUrl) return errorResult(new Error("fileUrl is required when sourceType is 'pptx'."))
-        if (args.sourceType === 'canva' && !args.designId) return errorResult(new Error("designId is required when sourceType is 'canva'."))
-        const source =
-          args.sourceType === 'pptx'
-            ? ({ type: 'pptx', fileUrl: args.fileUrl as string } as const)
-            : ({ type: 'canva', designId: args.designId as string } as const)
-        const client = await getClient(extra)
-        return projectCreatedResult(await client.importProject({ source, title: args.title, cardId: args.cardId }), args.cardId)
       } catch (err) {
         return errorResult(err)
       }

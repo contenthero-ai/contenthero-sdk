@@ -203,7 +203,7 @@ const CASES: Case[] = [
   { tool: 'generate_board', args: { boardType: 'character', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'edit_audio', args: { operation: 'enhance', sourceUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'edit_audio', args: { projectId: 'p1', enhanceClips: true }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
-  { tool: 'import_media', args: { url: 'https://example.com/a.png' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
+  { tool: 'import', args: { url: 'https://example.com/a.png' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'transcribe', args: { audioUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: TRANSCRIPT.shortId, appUrl: TRANSCRIPT.appUrl }, paths: ['finished'] },
   // The 2026-10-10 case: a picture or sound export that finished inside the call is drawn by the card, and still named.
   { tool: 'export_project', args: { projectId: 'p1', format: 'mp4' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },

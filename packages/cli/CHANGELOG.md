@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking (hard cutover, no alias): one command `import` replaces `media import` and `project import`, named after
+  the MCP's `import`. `contenthero import <url>` brings a file (free) or a video page on a supported site (spends)
+  into the library; `--content <id>` imports a tracked post's video into its shared analysis copy and waits while it
+  downloads (exit 4 when still downloading); `--pptx <url>` or `--canva <id>` makes a new canvas project (with
+  `--title`, `--card`). `--cost` prints what any of them would spend and runs nothing.
 - `model get` prints the model's input limits (file sizes, reference lengths, and reference video plus output
   together).
 - `content analyze` waits through the SDK's one wait (`waitForStatus`) instead of a loop of its own, and exits 4 when

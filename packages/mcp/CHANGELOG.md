@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Breaking (hard cutover, no alias): one tool `import` replaces `import_media` and `import_project`. Pass exactly one
+  source: `url` (a file, free, or a video page on a supported site, which spends) becomes library media; `contentId`
+  imports a tracked post's video into its shared analysis copy (spends unless the copy exists or is being made);
+  `pptxUrl` or `canvaDesignId` becomes a new canvas project (free; `title`, `cardId`). `getCost` prices any of them
+  first. A media import still running is followed with `get_status`; a post's copy still downloading, by importing it
+  again, which is free. A page address import reports what it cost.
 - `get_model` lists the model's input limits (file sizes, reference lengths, and reference video plus output
   together), which it left out, so a request is shaped within them instead of refused.
 - Fixed: `list_content` says each `accountIds` entry that named no account of yours, one line each, instead of

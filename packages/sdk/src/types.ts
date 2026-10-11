@@ -2057,11 +2057,42 @@ export interface CreateMediaUploadResult {
   expiresAt: string
 }
 
-/** Fields to import a remote URL as first-class media. */
+/**
+ * Fields to import a remote URL as first-class media. `url` is a file address (an image, video or audio file), which
+ * imports free, or a supported page address (a YouTube video, an Instagram post), whose video is downloaded into the
+ * library: the most it may cost is held and what arrived is charged. Price it first with `estimateImportCost`.
+ */
 export interface ImportMediaInput {
   url: string
   contentType?: string
   fileName?: string
+}
+
+/** What `estimateImportCost` prices: a url as `importMedia` takes it, or a tracked post as `importContent` takes it. */
+export type ImportCostSource = { url: string } | { contentId: string }
+
+/**
+ * Where a tracked post's shared analysis copy stands: `ready` to read, `pending` while it downloads (ask again to
+ * follow it, free), `failed` with why, `unavailable` with why the post has no video to copy.
+ */
+export type ContentImportCopy =
+  | { status: 'ready' }
+  | { status: 'pending' }
+  | { status: 'failed'; error: string }
+  | { status: 'unavailable'; reason: string }
+
+/**
+ * Result of `importContent`: a tracked post's video in its shared analysis copy, which the reading tools use. Nothing
+ * lands in the caller's library.
+ */
+export interface ContentImportResult {
+  contentId: string
+  /** The post's short id and its page in the app. */
+  shortId: string
+  appUrl: string
+  copy: ContentImportCopy
+  /** What it cost: held on the most the download may move, charged for what arrived; null when nothing was charged. */
+  charge: Charge | null
 }
 
 /**
@@ -2138,6 +2169,11 @@ export interface ImportedMedia {
    * from older servers.
    */
   contentType?: string
+  /**
+   * What it cost, from a page address (a video page whose download is charged for what arrived). Absent for a file
+   * address, which imports free, and from an older server.
+   */
+  charge?: Charge
 }
 
 /** The operation a model performs within its content type. */

@@ -1033,10 +1033,10 @@ test('get_status blocks by default and returns the final URLs', async () => {
   assert.ok(!res.isError)
 })
 
-test('import_media waits within the call, and hands back the outputId as pending when the job is still running', async () => {
+test('import of a url waits within the call, and hands back the outputId as pending when the job is still running', async () => {
   let options
   const mcp = await connect(fakeClient({ importMedia: async (_input, opts) => { options = opts; throw new GenerationTimeoutError('im9') } }))
-  const res = await mcp.callTool({ name: 'import_media', arguments: { url: 'https://example.com/a.mp4' } })
+  const res = await mcp.callTool({ name: 'import', arguments: { url: 'https://example.com/a.mp4' } })
   assert.deepEqual(options, { timeoutMs: 300, pollIntervalMs: 50 })
   assert.ok(!res.isError)
   assert.match(res.content[0].text, /Import im9 is still running/)
@@ -3565,17 +3565,82 @@ test('create_project names a new editor project\'s main track, so the first clip
   assert.doesNotMatch((canvas.content[0] as { text: string }).text, /Main track/)
 })
 
-test('import_project (pptx) creates a canvas project from a file URL', async () => {
+test('import of a page address reports what its download cost', async () => {
+  const mcp = await connect(fakeClient({
+    importMedia: async () => ({ outputId: 'im1', shortId: 'Imp00001', appUrl: 'https://app/m/Imp00001', url: 'https://cdn/v.mp4', alreadyExisted: false, contentType: 'video', charge: CHARGE }),
+  }))
+  const res = await mcp.callTool({ name: 'import', arguments: { url: 'https://www.youtube.com/watch?v=x' } })
+  assert.ok(!res.isError)
+  assert.match(res.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n'), /Cost: 7 credits charged\./)
+})
+
+test('import of a pptxUrl creates a canvas project from a file URL', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'import_project', arguments: { sourceType: 'pptx', fileUrl: 'https://x/deck.pptx' } })
+  const res = await mcp.callTool({ name: 'import', arguments: { pptxUrl: 'https://x/deck.pptx' } })
   assert.ok(!res.isError)
   assert.match((res.content[0]).text, /Created canvas project imp1/)
 })
 
-test('import_project (pptx) without fileUrl is an error', async () => {
+test('import of a canvaDesignId hands the design to importProject', async () => {
+  let seen
+  const mcp = await connect(fakeClient({ importProject: async (input) => { seen = input; return { id: 'imp2', type: 'canvas', kind: 'canvas', title: 'D', orientation: '16:9', width: 1920, height: 1080, revision: 0, state: { slides: [] } } } }))
+  const res = await mcp.callTool({ name: 'import', arguments: { canvaDesignId: 'DAF1', title: 'D' } })
+  assert.ok(!res.isError)
+  assert.deepEqual(seen, { source: { type: 'canva', designId: 'DAF1' }, title: 'D', cardId: undefined })
+})
+
+test('import takes exactly one source, and refuses an input that belongs to another source', async () => {
   const mcp = await connect(fakeClient())
-  const res = await mcp.callTool({ name: 'import_project', arguments: { sourceType: 'pptx' } })
-  assert.ok(res.isError)
+  const none = await mcp.callTool({ name: 'import', arguments: {} })
+  assert.ok(none.isError)
+  assert.match(none.content[0].text, /exactly one source/)
+  const two = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', contentId: 'c1' } })
+  assert.ok(two.isError)
+  assert.match(two.content[0].text, /got url and contentId/)
+  const stray = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1', fileName: 'a.mp4' } })
+  assert.ok(stray.isError)
+  assert.match(stray.content[0].text, /go with url only/)
+  const card = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', cardId: 'c1' } })
+  assert.ok(card.isError)
+  assert.match(card.content[0].text, /go with pptxUrl or canvaDesignId only/)
+})
+
+test('import of a post asks again while its copy downloads, then names where it stands and what it cost', async () => {
+  const answers = [
+    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null },
+    { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'ready' }, charge: null },
+  ]
+  let asked = 0
+  const mcp = await connect(fakeClient({ importContent: async (id) => { assert.equal(id, 'c1'); return answers[Math.min(asked++, 1)] } }))
+  const res = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1' } })
+  assert.ok(!res.isError)
+  assert.equal(asked, 2)
+  assert.match(res.content[0].text, /Con00001/)
+  assert.match(res.content[0].text, /ready in the post's shared analysis copy/)
+  assert.equal(res.structuredContent.status, 'ready')
+})
+
+test('import of a post still downloading at the end of the call says to import it again', async () => {
+  const pending = { contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null }
+  const mcp = await connect(fakeClient({ importContent: async () => pending }))
+  const res = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1' } })
+  assert.ok(!res.isError)
+  assert.match(res.content[0].text, /import \{ contentId: "Con00001" \} again, which is free/)
+  assert.equal(res.structuredContent.status, 'pending')
+})
+
+test('import getCost prices a post and a url through the SDK, and a project as free without asking', async () => {
+  const asked = []
+  const mcp = await connect(fakeClient({
+    estimateImportCost: async (source) => { asked.push(source); return { getCost: true, creditsEstimate: 'contentId' in source ? 9 : 0 } },
+  }))
+  const post = await mcp.callTool({ name: 'import', arguments: { contentId: 'c1', getCost: true } })
+  assert.match(post.content[0].text, /at most 9 credits/)
+  const file = await mcp.callTool({ name: 'import', arguments: { url: 'https://x/a.png', getCost: true } })
+  assert.match(file.content[0].text, /costs 0 credits: it is a file/)
+  const deck = await mcp.callTool({ name: 'import', arguments: { pptxUrl: 'https://x/d.pptx', getCost: true } })
+  assert.match(deck.content[0].text, /canvas project costs 0 credits/)
+  assert.deepEqual(asked, [{ contentId: 'c1' }, { url: 'https://x/a.png' }])
 })
 
 test('export_project returns the download URL when it finishes in time', async () => {
@@ -4326,11 +4391,11 @@ test('no tool text uses the retired "pipeline stage" vocabulary', async () => {
 })
 
 /**
- * create_project and import_project hand cardId to the client (2026-09-27). import_project builds its input field by
+ * create_project and import hand cardId to the client (2026-09-27). import builds its project input field by
  * field, so a new parameter it does not copy would be accepted by the schema and silently dropped: the project would
  * be made and never linked.
  */
-test('create_project and import_project pass cardId through, and say the project is linked', async () => {
+test('create_project and import pass cardId through, and say the project is linked', async () => {
   const seen: Array<Record<string, unknown>> = []
   const project = { id: 'p1', type: 'editor', kind: 'editor', surface: 'editor', title: 'T', orientation: '16:9', width: 1920, height: 1080, revision: 1 }
   const mcp = await connect(
@@ -4341,8 +4406,8 @@ test('create_project and import_project pass cardId through, and say the project
   )
   const created = await mcp.callTool({ name: 'create_project', arguments: { cardId: 'c1' } })
   const imported = await mcp.callTool({
-    name: 'import_project',
-    arguments: { sourceType: 'pptx', fileUrl: 'https://x/d.pptx', cardId: 'c1' },
+    name: 'import',
+    arguments: { pptxUrl: 'https://x/d.pptx', cardId: 'c1' },
   })
   assert.deepEqual(seen.map((s) => s.cardId), ['c1', 'c1'])
   for (const res of [created, imported]) {
@@ -4393,6 +4458,7 @@ const SPENDING_CALLS = {
   create_avatar: { name: 'Mika', age: '20s', gender: 'female' },
   add_brand_knowledge: { brandKitId: 'bk1', sourceType: 'text', text: 'a note' },
   analyze_content: { contentId: 'c1' },
+  import: { contentId: 'c1' },
 }
 
 test('every tool that spends reports its cost the same way', async () => {
@@ -4409,6 +4475,7 @@ test('every tool that spends reports its cost the same way', async () => {
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
       analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
       addBrandKnowledge: async () => ({ item: { id: 'kn1', title: 'a note', sourceType: 'text' }, charge: CHARGE }),
+      importContent: async () => ({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'ready' }, charge: CHARGE }),
     }),
   )
   const { tools } = await mcp.listTools()

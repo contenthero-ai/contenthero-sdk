@@ -99,6 +99,7 @@ import type {
   ContentAnalysisResult,
   ContentAnalysisKind,
   ContentScenesResult,
+  ContentImportResult,
   ContentListResult,
   TrackedAccountDetail,
   Transcription,
@@ -1708,13 +1709,13 @@ function renderableMedia(
  */
 export function importedMediaResult(r: ImportedMedia): CallToolResult {
   if (!r.alreadyExisted) {
-    return renderableMedia(
+    return withCharge(renderableMedia(
       `Media ready (${idOf({ id: r.shortId || r.outputId, appUrl: r.appUrl })}): ${r.url}. Reference it by outputId in generate_* or add_post_asset, or find it via list_media / get_media.`,
       r.outputId,
       r.url,
       r.contentType,
       r.appUrl,
-    )
+    ), r.charge)
   }
   if (r.outputId) {
     return text(
@@ -1729,10 +1730,55 @@ export function importedMediaResult(r: ImportedMedia): CallToolResult {
   )
 }
 
-/** import_media's answer when the import is still running at the end of the call. */
+/** import's answer for a url when the import is still running at the end of the call. */
 export function importPendingResult(job: { outputId: string; shortId?: string | null; appUrl?: string | null }): CallToolResult {
   const handle: JobHandle = { id: job.outputId, shortId: job.shortId, appUrl: job.appUrl, kind: 'output' }
   return text(`Import ${jobName(handle)} is still running. Wait for it with ${statusCallFor([handle])}.`)
+}
+
+/** What an import would spend, by what it brings in. Nothing ran and nothing was charged. */
+export type ImportCostSubject = 'url' | 'post' | 'project'
+
+/** import's price check: the most it may spend, and why it is 0 when it is. */
+export function importCostResult(est: { creditsEstimate: number }, subject: ImportCostSubject): CallToolResult {
+  const n = est.creditsEstimate
+  const credits = `${n} credit${n === 1 ? '' : 's'}`
+  const none = 'Nothing ran and nothing was charged.'
+  if (subject === 'project') return text(`Importing into a new canvas project costs 0 credits. ${none}`)
+  if (subject === 'post') {
+    return text(
+      n === 0
+        ? `This post's copy already exists or is being made: importing it costs 0 credits. ${none}`
+        : `Importing this post costs at most ${credits}: the most its download may move is held, and it is charged for what arrives. ${none}`,
+    )
+  }
+  return text(
+    n === 0
+      ? `Importing this address costs 0 credits: it is a file, which imports free. ${none}`
+      : `Importing this page's video costs at most ${credits}: the most its download may move is held, and it is charged for what arrives. ${none}`,
+  )
+}
+
+/**
+ * import's answer for a tracked post: where its shared analysis copy stands. A copy still downloading is followed by
+ * importing the post again, which is free, since a post's copy has no job of its own for get_status to read.
+ */
+export function contentImportResult(r: ContentImportResult): CallToolResult {
+  const post = jobName({ id: r.contentId, shortId: r.shortId, appUrl: r.appUrl })
+  const again = `import { contentId: "${r.shortId || r.contentId}" }`
+  const copy = r.copy
+  const body =
+    copy.status === 'ready'
+      ? 'Its video is ready in the post\'s shared analysis copy, which the reading tools use. Nothing was added to your library.'
+      : copy.status === 'pending'
+        ? `Its video is still downloading into the post's shared analysis copy. Follow it with ${again} again, which is free.`
+        : copy.status === 'failed'
+          ? `The download failed: ${copy.error}. Importing the post again tries once more.`
+          : `This post has no video to import: ${copy.reason}.`
+  return {
+    content: [{ type: 'text', text: lines([`Post ${post}`, body, chargeLine(r.charge)]) }],
+    structuredContent: { contentId: r.contentId, appUrl: r.appUrl ?? null, status: copy.status, ...chargeData(r.charge) },
+  }
 }
 
 export function accountResult(b: Account): CallToolResult {

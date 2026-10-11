@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- New: `importContent(contentId)` imports a tracked post's video into its shared analysis copy, which the reading
+  tools use; nothing lands in the library. It answers where the copy stands (`ready`, `pending`, `failed`,
+  `unavailable`) with the charge; asking again follows a pending copy and is free. `ContentImportResult` and
+  `ContentImportCopy` are exported.
+- New: `estimateImportCost(source)` prices an import and runs nothing: `{ url }` as `importMedia` takes it (0 for a
+  file address) or `{ contentId }` as `importContent` takes it (0 when the copy exists or is being made).
+  `ImportCostSource` is exported.
+- `importMedia` takes a video page address on a supported site as well as a file address: the page's video is
+  downloaded into the library, holding the most it may cost and charging what arrived. `ImportedMedia.charge` reports
+  what it cost.
 - New: `describeInputLimits(capabilities)`, one line per input limit a model declares (file sizes, reference
   lengths, and reference video plus output together), so the MCP and the CLI state them in the same words.
 - New: `ContentListResult.accountIdsNotFound`, each `accountIds` entry that named none of your tracked accounts in

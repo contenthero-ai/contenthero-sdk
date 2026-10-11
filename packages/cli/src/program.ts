@@ -24,6 +24,7 @@ import { registerAudio } from './commands/audio.js'
 import { registerTranscribe } from './commands/transcribe.js'
 import { registerStatus } from './commands/status.js'
 import { registerMedia } from './commands/media.js'
+import { registerImport } from './commands/import.js'
 import { registerFolder } from './commands/folder.js'
 import { registerCard, registerPost } from './commands/card.js'
 import { registerStage } from './commands/stage.js'
@@ -79,6 +80,7 @@ export function buildProgram(): Command {
   registerTranscribe(program)
   registerStatus(program)
   registerMedia(program)
+  registerImport(program)
   registerFolder(program)
   registerCard(program)
   registerPost(program)

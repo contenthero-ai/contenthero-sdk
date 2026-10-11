@@ -112,6 +112,8 @@ import type {
   ImportMediaInput,
   ImportedMedia,
   ImportStarted,
+  ImportCostSource,
+  ContentImportResult,
   UploadedMedia,
   ModelInfo,
   PlatformSummary,
@@ -1035,7 +1037,9 @@ export class ContentHero {
   /**
    * Import a remote URL as first-class media: the server fetches and re-hosts it.
    * Use when the file is already on a public URL (or from an environment that can't
-   * read local files).
+   * read local files). A file address imports free. A supported page address (a YouTube
+   * video, an Instagram post) downloads the page's video into the library: the most it
+   * may cost is held and what arrived is charged, so price it with `estimateImportCost`.
    *
    * ⚠️ IDEMPOTENT. If the account already holds these exact bytes nothing is created and `alreadyExisted`
    * is true; `outputId` is then the item that already owns them, or NULL when the bytes belong to something
@@ -1663,6 +1667,29 @@ export class ContentHero {
     options: { kind?: ContentAnalysisKind } = {},
   ): Promise<ContentAnalysisResult | ContentScenesResult> {
     return this.request('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, options.kind ? { kind: options.kind } : {})
+  }
+
+  /**
+   * Import a tracked post's video into its shared analysis copy, which the reading tools use (frames, sound, the
+   * transcript). Nothing lands in the caller's library. A copy that exists answers `ready` at no charge; one being
+   * made answers `pending`, also free; otherwise the most the download may cost is held and the copy starts, charged
+   * for what arrives. Call this again to follow a pending copy: asking again is free. A post with no video is refused
+   * with the reason. Price it first with `estimateImportCost({ contentId })`.
+   */
+  async importContent(contentId: string): Promise<ContentImportResult> {
+    return this.request<ContentImportResult>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/import`, {})
+  }
+
+  /**
+   * The most an import may cost, running nothing: a url as `importMedia` takes it (0 for a file address), or a tracked
+   * post as `importContent` takes it (0 when its copy exists or is under way). It is charged for what arrives, never
+   * more. A project import (`importProject`) never spends.
+   */
+  async estimateImportCost(source: ImportCostSource): Promise<CostEstimate> {
+    if ('contentId' in source) {
+      return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(source.contentId)}/import`, { getCost: true })
+    }
+    return this.request<CostEstimate>('POST', '/api/v1/media/imports', { url: source.url, getCost: true })
   }
 
   /** What `analyzeContent` would charge for this post and kind: 0 when the result already exists. Runs nothing. */
@@ -2355,6 +2382,8 @@ export function importedMediaFrom(gen: Generation, shortId: string | null): Impo
     shortId,
     alreadyExisted: false,
     contentType: gen.contentType,
+    // A page address spends: what its download moved is charged when it lands. A file address carries no charge.
+    ...(gen.charge ? { charge: gen.charge } : {}),
   }
 }
 

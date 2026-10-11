@@ -1,14 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { importedHuman } from './media.js'
+import { importedHuman, contentImportHuman } from './import.js'
 
 /**
- * What `ch media import` PRINTS when it created nothing.
+ * What `contenthero import` PRINTS for a url when it created nothing.
  *
  * ## The failure this replaces
  *
- * `media import` rendered through `uploadedHuman`, the upload formatter. An import is idempotent, so on a
+ * Importing a url rendered through `uploadedHuman`, the upload formatter. An import is idempotent, so on a
  * duplicate `outputId` is null, and that formatter printed `Output id:` followed by nothing. A blank value
  * reads as a broken command, not as a deliberate no-op, which is worse than the behavior it replaced.
  *
@@ -52,4 +52,13 @@ test('a duplicate with no role recorded still states the absent id', () => {
   assert.match(out, /an existing file/)
   assert.match(out, /Output id.*none/)
   assert.doesNotMatch(out, /Output id:\s*$/m)
+})
+
+test("a post import still downloading names how to follow it, and a ready one says nothing reached the library", () => {
+  const pending = contentImportHuman({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'pending' }, charge: null })
+  assert.match(pending, /still downloading/)
+  assert.match(pending, /contenthero import --content Con00001/)
+  const ready = contentImportHuman({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', copy: { status: 'ready' }, charge: null })
+  assert.match(ready, /Nothing was added to your library/)
+  assert.doesNotMatch(ready, /Next/)
 })

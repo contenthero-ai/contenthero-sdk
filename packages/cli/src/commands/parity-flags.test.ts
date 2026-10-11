@@ -91,8 +91,21 @@ test('folder update --text re-queries a smart folder', async () => {
 test('project create and import --card link the new project to that card', async () => {
   const created = await run('project', 'create', '--card', 'c1')
   assert.equal(created.body?.cardId, 'c1')
-  const imported = await run('project', 'import', '--source-type', 'pptx', '--file-url', 'https://x/d.pptx', '--card', 'c1')
-  assert.equal(imported.body?.cardId, 'c1')
+  const imported = await run('import', '--pptx', 'https://x/d.pptx', '--card', 'c1')
+  assert.equal(imported.path, '/api/v1/projects/import')
+  assert.deepEqual(imported.body, { source: { type: 'pptx', fileUrl: 'https://x/d.pptx' }, cardId: 'c1' })
+})
+
+test('import sends each source to its route: a Canva design, a post, and a url with --cost', async () => {
+  const canva = await run('import', '--canva', 'DAF1', '--title', 'Deck')
+  assert.deepEqual(canva.body, { source: { type: 'canva', designId: 'DAF1' }, title: 'Deck' })
+  const post = await run('import', '--content', 'c1', '--no-wait')
+  assert.equal(post.path, '/api/v1/content/c1/import')
+  const postCost = await run('import', '--content', 'c1', '--cost')
+  assert.deepEqual(postCost.body, { getCost: true })
+  const urlCost = await run('import', 'https://x/a.png', '--cost')
+  assert.equal(urlCost.path, '/api/v1/media/imports')
+  assert.deepEqual(urlCost.body, { url: 'https://x/a.png', getCost: true })
 })
 
 test('project create --brand-kit associates the kit', async () => {

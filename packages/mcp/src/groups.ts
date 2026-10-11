@@ -41,9 +41,9 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
   {
     slug: 'media',
     title: 'Media',
-    blurb: 'The library: browse, search, import and upload the media an account owns, and favorite, archive or share any item.',
+    blurb: 'The library: browse, search, import and upload the media an account owns, and favorite, archive or share any item. import also brings a tracked post\'s video in for analysis, and a deck in as a new canvas project.',
     tools: [
-      'list_media', 'get_media', 'show_media', 'search_media', 'import_media',
+      'list_media', 'get_media', 'show_media', 'search_media', 'import',
       'create_media_upload', 'complete_media_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
       'favorite', 'archive', 'share',
@@ -94,7 +94,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb: 'Projects, their timelines and canvases, the templates you place on them, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'update_project', 'duplicate_project', 'delete_project',
-      'import_project', 'export_project', 'get_export', 'list_exports',
+      'export_project', 'get_export', 'list_exports',
       'list_project_versions', 'create_project_version', 'restore_project_version', 'update_project_version',
       'delete_project_version', 'undo_project_edit', 'redo_project_edit',
       'update_timeline', 'update_canvas', 'get_transcript',
