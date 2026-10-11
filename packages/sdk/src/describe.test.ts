@@ -227,3 +227,20 @@ test('describeClip names a post by contentId and slide, and describeSourceSound 
   ])
   assert.deepEqual(describeSourceSound(null), [])
 })
+
+test('a transcription names its post and slide, prices it, and says where it stands', async () => {
+  const { transcriptionSource, describeTranscribeCost, describeTranscriptionState } = await import('./describe.js')
+  assert.equal(transcriptionSource({ contentId: 'c1', slide: 2 }), 'post c1, slide 2')
+  assert.equal(transcriptionSource({}), null)
+  assert.equal(
+    describeTranscribeCost({ getCost: true, creditsEstimate: 5, contentId: 'c1' }),
+    "Transcribing post c1 costs 5 credits, priced from its video's length and charged for what is heard. Nothing ran and nothing was charged.",
+  )
+  assert.match(describeTranscribeCost({ getCost: true, creditsEstimate: 0, contentId: 'c1', slide: 0 }), /^The words of post c1, slide 0 already exist or are being made: transcribing it costs 0 credits\./)
+  assert.equal(describeTranscriptionState({ status: 'running', contentId: 'c1' }), 'Still transcribing post c1.')
+  assert.equal(
+    describeTranscriptionState({ status: 'failed', contentId: 'c1', error: 'This video could not be transcribed. Please contact support.' }),
+    'This video could not be transcribed. Please contact support. Nothing was charged for it.',
+  )
+  assert.equal(describeTranscriptionState({ status: 'completed', transcript: '', wordCount: 0, durationSeconds: 1 }), null)
+})

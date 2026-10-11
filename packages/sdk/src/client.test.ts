@@ -15,6 +15,7 @@ import {
   GenerationInterruptedError,
   pendingOutputId,
   ConflictError,
+  NotFoundError,
   ServiceUnavailableError,
 } from './errors.js'
 import type { FetchLike } from './client.js'
@@ -212,6 +213,44 @@ test('transcribe posts the audio URL and returns the transcript', async () => {
   assert.equal(result.wordCount, 2)
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/studio/transcribe')
   assert.equal(calls[0]?.init?.method, 'POST')
+})
+
+test('transcribe names a tracked post (and a carousel slide), and a long one answers running', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 202, body: { contentId: 'c1', slide: 2, status: 'running', charge: { credits: 0, held: 4, state: 'pending', balanceAfter: null } } },
+    { status: 200, body: { contentId: 'c1', slide: 2, status: 'completed', transcript: 'hi there', language: 'en', wordCount: 2, durationSeconds: 3 } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const running = await client.transcribe({ contentId: 'c1', slide: 2 })
+  assert.equal(running.status, 'running')
+  const done = await client.transcribe({ contentId: 'c1', slide: 2 })
+  assert.equal(done.status === 'completed' && done.transcript, 'hi there')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/studio/transcribe')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { contentId: 'c1', slide: 2 })
+})
+
+test('estimateTranscribeCost prices a post on the transcribe route', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { getCost: true, creditsEstimate: 5, contentId: 'c1' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const est = await client.estimateTranscribeCost({ contentId: 'c1' })
+  assert.equal(est.creditsEstimate, 5)
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { contentId: 'c1', getCost: true })
+})
+
+test('download reads the save links an id names; 404 and 409 throw their typed errors', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { files: [{ mediaId: 'Abc12345-1', name: 'cat-1', url: 'https://app.test/api/media/k1?download=cat-1' }, { mediaId: 'Abc12345-2', name: 'cat-2', url: 'https://app.test/api/media/k2?download=cat-2' }] } },
+    { status: 404, body: { error: "Nothing of yours is named 'nope'." } },
+    { status: 409, body: { error: 'This export is rendering, not finished: follow it with get_export, then download it.' } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const { files } = await client.download('Abc 12345')
+  assert.equal(files.length, 2)
+  assert.equal(files[1].name, 'cat-2')
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/download/Abc%2012345')
+  assert.equal(calls[0]?.init?.method, 'GET')
+  await assert.rejects(client.download('nope'), NotFoundError)
+  await assert.rejects(client.download('exp1'), ConflictError)
 })
 
 test('listAvatars returns the { avatars, nextCursor } page', async () => {

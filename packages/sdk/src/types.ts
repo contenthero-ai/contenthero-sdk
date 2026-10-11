@@ -944,32 +944,103 @@ export type JobStatusResult = JobStatus | JobStatusUnanswered
 /** A job to wait on: its id, or its id with the kind when the id alone does not name it. */
 export type JobTarget = string | { id: string; kind?: JobKind }
 
-/** Request to transcribe an audio URL to text. */
-export interface TranscribeRequest {
+/** Transcribe an audio file by its public URL. */
+export interface TranscribeAudioRequest {
   /** Public URL of the audio to transcribe. */
   audioUrl: string
+  contentId?: never
+  slide?: never
   /** Optional ISO language hint (e.g. "en"); auto-detected when omitted. */
   languageCode?: string
   /** Label each speaker (diarization). */
   diarize?: boolean
 }
 
-/** Result of transcribing audio. Synchronous (no polling). */
-export interface Transcription {
-  outputId: string
-  /** Its stored record's short id and app link. Absent when no record was kept (the account's own key paid). */
+/**
+ * Transcribe a tracked post's video, word by word, from the copy `analyzeContent` kind `video` downloaded. Price it
+ * first with `estimateTranscribeCost`.
+ */
+export interface TranscribePostRequest {
+  audioUrl?: never
+  /** The tracked post whose video to transcribe. */
+  contentId: string
+  /** Which video of a carousel post, by its 0-based slide (as `analyzeContent` kind `video` reports it). */
+  slide?: number
+  /** A post's language is detected from its video. */
+  languageCode?: never
+  diarize?: never
+}
+
+/** Request to transcribe speech to text: an audio file by its URL, or a tracked post's downloaded video. */
+export type TranscribeRequest = TranscribeAudioRequest | TranscribePostRequest
+
+/** What names the source of a transcription, and what it cost. */
+interface TranscriptionSource {
+  /** The stored transcript record, for an audio file. A post's words live on the post, so it has none. */
+  outputId?: string
+  /** Its stored record's short id and app link. Absent when no record was kept (the account's own key paid, or a post). */
   shortId?: string
   appUrl?: string
-  transcript: string
-  language: string
-  wordCount: number
-  /** Source audio length in seconds, when known. */
-  durationSeconds: number | null
+  /** The post transcribed, for a post. */
+  contentId?: string
+  /** The carousel slide transcribed (0-based), for a carousel post's video. */
+  slide?: number
   /**
-   * What the run cost. `free` only when the user's own ElevenLabs key covered it, in which case the provider
-   * billed them directly.
+   * What the run cost. An audio file is `free` only when the user's own ElevenLabs key covered it, in which case
+   * the provider billed them directly. A post is charged once, to whoever asks first, for what was heard, and is free
+   * once its words exist or are being made.
    */
   charge?: Charge
+}
+
+/** A finished transcription. A post with no speech completes with an empty transcript and `wordCount` 0. */
+export interface CompletedTranscription extends TranscriptionSource {
+  status: 'completed'
+  transcript: string
+  /** The language heard, when known. */
+  language?: string | null
+  wordCount: number
+  /** Source length in seconds, when known. */
+  durationSeconds: number | null
+}
+
+/** A post's transcription still running: asking again with the same post follows it, free. */
+export interface RunningTranscription extends TranscriptionSource {
+  status: 'running'
+}
+
+/** A post's transcription that did not finish. Nothing is charged for it. */
+export interface FailedTranscription extends TranscriptionSource {
+  status: 'failed'
+  error: string
+}
+
+/**
+ * Result of `transcribe`. An audio file answers `completed`. A post answers `completed`, or `running` while a long
+ * video is still being transcribed (ask again with the same post to follow it, free), or `failed`.
+ */
+export type Transcription = CompletedTranscription | RunningTranscription | FailedTranscription
+
+/** `estimateTranscribeCost`'s answer: what transcribing the post's video costs now, with nothing run or charged. */
+export interface TranscribeCostEstimate extends CostEstimate {
+  contentId: string
+  /** The carousel slide priced (0-based), for a carousel post's video. */
+  slide?: number
+}
+
+/** One file `download` hands back. */
+export interface DownloadFile {
+  /** The output's media id, when the item has several outputs (a generation's variations). */
+  mediaId?: string
+  /** The name the file saves under, without its extension (the link adds it from the file's type). */
+  name: string
+  /** A save link: it names the file, needs no sign-in and does not expire. */
+  url: string
+}
+
+/** Result of `download`: each file the id names, as a save link. */
+export interface DownloadResult {
+  files: DownloadFile[]
 }
 
 /** An avatar as returned by `listAvatars` (the list projection). */

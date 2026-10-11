@@ -520,10 +520,11 @@ test('every tool input parameter is camelCase', async () => {
  * A bare `id` is fine on a UNIVERSAL tool, where the caller supplies `assetType` to say what kind of id
  * it is: `favorite` and `archive` are exactly that, and renaming their `id` would be wrong. On a
  * single-resource tool it is a missed opportunity to be unambiguous, and it is how `delete_element`
- * ended up taking `id` while its five sibling deletes each took a named one.
+ * ended up taking `id` while its five sibling deletes each took a named one. `download` is universal too: its id
+ * names a media item of any kind or an export, as the server reads it.
  */
 test('single-resource tools name their id parameter after the resource', async () => {
-  const UNIVERSAL = new Set(['favorite', 'archive', 'share'])
+  const UNIVERSAL = new Set(['favorite', 'archive', 'share', 'download'])
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const offenders = tools
@@ -624,17 +625,19 @@ test('no tool that spends credits is advertised as read-only', async () => {
 })
 
 /**
- * Metered tools the SERVER cannot price, so the MCP cannot offer a preflight.
+ * Metered tools the SERVER cannot price, in whole or for one of their sources, each with the input the server
+ * cannot price. A tool here with no getCost cannot be priced at all; one with getCost prices every source but that
+ * input.
  *
  * This is a list of server limitations, not a list of tools we decided to skip, and it
  * must stay that way or it becomes the place missing preflights go to hide. Every entry
  * names the route that would have to change to remove it.
  *
- * - transcribe: POST /api/v1/studio/transcribe accepts no getCost flag, and pricing it
- *   means reading the audio's duration before transcribing. The cost is knowable only
- *   afterwards, from `charge` on the result.
+ * - transcribe (audioUrl): POST /api/v1/studio/transcribe prices a post (contentId) up front, but refuses getCost
+ *   for an audioUrl, since pricing it means reading the audio's duration before transcribing. An audio file's cost
+ *   is knowable only afterwards, from `charge` on the result.
  */
-const METERED_WITHOUT_PREFLIGHT = new Set(['transcribe'])
+const METERED_WITHOUT_PREFLIGHT = new Map([['transcribe', 'audioUrl']])
 
 /**
  * The declaration a tool makes when calling it costs the caller credits.
@@ -677,10 +680,15 @@ test('spending is declared and priceable in both directions', async () => {
 
   // 3. The exception list must not outlive its reason. If a route learns to price itself
   //    and its tool gains getCost, this fails until the entry is deleted.
-  const stale = [...METERED_WITHOUT_PREFLIGHT].filter((n) => {
+  //    An entry stays only while its source exists and, when the tool has getCost, getCost still says that source
+  //    cannot be priced.
+  const stale = [...METERED_WITHOUT_PREFLIGHT].filter(([n, input]) => {
     const t = tools.find((x) => x.name === n)
-    return !t || hasPreflight(t)
-  })
+    if (!t) return true
+    const props = (t.inputSchema?.properties ?? {}) as Record<string, { description?: string }>
+    if (!props[input]) return true
+    return hasPreflight(t) && !/cannot be priced/.test(props.getCost?.description ?? '')
+  }).map(([n]) => n)
   assert.deepEqual(stale, [], `remove from METERED_WITHOUT_PREFLIGHT: ${stale.join(', ')}`)
 })
 
@@ -1909,6 +1917,87 @@ test('transcribe returns the transcript text', async () => {
   assert.equal(captured.languageCode, 'en')
 })
 
+
+test('transcribe a tracked post: priced with getCost, followed while it runs, word-timed once done', async () => {
+  const calls = []
+  const mcp = await connect(
+    fakeClient({
+      estimateTranscribeCost: async (req) => {
+        calls.push(['cost', req])
+        return { getCost: true, creditsEstimate: 6, contentId: req.contentId, ...(req.slide !== undefined ? { slide: req.slide } : {}) }
+      },
+      transcribe: async (req) => {
+        calls.push(['run', req])
+        if (req.slide === 1) return { status: 'running', contentId: 'c1', slide: 1, charge: { credits: 0, held: 6, state: 'pending', balanceAfter: null } }
+        return { status: 'completed', contentId: 'c1', transcript: 'one two three', language: 'en', wordCount: 3, durationSeconds: 4, charge: { credits: 6, held: 0, state: 'charged', balanceAfter: 94 } }
+      },
+    }),
+  )
+  const cost = await mcp.callTool({ name: 'transcribe', arguments: { contentId: 'c1', getCost: true } })
+  assert.equal(cost.content[0].text, "Transcribing post c1 costs 6 credits, priced from its video's length and charged for what is heard. Nothing ran and nothing was charged.")
+
+  const running = await mcp.callTool({ name: 'transcribe', arguments: { contentId: 'c1', slide: 1 } })
+  assert.ok(!running.isError)
+  assert.match(running.content[0].text, /^Still transcribing post c1, slide 1\. Call transcribe again with contentId "c1" and slide 1 to follow it, which is free\./)
+  assert.match(running.content[0].text, /Estimated cost: 6 credits/)
+
+  const done = await mcp.callTool({ name: 'transcribe', arguments: { contentId: 'c1' } })
+  const out = done.content[0].text
+  assert.match(out, /^Transcript of post c1 \(en\), 3 words:\n\none two three\n\nget_content with transcript='segments' returns it word-timed\./)
+  assert.match(out, /Cost: 6 credits charged\./)
+  assert.deepEqual(calls, [['cost', { contentId: 'c1' }], ['run', { contentId: 'c1', slide: 1 }], ['run', { contentId: 'c1' }]])
+})
+
+test('transcribe takes exactly one source, and getCost and slide only for a post', async () => {
+  let called = 0
+  const mcp = await connect(fakeClient({ transcribe: async () => { called++; return {} }, estimateTranscribeCost: async () => { called++; return {} } }))
+  for (const args of [
+    {},
+    { audioUrl: 'https://cdn/a.mp3', contentId: 'c1' },
+    { audioUrl: 'https://cdn/a.mp3', getCost: true },
+    { audioUrl: 'https://cdn/a.mp3', slide: 0 },
+    { contentId: 'c1', languageCode: 'en' },
+  ]) {
+    const res = await mcp.callTool({ name: 'transcribe', arguments: args })
+    assert.equal(res.isError, true, JSON.stringify(args))
+  }
+  assert.equal(called, 0)
+})
+
+test('a failed post transcription says so, and a silent one says no speech was heard', async () => {
+  const failed = await connect(fakeClient({ transcribe: async () => ({ status: 'failed', contentId: 'c1', error: 'This video could not be transcribed. Please contact support.' }) }))
+  const f = await failed.callTool({ name: 'transcribe', arguments: { contentId: 'c1' } })
+  assert.equal(f.isError, true)
+  assert.equal(f.content[0].text, 'This video could not be transcribed. Please contact support. Nothing was charged for it.')
+  const silent = await connect(fakeClient({ transcribe: async () => ({ status: 'completed', contentId: 'c1', slide: 0, transcript: '', wordCount: 0, durationSeconds: 3 }) }))
+  const q = await silent.callTool({ name: 'transcribe', arguments: { contentId: 'c1', slide: 0 } })
+  assert.equal(q.content[0].text, 'No speech was heard in post c1, slide 0.')
+})
+
+test('download lists each file by name with its save link, read-only', async () => {
+  let asked
+  const mcp = await connect(
+    fakeClient({
+      download: async (id) => {
+        asked = id
+        return { files: [{ mediaId: 'Abc12345-1', name: 'cat-1', url: 'https://app/api/media/k1?download=cat-1' }, { mediaId: 'Abc12345-2', name: 'cat-2', url: 'https://app/api/media/k2?download=cat-2' }] }
+      },
+    }),
+  )
+  const res = await mcp.callTool({ name: 'download', arguments: { id: 'Abc12345' } })
+  assert.equal(asked, 'Abc12345')
+  assert.equal(
+    res.content[0].text,
+    [
+      '2 files to download. Each link names the file, needs no sign-in and does not expire:',
+      '- cat-1 (Abc12345-1): https://app/api/media/k1?download=cat-1',
+      '- cat-2 (Abc12345-2): https://app/api/media/k2?download=cat-2',
+    ].join('\n'),
+  )
+  assert.equal(res.structuredContent.files.length, 2)
+  const { tools } = await mcp.listTools()
+  assert.equal(tools.find((t) => t.name === 'download').annotations.readOnlyHint, true)
+})
 
 // -- posts (content pipeline) -------------------------------------------------
 

@@ -137,7 +137,10 @@ import type {
   Tag,
   PublishResult,
   TranscribeRequest,
+  TranscribePostRequest,
   Transcription,
+  TranscribeCostEstimate,
+  DownloadResult,
   UpdateCardInput,
   PostInput,
   CardAssetInput,
@@ -551,11 +554,42 @@ export class ContentHero {
   }
 
   /**
-   * Transcribe an audio URL to text (ElevenLabs Scribe). Synchronous: the transcript comes back inline, with what it
-   * cost in `charge` (free only when the account's own ElevenLabs key covered it).
+   * Transcribe speech to text (ElevenLabs Scribe), from one of two sources:
+   *
+   * - `audioUrl`: an audio file. Synchronous: the transcript comes back inline, with what it cost in `charge` (free
+   *   only when the account's own ElevenLabs key covered it). Its cost is known only afterwards.
+   * - `contentId` (and `slide` for a carousel's video): a tracked post's video, word by word, once `analyzeContent`
+   *   kind `video` has downloaded it. The post's one video becomes its live transcript, which `getContent` then reads
+   *   word-timed; a carousel slide's stays with that slide. Charged once, to whoever asks first, for what was heard;
+   *   free once its words exist or are being made. Price it first with `estimateTranscribeCost`. A long video
+   *   answers `status: 'running'`: call this again with the same post to follow it, which is free. A post that
+   *   cannot be transcribed is refused with why (a 422 whose body carries its `code`).
    */
   async transcribe(request: TranscribeRequest): Promise<Transcription> {
     return this.request<Transcription>('POST', '/api/v1/studio/transcribe', request)
+  }
+
+  /**
+   * What `transcribe` would charge for a tracked post's video: 0 when its words exist or are being made. Runs
+   * nothing. An audio file cannot be priced in advance.
+   */
+  async estimateTranscribeCost(request: Pick<TranscribePostRequest, 'contentId' | 'slide'>): Promise<TranscribeCostEstimate> {
+    return this.request<TranscribeCostEstimate>('POST', '/api/v1/studio/transcribe', {
+      contentId: request.contentId,
+      ...(request.slide !== undefined ? { slide: request.slide } : {}),
+      getCost: true,
+    })
+  }
+
+  /**
+   * Any file of the caller's out of ContentHero, to keep. `id` is a media id (a generation, `-<n>` for one of its
+   * outputs, an upload, an import, a library file) or an export id. Each file comes back as a save link that names
+   * the file, needs no sign-in and does not expire; fetch it to get the bytes. Never spends. Throws `NotFoundError`
+   * when the id names nothing of the caller's, and `ConflictError` when the file is not made yet: wait for it
+   * with `getStatus`, then download it.
+   */
+  async download(id: string): Promise<DownloadResult> {
+    return this.request<DownloadResult>('GET', `/api/v1/download/${encodeURIComponent(id)}`)
   }
 
   /**

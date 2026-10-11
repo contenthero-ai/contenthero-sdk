@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `transcribe --content-id <id>` transcribes a tracked post's video word by word once `content analyze --kind video`
+  has downloaded it (`--slide <n>` for a carousel's video, 0-based); `--cost` prices it first. It waits while a long
+  video runs by asking again, which is free (exit 4 when still running at the end of the wait; `--no-wait` returns at
+  once; `--timeout`). The audio URL is now optional, as one of the two sources.
+- New: `contenthero download <id> [path]` writes any file of yours (a generation, one of its outputs, an upload, an
+  import, a library file, or a project's export) to disk, streamed from its save link: `path` is the file for one
+  file, the directory for several; by default the current directory under the server's names. Never spends.
+- `media get --save` streams each output to disk through the same writer, instead of holding each file in memory,
+  and names it with the extension its type calls for.
 - `view --content-id <id>` sees and hears a tracked post's video once `content analyze --kind video` has downloaded it;
   beside it, `--slide <n>` names the carousel's video slide (0-based, as content analyze reports it), where without a
   post it stays a canvas slide id. `--at-sec <list>` takes frames at named seconds of any source, `--per-second`

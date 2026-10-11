@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, ApplyEditorOpsResult, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem } from './types.js'
+import type { AccountIdNotFound, ApplyEditorOpsResult, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -426,4 +426,29 @@ export function describeContentVideo(video: ContentVideo): string {
             ? `unavailable: ${c.reason.trim().replace(/\.+$/, '')}`
             : 'not downloaded yet'
   return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}.`
+}
+
+/** The post a transcription (or its price) names, with the carousel slide when there is one; null for an audio file. */
+export function transcriptionSource(t: { contentId?: string; slide?: number }): string | null {
+  if (!t.contentId) return null
+  return `post ${t.contentId}${t.slide !== undefined ? `, slide ${t.slide}` : ''}`
+}
+
+/** What transcribing a post's video costs, with nothing run or charged. */
+export function describeTranscribeCost(est: TranscribeCostEstimate): string {
+  const what = transcriptionSource(est) ?? 'this post'
+  return est.creditsEstimate === 0
+    ? `The words of ${what} already exist or are being made: transcribing it costs 0 credits. Nothing ran and nothing was charged.`
+    : `Transcribing ${what} costs ${credits(est.creditsEstimate)}, priced from its video's length and charged for what is heard. Nothing ran and nothing was charged.`
+}
+
+/**
+ * Where a transcription stands when it has no transcript to show: still running (each surface then says how to follow
+ * it, by asking again with the same post, which is free) or failed. Null once it completed.
+ */
+export function describeTranscriptionState(t: Transcription): string | null {
+  const what = transcriptionSource(t) ?? 'the audio'
+  if (t.status === 'running') return `Still transcribing ${what}.`
+  if (t.status === 'failed') return `${t.error.trim()} Nothing was charged for it.`
+  return null
 }

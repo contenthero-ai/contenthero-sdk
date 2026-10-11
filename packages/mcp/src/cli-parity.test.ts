@@ -66,6 +66,7 @@ const TOOL_TO_CLI: Record<string, string[]> = {
   create_media_upload: ['media upload'],
   complete_media_upload: ['media upload'],
   import: ['import'],
+  download: ['download'],
   list_folders: ['folder list'],
   get_folder: ['folder get'],
   create_folder: ['folder create'],

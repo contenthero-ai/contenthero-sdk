@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `transcribe` takes a tracked post's video: `contentId` (and `slide` for a carousel's video) instead of `audioUrl`,
+  once `analyze_content` kind `video` has downloaded it, transcribed word by word. `getCost` prices a post first; an
+  audio file still cannot be priced in advance. The post's one video becomes its transcript, which `get_content` then
+  returns word-timed with `transcript='segments'`. A long video returns running with how to follow it (call again
+  with the same post, free); a failed one says so. The title is now Transcribe.
+- New tool `download` (read-only, never spends): any file of the account's, or a project's export, named by its
+  media id or export id, answered as each file's name and a save link that names the file, needs no sign-in and does
+  not expire (`structuredContent.files`).
 - `view` sees and hears a tracked post's video: `contentId` (and `slide` for a carousel) once `analyze_content` kind
   `video` has downloaded it. `atSec` takes frames at named seconds of any source, `perSecond` spreads them across a
   source's window, and `sound` measures a source's window as it is, beside any frames. The answer names a post by its

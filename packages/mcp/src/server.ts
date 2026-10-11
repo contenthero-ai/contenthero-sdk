@@ -7,12 +7,13 @@
  *   generate_audio    - synchronous (ElevenLabs), no polling
  *   upscale           - smart-wait, image/video upscalers
  *   generate_lip_sync - smart-wait, talking-head lip-sync (portrait + audio/script)
- *   transcribe        - synchronous speech-to-text (audio URL -> transcript)
+ *   transcribe        - speech-to-text: an audio URL, or a tracked post's downloaded video, word by word
  *   list_avatars / get_avatar - the account's avatars (base look + default voice)
  *   list_voices  / get_voice  - the account's saved voices
  *   list_brand_kits / get_brand_kit - the account's brand kits (full brand context)
  *   list_media / get_media    - the account's studio outputs (+ per-variation ids)
  *   search_media              - semantic search of the editable media library (with scene timestamps)
+ *   download                  - any file of the account's, or an export, as save links (free)
  *   get_status - check 1-8 background jobs of any kind; blocks until terminal by default
  *   get_account / update_account - your ContentHero account (balance, spend cap, plan)
  *   ... plus the content-pipeline, brand-kit-write, inspiration, brand-account,
@@ -192,6 +193,8 @@ import {
   linkFormatsResult,
   trackedAccountListResult,
   transcriptResult,
+  transcribeCostResult,
+  downloadResult,
   voiceListResult,
   voiceResult,
 } from './format.js'
@@ -1966,7 +1969,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   server.registerTool(
     'transcribe',
     {
-      title: 'Transcribe Audio',
+      title: 'Transcribe',
       /*
         ⭐ ANNOTATED, NOT JUST ARGUED FOR. The comment below has said "NOT read-only" since this tool
         shipped, and nobody ever wrote the annotation, so the tool went out carrying NEITHER hint. Claude
@@ -1975,36 +1978,58 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       */
       annotations: WRITE,
       // NOT read-only, despite only returning text. readOnlyHint is a host's signal that a
-      // tool is safe to call without asking the user, and this one is metered per minute of
-      // audio: annotated READ, an agent could transcribe a two-hour file repeatedly,
-      // unattended, spending real credits. Every other metered tool here is a write with a
-      // getCost preflight, and a test now holds that line.
+      // tool is safe to call without asking the user, and this one is metered by the length
+      // heard: annotated READ, an agent could transcribe a two-hour file repeatedly,
+      // unattended, spending real credits.
       //
-      // ⚠️ This tool has NO getCost, and that is a server limitation, not an oversight:
-      // POST /api/v1/studio/transcribe does not accept the flag, and pricing the call
-      // means knowing the audio's duration before transcribing it. Until the route can
-      // price it, the cost is only knowable after the fact, from `charge` on the
-      // result. It is the single documented entry in METERED_WITHOUT_PREFLIGHT.
+      // ⚠️ getCost prices a POST only. A post's downloaded copy has a known length, so the route
+      // prices it up front; an audioUrl does not, and POST /api/v1/studio/transcribe refuses getCost
+      // for one (400), because pricing it means reading the audio's duration before transcribing it.
+      // Until the route can, an audio file's cost is knowable only after the fact, from `charge` on
+      // the result, which is why transcribe stays in METERED_WITHOUT_PREFLIGHT for audioUrl.
       description:
-        'Transcribe an audio URL to text (speech-to-text). Returns the transcript directly (synchronous, no polling). SPENDS CREDITS, metered per minute of audio, and the cost cannot be previewed: the result reports the credits it cost after the fact. Zero only when the account runs on its own ElevenLabs key.',
+        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. A post can be priced first with getCost; an audio file cannot be priced in advance, so its result reports what it cost after the fact (zero only when the account runs on its own ElevenLabs key). A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='segments'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
       inputSchema: {
-        audioUrl: z.string().describe('Public URL of the audio file to transcribe.'),
-        languageCode: z
+        audioUrl: z.string().optional().describe('Public URL of the audio file to transcribe. Pass this or contentId.'),
+        contentId: z
           .string()
           .optional()
-          .describe('ISO language hint, e.g. "en". Auto-detected when omitted.'),
-        diarize: z.boolean().optional().describe('Label each speaker (diarization).'),
+          .describe("The tracked post whose video to transcribe, from list_content or get_tracked_account. Its video must be downloaded first with analyze_content kind video. Pass this or audioUrl."),
+        slide: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("Which video of a carousel post, by the 0-based slide analyze_content kind video reports it with. Only with contentId."),
+        getCost: z
+          .boolean()
+          .optional()
+          .describe("Return the credit cost of transcribing the post instead of transcribing it (nothing runs, nothing is charged). 0 when its words exist or are being made. Only with contentId: an audio file cannot be priced in advance."),
+        languageCode: z.string().optional().describe('ISO language hint for an audio file. Auto-detected when omitted; a post\'s language is always detected.'),
+        diarize: z.boolean().optional().describe('Label each speaker (diarization), for an audio file.'),
       },
     },
     async (args, extra) => {
       try {
+        const audioUrl = args.audioUrl?.trim()
+        const contentId = args.contentId?.trim()
+        if (!!audioUrl === !!contentId) return errorResult(new Error('Pass exactly one source: audioUrl for an audio file, or contentId for a tracked post.'))
+        if (audioUrl) {
+          if (args.slide !== undefined) return errorResult(new Error("slide picks a carousel post's video: name the post with contentId."))
+          if (args.getCost) return errorResult(new Error('getCost prices a post (contentId). An audio file cannot be priced in advance: its result reports what it cost.'))
+        }
+        if (contentId && (args.languageCode !== undefined || args.diarize !== undefined)) {
+          return errorResult(new Error("languageCode and diarize apply to an audio file; a post's language is detected from its video."))
+        }
         const client = await getClient(extra)
-        const t = await client.transcribe({
-          audioUrl: args.audioUrl,
-          languageCode: args.languageCode,
-          diarize: args.diarize,
-        })
-        return transcriptResult(t)
+        if (contentId) {
+          const post = { contentId, ...(args.slide !== undefined ? { slide: args.slide } : {}) }
+          if (args.getCost) return transcribeCostResult(await client.estimateTranscribeCost(post))
+          return transcriptResult(await client.transcribe(post))
+        }
+        return transcriptResult(
+          await client.transcribe({ audioUrl: audioUrl as string, languageCode: args.languageCode, diarize: args.diarize }),
+        )
       } catch (err) {
         return errorResult(err)
       }
@@ -3103,6 +3128,31 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         )
       } catch (err) {
         if (err instanceof GenerationTimeoutError) return importPendingResult(err)
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- download -------------------------------------------------------------
+  server.registerTool(
+    'download',
+    {
+      title: 'Download',
+      // Read-only: it hands back links to what is already stored, and runs and charges nothing.
+      annotations: READ,
+      description:
+        "Download any file of the account's out of ContentHero to keep: a generation (every output, or one output by its -<n> media id), an upload, an import, a library file, or a project's export, named by its media id or export id. Answers each file's name and a save link that names the file, needs no sign-in and does not expire: fetch the link for the file itself. Free: it reads what is already stored. A file not made yet is refused with the step that follows it.",
+      inputSchema: {
+        id: z
+          .string()
+          .describe('A media id (a generation, -<n> for one of its outputs, an upload, an import, a library file) or an export id.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return downloadResult(await client.download(args.id))
+      } catch (err) {
         return errorResult(err)
       }
     },

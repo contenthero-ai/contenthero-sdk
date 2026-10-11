@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- `transcribe` takes a tracked post: `contentId` (and `slide`, a carousel's 0-based video slide) instead of
+  `audioUrl`, once `analyzeContent` kind `video` has downloaded its video. It is transcribed word by word: the post's
+  one video becomes its live transcript, which `getContent` then reads word-timed; a carousel slide's stays with that
+  slide. Charged once, to whoever asks first, for what was heard; free once the words exist or are being made. A long
+  video answers `status: 'running'`: asking again with the same post follows it, free. A post that cannot be
+  transcribed is refused with why (422, its `code` in the body: `video_not_downloaded`, `video_downloading`,
+  `slide_required`, `not_a_video_slide`, `no_video`; 404 `post_not_found`).
+- New: `estimateTranscribeCost({ contentId, slide })` prices a post's transcription (`TranscribeCostEstimate`). An audio
+  file still cannot be priced in advance.
+- Breaking (types): `TranscribeRequest` is `TranscribeAudioRequest | TranscribePostRequest`, and `Transcription` is
+  `CompletedTranscription | RunningTranscription | FailedTranscription`, discriminated by `status`. `outputId` is
+  absent for a post (its words live on the post), `language` may be null, and a post's answer carries `contentId` and
+  `slide`.
+- New: `download(id)` hands back any file of the caller's (a generation, `-<n>` for one output, an upload, an import, a
+  library file, or an export) as `{ files: [{ mediaId?, name, url }] }`: each url is a save link that names the file,
+  needs no sign-in and does not expire. Never spends. `NotFoundError` when the id names nothing of the caller's,
+  `ConflictError` when the file is not made yet. `DownloadFile` and `DownloadResult` are exported.
+- New: `transcriptionSource`, `describeTranscribeCost` and `describeTranscriptionState`, a transcription's source, price
+  and state in the words the MCP and the CLI print.
 - `view` sees and hears a tracked post's video as a source: `contentId` (and `slide`, the carousel's 0-based video
   slide, as `analyzeContent` reports it) once `analyzeContent` kind `video` has downloaded it. Frames of any source
   come at named seconds (`atSec`), spread across the window (`count`), or `perSecond` across it (with `fromSec` and

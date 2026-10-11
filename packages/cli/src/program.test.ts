@@ -25,6 +25,7 @@ test('every top-level command group is registered', () => {
     'generate',
     'upscale',
     'transcribe',
+    'download',
     'status',
     'media',
     'card',

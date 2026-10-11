@@ -83,10 +83,13 @@ Each command is named after the MCP tool it runs (`project export get` is `get_e
 
 ```
 contenthero view               see what the user is looking at; render, hear or watch your work; see a raw clip
-contenthero project            list | get | create | update | duplicate | share | delete | import | apply
+contenthero project            list | get | create | update | duplicate | share | delete | apply
                                | export | export get|list | transcript get | edit undo|redo
                                | settings get|update | version list|save|restore|update|delete
-contenthero media              list | search | get | zoom | upload | share | import
+contenthero media              list | search | get | zoom | upload | share
+contenthero import             <url> | --pptx <url> | --canva <id>: bring a file, video page or deck in
+contenthero download           <id> [path]: write any file of yours, or an export, to disk (free)
+contenthero transcribe         [audioUrl] | --content-id <id> [--slide <n>]: speech to text
 contenthero status             <ids...> [--kind <kind>]: where any background job is
 contenthero card               list | get | create | update
 contenthero post               publish

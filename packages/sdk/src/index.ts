@@ -113,7 +113,15 @@ export type {
   Element,
   CreateElementRequest,
   TranscribeRequest,
+  TranscribeAudioRequest,
+  TranscribePostRequest,
   Transcription,
+  CompletedTranscription,
+  RunningTranscription,
+  FailedTranscription,
+  TranscribeCostEstimate,
+  DownloadFile,
+  DownloadResult,
   AvatarSummary,
   AvatarLook,
   Avatar,
@@ -326,4 +334,4 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness } from './describe.js'
+export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'

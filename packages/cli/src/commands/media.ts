@@ -10,7 +10,7 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { basename } from 'node:path'
 import type { Command } from 'commander'
 import {
   LIST_SORTS,
@@ -34,6 +34,7 @@ import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, withMore, clip } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toList, withPageFlags, withSortFlags } from '../args.js'
+import { mimeForFile, saveFiles } from '../save-files.js'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: string): Buffer | null {
@@ -47,35 +48,6 @@ type Kind = (typeof KINDS)[number]
 // `list` reads the library's files, all or one partition (`MEDIA_LIST_SOURCES`); a single-item `get` names its library.
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
 const SEARCH_KINDS: MediaKind[] = ['image', 'video', 'audio']
-
-/** Minimal extension -> MIME map for local uploads (defaults to octet-stream). */
-const MIME_BY_EXT: Record<string, string> = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
-  gif: 'image/gif', svg: 'image/svg+xml', mp4: 'video/mp4', mov: 'video/quicktime',
-  webm: 'video/webm', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4',
-  ogg: 'audio/ogg', pdf: 'application/pdf', json: 'application/json', txt: 'text/plain',
-}
-
-function mimeForFile(path: string): string {
-  const ext = extname(path).replace('.', '').toLowerCase()
-  return MIME_BY_EXT[ext] ?? 'application/octet-stream'
-}
-
-/** Default file extension per media type, for --save when a URL has none. */
-const EXT_BY_TYPE: Record<string, string> = {
-  image: '.png', video: '.mp4', audio: '.mp3', transcript: '.txt',
-}
-
-/** Pick a file extension for a downloaded variation (from the URL, else the type). */
-function saveExt(url: string, type: string): string {
-  try {
-    const ext = extname(new URL(url).pathname)
-    if (ext) return ext
-  } catch {
-    /* fall through to the type default */
-  }
-  return EXT_BY_TYPE[type] ?? ''
-}
 
 function uploadedHuman(m: UploadedMedia): string {
   return keyValues([
@@ -220,19 +192,8 @@ export function registerMedia(program: Command): void {
       if (opts.save) {
         const dir = String(opts.save)
         await mkdir(dir, { recursive: true })
-        for (const v of item.variations) {
-          if (!v.url) continue
-          const res = await fetch(v.url)
-          if (!res.ok) {
-            throw new CliError(
-              `Failed to download ${v.mediaId}: HTTP ${res.status}`,
-              EXIT.GENERAL,
-            )
-          }
-          const file = join(dir, `${v.mediaId}${saveExt(v.url, item.type)}`)
-          await writeFile(file, Buffer.from(await res.arrayBuffer()))
-          saved.push(file)
-        }
+        const files = item.variations.flatMap((v) => (v.url ? [{ mediaId: v.mediaId, name: v.mediaId, url: v.url }] : []))
+        if (files.length) saved.push(...(await saveFiles(files, dir)).map((f) => f.path))
       }
 
       emit(item, ctx, (m: MediaItem) => {

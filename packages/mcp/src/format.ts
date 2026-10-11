@@ -103,6 +103,8 @@ import type {
   ContentListResult,
   TrackedAccountDetail,
   Transcription,
+  TranscribeCostEstimate,
+  DownloadResult,
   Voice,
   ApplyEditorOpsResult,
   ProjectDetail,
@@ -122,7 +124,7 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -938,11 +940,38 @@ export function jobStatusesResult(statuses: JobStatusResult[]): CallToolResult {
   return text(lines([head, ...rows, tail]), failed)
 }
 
-/** A finished transcription: header line plus the transcript body. */
+/**
+ * A transcription: the transcript under a header naming its source, or, for a post still running, how to follow it
+ * (asking again with the same post, free), or why it failed. Every answer carries what it cost.
+ */
 export function transcriptResult(t: Transcription): CallToolResult {
+  const post = transcriptionSource(t)
+  const state = describeTranscriptionState(t)
+  if (t.status === 'running') {
+    const follow = `Call transcribe again with contentId "${t.contentId}"${t.slide !== undefined ? ` and slide ${t.slide}` : ''} to follow it, which is free.`
+    return withCharge(text(`${state} ${follow}`), t.charge)
+  }
+  if (t.status === 'failed') return withCharge(text(state ?? t.error, true), t.charge)
   const lang = t.language ? ` (${t.language})` : ''
-  const header = `Transcript${lang}, ${t.wordCount} words (outputId ${jobName({ id: t.outputId, shortId: t.shortId, appUrl: t.appUrl })}):`
-  return withCharge(text([header, '', t.transcript].join('\n')), t.charge)
+  const record = t.outputId ? ` (outputId ${jobName({ id: t.outputId, shortId: t.shortId, appUrl: t.appUrl })})` : ''
+  if (post && t.wordCount === 0) return withCharge(text(`No speech was heard in ${post}.`), t.charge)
+  const header = `Transcript${post ? ` of ${post}` : ''}${lang}, ${t.wordCount} words${record}:`
+  // The post's one video became its live transcript: say where it is read word-timed.
+  const where = post && t.slide === undefined ? "get_content with transcript='segments' returns it word-timed." : null
+  return withCharge(text([header, '', t.transcript, ...(where ? ['', where] : [])].join('\n')), t.charge)
+}
+
+/** transcribe's price check for a post: nothing ran and nothing was charged. */
+export function transcribeCostResult(est: TranscribeCostEstimate): CallToolResult {
+  return text(describeTranscribeCost(est))
+}
+
+/** download's answer: each file's name and save link. */
+export function downloadResult(r: DownloadResult): CallToolResult {
+  const n = r.files.length
+  const head = `${n} file${n === 1 ? '' : 's'} to download. Each link names the file, needs no sign-in and does not expire:`
+  const rows = r.files.map((f) => `- ${f.name}${f.mediaId ? ` (${f.mediaId})` : ''}: ${f.url}`)
+  return { ...text(lines([head, ...rows])), structuredContent: { files: r.files } }
 }
 
 /** Join the non-empty lines (drops null/empty entries). */
