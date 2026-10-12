@@ -73,6 +73,8 @@ import {
   PLACEMENT_ENDS,
   JOB_KINDS,
   type SortableList,
+  contentVideosPending,
+  isSourceView,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 
@@ -1985,13 +1987,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // heard: annotated READ, an agent could transcribe a two-hour file repeatedly,
       // unattended, spending real credits.
       //
-      // ⚠️ getCost prices a POST only. A post's downloaded copy has a known length, so the route
-      // prices it up front; an audioUrl does not, and POST /api/v1/studio/transcribe refuses getCost
-      // for one (400), because pricing it means reading the audio's duration before transcribing it.
-      // Until the route can, an audio file's cost is knowable only after the fact, from `charge` on
-      // the result, which is why transcribe stays in METERED_WITHOUT_PREFLIGHT for audioUrl.
+      // getCost prices either source: a post from its downloaded copy's length, an audio file from
+      // its own (the route reads the file's length, which costs nothing). A file whose length cannot
+      // be read answers a null price that says it is known only once transcribed.
       description:
-        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. A post can be priced first with getCost; an audio file cannot be priced in advance, so its result reports what it cost after the fact (zero only when the account runs on its own ElevenLabs key). A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='segments'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
+        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='segments'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
       inputSchema: {
         audioUrl: z.string().optional().describe('Public URL of the audio file to transcribe. Pass this or contentId.'),
         contentId: z
@@ -2007,7 +2007,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         getCost: z
           .boolean()
           .optional()
-          .describe("Return the credit cost of transcribing the post instead of transcribing it (nothing runs, nothing is charged). 0 when its words exist or are being made. Only with contentId: an audio file cannot be priced in advance."),
+          .describe('Return the credit cost estimate instead of transcribing (nothing runs, nothing is charged).'),
         languageCode: z.string().optional().describe('ISO language hint for an audio file. Auto-detected when omitted; a post\'s language is always detected.'),
         diarize: z.boolean().optional().describe('Label each speaker (diarization), for an audio file.'),
       },
@@ -2019,7 +2019,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (!!audioUrl === !!contentId) return errorResult(new Error('Pass exactly one source: audioUrl for an audio file, or contentId for a tracked post.'))
         if (audioUrl) {
           if (args.slide !== undefined) return errorResult(new Error("slide picks a carousel post's video: name the post with contentId."))
-          if (args.getCost) return errorResult(new Error('getCost prices a post (contentId). An audio file cannot be priced in advance: its result reports what it cost.'))
         }
         if (contentId && (args.languageCode !== undefined || args.diarize !== undefined)) {
           return errorResult(new Error("languageCode and diarize apply to an audio file; a post's language is detected from its video."))
@@ -2030,6 +2029,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           if (args.getCost) return transcribeCostResult(await client.estimateTranscribeCost(post))
           return transcriptResult(await client.transcribe(post))
         }
+        if (args.getCost) return transcribeCostResult(await client.estimateTranscribeCost({ audioUrl: audioUrl as string }))
         return transcriptResult(
           await client.transcribe({ audioUrl: audioUrl as string, languageCode: args.languageCode, diarize: args.diarize }),
         )
@@ -4299,9 +4299,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         transcript: z
-          .enum(['none', 'text', 'segments'])
+          .enum(['none', 'text', 'segments', 'words'])
           .optional()
-          .describe("How much transcript to include. Default 'none'."),
+          .describe("How much transcript to include. Default 'none'. 'words' adds each word's start and end to the segments, where the post has word timing."),
         startMs: z.number().optional().describe('Window start, ms from the start of the media. Narrows transcript segments, scenes and cut lists.'),
         endMs: z.number().optional().describe('Window end, ms from the start of the media. Narrows transcript segments, scenes and cut lists.'),
         transcriptSearch: z
@@ -4343,7 +4343,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
       description:
-        "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes maps the post's scenes: each one's range, what happens and what is said in it; see a scene's frames with view. video downloads every video the post holds, its one video or each video slide of a carousel, into shared analysis copies, which the reading tools use; nothing lands in your library or counts against your storage. Once stored, each video answers with its cut list, where it changes scene, free. A post with no video says so: its images are already stored and readable. Viewing an existing result is free; creating one spends credits (video is charged for what its downloads moved, holding the most they may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
+        "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes maps the post's scenes: each one's range, what happens and what is said in it; see a scene's frames with view. video downloads every video the post holds, its one video or each video slide of a carousel, into shared analysis copies, which the reading tools use; nothing lands in your library or counts against your storage. Once stored, each video answers with its cut list, where it changes scene, free. A post with no video says so: its images are already stored and readable. Sound is not analyzed on download: view the video with sound, or split it, to analyze its sound (free). Viewing an existing result is free; creating one spends credits (video is charged for what its downloads moved, holding the most they may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
       inputSchema: {
         contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
         kind: z
@@ -4351,13 +4351,19 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe("breakdown (default): the Break It Down analysis. scenes: the scene map, each scene's range, what happens and what is said, priced per minute of video. video: every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved."),
         getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists, or for video when its copies are being made.'),
+        resolution: z
+          .enum(['720p', '1080p'])
+          .optional()
+          .describe('Only with kind video. The most detail the stored copy should have: the best the platform offers up to this is downloaded, charged for what arrives. A copy already at or above it costs nothing. Leave it out to keep the stored copy, or to get one at the standard detail.'),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         const kind = args.kind ?? 'breakdown'
-        if (args.getCost) return analysisCostResult(await client.estimateAnalysisCost(args.contentId, { kind }), kind)
+        if (args.resolution && kind !== 'video') return errorResult(new Error('resolution applies only to kind video.'))
+        const resolution = args.resolution ? { resolution: args.resolution } : {}
+        if (args.getCost) return analysisCostResult(await client.estimateAnalysisCost(args.contentId, { kind, ...resolution }), kind)
         // Either kind runs as a job. Wait a while within this call (the hosted route allows 60s) through the one
         // status wait, which starts nothing; past that the agent waits with get_status and calls again, also free.
         // Finished: ask once more, which starts nothing for a finished post and answers with the result and its
@@ -4377,10 +4383,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (kind === 'video') {
           // A post's copy has no job get_status reads; asking again is how it is followed, and is free. Ask again
           // within this call while it downloads, then answer pending with how to follow it.
-          let video = await client.analyzeContent(args.contentId, { kind: 'video' })
+          let video = await client.analyzeContent(args.contentId, { kind: 'video', ...resolution })
           const deadline = Date.now() + jobWait.waitMs
-          while (video.copy.status === 'pending' && Date.now() + jobWait.pollMs <= deadline) {
+          while (contentVideosPending(video) && Date.now() + jobWait.pollMs <= deadline) {
             await new Promise((resolve) => setTimeout(resolve, jobWait.pollMs))
+            // Followed without the resolution: it was asked for once, and asking again would only report it.
             video = await client.analyzeContent(args.contentId, { kind: 'video' })
           }
           return contentVideoResult(video)
@@ -4663,7 +4670,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'View',
       annotations: READ,
       description:
-        "See what the user is looking at, and see or hear your own work. With no render input it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. It is fast and does not disturb the page. Set capture to also get a picture of the user's screen as shown now, including unsaved and transient state; capturing takes a moment and briefly interrupts the page. To see your work as it will play, rendered from the saved project: render shows one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for an editor timeline, frames, perSecond over a range, or count over a range name several frames, which come back one by one when they fit one result and otherwise as contact sheets with each frame's number under its tile, in pages. sound renders a range of the mix as an export mixes it and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured. To see and hear a source rather than your edit, name a clip of the user's with assetId or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec. Its frames come spread across the window, at the seconds atSec names, or perSecond across it; sound measures the window as it is, beside any frames; with video you watch it play. On any stored source (a post's video, a library file, a clip's source), every view also carries its sound analysis for the window read: speech, sound candidates with their measured descriptors, levels against the voice, offset from the beat and repetition pattern, music and beats, loudness, and each stem's level; free, made once per file, and pending the first time its sound is read. With sound, the window also comes as one evidence sheet: its frames, the spoken words and a spectrogram strip per stem on one time axis, each sound candidate marked by its number. A candidate is measured, never named: judge what it is from its strip and its descriptors. A render is a job: what finishes within the call comes back with a renderId, and the rest is read by calling again with renderId and page. Renders are ephemeral, count against nothing and need no live tab, only a projectId when no one is viewing. Check your work here, never with export, which makes a file the user keeps. Requires the context:read scope.",
+        "See what the user is looking at, and see or hear your own work. With no render input it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. It is fast and does not disturb the page. Set capture to also get a picture of the user's screen as shown now, including unsaved and transient state; capturing takes a moment and briefly interrupts the page. To see your work as it will play, rendered from the saved project: render shows one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for an editor timeline, frames, perSecond over a range, or count over a range name several frames, which come back one by one when they fit one result and otherwise as contact sheets with each frame's number under its tile, in pages. sound renders a range of the mix as an export mixes it and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured. To see and hear a source rather than your edit, name a clip of the user's with assetId or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec. Its frames come spread across the window, at the seconds atSec names, or perSecond across it, in pages; layout tiles a source's frames into contact sheets, each frame labeled with its second; chosen by size when not named. A source read carries the source alone, never the live context. sound measures the window as it is, beside any frames; with video you watch it play. On any stored source (a post's video, a library file, a clip's source), every view also carries its sound analysis for the window read: speech, sound candidates with their measured descriptors, levels against the voice, offset from the beat and repetition pattern, music and beats, loudness, and each stem's level; free, made once per file, and pending the first time its sound is read. With sound, the window also comes as one evidence sheet: its frames, the spoken words and a spectrogram strip per stem on one time axis, each sound candidate marked by its number. A candidate is measured, never named: judge what it is from its strip and its descriptors. A render is a job: what finishes within the call comes back with a renderId, and the rest is read by calling again with renderId and page. Renders are ephemeral, count against nothing and need no live tab, only a projectId when no one is viewing. Check your work here, never with export, which makes a file the user keeps. Requires the context:read scope.",
       inputSchema: {
         projectId: z.string().optional().describe("The project to view or render. Omit for the surface the user is on now. Needed to render when no one is viewing."),
         capture: z.boolean().optional().describe("Also return a picture of the user's screen as shown now, including unsaved and transient state. Use it only when the task depends on what the screen shows; to see your work, render it instead."),
@@ -4676,11 +4683,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
         count: z.number().int().min(1).optional().describe("How many frames to spread evenly across the range, or across a source's window. Omit for one frame at the focus point, or about one a second of a range."),
         perSecond: z.number().positive().optional().describe("How many frames to take per second of the range, up to every frame, or of a source's window."),
-        layout: z.enum(['frames', 'sheets']).optional().describe("'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, each frame numbered under its tile. Omit to choose by how many fit one result."),
+        layout: z.enum(['frames', 'sheets']).optional().describe("'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, an edit's frames numbered and a source's labeled with its second under each tile. Omit to choose by how many fit one result."),
         video: z.boolean().optional().describe("Watch the range play with its sound, to judge motion, timing, transitions and pacing. Takes fromFrame and toFrame, or a source's window."),
         sound: z.boolean().optional().describe("Hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by fromFrame and toFrame; or a source's window as it is, by fromSec and toSec, beside any frames asked for."),
         renderId: z.string().optional().describe('Read a render already started, by the renderId it returned. Pass only page with it.'),
-        page: z.number().int().min(1).optional().describe('Which page of the render to read, starting at 1.'),
+        page: z.number().int().min(1).optional().describe("Which page of the render, or of a source's frames, to read, starting at 1."),
         /*
           ⭐ 3840, THE WIDEST NATIVE FRAME (4K landscape). This was 1440, while the server rendered at 960 and
           enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
@@ -4737,7 +4744,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           toSec: args.toSec,
           atSec: args.atSec,
         })
-        const snapshotUrl = typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
+        // A source read carries the source alone; only a live view has a screen capture.
+        const snapshotUrl = !isSourceView(result) && typeof result.context?.snapshotUrl === 'string' ? result.context.snapshotUrl : null
         const snapshot = snapshotUrl ? await fetchSnapshotBase64(snapshotUrl) : null
         // The same per-result allowance get_media spends: the screen capture and the render share it.
         return viewResult(result, snapshot, MAX_INLINE_BASE64_CHARS)

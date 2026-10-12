@@ -1037,11 +1037,23 @@ export interface FailedTranscription extends TranscriptionSource {
  */
 export type Transcription = CompletedTranscription | RunningTranscription | FailedTranscription
 
-/** `estimateTranscribeCost`'s answer: what transcribing the post's video costs now, with nothing run or charged. */
-export interface TranscribeCostEstimate extends CostEstimate {
-  contentId: string
+/**
+ * `estimateTranscribeCost`'s answer: what transcribing the source costs now, with nothing run or charged. A post is
+ * priced from its stored copy's length, an audio file from its own.
+ */
+export interface TranscribeCostEstimate extends Omit<CostEstimate, 'creditsEstimate'> {
+  /** Null only for an audio file whose length could not be read: its price is known once it is transcribed (`note`). */
+  creditsEstimate: number | null
+  /** The post priced, for a post. */
+  contentId?: string
   /** The carousel slide priced (0-based), for a carousel post's video. */
   slide?: number
+  /** The audio file priced, for an audio file. */
+  audioUrl?: string
+  /** The audio file's measured length in seconds; null when it could not be read. */
+  durationSeconds?: number | null
+  /** Why there is no price, when there is none. */
+  note?: string
 }
 
 /** One file `download` hands back. */
@@ -2850,12 +2862,21 @@ export interface ContentSummary {
   isOwn?: boolean
 }
 
+/** One spoken word of a word-timed transcript, in milliseconds from the start of the media. */
+export interface ContentTranscriptWord {
+  startMs: number
+  endMs: number
+  text: string
+}
+
 /** One timed slice of a transcript. */
 export interface ContentTranscriptSegment {
   startMs: number
   endMs: number
   text: string
   speaker: string | null
+  /** Each word said in the segment, with its own start and end. Only at the `words` grain, on a word-timed post. */
+  words?: ContentTranscriptWord[]
 }
 
 /**
@@ -2870,10 +2891,15 @@ export interface ContentTranscript {
   language: string | null
   /** Present at the `text` grain. */
   text?: string | null
-  /** Present at the `segments` grain. */
+  /** Present at the `segments` and `words` grains. */
   segments?: ContentTranscriptSegment[]
   /** True when a window or a search narrowed what came back, so an empty list is not "nothing exists". */
   windowed?: boolean
+  /**
+   * Only at the `words` grain: whether the post's transcript is timed word by word. False means its segments are timed
+   * and its words are not, so no segment carries `words`.
+   */
+  wordTimed?: boolean
 }
 
 /** Full detail for one tracked post. */
@@ -2952,12 +2978,32 @@ export interface ContentScene {
 export type ContentAnalysisKind = 'breakdown' | 'scenes' | 'video'
 
 /**
+ * The most detail a post's analysis copy is fetched at, as a ceiling on the video's shorter side: the best the
+ * platform offers up to it is downloaded. Only with kind `video`.
+ */
+export type ContentVideoResolution = '720p' | '1080p'
+
+/** What `estimateAnalysisCost` reports: the price, and for kind `video` the detail stored, offered and on offer. */
+export interface ContentAnalysisCostEstimate extends CostEstimate {
+  /** The ceiling asked for, in pixels on the video's shorter side (kind `video`, when one was asked). */
+  resolution?: number
+  /** Kind `video`: each video's stored detail (null when none is stored) and the detail its platform offers. */
+  videos?: Array<{ slide?: number; stored: number | null; offered: number[] }>
+  /** Kind `video`: each ceiling that would bring more detail than is stored, with what it would cost now. */
+  upgrades?: Array<{ resolution: number; creditsEstimate: number }>
+}
+
+/**
  * Where a post's video copy stands: `ready` to read, `pending` while it downloads (ask again with kind `video` to
  * follow it, free), `failed` with why, `unavailable` with why there is no video to copy, `absent` when it was never
  * downloaded (`analyzeContent` kind `video` downloads it).
  */
 export type ContentVideoCopy =
-  | { status: 'ready' }
+  /**
+   * `resolution` is the stored copy's detail, its shorter side in pixels (absent on older servers); `upgrading`, while
+   * a copy with more detail is being fetched, names the most detail it is fetched at: this one stays readable meanwhile.
+   */
+  | { status: 'ready'; resolution?: number; upgrading?: { resolution: number } }
   | { status: 'pending' }
   | { status: 'failed'; error: string }
   | { status: 'unavailable'; reason: string }
@@ -3143,6 +3189,8 @@ export interface ContentVideoResult extends ContentVideos {
   shortId: string
   appUrl: string
   kind: 'video'
+  /** Set when a resolution was asked for and nothing more was on offer, so nothing was downloaded. */
+  notice?: string
   /** What it cost: held on the most the downloads may move, charged for what arrived. */
   charge: Charge
 }
@@ -3252,8 +3300,11 @@ export interface ListContentOptions extends PageOptions, SortOptions<ContentSort
 
 /** Options for `getContent`. */
 export interface GetContentOptions {
-  /** `none` (default), `text` for the flat transcript, or `segments` for the timed form. */
-  transcript?: 'none' | 'text' | 'segments'
+  /**
+   * `none` (default), `text` for the flat transcript, `segments` for the timed form, or `words` for the segments with
+   * each word's own start and end, where the post is word-timed.
+   */
+  transcript?: 'none' | 'text' | 'segments' | 'words'
   /** Segment window, in milliseconds from the start of the media. Implies the `segments` grain. */
   startMs?: number
   endMs?: number
@@ -3717,10 +3768,10 @@ export interface LiveContextParticipant {
 }
 
 /**
- * The result of `view`: the most-recent-active session's live context, the full participant set, and whatever was
- * rendered.
+ * The result of a `view` that names no source: the most-recent-active session's live context, the full participant
+ * set, and whatever was rendered.
  */
-export interface ViewResult {
+export interface LiveViewResult {
   /**
    * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object carrying
    * the focus (e.g. `focusedSlideId`, `playheadFrame`) and current selection. A short-lived `snapshotUrl` of
@@ -3728,20 +3779,6 @@ export interface ViewResult {
    * - `rendered`: the picture or sound job answer, when the read rendered or read a render.
    * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
    *   `rendered` and its sound measurement here, a sound answer of the same shape as a sound `rendered`.
-   * - `clip`: a source named by `assetId` or `mediaUrl` (a clip of yours), or by `contentId` (a tracked post's video):
-   *   `{ url | contentId and slide?, type: 'video' | 'image', fromSec?, toSec?, durationSeconds?,
-   *   keyframes?: [{ atSec, dataUrl }], keyframeError?, crop?, cropError?, sound?, error?: { code, message } }`. A post
-   *   is named by its `contentId` (and `slide`) in place of a `url`: its copy's address is never handed out. A post that
-   *   cannot be read says why in `error`: `post_not_found`, `no_video`, `slide_required`, `not_a_carousel`,
-   *   `not_a_video_slide`, `video_not_downloaded`, `video_downloading` or `video_failed`. `sound`, when asked, is the
-   *   window measured as it is: `{ kind: 'sound', fromSec, toSec, sampleRate, channels, durationSeconds, loudness,
-   *   stereo, bands, onsets: [{ seconds }] (in the source's own seconds), picture: { width, height, dataUrl } (its
-   *   waveform above its spectrogram), audioUrl (short-lived) }`, or `{ kind: 'sound', error: { code, message } }`
-   *   (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`). A post's video also carries `audioMap`
-   *   (`AudioMapAnswer`) on every view of it, frames or sound: ready, its `window` is the window read (an open end
-   *   runs to the video's edge). A clip of yours has none. A post's window heard with `sound` also carries `sheet`
-   *   (`EvidenceSheet`): its frames, words and a spectrogram strip per stem on one time axis, its sound candidates
-   *   marked; when it is ready, `sound` carries no `picture` (the sheet holds the window's spectrograms).
    * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
    */
   context: Record<string, unknown> | null
@@ -3749,6 +3786,42 @@ export interface ViewResult {
   participant: LiveContextParticipant | null
   /** Every currently-live participant, most-recent first, for multi-human callers. */
   participants: LiveContextParticipant[]
+}
+
+/**
+ * The result of a `view` of a source (`assetId`, `mediaUrl` or `contentId`): the source alone, never the live context
+ * of the user's screen, which is what a view that names no source returns.
+ *
+ * `clip` is `{ url | contentId and slide?, type: 'video' | 'image', fromSec?, toSec?, durationSeconds?, layout?, page?,
+ * pages?, keyframes?: [{ atSec, dataUrl }], sheets?: [{ atSec: number[], columns, rows, width, height, dataUrl }],
+ * keyframeError?, crop?, cropError?, sound?, audioMap?, sheet?, error?: { code, message } }`.
+ * - Its frames come in pages (`page` of `pages`): one by one in `keyframes` (`layout: 'frames'`), or tiled into
+ *   contact sheets in `sheets` (`layout: 'sheets'`), each tile labeled with its second of the source. Ask for the next
+ *   page with `page`. The window's `sound`, `audioMap` and `sheet` describe the whole window and come on the first page.
+ * - A post is named by its `contentId` (and `slide`) in place of a `url`: its copy's address is never handed out. A
+ *   source that cannot be read says why in `error`: `clip_not_found`, `host_not_allowed` (an address on a host
+ *   ContentHero does not read from), `not_a_clip`, `invalid_page`, and for a post `post_not_found`, `no_video`,
+ *   `slide_required`, `not_a_carousel`, `not_a_video_slide`, `video_not_downloaded`, `video_downloading` or
+ *   `video_failed`.
+ * - `sound`, when asked, is the window measured as it is: `{ kind: 'sound', fromSec, toSec, sampleRate, channels,
+ *   durationSeconds, loudness, stereo, bands, onsets: [{ seconds }] (in the source's own seconds), picture: { width,
+ *   height, dataUrl } (its waveform above its spectrogram), audioUrl (short-lived) }`, or `{ kind: 'sound', error: {
+ *   code, message } }` (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`).
+ * - A stored source (a post's video, a library file, a clip's source) carries `audioMap` (`AudioMapAnswer`) when its
+ *   analysis exists or its sound was read: ready, its `window` is the window read (an open end runs to the file's
+ *   edge). Heard with `sound`, it also carries `sheet` (`EvidenceSheet`): its frames, words and a spectrogram strip per
+ *   stem on one time axis, its sound candidates marked; when it is ready, `sound` carries no `picture`.
+ */
+export interface SourceViewResult {
+  clip: Record<string, unknown>
+}
+
+/** The result of `view`: the live context (with what was rendered), or a source alone. */
+export type ViewResult = LiveViewResult | SourceViewResult
+
+/** Whether a `view` result is a source read (`SourceViewResult`). */
+export function isSourceView(result: ViewResult): result is SourceViewResult {
+  return 'clip' in result && result.clip !== null && typeof result.clip === 'object'
 }
 
 /** Options for `view`. */
@@ -3792,7 +3865,10 @@ export interface ViewInput {
   frames?: number[]
   /** How many frames to take per second of the range, up to every frame, or of a source's window. */
   perSecond?: number
-  /** `frames` returns each frame as its own image; `sheets` tiles them into contact sheets. Omit to choose by how many fit one response. */
+  /**
+   * `frames` returns each frame as its own image; `sheets` tiles them into contact sheets, an edit's frames numbered and
+   * a source's labeled with its second under each tile. Omit to choose by how many fit one response.
+   */
   layout?: 'frames' | 'sheets'
   /**
    * Hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by fromFrame and
@@ -3810,7 +3886,7 @@ export interface ViewInput {
   video?: boolean
   /** Read a render already started, by the `rendered.renderId` it returned. Pass only `page` (and `wait`) with it. */
   renderId?: string
-  /** Which page of a render to read, starting at 1. */
+  /** Which page of a render, or of a source's frames, to read, starting at 1. */
   page?: number
   /** How long to wait for results before answering, in seconds. What is not ready by then is read later with `renderId`. */
   wait?: number

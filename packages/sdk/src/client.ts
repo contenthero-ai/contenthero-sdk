@@ -54,6 +54,8 @@ import type {
   ContentDetail,
   ContentAnalysisResult,
   ContentAnalysisKind,
+  ContentAnalysisCostEstimate,
+  ContentVideoResolution,
   ContentScenesResult,
   ContentVideoResult,
   TrackedAccountDetail,
@@ -559,7 +561,7 @@ export class ContentHero {
    * Transcribe speech to text (ElevenLabs Scribe), from one of two sources:
    *
    * - `audioUrl`: an audio file. Synchronous: the transcript comes back inline, with what it cost in `charge` (free
-   *   only when the account's own ElevenLabs key covered it). Its cost is known only afterwards.
+   *   only when the account's own ElevenLabs key covered it). Price it first with `estimateTranscribeCost`.
    * - `contentId` (and `slide` for a carousel's video): a tracked post's video, word by word, once `analyzeContent`
    *   kind `video` has downloaded it. The post's one video becomes its live transcript, which `getContent` then reads
    *   word-timed; a carousel slide's stays with that slide. Charged once, to whoever asks first, for what was heard;
@@ -572,15 +574,17 @@ export class ContentHero {
   }
 
   /**
-   * What `transcribe` would charge for a tracked post's video: 0 when its words exist or are being made. Runs
-   * nothing. An audio file cannot be priced in advance.
+   * What `transcribe` would charge, running nothing. A tracked post's video is priced from its stored copy's length
+   * (0 when its words exist or are being made); an audio file from its own length (0 on the account's own ElevenLabs
+   * key). An audio file whose length cannot be read answers `creditsEstimate: null`: it is priced once transcribed.
    */
-  async estimateTranscribeCost(request: Pick<TranscribePostRequest, 'contentId' | 'slide'>): Promise<TranscribeCostEstimate> {
-    return this.request<TranscribeCostEstimate>('POST', '/api/v1/studio/transcribe', {
-      contentId: request.contentId,
-      ...(request.slide !== undefined ? { slide: request.slide } : {}),
-      getCost: true,
-    })
+  async estimateTranscribeCost(
+    request: Pick<TranscribePostRequest, 'contentId' | 'slide'> | { audioUrl: string },
+  ): Promise<TranscribeCostEstimate> {
+    const source = 'audioUrl' in request
+      ? { audioUrl: request.audioUrl }
+      : { contentId: request.contentId, ...(request.slide !== undefined ? { slide: request.slide } : {}) }
+    return this.request<TranscribeCostEstimate>('POST', '/api/v1/studio/transcribe', { ...source, getCost: true })
   }
 
   /**
@@ -1726,16 +1730,21 @@ export class ContentHero {
    * being made answer `pending`, also free; otherwise the most the downloads may cost is held and the missing copies
    * start, charged for what arrived. Call this again with the same kind to follow a pending copy, which is free
    * (`getStatus` has no kind for it). A post with no video is refused with the reason: its images are already stored
-   * and readable.
+   * and readable. Each stored copy reports its detail; `resolution` asks for more: the best the platform offers up to
+   * it is downloaded for everyone, charged for what arrives, and a copy already at or above it costs nothing. Sound is
+   * not analyzed on download: `view` with sound, or a split, analyzes it (free).
    */
   async analyzeContent(contentId: string, options?: { kind?: 'breakdown' }): Promise<ContentAnalysisResult>
   async analyzeContent(contentId: string, options: { kind: 'scenes' }): Promise<ContentScenesResult>
-  async analyzeContent(contentId: string, options: { kind: 'video' }): Promise<ContentVideoResult>
+  async analyzeContent(contentId: string, options: { kind: 'video'; resolution?: ContentVideoResolution }): Promise<ContentVideoResult>
   async analyzeContent(
     contentId: string,
-    options: { kind?: ContentAnalysisKind } = {},
+    options: { kind?: ContentAnalysisKind; resolution?: ContentVideoResolution } = {},
   ): Promise<ContentAnalysisResult | ContentScenesResult | ContentVideoResult> {
-    return this.request('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, options.kind ? { kind: options.kind } : {})
+    return this.request('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
+      ...(options.kind ? { kind: options.kind } : {}),
+      ...(options.resolution ? { resolution: options.resolution } : {}),
+    })
   }
 
   /**
@@ -1748,12 +1757,18 @@ export class ContentHero {
 
   /**
    * What `analyzeContent` would charge for this post and kind: 0 when the result already exists (or, for `video`, is
-   * being made). For `video` it is the most the downloads may cost; it is charged for what arrives. Runs nothing.
+   * being made). For `video` it is the most the downloads may cost; it is charged for what arrives. For `video` it also
+   * reports each video's stored detail, the detail its platform offers, and the price of each resolution that would
+   * bring more. Runs nothing.
    */
-  async estimateAnalysisCost(contentId: string, options: { kind?: ContentAnalysisKind } = {}): Promise<CostEstimate> {
-    return this.request<CostEstimate>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
+  async estimateAnalysisCost(
+    contentId: string,
+    options: { kind?: ContentAnalysisKind; resolution?: ContentVideoResolution } = {},
+  ): Promise<ContentAnalysisCostEstimate> {
+    return this.request<ContentAnalysisCostEstimate>('POST', `/api/v1/content/${encodeURIComponent(contentId)}/analysis`, {
       getCost: true,
       ...(options.kind ? { kind: options.kind } : {}),
+      ...(options.resolution ? { resolution: options.resolution } : {}),
     })
   }
 
@@ -1893,9 +1908,11 @@ export class ContentHero {
    * edit, name a clip of yours with `assetId` or `mediaUrl`, or a tracked post's video with `contentId` (and `slide`
    * for a carousel) once `analyzeContent` kind `video` has downloaded it, and window it with `fromSec` and `toSec`;
    * its frames come spread across the window, at the seconds `atSec` names, or `perSecond` across it, and `sound`
-   * measures the window as it is (`ViewResult.context.clip`). Renders are ephemeral and
-   * do not need a live tab. Returns the most-recent-active session's context plus the full live participant set
-   * (`ViewResult`). Optionally scope to one project. Requires the `context:read` scope.
+   * measures the window as it is. A source read answers with the source alone (`SourceViewResult`, `{ clip }`), its
+   * frames in pages, one by one or as contact sheets (`layout`, `page`). Renders are ephemeral and do not need a live
+   * tab. A view that names no source returns the most-recent-active session's context plus the full live participant
+   * set (`LiveViewResult`); `isSourceView` tells the two apart. Optionally scope to one project. Requires the
+   * `context:read` scope.
    */
   async view(input: ViewInput = {}): Promise<ViewResult> {
     const params = new URLSearchParams()

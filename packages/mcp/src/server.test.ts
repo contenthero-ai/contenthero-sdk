@@ -641,11 +641,9 @@ test('no tool that spends credits is advertised as read-only', async () => {
  * must stay that way or it becomes the place missing preflights go to hide. Every entry
  * names the route that would have to change to remove it.
  *
- * - transcribe (audioUrl): POST /api/v1/studio/transcribe prices a post (contentId) up front, but refuses getCost
- *   for an audioUrl, since pricing it means reading the audio's duration before transcribing. An audio file's cost
- *   is knowable only afterwards, from `charge` on the result.
+ * None today: transcribe (audioUrl) left on 2026-10-12, when the route learned to price an audio file by its length.
  */
-const METERED_WITHOUT_PREFLIGHT = new Map([['transcribe', 'audioUrl']])
+const METERED_WITHOUT_PREFLIGHT = new Map<string, string>()
 
 /**
  * The declaration a tool makes when calling it costs the caller credits.
@@ -1956,13 +1954,28 @@ test('transcribe a tracked post: priced with getCost, followed while it runs, wo
   assert.deepEqual(calls, [['cost', { contentId: 'c1' }], ['run', { contentId: 'c1', slide: 1 }], ['run', { contentId: 'c1' }]])
 })
 
-test('transcribe takes exactly one source, and getCost and slide only for a post', async () => {
+test('transcribe prices an audio file by its length, and says when it cannot', async () => {
+  const asked = []
+  let price = { getCost: true, audioUrl: 'https://cdn/a.mp3', creditsEstimate: 3, durationSeconds: 61.6 }
+  const mcp = await connect(fakeClient({
+    estimateTranscribeCost: async (req) => (asked.push(req), price),
+    transcribe: async () => { throw new Error('must not run') },
+  }))
+  const priced = await mcp.callTool({ name: 'transcribe', arguments: { audioUrl: 'https://cdn/a.mp3', getCost: true } })
+  assert.equal(priced.content[0].text, 'Transcribing this audio file (62 s) costs 3 credits, priced from its length and charged for what is heard. Nothing ran and nothing was charged.')
+  assert.deepEqual(asked, [{ audioUrl: 'https://cdn/a.mp3' }])
+
+  price = { getCost: true, audioUrl: 'https://cdn/a.mp3', creditsEstimate: null, durationSeconds: null, note: "This file's length could not be read, so its price is known only after it is transcribed." }
+  const unknown = await mcp.callTool({ name: 'transcribe', arguments: { audioUrl: 'https://cdn/a.mp3', getCost: true } })
+  assert.equal(unknown.content[0].text, "This file's length could not be read, so its price is known only after it is transcribed. Nothing ran and nothing was charged.")
+})
+
+test('transcribe takes exactly one source, and slide only for a post', async () => {
   let called = 0
   const mcp = await connect(fakeClient({ transcribe: async () => { called++; return {} }, estimateTranscribeCost: async () => { called++; return {} } }))
   for (const args of [
     {},
     { audioUrl: 'https://cdn/a.mp3', contentId: 'c1' },
-    { audioUrl: 'https://cdn/a.mp3', getCost: true },
     { audioUrl: 'https://cdn/a.mp3', slide: 0 },
     { contentId: 'c1', languageCode: 'en' },
   ]) {
@@ -2773,7 +2786,73 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
   const body = res.content[0].text
   assert.match(body, /Slide 1 \(slide: 0\): ready; audio map \(free\): 1\.5s of speech in 6\.0s, 1 sound candidate, music 118 BPM, A minor, drops 9 dB under speech, mix -14 LUFS\./)
   assert.match(body, /\n {4}audio map \(free\), 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
-  assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: being measured \(free; ask again shortly\)\./)
+  assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: the sound analysis is still being made: read this window again to get it\./)
+})
+
+/**
+ * The audio map is exact data (phase 5 item 4): the text rounds for reading, and the API's own values ride in
+ * structuredContent for computing, once, with a line saying where. Break-verified: dropping structuredContent from
+ * inspirationContentResult or clipSection turns this red; leaving the map in the view's JSON text, the size assertion.
+ */
+test('get_content and view carry the exact audio map in structuredContent, beside the readable text', async () => {
+  const video = { copy: { status: 'ready' }, videos: [{ slide: 0, copy: { status: 'ready' }, audioMap: { status: 'ready', window: AUDIO_WINDOW } }] }
+  const mcp = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' }, video }) }))
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', audioMap: true } })
+  assert.match(res.content[0].text, /Exact values for computing are in the structured data beside this text\./)
+  assert.deepEqual(res.structuredContent, { contentId: 'c1', videos: [{ slide: 0, audioMap: { status: 'ready', window: AUDIO_WINDOW } }] })
+  // Nothing exact was asked for: no structured data, no pointer.
+  const plain = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' } }) }))
+  const bare = await plain.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.equal(bare.structuredContent, undefined)
+  assert.doesNotMatch(bare.content[0].text, /Exact values/)
+
+  const clip = { contentId: 'post-1', type: 'video', fromSec: 1, toSec: 4, audioMap: { status: 'ready', window: AUDIO_WINDOW } }
+  const viewer = await connect(fakeClient({ view: async () => ({ clip }) }))
+  const seen = await viewer.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4 } })
+  assert.deepEqual(seen.structuredContent, { clip })
+  assert.match(seen.content[0].text, /Exact values for computing are in the structured data beside this text\./)
+  // The map is in the structured data once; the text's JSON carries the clip without it.
+  assert.doesNotMatch(seen.content[0].text, /"audioMap"/)
+})
+
+/**
+ * Word timing reaches the reader only when asked (phase 5 item 3): each word at its exact start and end under its
+ * segment, and a transcript without word timing says so. Break-verified: dropping the words line from transcriptLines,
+ * or 'words' from the transcript enum, turns this red.
+ */
+test('get_content shows each word at its exact time when words are asked for', async () => {
+  let asked
+  const transcript = {
+    status: 'complete', language: 'en', wordTimed: true,
+    segments: [{ startMs: 1200, endMs: 1850, text: 'Hello there.', speaker: null, words: [{ startMs: 1200, endMs: 1480, text: 'Hello' }, { startMs: 1505, endMs: 1850, text: 'there.' }] }],
+  }
+  const mcp = await connect(fakeClient({ getContent: async (_id, opts) => ((asked = opts), { id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' }, transcript }) }))
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', transcript: 'words' } })
+  assert.deepEqual(asked, { transcript: 'words' })
+  assert.match(res.content[0].text, /\[1\.2s\] Hello there\.\n {4}Hello@1\.2s-1\.48s there\.@1\.505s-1\.85s/)
+  assert.deepEqual(res.structuredContent, { contentId: 'c1', transcript })
+
+  const unTimed = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' }, transcript: { status: 'complete', language: 'en', wordTimed: false, segments: [{ startMs: 0, endMs: 2000, text: 'Hi', speaker: null }] } }) }))
+  const phrases = await unTimed.callTool({ name: 'get_content', arguments: { contentId: 'c1', transcript: 'words' } })
+  assert.match(phrases.content[0].text, /This post's transcript has no word timing: its segments are timed, its words are not\./)
+})
+
+/**
+ * A source's frames come in pages, as frames or contact sheets (phase 5 item 5, gap 12): each sheet attached with the
+ * seconds it spans, the page named with how to read the next, and no live context. Break-verified: dropping parseSheets
+ * from clipSection turns this red.
+ */
+test("view shows a source's contact sheets, a page at a time", async () => {
+  const clip = {
+    contentId: 'post-1', type: 'video', fromSec: 0, toSec: 9, layout: 'sheets', page: 1, pages: 2,
+    sheets: [{ atSec: [0, 0.2, 0.4], columns: 3, rows: 1, width: 600, height: 120, dataUrl: 'data:image/webp;base64,U0gx' }],
+  }
+  const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 0, toSec: 9, perSecond: 5, layout: 'sheets' } })
+  const text = res.content[0].text
+  assert.match(text, /1 contact sheet\(s\) of the source are attached below, in order, each tile labeled with its second in the source\./)
+  assert.doesNotMatch(text, /U0gx|Live context/)
+  assert.deepEqual(res.content.slice(1).map((c) => (c.type === 'image' ? c.data : c.text)), ['From 0s to 0.4s:', 'U0gx'])
 })
 
 /**
@@ -2782,7 +2861,7 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
  */
 test("view on a post's video shows its audio map for the window", async () => {
   const clip = { contentId: 'post-1', type: 'video', fromSec: 1, toSec: 4, durationSeconds: 6, audioMap: { status: 'ready', window: AUDIO_WINDOW } }
-  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, count: 1 } })
   const text = res.content[0].text
   assert.match(text, /audio map \(free\), 1\.0s to 4\.0s of 6\.0s:/)
@@ -2806,7 +2885,7 @@ test("view on a post's heard window attaches its evidence sheet and says how to 
     audioMap: { status: 'ready', window: AUDIO_WINDOW },
     sheet,
   }
-  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, sound: true } })
   const text = res.content[0].text
   assert.match(text, /evidence sheet, 1\.0s to 4\.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem \(vocals, drums, bass, other;/)
@@ -2817,7 +2896,7 @@ test("view on a post's heard window attaches its evidence sheet and says how to 
   assert.ok(res.content.some((b) => b.type === 'text' && b.text === 'Its evidence sheet:'))
 
   const pending = { ...clip, sheet: { status: 'pending', reason: 'The evidence sheet is drawn once the audio map is ready.' } }
-  const mcp2 = await connect(fakeClient({ view: async () => ({ context: { clip: pending }, participant: null, participants: [] }) }))
+  const mcp2 = await connect(fakeClient({ view: async () => ({ clip: pending }) }))
   const res2 = await mcp2.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, sound: true } })
   assert.match(res2.content[0].text, /evidence sheet: being made \(The evidence sheet is drawn once the audio map is ready\)/)
   assert.equal(res2.content.filter((b) => b.type === 'image').length, 0)
@@ -3411,7 +3490,7 @@ test("view shows a post's frames and its sound, with the picture as an image", a
       picture: { width: 1240, height: 402, dataUrl: 'data:image/webp;base64,U05E' }, audioUrl: 'https://media.test/w.wav',
     },
   }
-  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', slide: 4, fromSec: 2, toSec: 4, count: 1, sound: true } })
   const text = res.content[0].text
   assert.match(text, /Tracked post post-1, its video \(slide 4\) \(10\.00s long\), from 2s to 4s/)
@@ -3422,7 +3501,7 @@ test("view shows a post's frames and its sound, with the picture as an image", a
   assert.deepEqual(res.content.slice(1).map((c) => (c.type === 'image' ? c.data : c.text)), ['At 2s:', 'SzE=', 'Its sound:', 'U05E'])
 
   const silent = await connect(
-    fakeClient({ view: async () => ({ context: { clip: { contentId: 'post-1', type: 'video', sound: { kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } } } }, participant: null, participants: [] }) }),
+    fakeClient({ view: async () => ({ clip: { contentId: 'post-1', type: 'video', sound: { kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } } } }) }),
   )
   const quiet = await silent.callTool({ name: 'view', arguments: { contentId: 'post-1', sound: true } })
   assert.match(quiet.content[0].text, /The sound could not be heard\. no_sound: This video has no sound\./)
@@ -3464,7 +3543,7 @@ test('view shows a raw clip by its keyframes, each labeled with its time', async
     url: 'https://media.contenthero.ai/c.mp4', type: 'video', fromSec: 1, toSec: 3, durationSeconds: 12,
     keyframes: [{ atSec: 1, dataUrl: 'data:image/jpeg;base64,SzE=' }, { atSec: 2.5, dataUrl: 'data:image/jpeg;base64,SzI=' }],
   }
-  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 1, toSec: 3 } })
   assert.doesNotMatch(res.content[0].text, /No live context/)
   assert.match(res.content[0].text, /Raw source clip \(video\) \(12\.00s long\), from 1s to 3s: https:\/\/media\.contenthero\.ai\/c\.mp4/)
@@ -3485,14 +3564,10 @@ test("view cuts a clip's frames to a region and says how they map back", async (
   const mcp = await connect(
     fakeClient({
       view: async () => ({
-        context: {
-          clip: {
-            url: 'https://media.contenthero.ai/c.mp4', type: 'video',
-            crop: { width: 640, height: 360, region: { x: 960, y: 540, width: 960, height: 540 }, pixelsPerSourcePixel: 0.6667 },
-          },
+        clip: {
+          url: 'https://media.contenthero.ai/c.mp4', type: 'video',
+          crop: { width: 640, height: 360, region: { x: 960, y: 540, width: 960, height: 540 }, pixelsPerSourcePixel: 0.6667 },
         },
-        participant: null,
-        participants: [],
       }),
     }),
   )
@@ -3503,7 +3578,7 @@ test("view cuts a clip's frames to a region and says how they map back", async (
   assert.match(res.content[0].text, /Zoom: 960x540 at \(960, 540\) in the file's pixels, shown at 640x360 \(0\.6667 px per file px\)/)
   const failed = await connect(
     fakeClient({
-      view: async () => ({ context: { clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', cropError: 'The region is outside the clip.' } }, participant: null, participants: [] }),
+      view: async () => ({ clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', cropError: 'The region is outside the clip.' } }),
     }),
   )
   const why = await failed.callTool({ name: 'view', arguments: { assetId: 'a1', region: { x: 0, y: 0, width: 10, height: 10 } } })
@@ -3513,7 +3588,7 @@ test("view cuts a clip's frames to a region and says how they map back", async (
 test('view keyframes spend the one result budget, and a clip that failed says why', async () => {
   const frame = (c, atSec) => ({ atSec, dataUrl: `data:image/jpeg;base64,${c.repeat(400_000)}` })
   const clip = { url: 'https://media.contenthero.ai/c.mp4', type: 'video', keyframes: [frame('A', 0), frame('B', 1), frame('C', 2)] }
-  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', count: 3 } })
   assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data[0]), ['A', 'B'])
   assert.match(res.content[0].text, /1 keyframe\(s\) not shown: too large for this reply\. Ask for fewer frames or a narrower fromSec\/toSec\./)
@@ -3521,9 +3596,7 @@ test('view keyframes spend the one result budget, and a clip that failed says wh
   const failed = await connect(
     fakeClient({
       view: async () => ({
-        context: { clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', keyframeError: 'The video service is unavailable.', error: { code: 'clip_unreadable', message: 'The clip could not be opened.' } } },
-        participant: null,
-        participants: [],
+        clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', keyframeError: 'The video service is unavailable.', error: { code: 'clip_unreadable', message: 'The clip could not be opened.' } },
       }),
     }),
   )
@@ -3920,6 +3993,37 @@ test('analyze_content kind video asks again while its copy downloads, then names
   assert.equal(res.structuredContent.status, 'ready')
   assert.deepEqual(res.structuredContent.videos[0].cuts.boundaries, [1.5, 4.25])
   assert.equal(res.structuredContent.cuts, undefined)
+})
+
+test('analyze_content kind video asks once for more detail, follows the upgrade without asking again, and says what each copy is', async () => {
+  const at = (copy: Record<string, unknown>) => ({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy, videos: [{ copy }], charge: null })
+  const answers = [at({ status: 'ready', resolution: 360, upgrading: { resolution: 1080 } }), at({ status: 'ready', resolution: 1080 })]
+  const seen: unknown[] = []
+  const mcp = await connect(fakeClient({ analyzeContent: async (_id, opts) => (seen.push(opts), answers[Math.min(seen.length - 1, 1)]) }))
+  const res = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video', resolution: '1080p' } })
+  assert.ok(!res.isError)
+  assert.deepEqual(seen, [{ kind: 'video', resolution: '1080p' }, { kind: 'video' }])
+  assert.match(res.content[0].text, /Video: ready at 1080p\./)
+
+  // Still upgrading at the end of the call: the stored copy is readable and how to follow it is named.
+  const waiting = await connect(fakeClient({ analyzeContent: async () => answers[0] }))
+  const text = (await waiting.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video' } })).content[0].text
+  assert.match(text, /Video: ready at 360p; a 1080p copy is downloading; the 360p copy stays readable until it lands\./)
+
+  // A resolution is for kind video only.
+  const refused = await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'scenes', resolution: '1080p' } })
+  assert.ok(refused.isError)
+  assert.match(refused.content[0].text, /resolution applies only to kind video/)
+})
+
+test('analyze_content kind video getCost lists the detail stored and offered, and the price of each upgrade', async () => {
+  const mcp = await connect(fakeClient({
+    estimateAnalysisCost: async () => ({ getCost: true, creditsEstimate: 0, videos: [{ stored: 360, offered: [360, 720, 1080] }], upgrades: [{ resolution: 720, creditsEstimate: 13 }, { resolution: 1080, creditsEstimate: 27 }] }),
+  }))
+  const text = (await mcp.callTool({ name: 'analyze_content', arguments: { contentId: 'c1', kind: 'video', getCost: true } })).content[0].text
+  assert.match(text, /Stored copy: 360p\. The platform offers: 360p, 720p, 1080p\./)
+  assert.match(text, /Upgrade to 720p: about 13 credits\./)
+  assert.match(text, /Upgrade to 1080p: about 27 credits\./)
 })
 
 test('analyze_content kind video on a carousel reports each video slide, by slide, with its state and cut list', async () => {

@@ -196,3 +196,13 @@ test('content get --scenes map prints the scenes in words and names view for fra
   })
   assert.equal(requests.length, 0)
 })
+
+test('content analyze --kind video prints each copy\'s detail, and an upgrade under way as still to follow', async () => {
+  const { contentVideoHuman } = await import('./content.js')
+  const copy = { status: 'ready' as const, resolution: 360, upgrading: { resolution: 1080 } }
+  const out = contentVideoHuman({ contentId: 'c1', shortId: 'Con00001', appUrl: 'https://app/c/Con00001', kind: 'video', copy, videos: [{ copy }], charge: null })
+  assert.match(out, /ready at 360p; a 1080p copy is downloading; the 360p copy stays readable until it lands/)
+  assert.match(out, /contenthero content analyze Con00001 --kind video \(free\)/)
+  const note = contentVideoHuman({ contentId: 'c1', kind: 'video', copy: { status: 'ready', resolution: 720 }, videos: [], notice: 'The stored copy is already the best this platform offers up to 1080p; nothing was downloaded.', charge: null } as never)
+  assert.match(note, /nothing was downloaded/)
+})

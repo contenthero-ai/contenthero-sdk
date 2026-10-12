@@ -20,7 +20,7 @@
  * Reads, plus tracking and moving accounts.
  */
 
-import { chargeSentence, contentVideoLabel, describeAccountIdsNotFound, describeLimit, describeAudioMapWindow, describeContentVideo, statusTarget, type Charge } from '@contenthero/sdk'
+import { chargeSentence, contentVideoLabel, contentVideosPending, describeAccountIdsNotFound, describeLimit, describeAudioMapWindow, describeContentVideo, describeVideoCostDetail, describeSegmentWords, describeWordTiming, statusTarget, type Charge, type ContentAnalysisCostEstimate, type ContentVideoResolution } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -31,7 +31,6 @@ import type {
   ContentAnalysis,
   ContentAnalysisResult,
   ContentDetail,
-  CostEstimate,
   ContentListResult,
   ContentSummary,
   ContentScope,
@@ -80,7 +79,7 @@ export function outliersTable(rows: ContentSummary[]): string {
 
 const SCOPES = ['all', 'inspiration', 'brand'] as const
 const WINDOWS = ['week', 'month', '3months', '6months', 'year', '2years'] as const
-const GRAINS = ['none', 'text', 'segments'] as const
+const GRAINS = ['none', 'text', 'segments', 'words'] as const
 
 function accountDetailHuman(d: TrackedAccountDetail): string {
   const head = keyValues([
@@ -290,7 +289,7 @@ export function registerContent(program: Command): void {
     .command('get')
     .description('Get one tracked post in full (engagement, hashtags, optional transcript and Break It Down analysis)')
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
-    .option('--transcript [grain]', `include the transcript: ${GRAINS.join(', ')} (default none)`)
+    .option('--transcript [grain]', `include the transcript: ${GRAINS.join(', ')} (default none); 'words' adds each word's start and end to the segments, where the post has word timing`)
     .option('--start-ms <n>', 'window start, ms into the media: narrows transcript segments, scenes and cut lists', toInt)
     .option('--end-ms <n>', 'window end, ms into the media: narrows transcript segments, scenes and cut lists', toInt)
     .option('--transcript-search <text>', 'only the transcript segments containing this phrase')
@@ -354,8 +353,13 @@ export function registerContent(program: Command): void {
           // "nothing to read" and "ask again later", which an empty body cannot convey.
           const head = `\n\nTranscript [${t.status}]${t.windowed ? ' (windowed)' : ''}:`
           if (t.segments) {
-            out += head + '\n' + (t.segments.length
-              ? t.segments.map((sg) => `  [${(sg.startMs / 1000).toFixed(1)}s] ${sg.text}`).join('\n')
+            // Word timing only when asked for (--transcript words): each word at its exact start and end, under its segment.
+            const timing = describeWordTiming(t)
+            out += head + '\n' + (timing ? `  ${timing}\n` : '') + (t.segments.length
+              ? t.segments.map((sg) => {
+                  const words = describeSegmentWords(sg.words)
+                  return `  [${(sg.startMs / 1000).toFixed(1)}s] ${sg.text}${words ? `\n    ${words}` : ''}`
+                }).join('\n')
               : t.windowed ? '  (no segments in that window)' : '  (none stored)')
           } else {
             out += head + '\n' + (t.text ?? '  (none stored)')
@@ -376,6 +380,7 @@ export function registerContent(program: Command): void {
     .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
     .option('--kind <kind>', "breakdown (default), scenes (the scene map, each scene's range, what happens and what is said, priced per minute of video), or video (every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved)")
     .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
+    .option('--resolution <720p|1080p>', 'Most detail for the stored copy (kind video); the best offered up to it is downloaded')
     .option('--no-wait', 'return at once instead of waiting for a running analysis')
     .option('--timeout <sec>', `how long to wait for a running analysis (default ${ANALYZE_TIMEOUT_SEC})`, toInt)
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
@@ -384,13 +389,22 @@ export function registerContent(program: Command): void {
       if (kind !== 'breakdown' && kind !== 'scenes' && kind !== 'video') {
         throw new CliError("--kind must be 'breakdown', 'scenes' or 'video'", EXIT.USAGE)
       }
+      const resolutionOpt = opts.resolution as string | undefined
+      if (resolutionOpt !== undefined && resolutionOpt !== '720p' && resolutionOpt !== '1080p') {
+        throw new CliError('--resolution must be one of: 720p, 1080p.', EXIT.USAGE)
+      }
+      if (resolutionOpt !== undefined && kind !== 'video') throw new CliError('--resolution applies only to --kind video.', EXIT.USAGE)
+      const resolution = resolutionOpt ? { resolution: resolutionOpt as ContentVideoResolution } : {}
       if (opts.cost) {
-        const est = await client.estimateAnalysisCost(id, { kind })
-        emit(est, ctx, (e: CostEstimate) =>
+        const est = await client.estimateAnalysisCost(id, { kind, ...resolution })
+        emit(est, ctx, (e: ContentAnalysisCostEstimate) =>
           kind === 'video'
-            ? e.creditsEstimate === 0
-              ? "This post's videos are already in their analysis copies or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
-              : `Downloading this post's videos for analysis costs at most ${e.creditsEstimate} credits: the most the downloads may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`
+            ? [
+                e.creditsEstimate === 0
+                  ? "This post's videos are already in their analysis copies or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
+                  : `Downloading this post's videos for analysis costs at most ${e.creditsEstimate} credits: the most the downloads may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`,
+                ...describeVideoCostDetail(e),
+              ].join('\n')
             : kind === 'scenes'
               ? `Preparing this post's scenes costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`
               : `Analyzing this post costs ${e.creditsEstimate} credits. Nothing ran and nothing was charged.`,
@@ -400,14 +414,15 @@ export function registerContent(program: Command): void {
       const timeoutMs = ((opts.timeout as number | undefined) ?? ANALYZE_TIMEOUT_SEC) * 1000
       if (kind === 'video') {
         // A post's copy has no job `status` reads: asking again with the same kind is how it is followed, and is free.
-        let video = await client.analyzeContent(id, { kind: 'video' })
+        let video = await client.analyzeContent(id, { kind: 'video', ...resolution })
         const deadline = Date.now() + timeoutMs
-        while (opts.wait !== false && video.copy.status === 'pending' && Date.now() + ANALYZE_POLL_MS <= deadline) {
+        while (opts.wait !== false && contentVideosPending(video) && Date.now() + ANALYZE_POLL_MS <= deadline) {
           await new Promise((resolve) => setTimeout(resolve, ANALYZE_POLL_MS))
+          // Followed without the resolution: it was asked for once, and asking again would only report it.
           video = await client.analyzeContent(id, { kind: 'video' })
         }
         emit(video, ctx, contentVideoHuman)
-        if (opts.wait !== false && video.copy.status === 'pending') process.exitCode = EXIT.TIMEOUT
+        if (opts.wait !== false && contentVideosPending(video)) process.exitCode = EXIT.TIMEOUT
         return
       }
       // Either kind runs as a job, waited on through the SDK's one wait (`waitForStatus`), which starts nothing. Done:
@@ -451,9 +466,10 @@ export function contentVideoHuman(r: ContentVideoResult): string {
     ['Post', displayId({ id: r.contentId, shortId: r.shortId })],
     ...linkRow(r),
     ['Status', status],
+    ...(r.notice ? [['Note', r.notice] as [string, string]] : []),
     ...r.videos.map((v): [string, string] => [contentVideoLabel(v), describeContentVideo(v)]),
     ...costRows(r.charge),
-    ...(copy.status === 'pending'
+    ...(contentVideosPending(r)
       ? [['Next', `contenthero content analyze ${r.shortId || r.contentId} --kind video (free)`] as [string, string]]
       : []),
   ])

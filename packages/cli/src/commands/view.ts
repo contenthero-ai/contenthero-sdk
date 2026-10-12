@@ -91,20 +91,18 @@ function renderedImages(rendered: Record<string, unknown> | null): Buffer[] {
   return [bufferFromDataUrl(rendered.dataUrl), ...listed, picture].filter((b): b is Buffer => b !== null)
 }
 
-/** Every image a view returned, in order: the render, the range's sound beside it, then a source's keyframes, a post's evidence sheet and its sound's picture. */
-function viewImages(context: Record<string, unknown> | null): Buffer[] {
-  const clip = record(context?.clip)
-  const keyframes = Array.isArray(clip?.keyframes)
-    ? (clip.keyframes as Array<Record<string, unknown>>).map((kf) => bufferFromDataUrl(kf.dataUrl)).filter((b): b is Buffer => b !== null)
-    : []
-  const sheet = record(clip?.sheet)
-  return [
-    ...renderedImages(record(context?.rendered)),
-    ...renderedImages(record(context?.renderedSound)),
-    ...keyframes,
-    ...(sheet ? [bufferFromDataUrl(sheet.dataUrl)].filter((b): b is Buffer => b !== null) : []),
-    ...renderedImages(record(clip?.sound)),
-  ]
+/** Every image a view returned, in order: the render and the range's sound beside it, or a source's page of keyframes or contact sheets, its evidence sheet and its sound's picture. */
+function viewImages(result: ViewResult): Buffer[] {
+  if ('clip' in result) {
+    const clip = record(result.clip)
+    const pictures = [clip?.keyframes, clip?.sheets].flatMap((list) =>
+      Array.isArray(list) ? (list as Array<Record<string, unknown>>).map((item) => bufferFromDataUrl(item.dataUrl)) : [],
+    )
+    const sheet = record(clip?.sheet)
+    return [...pictures, sheet ? bufferFromDataUrl(sheet.dataUrl) : null, ...renderedImages(record(clip?.sound))].filter((b): b is Buffer => b !== null)
+  }
+  const context = result.context
+  return [...renderedImages(record(context?.rendered)), ...renderedImages(record(context?.renderedSound))]
 }
 
 /** A source's sound in lines: its measurement and where its sounds start, or why it could not be heard, and its audio. */
@@ -135,12 +133,23 @@ function renderedLines(rendered: Record<string, unknown> | null): string[] {
  * a post's audio map for the window and its evidence sheet, and what was saved.
  */
 export function viewSummary(result: ViewResult, saved: { count: number; path: string }): string {
+  const savedLine = saved.count > 0 ? [`${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}`] : []
+  // A source read is the source alone, never the live context.
+  if ('clip' in result) {
+    const clip = record(result.clip)
+    return [
+      ...describeClip(clip),
+      ...sourceSoundLines(record(clip?.sound)),
+      ...describeAudioMap(record(clip?.audioMap) as AudioMapAnswer | null),
+      ...describeEvidenceSheet(record(clip?.sheet) as EvidenceSheet | null),
+      ...savedLine,
+    ].join('\n')
+  }
   const c = result.context
   const rendered = record(c?.rendered)
   const renderedSound = record(c?.renderedSound)
-  const clip = record(c?.clip)
-  // A render or a clip comes back with no live tab (each works without one), so only a context with none is empty.
-  if (!c || (!result.participant && !rendered && !renderedSound && !clip)) {
+  // A render comes back with no live tab (it works without one), so only a context with none is empty.
+  if (!c || (!result.participant && !rendered && !renderedSound)) {
     return 'No live context: no one is currently viewing this in the app.'
   }
   const head = result.participant
@@ -148,17 +157,7 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
     : rendered || renderedSound
       ? ['No one is viewing this in the app right now; the render is from the saved project.']
       : []
-  const savedLine = saved.count > 0 ? [`${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}`] : []
-  return [
-    ...head,
-    ...renderedLines(rendered),
-    ...renderedLines(renderedSound),
-    ...describeClip(clip),
-    ...sourceSoundLines(record(clip?.sound)),
-    ...describeAudioMap(record(clip?.audioMap) as AudioMapAnswer | null),
-    ...describeEvidenceSheet(record(clip?.sheet) as EvidenceSheet | null),
-    ...savedLine,
-  ].join('\n')
+  return [...head, ...renderedLines(rendered), ...renderedLines(renderedSound), ...savedLine].join('\n')
 }
 
 export function registerView(program: Command): void {
@@ -177,11 +176,11 @@ export function registerView(program: Command): void {
     .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
     .option('--count <n>', "how many frames to spread evenly across the range, or across a source's window (omit for one at the focus point, or about one a second of a range)", (v) => parseInt(v, 10))
     .option('--per-second <n>', "how many frames to take per second of the range, up to every frame, or of a source's window", (v) => Number(v))
-    .option('--layout <layout>', "'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, each frame numbered under its tile (omit to choose by how many fit one response)")
+    .option('--layout <layout>', "'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, an edit's frames numbered and a source's labeled with its second under each tile (omit to choose by how many fit one response)")
     .option('--sound', "hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by --from-frame and --to-frame; or a source's window as it is, by --from-sec and --to-sec, beside any frames asked for")
     .option('--video', "watch the range play with its sound, to judge motion, timing, transitions and pacing; a terminal cannot take video, so it returns frames across the range and the sound measured. Takes --from-frame and --to-frame, or a source's window")
     .option('--render-id <id>', 'read a render already started, by the renderId it returned')
-    .option('--page <n>', 'which page of the render to read, starting at 1', (v) => parseInt(v, 10))
+    .option('--page <n>', "which page of the render, or of a source's frames, to read, starting at 1", (v) => parseInt(v, 10))
     .option('--wait <seconds>', 'how long to wait for results before answering; what is not ready is read later with --render-id', (v) => Number(v))
     .option('--width <n>', "image: the width in pixels to render at, or of a source's frames, to check legibility at the size it will be seen. Height follows the aspect ratio. The size used is reported with the result.", (v) => parseInt(v, 10))
     .option('--region <x,y,w,h>', "image: render only this rectangle, x,y,width,height in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without --width, it renders at native scale. For a source, the rectangle is in its own pixels, and each of its frames is cut to it.", parseRegion)
@@ -250,12 +249,12 @@ export function registerView(program: Command): void {
         atSec: opts.atSec as number[] | undefined,
       })
 
-      const c = result.context as Record<string, unknown> | null
+      const c = 'clip' in result ? null : result.context
       const rendered = record(c?.rendered)
       const failure = describeRenderFailure(rendered) ?? describeRenderFailure(record(c?.renderedSound))
       let savedCount = 0
       if (opts.save) {
-        const images = viewImages(c)
+        const images = viewImages(result)
         if (images.length > 1) {
           images.forEach((buf, i) => {
             writeFileSync(numberedPath(opts.save as string, i + 1), buf)

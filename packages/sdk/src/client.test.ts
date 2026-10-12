@@ -237,6 +237,14 @@ test('estimateTranscribeCost prices a post on the transcribe route', async () =>
   assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { contentId: 'c1', getCost: true })
 })
 
+test('estimateTranscribeCost prices an audio file on the transcribe route', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { getCost: true, creditsEstimate: 3, audioUrl: 'https://cdn/a.mp3', durationSeconds: 61 } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const est = await client.estimateTranscribeCost({ audioUrl: 'https://cdn/a.mp3' })
+  assert.equal(est.creditsEstimate, 3)
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { audioUrl: 'https://cdn/a.mp3', getCost: true })
+})
+
 test('download reads the save links an id names; 404 and 409 throw their typed errors', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { files: [{ mediaId: 'Abc12345-1', name: 'cat-1', url: 'https://app.test/api/media/k1?download=cat-1' }, { mediaId: 'Abc12345-2', name: 'cat-2', url: 'https://app.test/api/media/k2?download=cat-2' }] } },
@@ -455,6 +463,20 @@ test('analyzeContent with kind video POSTs to the post\'s analysis route and ret
   assert.equal(calls[0]?.url, 'https://example.test/api/v1/content/c1/analysis')
   assert.equal(calls[0]?.init?.method, 'POST')
   assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { kind: 'video' })
+})
+
+test('analyzeContent and its price check send a resolution only when one is asked for', async () => {
+  const answer = { contentId: 'c1', kind: 'video', copy: { status: 'ready', resolution: 360 }, videos: [], charge: null }
+  const { fetch, calls } = stubFetch([
+    { status: 202, body: answer },
+    { status: 200, body: { getCost: true, creditsEstimate: 27, upgrades: [{ resolution: 1080, creditsEstimate: 27 }] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.analyzeContent('c1', { kind: 'video', resolution: '1080p' })
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { kind: 'video', resolution: '1080p' })
+  const cost = await client.estimateAnalysisCost('c1', { kind: 'video', resolution: '1080p' })
+  assert.deepEqual(JSON.parse(calls[1]?.init?.body as string), { getCost: true, kind: 'video', resolution: '1080p' })
+  assert.deepEqual(cost.upgrades, [{ resolution: 1080, creditsEstimate: 27 }])
 })
 
 test('estimateAnalysisCost prices a post\'s video on its analysis route; estimateImportCost prices a url', async () => {

@@ -19,11 +19,10 @@ test("a post's one video prints its transcript and where it is read word-timed; 
   assert.doesNotMatch(silent, /content get/)
 })
 
-test('transcribe takes exactly one source, and --cost and --slide only for a post', async () => {
+test('transcribe takes exactly one source, and --slide only for a post', async () => {
   for (const args of [
     [],
     ['https://cdn/a.mp3', '--content-id', 'c1'],
-    ['https://cdn/a.mp3', '--cost'],
     ['https://cdn/a.mp3', '--slide', '0'],
     ['--content-id', 'c1', '--language', 'en'],
   ]) {

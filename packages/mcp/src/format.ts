@@ -99,6 +99,7 @@ import type {
   ContentDetail,
   ContentAnalysisResult,
   ContentAnalysisKind,
+  ContentAnalysisCostEstimate,
   ContentScenesResult,
   ContentVideoResult,
   ContentListResult,
@@ -127,7 +128,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeAudioMapWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeAudioMapWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1495,6 +1496,22 @@ function parseKeyframes(keyframes: unknown): Array<{ data: string; mimeType: str
   })
 }
 
+/** A source's contact sheets as images, each labeled with the seconds it holds. */
+function parseSheets(sheets: unknown): Array<{ data: string; mimeType: string; atSec: unknown }> {
+  if (!Array.isArray(sheets)) return []
+  return (sheets as Array<Record<string, unknown>>).flatMap((sheet) => {
+    const parsed = isPlainRecord(sheet) ? parseDataUrl(sheet.dataUrl) : null
+    const seconds = isPlainRecord(sheet) && Array.isArray(sheet.atSec) ? (sheet.atSec as unknown[]).filter((t): t is number => typeof t === 'number') : []
+    return parsed ? [{ ...parsed, atSec: seconds.length ? `${seconds[0]}s to ${seconds[seconds.length - 1]}s` : null }] : []
+  })
+}
+
+/**
+ * Where an agent finds a result's exact values: its `structuredContent`, beside the readable text. The text rounds for
+ * reading; the structured data is the API's own, unrounded, for computing.
+ */
+const EXACT_VALUES_POINTER = 'Exact values for computing are in the structured data beside this text.'
+
 /** Keyframes of a view clip that did not fit the result. */
 function keyframesNotShown(dropped: number): string {
   return `${dropped} keyframe(s) not shown: too large for this reply. Ask for fewer frames or a narrower fromSec/toSec.`
@@ -1504,6 +1521,8 @@ function keyframesNotShown(dropped: number): string {
 function keyframeBlocks(keyframes: ReadonlyArray<{ data: string; mimeType: string; atSec: unknown }>): CallToolResult['content'] {
   return keyframes.flatMap((kf) => [
     ...(typeof kf.atSec === 'number' ? [{ type: 'text' as const, text: `At ${kf.atSec}s:` }] : []),
+    // A contact sheet is labeled with the seconds it spans.
+    ...(typeof kf.atSec === 'string' ? [{ type: 'text' as const, text: `From ${kf.atSec}:` }] : []),
     { type: 'image' as const, data: kf.data, mimeType: kf.mimeType },
   ])
 }
@@ -2490,16 +2509,25 @@ function transcriptLines(t: NonNullable<ContentDetail['transcript']>): string[] 
     if (!t.segments.length) {
       return [head, t.windowed ? '  (no segments in that window)' : '  (none stored)']
     }
-    return [head, ...t.segments.map((sg) => `  [${(sg.startMs / 1000).toFixed(1)}s] ${sg.text}`)]
+    // Word timing only when it was asked for (transcript 'words'): each word at its exact start and end, in seconds.
+    return [
+      head,
+      ...[describeWordTiming(t)].filter((l): l is string => l !== null).map((l) => `  ${l}`),
+      ...t.segments.flatMap((sg) => {
+        const words = describeSegmentWords(sg.words)
+        return [`  [${(sg.startMs / 1000).toFixed(1)}s] ${sg.text}`, ...(words ? [`    ${words}`] : [])]
+      }),
+    ]
   }
   return [head, t.text ? t.text : '  (none stored)']
 }
 
 /** One tracked post in full, with its transcript when it was asked for. */
 export function inspirationContentResult(c: ContentDetail): CallToolResult {
+  const exactData = contentExactData(c)
   const stats = `${compactNum(c.viewCount)} views, ${compactNum(c.likeCount)} likes, ${compactNum(c.commentCount)} comments`
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
-  return text(
+  const result = text(
     lines([
       `${c.title ?? '(untitled)'} (${idOf(c)})${c.isOwn ? ' [yours]' : ''}`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
@@ -2512,8 +2540,20 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
       ...analysisLines(c.id, c.analysis),
       ...scenesLines(c.id, c.scenes, c.shortId || c.id),
       ...postVideoLines(c.video),
+      exactData ? EXACT_VALUES_POINTER : null,
     ]),
   )
+  // The exact values, as the API returned them, for an agent to compute with: the word timing asked for, and each
+  // video's audio map window. The text above rounds for reading.
+  return exactData ? { ...result, structuredContent: exactData } : result
+}
+
+/** The parts of a post an agent computes with, exact, when they were asked for; null when none was. */
+function contentExactData(c: ContentDetail): Record<string, unknown> | null {
+  const words = c.transcript?.segments?.some((sg) => sg.words) ? { transcript: c.transcript } : null
+  const maps = (c.video?.videos ?? []).filter((v) => v.audioMap?.status === 'ready' && v.audioMap.window)
+  const audioMaps = maps.length ? { videos: maps.map((v) => ({ ...(v.slide !== undefined ? { slide: v.slide } : {}), audioMap: v.audioMap })) } : null
+  return words || audioMaps ? { contentId: c.id, ...words, ...audioMaps } : null
 }
 
 function seconds(ms: number): string {
@@ -2607,13 +2647,16 @@ function analysisWait(r: { contentId: string; shortId?: string }, kind: 'content
 }
 
 /** analyze_content's price check: nothing ran and nothing was charged. */
-export function analysisCostResult(est: CostEstimate, kind: ContentAnalysisKind = 'breakdown'): CallToolResult {
+export function analysisCostResult(est: ContentAnalysisCostEstimate, kind: ContentAnalysisKind = 'breakdown'): CallToolResult {
   const credits = `${est.creditsEstimate} credit${est.creditsEstimate === 1 ? '' : 's'}`
   if (kind === 'video') {
     return text(
-      est.creditsEstimate === 0
-        ? "This post's videos are already in their analysis copies or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
-        : `Downloading this post's videos for analysis costs at most ${credits}: the most the downloads may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`,
+      lines([
+        est.creditsEstimate === 0
+          ? "This post's videos are already in their analysis copies or being downloaded: it costs 0 credits. Nothing ran and nothing was charged."
+          : `Downloading this post's videos for analysis costs at most ${credits}: the most the downloads may move is held, and it is charged for what arrives. Nothing ran and nothing was charged.`,
+        ...describeVideoCostDetail(est),
+      ]),
     )
   }
   if (kind === 'scenes') {
@@ -2655,8 +2698,11 @@ export function contentVideoResult(r: ContentVideoResult): CallToolResult {
   const copy = r.copy
   const many = r.videos.length > 1
   const its = many ? `Its ${r.videos.length} videos are` : 'Its video is'
+  const upgrading = copy.status !== 'pending' && contentVideosPending(r)
   const body =
-    copy.status === 'ready'
+    upgrading
+      ? `${its} ready in the post's shared analysis copies, and more detail is downloading. Follow it with ${again} again, which is free.`
+      : copy.status === 'ready'
       ? `${its} ready in the post's shared analysis copies, which the reading tools use. Nothing was added to your library.`
       : copy.status === 'pending'
         ? `${its} still downloading into the post's shared analysis copies. Follow them with ${again} again, which is free.`
@@ -2667,7 +2713,7 @@ export function contentVideoResult(r: ContentVideoResult): CallToolResult {
             : `${its} not downloaded yet. ${again} downloads ${many ? 'them' : 'it'}.`
   const videoLines = r.videos.map((v) => `${contentVideoLabel(v)}: ${describeContentVideo(v)}`)
   return {
-    content: [{ type: 'text', text: lines([`Post ${post}`, body, ...videoLines, chargeLine(r.charge)]) }],
+    content: [{ type: 'text', text: lines([`Post ${post}`, body, ...(r.notice ? [r.notice] : []), ...videoLines, chargeLine(r.charge)]) }],
     structuredContent: {
       contentId: r.contentId,
       appUrl: r.appUrl ?? null,
@@ -2944,7 +2990,9 @@ function clipSection(
   clip: Record<string, unknown>,
   budget: number,
 ): { json: Record<string, unknown>; lines: string[]; blocks: CallToolResult['content'] } {
-  const keyframes = parseKeyframes(clip.keyframes)
+  // A page of a source's frames comes one by one (`keyframes`) or tiled into contact sheets (`sheets`); both spend the
+  // same allowance, in order, and what does not fit is named.
+  const keyframes = [...parseKeyframes(clip.keyframes), ...parseSheets(clip.sheets)]
   const spent = admitWithinBudget(keyframes, budget)
   const sheet = isPlainRecord(clip.sheet) ? (clip.sheet as unknown as EvidenceSheet) : null
   const sheetPicture = sheet?.status === 'ready' ? parseDataUrl(sheet.dataUrl) : null
@@ -2954,13 +3002,20 @@ function clipSection(
   const heard = admitWithinBudget(soundPicture ? [soundPicture] : [], drawn.remaining)
   const [what, ...why] = describeClip(clip)
   const lines: string[] = what ? [what] : []
+  const sheeted = Array.isArray(clip.sheets) && clip.sheets.length > 0
   if (spent.admitted.length > 0) {
-    lines.push(`${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`)
+    lines.push(
+      sheeted
+        ? `${spent.admitted.length} contact sheet(s) of the source are attached below, in order, each tile labeled with its second in the source.`
+        : `${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`,
+    )
   }
   if (spent.dropped > 0) lines.push(keyframesNotShown(spent.dropped))
   lines.push(...why)
   lines.push(...describeSourceSound(sound))
-  lines.push(...describeAudioMap(isPlainRecord(clip.audioMap) ? (clip.audioMap as unknown as AudioMapAnswer) : null))
+  const audioMap = isPlainRecord(clip.audioMap) ? (clip.audioMap as unknown as AudioMapAnswer) : null
+  lines.push(...describeAudioMap(audioMap))
+  if (audioMap?.status === 'ready') lines.push(EXACT_VALUES_POINTER)
   if (sheet && (sheet.status !== 'ready' || drawn.admitted.length > 0)) lines.push(...describeEvidenceSheet(sheet).map((l) => (sheet.status === 'ready' ? `${l} It is attached below.` : l)))
   if (drawn.dropped > 0) lines.push("The evidence sheet was not attached: over this result's size limit. Ask for fewer frames, or a narrower window.")
   if (heard.admitted.length > 0) {
@@ -2968,13 +3023,15 @@ function clipSection(
   }
   if (heard.dropped > 0) lines.push("The picture of the sound was not attached: over this result's size limit. Ask for fewer frames or a narrower window.")
   let json: Record<string, unknown> = clip
-  if (keyframes.length > 0 && Array.isArray(clip.keyframes)) {
-    json = {
-      ...json,
-      keyframes: (clip.keyframes as Array<Record<string, unknown>>).map((kf) => {
-        const { dataUrl: _drop, ...rest } = isPlainRecord(kf) ? kf : {}
-        return rest
-      }),
+  for (const key of ['keyframes', 'sheets'] as const) {
+    if (Array.isArray(clip[key])) {
+      json = {
+        ...json,
+        [key]: (clip[key] as Array<Record<string, unknown>>).map((item) => {
+          const { dataUrl: _drop, ...rest } = isPlainRecord(item) ? item : {}
+          return rest
+        }),
+      }
     }
   }
   if (sound && soundPicture && isPlainRecord(sound.picture)) {
@@ -2999,8 +3056,9 @@ function clipSection(
  * The view tool. Returns a text summary + the discriminated context JSON, plus IMAGE content block(s) so the calling
  * model can actually SEE: the viewport `snapshot` (capture) when the user's screen was requested, the composed-output
  * render (`context.rendered`), the range's sound beside frames when video could not be received
- * (`context.renderedSound`, formatted exactly as a sound `rendered`), and a source's keyframes and sound
- * (`context.clip`). The heavy data URLs are stripped from the JSON text (they ride only as image blocks).
+ * (`context.renderedSound`, formatted exactly as a sound `rendered`), or a source read alone (`clip`): a page of its
+ * keyframes or contact sheets and its sound, with its exact audio map in `structuredContent`. The heavy data URLs are
+ * stripped from the JSON text (they ride only as image blocks).
  */
 export function viewResult(
   result: ViewResult,
@@ -3013,17 +3071,25 @@ export function viewResult(
    */
   budget: number,
 ): CallToolResult {
+  // A source read is the source alone (`SourceViewResult`), never the live context of the user's screen. Its text is the
+  // readable lines and the clip's JSON without its audio map, which is in `structuredContent` once, exact.
+  if ('clip' in result) {
+    const clipped = clipSection(isPlainRecord(result.clip) ? result.clip : {}, budget)
+    const { audioMap: _exact, ...readable } = clipped.json
+    return {
+      content: [{ type: 'text', text: `${clipped.lines.join('\n')}\n\n${JSON.stringify(readable)}` }, ...clipped.blocks],
+      structuredContent: { clip: clipped.json },
+    }
+  }
   const { context, participant, participants } = result
   const rendered = context && isPlainRecord(context.rendered) ? context.rendered : null
   const renderedSound = context && isPlainRecord(context.renderedSound) ? context.renderedSound : null
-  const clip = context && isPlainRecord(context.clip) ? context.clip : null
   /**
    * ⭐ A RENDER IS SHOWN WITH OR WITHOUT A LIVE TAB. Render works from the saved project, and the API returns it
    * with `participant: null` when no one is viewing. This returned "No live context" whenever the participant was
    * null, so a render requested with a projectId and no open tab could never reach the agent, image or error.
-   * A raw clip needs no tab either.
    */
-  if (!context || (!participant && !rendered && !renderedSound && !clip)) {
+  if (!context || (!participant && !rendered && !renderedSound)) {
     return text(
       'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
         'The user may not have the editor/studio/content open right now.',
@@ -3034,7 +3100,6 @@ export function viewResult(
   const screen = admitWithinBudget(snapshot ? [snapshot] : [], budget)
   const picture = rendered ? renderedSection(rendered, screen.remaining) : null
   const sound = renderedSound ? renderedSection(renderedSound, picture?.remaining ?? screen.remaining) : null
-  const clipped = clip ? clipSection(clip, sound?.remaining ?? picture?.remaining ?? screen.remaining) : null
 
   const lines: string[] = []
   if (participant) {
@@ -3047,13 +3112,11 @@ export function viewResult(
   if (screen.dropped > 0) lines.push("The screen capture was not attached: it is over this result's size limit.")
   if (picture) lines.push(...picture.lines)
   if (sound) lines.push(...sound.lines)
-  if (clipped) lines.push(...clipped.lines)
 
   const contextForJson = {
     ...context,
     ...(picture ? { rendered: picture.json } : {}),
     ...(sound ? { renderedSound: sound.json } : {}),
-    ...(clipped ? { clip: clipped.json } : {}),
   }
   const content: CallToolResult['content'] = [
     { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(contextForJson, null, 2)}` },
@@ -3064,7 +3127,6 @@ export function viewResult(
     content.push({ type: 'text', text: 'The sound of the same range:' })
   }
   for (const img of sound?.images ?? []) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
-  if (clipped) content.push(...clipped.blocks)
   return { content }
 }
 

@@ -106,7 +106,7 @@ test("a video range's sound is measured beside its frames", () => {
 
 test('a raw clip says what it is and which window was read, with no live tab', () => {
   const out = viewSummary(
-    { context: { clip: { url: 'https://media.test/c.mp4', type: 'video', fromSec: 1, toSec: 3, keyframeError: 'The video service is unavailable.' } }, participant: null, participants: [] },
+    { clip: { url: 'https://media.test/c.mp4', type: 'video', fromSec: 1, toSec: 3, keyframeError: 'The video service is unavailable.' } },
     nothingSaved,
   )
   assert.doesNotMatch(out, /No live context/)
@@ -126,11 +126,11 @@ test("a post's video says its audio map for the window, or that it is being meas
     loudness: { integratedLufs: -15, shortTerm: [] },
     levels: { vocalsDb: null, drumsDb: -22, bassDb: -26, otherDb: -20 },
   }
-  const ready = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'ready', window } } }, participant: null, participants: [] }, nothingSaved)
+  const ready = viewSummary({ clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'ready', window } } }, nothingSaved)
   assert.match(ready, /audio map \(free\), 0\.0s to 3\.0s of 9\.0s:\n  speech: none\n  sound candidates \(measured, not identified\): 1\n    1\. 0\.5s to 1\.0s on other: -20 dB, \+12 over its floor; attack 6 ms/)
   assert.match(ready, /  music: 120 BPM, C major, 1 beat in this window/)
-  const pending = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'pending' } } }, participant: null, participants: [] }, nothingSaved)
-  assert.match(pending, /audio map: being measured \(free; ask again shortly\)/)
+  const pending = viewSummary({ clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'pending' } } }, nothingSaved)
+  assert.match(pending, /audio map: the sound analysis is still being made: read this window again to get it/)
 })
 
 /**
@@ -143,12 +143,10 @@ test("a post's heard window says how to read its evidence sheet, and --save writ
     status: 'ready', fromSec: 1, toSec: 3, width: 1292, height: 610, dataUrl: 'data:image/webp;base64,BQ==',
     frames: [{ atSec: 2 }], words: [], stems: ['vocals', 'drums', 'bass', 'other'], frequencyHz: { min: 20, max: 20000 }, soundsMarked: 0,
   }
-  const summary = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', sheet } }, participant: null, participants: [] }, nothingSaved)
+  const summary = viewSummary({ clip: { contentId: 'post-1', type: 'video', sheet } }, nothingSaved)
   assert.match(summary, /evidence sheet, 1\.0s to 3\.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem/)
   body = {
-    context: { clip: { contentId: 'post-1', type: 'video', keyframes: [{ atSec: 2, dataUrl: 'data:image/jpeg;base64,AQ==' }], sheet } },
-    participant: null,
-    participants: [],
+    clip: { contentId: 'post-1', type: 'video', keyframes: [{ atSec: 2, dataUrl: 'data:image/jpeg;base64,AQ==' }], sheet },
   }
   const path = join(mkdtempSync(join(tmpdir(), 'ch-view-')), 'sheet.webp')
   await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--content-id', 'post-1', '--sound', '--from-sec', '1', '--to-sec', '3', '--save', path], { from: 'user' })
@@ -158,9 +156,7 @@ test("a post's heard window says how to read its evidence sheet, and --save writ
 
 test("--save writes a clip's keyframes, numbered in order", async () => {
   body = {
-    context: { clip: { url: 'https://media.test/c.mp4', type: 'video', keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AQ==' }, { atSec: 1, dataUrl: 'data:image/jpeg;base64,Ag==' }] } },
-    participant: null,
-    participants: [],
+    clip: { url: 'https://media.test/c.mp4', type: 'video', keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AQ==' }, { atSec: 1, dataUrl: 'data:image/jpeg;base64,Ag==' }] },
   }
   const path = join(mkdtempSync(join(tmpdir(), 'ch-view-')), 'clip.jpg')
   await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--asset', 'a1', '--save', path], { from: 'user' })
@@ -199,17 +195,13 @@ test('--content-id and --slide name a post, --at-sec the seconds, and --sound co
 test("a post's summary names it and reads its sound, or says why it could not be heard", () => {
   const out = viewSummary(
     {
-      context: {
-        clip: {
+      clip: {
           contentId: 'post-1', slide: 4, type: 'video', fromSec: 2, toSec: 4,
           sound: {
             kind: 'sound', fromSec: 2, toSec: 4, loudness: { integratedLufs: -14, truePeakDbtp: -1 }, onsets: [{ seconds: 2.5 }],
             stereo: null, audioUrl: 'https://media.test/w.wav',
           },
         },
-      },
-      participant: null,
-      participants: [],
     },
     nothingSaved,
   )
@@ -219,7 +211,7 @@ test("a post's summary names it and reads its sound, or says why it could not be
   assert.match(out, /Sounds start at 2\.5s, in the source's own seconds\./)
   assert.match(out, /The audio, for a short while: https:\/\/media\.test\/w\.wav/)
   const silent = viewSummary(
-    { context: { clip: { contentId: 'post-1', type: 'video', sound: { kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } } } }, participant: null, participants: [] },
+    { clip: { contentId: 'post-1', type: 'video', sound: { kind: 'sound', error: { code: 'no_sound', message: 'This video has no sound.' } } } },
     nothingSaved,
   )
   assert.match(silent, /The sound could not be heard\. no_sound: This video has no sound\./)
@@ -227,15 +219,11 @@ test("a post's summary names it and reads its sound, or says why it could not be
 
 test("--save writes a source's keyframes, then its sound's picture", async () => {
   body = {
-    context: {
-      clip: {
+    clip: {
         contentId: 'post-1', type: 'video',
         keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AQ==' }],
         sound: { kind: 'sound', loudness: {}, onsets: [], stereo: null, picture: { width: 2, height: 2, dataUrl: 'data:image/webp;base64,Aw==' } },
       },
-    },
-    participant: null,
-    participants: [],
   }
   const path = join(mkdtempSync(join(tmpdir(), 'ch-view-')), 'post.jpg')
   await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--content-id', 'post-1', '--count', '1', '--sound', '--save', path], { from: 'user' })

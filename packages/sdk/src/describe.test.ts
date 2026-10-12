@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -157,6 +157,17 @@ test('describeClip says what the clip is, the window read, and why it or its key
       'The clip could not be read. clip_unreadable: The clip could not be opened.',
     ],
   )
+})
+
+// A source's frames come in pages; the page line names the next one. Break-verified: dropping the page line turns this red.
+test("describeClip names a source's page and how to read the next, and says nothing for one page", () => {
+  const post = { contentId: 'p1', type: 'video', layout: 'sheets' }
+  assert.deepEqual(describeClip({ ...post, page: 1, pages: 3 }), [
+    'Tracked post p1, its video',
+    'Page 1 of 3: ask for page 2 for the next frames.',
+  ])
+  assert.deepEqual(describeClip({ ...post, page: 3, pages: 3 }), ['Tracked post p1, its video', 'Page 3 of 3.'])
+  assert.deepEqual(describeClip({ ...post, page: 1, pages: 1 }), ['Tracked post p1, its video'])
 })
 
 /**
@@ -321,7 +332,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
     ['  speech: none', '  sound candidates (measured, not identified): none', '  music: none', '  loudness: mix silent over the video'],
   )
 
-  assert.deepEqual(describeAudioMap({ status: 'pending' }), ['audio map: being measured (free; ask again shortly)'])
+  assert.deepEqual(describeAudioMap({ status: 'pending' }), ['audio map: the sound analysis is still being made: read this window again to get it'])
   assert.deepEqual(describeAudioMap({ status: 'unavailable', reason: 'The audio map could not be measured just now.' }), [
     'audio map: unavailable (The audio map could not be measured just now)',
   ])
@@ -354,4 +365,29 @@ test('describeEvidenceSheet reads a ready sheet, and the pending and unavailable
   assert.match(describeEvidenceSheet({ ...ready, soundsMarked: 0 })[0]!, /no sound candidates in this window\.$/)
   assert.deepEqual(describeEvidenceSheet({ status: 'pending', reason: 'The stems are being separated again.' }), ['evidence sheet: being made (The stems are being separated again)'])
   assert.deepEqual(describeEvidenceSheet(null), [])
+})
+
+/** A post's video copy names its detail, and the price preview lists the detail stored, offered and on offer. */
+test('a copy reads with its detail, an upgrade under way keeps it readable, and the preview lists what more would cost', () => {
+  assert.equal(describeContentVideo({ copy: { status: 'ready', resolution: 720 } }), 'ready at 720p.')
+  const upgrading = { copy: { status: 'ready' as const, resolution: 360, upgrading: { resolution: 1080 } } }
+  assert.equal(describeContentVideo(upgrading), 'ready at 360p; a 1080p copy is downloading; the 360p copy stays readable until it lands.')
+  assert.equal(contentVideosPending({ copy: { status: 'ready', resolution: 360 }, videos: [upgrading] }), true)
+  assert.equal(contentVideosPending({ copy: { status: 'ready', resolution: 720 }, videos: [{ copy: { status: 'ready', resolution: 720 } }] }), false)
+
+  assert.deepEqual(
+    describeVideoCostDetail({
+      getCost: true, creditsEstimate: 0,
+      videos: [{ stored: 360, offered: [360, 720, 1080] }],
+      upgrades: [{ resolution: 720, creditsEstimate: 13 }, { resolution: 1080, creditsEstimate: 1 }],
+    }),
+    ['Stored copy: 360p. The platform offers: 360p, 720p, 1080p.', 'Upgrade to 720p: about 13 credits.', 'Upgrade to 1080p: about 1 credit.'],
+  )
+  assert.deepEqual(
+    describeVideoCostDetail({ getCost: true, creditsEstimate: 0, videos: [{ stored: 720, offered: [360, 720] }], upgrades: [] }),
+    ['Stored copy: 720p. The platform offers: 360p, 720p.', 'No higher resolution is offered.'],
+  )
+  assert.deepEqual(describeVideoCostDetail({ getCost: true, creditsEstimate: 5, videos: [{ stored: null, offered: [] }] }), ['Not downloaded yet.'])
+  // An older server reports none of it.
+  assert.deepEqual(describeVideoCostDetail({ getCost: true, creditsEstimate: 5 }), [])
 })

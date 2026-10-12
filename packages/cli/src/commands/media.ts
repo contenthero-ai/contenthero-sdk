@@ -49,9 +49,11 @@ type Kind = (typeof KINDS)[number]
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
 const SEARCH_KINDS: MediaKind[] = ['image', 'video', 'audio']
 
-function uploadedHuman(m: UploadedMedia): string {
+export function uploadedHuman(m: UploadedMedia): string {
   return keyValues([
     ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
+    // The name it was uploaded with, as the library lists it, so a batch reads back which file is which.
+    ...(m.fileName ? [['Name', m.fileName] as [string, string]] : []),
     ...linkRow(m),
     ['URL', m.url],
   ])

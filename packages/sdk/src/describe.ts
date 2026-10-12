@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -164,6 +164,12 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
   const zoom = describeCrop(crop, typeof clip.cropError === 'string' ? clip.cropError : null)
   if (zoom) lines.push(`${zoom[0]!.toUpperCase()}${zoom.slice(1)}`)
   if (typeof clip.keyframeError === 'string' && clip.keyframeError) lines.push(`Keyframes not shown: ${clip.keyframeError}`)
+  // A source's frames come in pages: which one this is, and how to read the next, so nothing past it is lost silently.
+  const page = typeof clip.page === 'number' ? clip.page : null
+  const pages = typeof clip.pages === 'number' ? clip.pages : null
+  if (page !== null && pages !== null && pages > 1) {
+    lines.push(page < pages ? `Page ${page} of ${pages}: ask for page ${page + 1} for the next frames.` : `Page ${page} of ${pages}.`)
+  }
   const error = clip.error
   if (error && typeof error === 'object' && !Array.isArray(error)) {
     const { code, message } = error as { code?: unknown; message?: unknown }
@@ -517,12 +523,26 @@ export function describeEvidenceSheet(sheet: EvidenceSheet | null | undefined): 
 }
 
 /**
+ * A segment's words at their exact times (`getContent` with transcript `words`), as one line every surface prints under
+ * the segment: each word with its start and end in seconds, unrounded. Null for a segment that carries none.
+ */
+export function describeSegmentWords(words: ReadonlyArray<{ startMs: number; endMs: number; text: string }> | null | undefined): string | null {
+  if (!words?.length) return null
+  return words.map((w) => `${w.text}@${w.startMs / 1000}s-${w.endMs / 1000}s`).join(' ')
+}
+
+/** Why a transcript asked for at the `words` grain has none: its segments are timed, its words are not. Null otherwise. */
+export function describeWordTiming(transcript: { wordTimed?: boolean } | null | undefined): string | null {
+  return transcript?.wordTimed === false ? "This post's transcript has no word timing: its segments are timed, its words are not." : null
+}
+
+/**
  * A video's audio map as a reader got it, in lines: being measured (free, so asking again costs nothing), why it is
  * unavailable, or its summary and the window read, whichever came back.
  */
 export function describeAudioMap(answer: AudioMapAnswer | null | undefined): string[] {
   if (!answer) return []
-  if (answer.status === 'pending') return ['audio map: being measured (free; ask again shortly)']
+  if (answer.status === 'pending') return ['audio map: the sound analysis is still being made: read this window again to get it']
   if (answer.status === 'unavailable') return [`audio map: unavailable (${answer.reason.trim().replace(/\.+$/, '')})`]
   return [...(answer.summary ? [describeAudioMapSummary(answer.summary)] : []), ...(answer.window ? describeAudioMapWindow(answer.window) : [])]
 }
@@ -536,7 +556,11 @@ export function describeContentVideo(video: ContentVideo): string {
   const c = video.copy
   const state =
     c.status === 'ready'
-      ? 'ready'
+      ? c.resolution
+        ? c.upgrading
+          ? `ready at ${c.resolution}p; a ${c.upgrading.resolution}p copy is downloading; the ${c.resolution}p copy stays readable until it lands`
+          : `ready at ${c.resolution}p`
+        : 'ready'
       : c.status === 'pending'
         ? 'still downloading'
         : c.status === 'failed'
@@ -549,18 +573,52 @@ export function describeContentVideo(video: ContentVideo): string {
   return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}${mapLine ? `; ${mapLine}` : ''}.`
 }
 
+/**
+ * Whether a post's videos are still being fetched: a copy being made, or a stored one being replaced with more detail.
+ * Asking again with kind `video` follows either, free.
+ */
+export function contentVideosPending(r: ContentVideos): boolean {
+  return r.copy.status === 'pending' || r.videos.some((v) => v.copy.status === 'ready' && v.copy.upgrading !== undefined)
+}
+
+/**
+ * What a post's video copies are and could be, from `estimateAnalysisCost` kind `video`, in lines: each video's stored
+ * detail and the detail its platform offers, then the price of each resolution that would bring more. Empty for an
+ * older server that reports none of it.
+ */
+export function describeVideoCostDetail(est: ContentAnalysisCostEstimate): string[] {
+  const out: string[] = []
+  for (const v of est.videos ?? []) {
+    const label = v.slide === undefined || (est.videos?.length ?? 0) < 2 ? '' : `${contentVideoLabel({ slide: v.slide } as ContentVideo)}: `
+    const stored = v.stored ? `Stored copy: ${v.stored}p.` : 'Not downloaded yet.'
+    const offered = v.offered.length ? ` The platform offers: ${v.offered.map((o) => `${o}p`).join(', ')}.` : ''
+    out.push(`${label}${stored}${offered}`)
+  }
+  if (est.upgrades) {
+    if (est.upgrades.length) for (const u of est.upgrades) out.push(`Upgrade to ${u.resolution}p: about ${credits(u.creditsEstimate)}.`)
+    else if (est.videos?.some((v) => v.stored)) out.push('No higher resolution is offered.')
+  }
+  return out
+}
+
 /** The post a transcription (or its price) names, with the carousel slide when there is one; null for an audio file. */
 export function transcriptionSource(t: { contentId?: string; slide?: number }): string | null {
   if (!t.contentId) return null
   return `post ${t.contentId}${t.slide !== undefined ? `, slide ${t.slide}` : ''}`
 }
 
-/** What transcribing a post's video costs, with nothing run or charged. */
+/** What transcribing a post's video or an audio file costs, with nothing run or charged. */
 export function describeTranscribeCost(est: TranscribeCostEstimate): string {
+  if (est.audioUrl !== undefined) {
+    if (est.creditsEstimate === null) return `${est.note ?? "This file's length could not be read, so its price is known only after it is transcribed."} Nothing ran and nothing was charged.`
+    if (est.creditsEstimate === 0) return "Transcribing this audio file costs 0 credits: the account's own ElevenLabs key runs it. Nothing ran and nothing was charged."
+    const length = est.durationSeconds ? ` (${Math.round(est.durationSeconds)} s)` : ''
+    return `Transcribing this audio file${length} costs ${credits(est.creditsEstimate)}, priced from its length and charged for what is heard. Nothing ran and nothing was charged.`
+  }
   const what = transcriptionSource(est) ?? 'this post'
   return est.creditsEstimate === 0
     ? `The words of ${what} already exist or are being made: transcribing it costs 0 credits. Nothing ran and nothing was charged.`
-    : `Transcribing ${what} costs ${credits(est.creditsEstimate)}, priced from its video's length and charged for what is heard. Nothing ran and nothing was charged.`
+    : `Transcribing ${what} costs ${credits(est.creditsEstimate ?? 0)}, priced from its video's length and charged for what is heard. Nothing ran and nothing was charged.`
 }
 
 /**

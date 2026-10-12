@@ -104,6 +104,11 @@ test('import sends each source to its route: a Canva design and a url with --cos
   assert.deepEqual(video.body, { kind: 'video' })
   const videoCost = await run('content', 'analyze', 'c1', '--kind', 'video', '--cost')
   assert.deepEqual(videoCost.body, { getCost: true, kind: 'video' })
+  // MCP analyze_content's resolution, the same names on both.
+  const hd = await run('content', 'analyze', 'c1', '--kind', 'video', '--resolution', '1080p', '--no-wait')
+  assert.deepEqual(hd.body, { kind: 'video', resolution: '1080p' })
+  const hdCost = await run('content', 'analyze', 'c1', '--kind', 'video', '--resolution', '720p', '--cost')
+  assert.deepEqual(hdCost.body, { getCost: true, kind: 'video', resolution: '720p' })
   const urlCost = await run('import', 'https://x/a.png', '--cost')
   assert.equal(urlCost.path, '/api/v1/media/imports')
   assert.deepEqual(urlCost.body, { url: 'https://x/a.png', getCost: true })
