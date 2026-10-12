@@ -53,7 +53,7 @@ export function trackedAccountsTable(rows: TrackedAccount[]): string {
     ['ID', 'KIND', 'PLATFORM', 'HANDLE', 'NAME', 'FOLLOWERS'],
     rows.map((a) => [
       displayId(a),
-      a.accountType === 'brand' ? 'yours' : a.accountType === 'inspiration' ? 'watching' : '',
+      a.accountType ?? '',
       a.platform ?? '',
       a.handle ?? '',
       a.name ?? '',
@@ -62,13 +62,12 @@ export function trackedAccountsTable(rows: TrackedAccount[]): string {
   )
 }
 
-/** A table of tracked content. OWN marks the caller's own posts, since one list holds both. */
+/** A table of tracked content. */
 export function outliersTable(rows: ContentSummary[]): string {
   return table(
-    ['ID', 'OWN', 'PLATFORM', 'SCORE', 'VIEWS', 'TITLE'],
+    ['ID', 'PLATFORM', 'SCORE', 'VIEWS', 'TITLE'],
     rows.map((o) => [
       displayId(o),
-      o.isOwn ? 'yes' : '',
       o.platform ?? '',
       o.outlierScore != null ? o.outlierScore.toFixed(1) : '',
       o.viewCount ?? '',
@@ -84,7 +83,7 @@ const GRAINS = ['none', 'text', 'segments', 'words'] as const
 function accountDetailHuman(d: TrackedAccountDetail): string {
   const head = keyValues([
     ['Account', d.account.name ?? d.account.handle ?? ''],
-    ['Kind', d.account.accountType === 'brand' ? 'yours' : 'watching'],
+    ['Kind', d.account.accountType ?? ''],
     ['Platform', d.account.platform ?? ''],
     ['Followers', d.account.followerCount ?? ''],
     ['Tracked items', d.contentCount],
@@ -110,7 +109,7 @@ function addedHuman({ trackedAccounts, refused, refusal }: AddTrackedAccountsRes
       ['ID', 'KIND', 'PLATFORM', 'HANDLE', 'NAME', 'OUTCOME'],
       trackedAccounts.map((a) => [
         displayId(a),
-        a.accountType === 'brand' ? 'yours' : 'watching',
+        a.accountType ?? '',
         a.platform ?? '',
         a.handle ?? '',
         a.name ?? '',
@@ -336,7 +335,6 @@ export function registerContent(program: Command): void {
       emit(item, ctx, (c: ContentDetail) => {
         const pairs: Array<[string, string | number]> = [
           ['Title', c.title ?? ''],
-          ['Own account', c.isOwn ? 'yes' : 'no'],
           ['Creator', c.sourceCreator ?? ''],
           ['Platform', c.platform ?? ''],
           ['Outlier score', c.outlierScore != null ? c.outlierScore.toFixed(2) : ''],

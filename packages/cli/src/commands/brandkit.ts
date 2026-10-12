@@ -86,7 +86,7 @@ function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
   return cmd
     .option(
       '--brand-account <ref>',
-      `the brand's own profile, linked as the kit's brand side (linking does not mark it as yours): a tracked account by any reference, or a profile url / platform:handle to ADD one. Repeatable${replaces}`,
+      `the brand's own profile, linked to this kit as its brand side: a tracked account by any reference, or a profile url / platform:handle to ADD one. Repeatable${replaces}`,
       collect,
     )
     .option('--inspiration-account <ref>', `a competitor/creator profile: same forms as --brand-account. Repeatable${replaces}`, collect)

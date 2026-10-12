@@ -400,7 +400,7 @@ function fakeClient(overrides = {}) {
       contentCount: 50,
       totals: { views: 1_000_000, likes: 50_000, comments: 5_000 },
       averages: { views: 20_000, engagementRate: 0.055, outlierScore: 1.2 },
-      topContent: [{ id: 'bc1', platform: 'instagram', contentType: 'reel', title: 'best reel', url: 'https://ig/bc1', thumbnailUrl: null, viewCount: 200_000, likeCount: 12_000, commentCount: 800, shareCount: 400, durationSeconds: 30, outlierScore: 2.1, engagementRate: 0.07, viewsPerFollower: 16, publishedAt: 't', sourceCreator: null, accountHandle: 'contenthero', isOwn: true }],
+      topContent: [{ id: 'bc1', platform: 'instagram', contentType: 'reel', title: 'best reel', url: 'https://ig/bc1', thumbnailUrl: null, viewCount: 200_000, likeCount: 12_000, commentCount: 800, shareCount: 400, durationSeconds: 30, outlierScore: 2.1, engagementRate: 0.07, viewsPerFollower: 16, publishedAt: 't', sourceCreator: null, accountHandle: 'contenthero' }],
       recentContent: [],
     }),
     listContent: async () => ({
@@ -2554,9 +2554,9 @@ test('list_tracked_accounts returns BOTH kinds, each labeled', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({ name: 'list_tracked_accounts', arguments: {} })
   // The whole point of merging the two list tools: one call answers both questions, and a reader can still
-  // tell the owner's own profile from a creator they watch.
-  assert.match(res.content[0].text, /@mrbeast \(id ia1\) \[watching\]/)
-  assert.match(res.content[0].text, /@contenthero \(id ba1\) \[yours\]/)
+  // tell the two kinds apart.
+  assert.match(res.content[0].text, /@mrbeast \(id ia1\) \[inspiration\]/)
+  assert.match(res.content[0].text, /@contenthero \(id ba1\) \[brand\]/)
 })
 
 test('list_tracked_accounts narrows to one kind when asked', async () => {
@@ -2574,7 +2574,7 @@ test('add_tracked_account lists what it tracked, and what the plan refused with 
   })
   const out = res.content[0].text
   assert.match(out, /1 account\(s\) tracked:/)
-  assert.match(out, /@mkbhd \(id ta9\) \[watching\] .* \| added/)
+  assert.match(out, /@mkbhd \(id ta9\) \[inspiration\] .* \| added/)
   assert.match(out, /1 not tracked:\n- rival \| instagram/)
   assert.match(out, /Tracking more than 3 accounts is part of the Hero plan/)
   assert.match(out, /- Upgrade: https:\/\/app\/billing/)

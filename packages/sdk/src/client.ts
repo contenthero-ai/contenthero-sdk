@@ -1697,7 +1697,7 @@ export class ContentHero {
   /**
    * The social content the caller tracks, ranked by outlier score by default.
    *
-   * Spans the creators they watch AND their own posts (`scope`, default `all`); each row carries `isOwn`.
+   * Spans the creators they watch AND their own posts (`scope`, default `all`).
    * Filter by platform, content type, a published window, and ranges over score, views, duration and
    * follower count.
    */

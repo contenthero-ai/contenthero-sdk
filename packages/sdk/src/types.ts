@@ -1629,9 +1629,8 @@ export interface UpdateBrandKitInput {
    * Linked tracked accounts, declarative: pass the whole set and what is absent is unlinked. Undefined leaves
    * a list untouched, `[]` clears it.
    *
-   * The two lists mean opposite things and stay separate: `brandAccounts` are the brand's own profiles, linked as the
-   * kit's brand side (linking never marks them as the user's own),
-   * `inspirationAccounts` are competitors and creators they watch.
+   * The two lists mean opposite things and stay separate: `brandAccounts` are the brand's own profiles, linked to this
+   * kit as its brand side, `inspirationAccounts` are competitors and creators they watch.
    *
    * An entry is either a tracked account by any reference (id, short id, profile link, handle, platform id), or `{ platform?, handleOrUrl }` to ADD a profile that
    * is not tracked yet. Adding one is what STARTS ingestion: it sets the account pending, and the dispatcher
@@ -2859,8 +2858,6 @@ export interface ContentSummary {
   publishedAt: string | null
   sourceCreator: string | null
   accountHandle: string | null
-  /** True when the post is on one of the caller's OWN accounts rather than a creator they watch. */
-  isOwn?: boolean
 }
 
 /** One spoken word of a word-timed transcript, in milliseconds from the start of the media. */
@@ -3283,7 +3280,6 @@ export type ContentScope = 'all' | 'inspiration' | 'brand'
 export interface ListContentOptions extends PageOptions, SortOptions<ContentSort> {
   /**
    * `inspiration` = creators they watch, `brand` = their own accounts, `all` = both (the default).
-   * Each row carries `isOwn`, so one list can answer both questions.
    */
   scope?: ContentScope
   platform?: string

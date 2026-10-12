@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.28
+
+- Tracked-account tables and details show the account's kind (`brand` or `inspiration`) instead of `yours` and
+  `watching`. Content tables drop the OWN column, and `content get` drops its "Own account" row.
+- `brand-kit --brand-account` help: the brand's own profile, linked to this kit as its brand side. Uses sdk 0.4.31.
+
 ## 0.3.27
 
 - New: a CLI older than the server never crashes on its answer. When formatting fails after the server answered, the

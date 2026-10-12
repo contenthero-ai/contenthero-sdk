@@ -2378,7 +2378,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         brandAccounts: z
           .array(accountEntrySchema)
           .optional()
-          .describe("The brand's own profiles, linked to this kit as its brand side. Linking does not mark them as the user's own: only add_tracked_account with accountType brand does. Each entry is one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, or { platform?, handleOrUrl } to ADD one and start ingesting it."),
+          .describe("The brand's own profiles, linked to this kit as its brand side. Each entry is one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, or { platform?, handleOrUrl } to ADD one and start ingesting it."),
         inspirationAccounts: z
           .array(accountEntrySchema)
           .optional()
@@ -2449,7 +2449,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         brandAccounts: z
           .array(accountEntrySchema)
           .optional()
-          .describe("The brand's own profiles, linked to this kit as its brand side. Linking does not mark them as the user's own: only add_tracked_account with accountType brand does. Each entry is one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, or { platform?, handleOrUrl } to ADD one and start ingesting it. REPLACES the list; [] clears it."),
+          .describe("The brand's own profiles, linked to this kit as its brand side. Each entry is one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, or { platform?, handleOrUrl } to ADD one and start ingesting it. REPLACES the list; [] clears it."),
         inspirationAccounts: z
           .array(accountEntrySchema)
           .optional()
@@ -4259,7 +4259,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Tracked Content',
       annotations: READ,
       description:
-        "The core research read: social posts this account tracks, ranked by OUTLIER SCORE (how far a post overperformed its own creator's baseline, so a small account's hit still surfaces), or by relevance when you pass search. SPANS BOTH the creators they watch and their OWN posts by default; set scope to narrow, and every row carries isOwn either way. This is how you answer both \"what is working for the people I watch\" and \"how did my own posts do\" without picking a subsystem first. Filter by platform, content type, a published window (publicationDate like 'week' or 'month', or exact publishedAfter/publishedBefore), and ranges over score, views, duration and follower count. Call get_content for one post in full, including its transcript.",
+        "The core research read: social posts this account tracks, ranked by OUTLIER SCORE (how far a post overperformed its own creator's baseline, so a small account's hit still surfaces), or by relevance when you pass search. SPANS BOTH the creators they watch and their OWN posts by default; set scope to narrow. This is how you answer both \"what is working for the people I watch\" and \"how did my own posts do\" without picking a subsystem first. Filter by platform, content type, a published window (publicationDate like 'week' or 'month', or exact publishedAfter/publishedBefore), and ranges over score, views, duration and follower count. Call get_content for one post in full, including its transcript.",
       inputSchema: {
         scope: z
           .enum(['all', 'inspiration', 'brand'])

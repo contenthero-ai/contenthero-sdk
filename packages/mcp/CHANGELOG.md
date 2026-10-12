@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.4.38
+
+- Tracked accounts are labeled by their kind (`[brand]` or `[inspiration]`) instead of `[yours]` and `[watching]`;
+  content lines no longer carry `[yours]`. `list_content` no longer promises `isOwn`.
+- `create_brand_kit` and `update_brand_kit` `brandAccounts`: "The brand's own profiles, linked to this kit as its brand
+  side." The sentence saying linking does not mark ownership is gone. Uses sdk 0.4.31.
+
 ## 0.4.37
 
 - New: a connector older than the server never crashes on its answer. When formatting fails after the server answered,

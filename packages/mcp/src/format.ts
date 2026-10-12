@@ -2434,8 +2434,8 @@ function compactNum(n: number | null): string {
 function accountLine(a: TrackedAccount): string {
   const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
   // The kind is on every line because the list is MIXED by default: without it a reader cannot tell the
-  // owner's own profile from a competitor they watch, and those mean opposite things.
-  const kind = a.accountType === 'brand' ? ' [yours]' : a.accountType === 'inspiration' ? ' [watching]' : ''
+  // owner's own profile from a competitor they learn from, and those mean opposite things.
+  const kind = a.accountType ? ` [${a.accountType}]` : ''
   return `- ${handle} (${idOf(a)})${kind} | ${a.platform ?? '?'} | ${compactNum(a.followerCount)} followers`
 }
 
@@ -2468,9 +2468,7 @@ export function trackedAccountRemovedResult(r: { id: string }): CallToolResult {
 function outlierLine(o: ContentSummary): string {
   const score = o.outlierScore != null ? `${o.outlierScore.toFixed(1)}x` : 'n/a'
   const creator = o.sourceCreator || (o.accountHandle ? `@${o.accountHandle}` : '')
-  // One list spans the owner's posts and the creators they watch, so each line has to say which it is.
-  const own = o.isOwn ? ' [yours]' : ''
-  return `- [${score}] ${o.title ?? '(untitled)'}${own}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (${idOf(o)})`
+  return `- [${score}] ${o.title ?? '(untitled)'}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views (${idOf(o)})`
 }
 
 /** A page of tracked content, in the order it was asked for. */
@@ -2494,7 +2492,7 @@ export function outlierListResult(result: ContentListResult): CallToolResult {
 export function trackedAccountDetailResult(d: TrackedAccountDetail): CallToolResult {
   const a = d.account
   const handle = a.handle ? `@${a.handle}` : (a.name ?? '(unnamed)')
-  const kind = a.accountType === 'brand' ? ' [yours]' : a.accountType === 'inspiration' ? ' [watching]' : ''
+  const kind = a.accountType ? ` [${a.accountType}]` : ''
   const avgEng = d.averages.engagementRate != null ? `${(d.averages.engagementRate * 100).toFixed(1)}%` : 'n/a'
   const avgScore = d.averages.outlierScore != null ? `${d.averages.outlierScore.toFixed(2)}x` : 'n/a'
   return text(
@@ -2540,7 +2538,7 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
   const result = text(
     lines([
-      `${c.title ?? '(untitled)'} (${idOf(c)})${c.isOwn ? ' [yours]' : ''}`,
+      `${c.title ?? '(untitled)'} (${idOf(c)})`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
       `${stats}${score ? ` | ${score}` : ''}`,
       c.url ? `url: ${c.url}` : null,

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.4.31
+
+- Removed: `isOwn` on `ContentSummary` (and so on content reads). Whose a post is reads from its account's
+  `accountType`; `scope` still narrows a content list by kind.
+- `UpdateBrandKitInput.brandAccounts` is again described as the brand's own profiles, linked to the kit as its brand
+  side. Linking an account to a side tracks it as that kind.
+
 ## 0.4.30
 
 - New: an older client never misreads a newer server's audio map. `AudioMapAnswer` ready may carry `version`;
