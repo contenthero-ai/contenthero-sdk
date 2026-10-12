@@ -288,7 +288,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
     durationSec: 30,
     speech: [{ fromSec: 0, toSec: 3.44 }, { fromSec: 4.1, toSec: 6 }],
     sounds: [
-      { atSec: 1.24, endSec: 1.8, stem: 'other' as const, levelDb: -18.3, riseDb: 14.2, vsVoiceDb: 2.6, descriptors },
+      { atSec: 1.24, endSec: 1.8, stem: 'other' as const, levelDb: -18.3, riseDb: 14.2, vsVoiceDb: 2.6, beatOffsetMs: -12.4, pattern: 2, descriptors },
       {
         atSec: 5,
         endSec: 5.5,
@@ -296,6 +296,8 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
         levelDb: -22,
         riseDb: 9,
         vsVoiceDb: null,
+        beatOffsetMs: null,
+        pattern: null,
         descriptors: { ...descriptors, decayMs: null, pitchHz: [880, null, 860], stereoWidth: null },
       },
     ],
@@ -308,7 +310,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
     'audio map (free), 0.0s to 6.0s of 30.0s:',
     '  speech: 0.0-3.4s, 4.1-6.0s',
     '  sound candidates (measured, not identified): 2',
-    '    1. 1.2s to 1.8s on other: -18 dB, +14 over its floor, +3 vs voice; attack 4 ms, decay 180 ms, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, unpitched, low band 8%, width 0.4',
+    '    1. 1.2s to 1.8s on other: -18 dB, +14 over its floor, +3 vs voice, -12 ms off the beat, pattern 2; attack 4 ms, decay 180 ms, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, unpitched, low band 8%, width 0.4',
     '    2. 5.0s to 5.5s on drums: -22 dB, +9 over its floor; attack 4 ms, decay past its end, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, pitch 880 to 860 Hz, low band 8%, width mono',
     '  music: 118 BPM, A minor, drops 9 dB under speech, 3 beats in this window',
     '  loudness: mix -14.2 LUFS over the video; short-term -18 to -13 LUFS in this window',

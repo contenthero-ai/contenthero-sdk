@@ -445,11 +445,15 @@ const share = (v: number) => `${Math.round(v * 100)}%`
 
 /**
  * One sound candidate in a line, numbered as the evidence sheet marks it: when and on which stem, how loud (alone,
- * over its stem's floor, against the voice), and what was measured of it. Never a name: the reader decides what it is.
+ * over its stem's floor, against the voice), where it falls against the beat and which repetition pattern it belongs
+ * to (when it has either), and what was measured of it. Never a name: the reader decides what it is.
  */
 export function describeAudioMapSound(sound: AudioMapSound, n: number): string {
   const d = sound.descriptors
-  const level = `${db(sound.levelDb)}, +${Math.round(sound.riseDb)} over its floor${sound.vsVoiceDb !== null ? `, ${signedDb(sound.vsVoiceDb)} vs voice` : ''}`
+  const beatMs = sound.beatOffsetMs != null ? Math.round(sound.beatOffsetMs) || 0 : null
+  const beat = beatMs != null ? `, ${beatMs > 0 ? `+${beatMs}` : beatMs} ms off the beat` : ''
+  const pattern = sound.pattern != null ? `, pattern ${sound.pattern}` : ''
+  const level = `${db(sound.levelDb)}, +${Math.round(sound.riseDb)} over its floor${sound.vsVoiceDb !== null ? `, ${signedDb(sound.vsVoiceDb)} vs voice` : ''}${beat}${pattern}`
   const pitched = d.pitchHz?.filter((p): p is number => p !== null) ?? []
   const pitch = pitched.length ? `pitch ${hz(pitched[0]!)}${pitched.length > 1 ? ` to ${hz(pitched[pitched.length - 1]!)}` : ''} Hz` : 'unpitched'
   const shape = [
