@@ -434,16 +434,27 @@ function audioMapMusicWords(music: { tempoBpm: number | null; key: string | null
   return parts
 }
 
+/** The voice over its bed in a window's line: its level while speaking and how far it sits over everything else. */
+function voiceOverBedLine(v: AudioMapWindow['voiceOverBed']): string {
+  if (!v) return '  voice: not measured'
+  if (v.bedUnderSpeechDb === null || v.voiceOverBedDb == null) return `  voice: ${db(v.voiceUnderSpeechDb)} while speaking, nothing under it`
+  return `  voice: ${db(v.voiceUnderSpeechDb)} while speaking, bed ${db(v.bedUnderSpeechDb)}, ${db(v.voiceOverBedDb)} over it`
+}
+
 /** Loudness in LUFS, or that the stretch is silent. */
 const lufs = (v: number | null) => (v === null ? 'silent' : `${Math.round(v * 10) / 10} LUFS`)
 
-/** A video's audio map in one line, free: how much speech in how long, how many sound candidates, its music and loudness. */
+/**
+ * A video's audio map in one line, free: how much speech in how long, how many sound candidates, its music, how far the
+ * voice sits over the bed while speaking (when measured) and loudness.
+ */
 export function describeAudioMapSummary(summary: AudioMapSummary): string {
   const n = summary.soundCount
   const sounds = n === 0 ? 'no sound candidates' : `${n} sound candidate${n === 1 ? '' : 's'}`
   const words = audioMapMusicWords(summary.music, summary.duckingDropDb)
   const music = !summary.music.present ? 'no music' : words.length ? `music ${words.join(', ')}` : 'music'
-  return `audio map (free): ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${sounds}, ${music}, mix ${lufs(summary.integratedLufs)}`
+  const voice = summary.voiceOverBedDb != null ? `, voice ${db(summary.voiceOverBedDb)} over the bed while speaking` : ''
+  return `audio map (free): ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${sounds}, ${music}${voice}, mix ${lufs(summary.integratedLufs)}`
 }
 
 const hz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v)}`)
@@ -479,7 +490,7 @@ export function describeAudioMapSound(sound: AudioMapSound, n: number): string {
 /**
  * A stretch of a video's audio map in lines, in the video's own seconds: where speech is, each sound candidate (numbered
  * as an evidence sheet marks it, with what was measured of it), the music with how many beats fall in the stretch, the
- * mix's loudness, and each stem's level across the whole video.
+ * voice over its bed while speaking, the mix's loudness, and each stem's level across the whole video.
  */
 export function describeAudioMapWindow(window: AudioMapWindow): string[] {
   const speech = window.speech.length ? window.speech.map((s) => `${s.fromSec.toFixed(1)}-${sec1(s.toSec)}`).join(', ') : 'none'
@@ -502,6 +513,7 @@ export function describeAudioMapWindow(window: AudioMapWindow): string[] {
       : '  sound candidates (measured, not identified): none',
     ...window.sounds.map((s, i) => `    ${describeAudioMapSound(s, i + 1)}`),
     `  music: ${music}`,
+    voiceOverBedLine(window.voiceOverBed),
     `  loudness: ${loudness}`,
     `  levels: vocals ${level(l.vocalsDb)}, drums ${level(l.drumsDb)}, bass ${level(l.bassDb)}, other ${level(l.otherDb)}`,
   ]

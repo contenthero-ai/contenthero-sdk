@@ -3102,6 +3102,16 @@ export interface AudioMapDucking {
   dropDb: number
 }
 
+/**
+ * How far the voice sits over everything else while it speaks: the vocals' level over speech, the other stems' combined
+ * level over the same frames, and the gap. Bed and gap are null when nothing sounds under the voice.
+ */
+export interface AudioMapVoiceOverBed {
+  voiceUnderSpeechDb: number
+  bedUnderSpeechDb: number | null
+  voiceOverBedDb: number | null
+}
+
 /** The mix's loudness (EBU R128): integrated over the video, and short-term on a fixed step. Null where silent. */
 export interface AudioMapLoudness {
   integratedLufs: number | null
@@ -3118,8 +3128,8 @@ export interface AudioMapLevels {
 
 /**
  * A stretch of a post video's audio map, in the video's own seconds: speech clipped to it, sound candidates overlapping
- * it (at their own times), beats and short-term loudness inside it; music, ducking, integrated loudness and levels are
- * whole-video facts. `durationSec` is the video's.
+ * it (at their own times), beats and short-term loudness inside it; music, ducking, voice over bed, integrated loudness
+ * and levels are whole-video facts. `durationSec` is the video's.
  */
 export interface AudioMapWindow {
   fromSec: number
@@ -3129,6 +3139,8 @@ export interface AudioMapWindow {
   sounds: AudioMapSound[]
   music: AudioMapMusic
   ducking: AudioMapDucking | null
+  /** Null or absent where not measured: too little speech, or an analysis made before it was. */
+  voiceOverBed?: AudioMapVoiceOverBed | null
   loudness: AudioMapLoudness
   levels: AudioMapLevels
 }
@@ -3141,6 +3153,8 @@ export interface AudioMapSummary {
   music: { present: boolean; tempoBpm: number | null; key: string | null; mode: 'major' | 'minor' | null }
   /** How far music drops under speech; null without music under speech. */
   duckingDropDb: number | null
+  /** How far the voice sits over everything else while it speaks; null or absent when not measured or nothing sounds under it. */
+  voiceOverBedDb?: number | null
   integratedLufs: number | null
 }
 

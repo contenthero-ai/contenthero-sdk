@@ -173,7 +173,7 @@ test('content get --audio-map asks for the audio map window, and its window does
   assert.match(asked, /startMs=1000/)
   assert.doesNotMatch(asked, /transcript=/)
   assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s; audio map \(free\): 4\.0s of speech in 9\.0s, no sound candidates, no music, mix -16 LUFS\./)
-  assert.match(out, /\n {4}audio map \(free\), 1\.0s to 9\.0s of 9\.0s:\n {6}speech: 1\.0-5\.0s\n {6}sound candidates \(measured, not identified\): none\n {6}music: none\n {6}loudness: mix -16 LUFS over the video\n {6}levels: vocals -16 dB, drums silent, bass silent, other silent/)
+  assert.match(out, /\n {4}audio map \(free\), 1\.0s to 9\.0s of 9\.0s:\n {6}speech: 1\.0-5\.0s\n {6}sound candidates \(measured, not identified\): none\n {6}music: none\n {6}voice: not measured\n {6}loudness: mix -16 LUFS over the video\n {6}levels: vocals -16 dB, drums silent, bass silent, other silent/)
 })
 
 /**
