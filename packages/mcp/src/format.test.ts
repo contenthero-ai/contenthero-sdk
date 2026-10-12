@@ -837,7 +837,7 @@ test("a finished split's outputs are named by their stem", () => {
       status: 'completed',
       contentType: 'audio',
       modelId: 'contenthero-stem-split',
-      outputs: ['voice', 'music', 'effects'].map((stem, i) => ({
+      outputs: (['vocals', 'drums', 'bass', 'other'] as const).map((stem, i) => ({
         mediaId: `sp1-${i + 1}`,
         status: 'succeeded',
         url: `https://cdn/sp1-${i + 1}.flac`,
@@ -846,6 +846,6 @@ test("a finished split's outputs are named by their stem", () => {
       })),
     }),
   )
-  assert.match(out, /sp1-1 \(voice\)/)
-  assert.match(out, /sp1-3 \(effects\)/)
+  assert.match(out, /sp1-1 \(vocals\)/)
+  assert.match(out, /sp1-4 \(other\)/)
 })

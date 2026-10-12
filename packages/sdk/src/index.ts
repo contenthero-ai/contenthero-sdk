@@ -232,8 +232,12 @@ export type {
   ContentVideoCuts,
   AudioMapAnswer,
   AudioMapDucking,
-  AudioMapEvent,
   AudioMapLevels,
+  AudioMapLoudness,
+  AudioMapSound,
+  AudioMapSoundDescriptors,
+  AudioStem,
+  EvidenceSheet,
   AudioMapMusic,
   AudioMapSpan,
   AudioMapSummary,
@@ -348,4 +352,4 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'
+export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'

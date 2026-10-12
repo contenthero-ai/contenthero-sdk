@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -246,61 +246,110 @@ test('a transcription names its post and slide, prices it, and says where it sta
 })
 
 /**
- * A video's audio map reads the same on every surface: a one-line summary, a window in lines, and the pending and
- * unavailable states. Break-verified: dropping the vs-voice null check gives an event no one speaks near a vs-voice
- * clause; dropping the summary from describeContentVideo, the last assertion.
+ * A video's audio map reads the same on every surface: a one-line summary, a window in lines (each sound candidate
+ * numbered as the evidence sheet marks it, with what was measured of it, never a name), and the pending and
+ * unavailable states. Break-verified: dropping the vs-voice null check gives a candidate no one speaks near a vs-voice
+ * clause; numbering candidates from 0 puts the sheet's marks off by one; dropping the summary from describeContentVideo,
+ * the last assertion.
  */
 test('describeAudioMap reads a summary, a window, and the pending and unavailable states', () => {
   const summary = {
     durationSec: 30,
     speechSec: 12.34,
-    eventCount: 7,
+    soundCount: 7,
     music: { present: true, tempoBpm: 118.4, key: 'A', mode: 'minor' as const },
     duckingDropDb: 9.2,
+    integratedLufs: -14.26,
   }
-  assert.equal(describeAudioMapSummary(summary), 'audio map (free): 12.3s of speech in 30.0s, 7 sound events, music 118 BPM, A minor, drops 9 dB under speech')
+  assert.equal(describeAudioMapSummary(summary), 'audio map (free): 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, mix -14.3 LUFS')
   assert.equal(
-    describeAudioMapSummary({ ...summary, eventCount: 1, music: { present: true, tempoBpm: null, key: null, mode: null }, duckingDropDb: null }),
-    'audio map (free): 12.3s of speech in 30.0s, 1 sound event, music',
+    describeAudioMapSummary({ ...summary, soundCount: 1, music: { present: true, tempoBpm: null, key: null, mode: null }, duckingDropDb: null }),
+    'audio map (free): 12.3s of speech in 30.0s, 1 sound candidate, music, mix -14.3 LUFS',
   )
   assert.equal(
-    describeAudioMapSummary({ ...summary, eventCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null }),
-    'audio map (free): 12.3s of speech in 30.0s, no sound events, no music',
+    describeAudioMapSummary({ ...summary, soundCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null, integratedLufs: null }),
+    'audio map (free): 12.3s of speech in 30.0s, no sound candidates, no music, mix silent',
   )
 
+  const descriptors = {
+    attackMs: 4.2,
+    decayMs: 180,
+    peakDb: -9.4,
+    centroidHz: { start: 5240, peak: 4100, end: 640 },
+    bandwidthHz: 3100,
+    flatness: 0.623,
+    pitchHz: null,
+    lowBandShare: 0.08,
+    stereoWidth: 0.4,
+  }
   const window = {
     fromSec: 0,
     toSec: 6,
     durationSec: 30,
     speech: [{ fromSec: 0, toSec: 3.44 }, { fromSec: 4.1, toSec: 6 }],
-    events: [
-      { fromSec: 1.24, toSec: 1.8, class: 'swoosh', classScore: 0.8, name: 'whoosh', nameScore: 0.7, levelDb: -18.3, vsVoiceDb: 2.6 },
-      { fromSec: 5, toSec: 5.5, class: 'Clapping', classScore: 0.6, name: 'clap', nameScore: 0.5, levelDb: -22, vsVoiceDb: null },
+    sounds: [
+      { atSec: 1.24, endSec: 1.8, stem: 'other' as const, levelDb: -18.3, riseDb: 14.2, vsVoiceDb: 2.6, descriptors },
+      {
+        atSec: 5,
+        endSec: 5.5,
+        stem: 'drums' as const,
+        levelDb: -22,
+        riseDb: 9,
+        vsVoiceDb: null,
+        descriptors: { ...descriptors, decayMs: null, pitchHz: [880, null, 860], stereoWidth: null },
+      },
     ],
     music: { present: true, tempoBpm: 118, beatsSec: [0.5, 1, 1.5], key: 'A', mode: 'minor' as const, levelDb: -24 },
     ducking: { musicUnderSpeechDb: -30, musicWithoutSpeechDb: -21, dropDb: 9 },
-    levels: { voiceDb: -16.2, musicDb: -24, effectsDb: null },
+    loudness: { integratedLufs: -14.2, shortTerm: [{ atSec: 0, lufs: null }, { atSec: 0.5, lufs: -18.4 }, { atSec: 5.5, lufs: -12.6 }] },
+    levels: { vocalsDb: -16.2, drumsDb: -24, bassDb: -28.4, otherDb: null },
   }
   assert.deepEqual(describeAudioMapWindow(window), [
     'audio map (free), 0.0s to 6.0s of 30.0s:',
     '  speech: 0.0-3.4s, 4.1-6.0s',
-    '  sound events: 1.2s whoosh (swoosh, -18 dB, +3 vs voice); 5.0s clap (Clapping, -22 dB)',
+    '  sound candidates (measured, not identified): 2',
+    '    1. 1.2s to 1.8s on other: -18 dB, +14 over its floor, +3 vs voice; attack 4 ms, decay 180 ms, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, unpitched, low band 8%, width 0.4',
+    '    2. 5.0s to 5.5s on drums: -22 dB, +9 over its floor; attack 4 ms, decay past its end, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, pitch 880 to 860 Hz, low band 8%, width mono',
     '  music: 118 BPM, A minor, drops 9 dB under speech, 3 beats in this window',
-    '  levels: voice -16 dB, music -24 dB, effects silent',
+    '  loudness: mix -14.2 LUFS over the video; short-term -18 to -13 LUFS in this window',
+    '  levels: vocals -16 dB, drums -24 dB, bass -28 dB, other silent',
   ])
   assert.deepEqual(
-    describeAudioMapWindow({ ...window, speech: [], events: [], music: { ...window.music, present: false }, ducking: null }).slice(1, 4),
-    ['  speech: none', '  sound events: none', '  music: none'],
+    describeAudioMapWindow({ ...window, speech: [], sounds: [], music: { ...window.music, present: false }, ducking: null, loudness: { integratedLufs: null, shortTerm: [] } }).slice(1, 5),
+    ['  speech: none', '  sound candidates (measured, not identified): none', '  music: none', '  loudness: mix silent over the video'],
   )
 
   assert.deepEqual(describeAudioMap({ status: 'pending' }), ['audio map: being measured (free; ask again shortly)'])
   assert.deepEqual(describeAudioMap({ status: 'unavailable', reason: 'The audio map could not be measured just now.' }), [
     'audio map: unavailable (The audio map could not be measured just now)',
   ])
-  assert.equal(describeAudioMap({ status: 'ready', summary, window }).length, 6)
+  assert.equal(describeAudioMap({ status: 'ready', summary, window }).length, 9)
   assert.deepEqual(describeAudioMap(undefined), [])
   assert.equal(
     describeContentVideo({ copy: { status: 'ready' }, audioMap: { status: 'ready', summary } }),
-    'ready; audio map (free): 12.3s of speech in 30.0s, 7 sound events, music 118 BPM, A minor, drops 9 dB under speech.',
+    'ready; audio map (free): 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, mix -14.3 LUFS.',
   )
+})
+
+/** A post window's evidence sheet says what its picture holds and how to read it, or why there is none yet. */
+test('describeEvidenceSheet reads a ready sheet, and the pending and unavailable states', () => {
+  const ready = {
+    status: 'ready' as const,
+    fromSec: 2,
+    toSec: 4,
+    width: 1292,
+    height: 610,
+    dataUrl: 'data:image/webp;base64,AA',
+    frames: [{ atSec: 2.5 }],
+    words: [],
+    stems: ['vocals', 'drums', 'bass', 'other'] as Array<'vocals' | 'drums' | 'bass' | 'other'>,
+    frequencyHz: { min: 20, max: 20000 },
+    soundsMarked: 3,
+  }
+  assert.deepEqual(describeEvidenceSheet(ready), [
+    "evidence sheet, 2.0s to 4.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem (vocals, drums, bass, other; log frequency 20 Hz to 20k Hz, low at the bottom), on one time axis in the video's seconds; its 3 sound candidates marked on the stem each is loudest in, numbered as listed under sound candidates.",
+  ])
+  assert.match(describeEvidenceSheet({ ...ready, soundsMarked: 0 })[0]!, /no sound candidates in this window\.$/)
+  assert.deepEqual(describeEvidenceSheet({ status: 'pending', reason: 'The stems are being separated again.' }), ['evidence sheet: being made (The stems are being separated again)'])
+  assert.deepEqual(describeEvidenceSheet(null), [])
 })

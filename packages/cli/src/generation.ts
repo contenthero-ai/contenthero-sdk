@@ -218,7 +218,7 @@ function clipJobsHuman(result: EditAudioResult, operation: 'enhance' | 'split'):
     : ''
   const wait = `Wait: ${statusCommand(jobs.map((j) => ({ id: j.outputId, shortId: j.shortId, kind: 'output' as const })))}`
   const applied = split
-    ? "Each clip is muted and its voice, music and effects are placed under it, each on its own track, as each job lands."
+    ? "Each clip is muted and its stems (vocals, drums, bass, other) are placed under it, each on its own track, as each job lands."
     : 'The enhanced audio is applied to the clips automatically as each job lands.'
   return `${head}\n${lines.join('\n')}\n${applied}${tail}\n${wait}`
 }

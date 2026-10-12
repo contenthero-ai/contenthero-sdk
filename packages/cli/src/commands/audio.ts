@@ -4,8 +4,8 @@
  * The sibling of `generate` for the audio-transform shape. `audio isolate`
  * removes background noise and music from a recording, leaving clean speech.
  * Isolation is synchronous (the processed URL comes back inline); --cost previews
- * the credit charge without running. `audio split` separates voice, music and
- * effects into three files; `audio split-clips` does it to clips on a timeline,
+ * the credit charge without running. `audio split` separates vocals, drums, bass and
+ * other into four files; `audio split-clips` does it to clips on a timeline,
  * as `audio enhance-clips` enhances them.
  */
 

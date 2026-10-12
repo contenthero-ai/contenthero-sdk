@@ -30,6 +30,7 @@ import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import {
   describeAudioMap,
+  describeEvidenceSheet,
   describeClip,
   describeCodeWarnings,
   describeRenderFailure,
@@ -37,6 +38,7 @@ import {
   describeSoundMeasurement,
   describeSourceSound,
   type AudioMapAnswer,
+  type EvidenceSheet,
   type CodeDiagnostic,
 } from '@contenthero/sdk'
 
@@ -89,16 +91,18 @@ function renderedImages(rendered: Record<string, unknown> | null): Buffer[] {
   return [bufferFromDataUrl(rendered.dataUrl), ...listed, picture].filter((b): b is Buffer => b !== null)
 }
 
-/** Every image a view returned, in order: the render, the range's sound beside it, then a source's keyframes and its sound's picture. */
+/** Every image a view returned, in order: the render, the range's sound beside it, then a source's keyframes, a post's evidence sheet and its sound's picture. */
 function viewImages(context: Record<string, unknown> | null): Buffer[] {
   const clip = record(context?.clip)
   const keyframes = Array.isArray(clip?.keyframes)
     ? (clip.keyframes as Array<Record<string, unknown>>).map((kf) => bufferFromDataUrl(kf.dataUrl)).filter((b): b is Buffer => b !== null)
     : []
+  const sheet = record(clip?.sheet)
   return [
     ...renderedImages(record(context?.rendered)),
     ...renderedImages(record(context?.renderedSound)),
     ...keyframes,
+    ...(sheet ? [bufferFromDataUrl(sheet.dataUrl)].filter((b): b is Buffer => b !== null) : []),
     ...renderedImages(record(clip?.sound)),
   ]
 }
@@ -128,7 +132,7 @@ function renderedLines(rendered: Record<string, unknown> | null): string[] {
 
 /**
  * The human summary of a view: who is viewing, what a render measured or why it has no image, a clip with its sound and
- * a post's audio map for the window, and what was saved.
+ * a post's audio map for the window and its evidence sheet, and what was saved.
  */
 export function viewSummary(result: ViewResult, saved: { count: number; path: string }): string {
   const c = result.context
@@ -152,6 +156,7 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
     ...describeClip(clip),
     ...sourceSoundLines(record(clip?.sound)),
     ...describeAudioMap(record(clip?.audioMap) as AudioMapAnswer | null),
+    ...describeEvidenceSheet(record(clip?.sheet) as EvidenceSheet | null),
     ...savedLine,
   ].join('\n')
 }

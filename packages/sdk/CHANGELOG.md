@@ -11,19 +11,25 @@
   comes back as `listTrackedAccounts` shows it, with its `outcome` (`added`, `restored`, `alreadyTracked`).
   `removeTrackedAccount(id)` stops tracking one and keeps its posts; adding it again restores it. Both require
   `inspiration:write`. `describeLimit` also takes a returned refusal.
-- New: `editAudio` operation `split` (`EditAudioOperation` gains `'split'`): voice, music and effects. On a file
-  (`sourceUrl`, one of your stored audio or video files) it answers `processing`, and the finished generation has three
-  `outputs`, each naming its `stem` (`GenerationOutput.stem`: `voice`, `music` or `effects`). In place (`projectId`
-  with `clipIds` or `inPlace`), one job per source recording: each clip is muted and its stems are placed under
-  it, each on its own track. Free today (`estimateEditAudioCost` asks the registry). A file split refuses a `projectId`.
+- New: `editAudio` operation `split` (`EditAudioOperation` gains `'split'`): the recording's four stems, `vocals`,
+  `drums`, `bass` and `other` (`AudioStem`). On a file (`sourceUrl`, one of your stored audio or video files) it answers
+  `processing`, and the finished generation has four `outputs`, each naming its `stem` (`GenerationOutput.stem`). In
+  place (`projectId` with `clipIds` or `inPlace`), one job per source recording: each clip is muted and its stems are
+  placed under it, each on its own track. Free today (`estimateEditAudioCost` asks the registry). A file split refuses a
+  `projectId`.
 - New: a post video's audio map, made automatically and free once its copy is stored (`analyzeContent` kind
-  `video`): where speech is, each sound event with its AudioSet class and closest sound-design name, its level and its
-  level against the voice, the music's tempo, beats and key, how far the music drops under speech, and each stem's
-  level. `getContent` reports each video's `audioMap` summary on `ContentVideo` (so does `analyzeContent` kind
-  `video`); `GetContentOptions.audioMap` adds its window, narrowed by `startMs`/`endMs` like `cuts`. `view` on a
-  post's video carries `context.clip.audioMap` with the window read. Types: `AudioMapAnswer`, `AudioMapSummary`,
-  `AudioMapWindow`, `AudioMapEvent`, `AudioMapMusic`, `AudioMapDucking`, `AudioMapLevels`, `AudioMapSpan`. Renderers:
-  `describeAudioMap`, `describeAudioMapSummary`, `describeAudioMapWindow`; `describeContentVideo` appends the summary.
+  `video`): where speech is, the music's tempo, beats and key, how far the music drops under speech, the mix's
+  loudness, each stem's level, and every sound candidate with what was measured of it (its stem, level, rise over its
+  stem's floor, level against the voice, and descriptors: attack, decay, peak, centroid, bandwidth, flatness, pitch, low
+  band share, stereo width), never a name. `getContent` reports each video's `audioMap` summary on `ContentVideo` (so
+  does `analyzeContent` kind `video`); `GetContentOptions.audioMap` adds its window, narrowed by `startMs`/`endMs` like
+  `cuts`. `view` on a post's video carries `context.clip.audioMap` with the window read, and a heard window
+  (`sound`) also `context.clip.sheet`, its evidence sheet (`EvidenceSheet`): the frames, the spoken words and a
+  spectrogram strip per stem on one time axis, the sound candidates marked. Types: `AudioMapAnswer`,
+  `AudioMapSummary`, `AudioMapWindow`, `AudioMapSound`, `AudioMapSoundDescriptors`, `AudioMapMusic`, `AudioMapDucking`,
+  `AudioMapLoudness`, `AudioMapLevels`, `AudioMapSpan`, `AudioStem`, `EvidenceSheet`. Renderers: `describeAudioMap`,
+  `describeAudioMapSummary`, `describeAudioMapWindow`, `describeAudioMapSound`, `describeEvidenceSheet`;
+  `describeContentVideo` appends the summary.
 
 ## 0.4.29
 

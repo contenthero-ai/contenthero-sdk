@@ -9,16 +9,18 @@
   for a bare handle; `--kind`, `--brand-kit`), printing each with how it came to be tracked and any the plan's limit
   refused, with the ways to continue. `contenthero tracked-account remove <id>` stops tracking one and keeps its
   posts.
-- New: `contenthero audio split <source>` separates a stored audio or video file into voice, music and effects
-  (three files; `--duration`, `--cost`, `--no-wait`, `--timeout`, as `audio enhance`), and `contenthero audio
+- New: `contenthero audio split <source>` separates a stored audio or video file into vocals, drums, bass and other
+  (four files; `--duration`, `--cost`, `--no-wait`, `--timeout`, as `audio enhance`), and `contenthero audio
   split-clips <projectId>` does it to clips in place (`--clips`, as `audio enhance-clips`): each clip is muted and its
   stems are placed under it, each on its own track.
 - New: a post video's audio map, made automatically and free once `content analyze --kind video` has stored its
-  copy: speech, sound events (AudioSet class, sound-design name, level and level against the voice), music tempo,
-  beats and key, how far the music drops under speech, and each stem's level. `content get` and `content analyze
+  copy: speech, music tempo, beats and key, how far the music drops under speech, the mix's loudness, each stem's
+  level, and every sound candidate with what was measured of it, numbered and never named. `content get` and `content analyze
   --kind video` print each video's summary; `content get --audio-map` adds its window, narrowed by
   `--start-ms`/`--end-ms` (which then do not imply transcript segments). `view --content-id` prints the map for the
-  window read, or that it is still being measured.
+  window read, or that it is still being measured; with `--sound` it also describes the window's evidence sheet (the
+  frames, the spoken words and a spectrogram strip per stem on one time axis), which `--save` writes after the
+  keyframes.
 
 ## 0.3.26
 

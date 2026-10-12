@@ -117,13 +117,43 @@ test('a raw clip says what it is and which window was read, with no live tab', (
 /** A post's video carries its audio map for the window read. Break-verified: dropping describeAudioMap from viewSummary turns this red. */
 test("a post's video says its audio map for the window, or that it is being measured", () => {
   const window = {
-    fromSec: 0, toSec: 3, durationSec: 9, speech: [], events: [{ fromSec: 0.5, toSec: 1, class: 'swoosh', classScore: 0.8, name: 'whoosh', nameScore: 0.7, levelDb: -20, vsVoiceDb: null }],
-    music: { present: true, tempoBpm: 120, beatsSec: [0.5], key: 'C', mode: 'major', levelDb: -22 }, ducking: null, levels: { voiceDb: null, musicDb: -22, effectsDb: -20 },
+    fromSec: 0, toSec: 3, durationSec: 9, speech: [],
+    sounds: [{
+      atSec: 0.5, endSec: 1, stem: 'other', levelDb: -20, riseDb: 12, vsVoiceDb: null,
+      descriptors: { attackMs: 6, decayMs: 240, peakDb: -11, centroidHz: { start: 3000, peak: 2500, end: 900 }, bandwidthHz: 2000, flatness: 0.7, pitchHz: null, lowBandShare: 0.1, stereoWidth: 0.5 },
+    }],
+    music: { present: true, tempoBpm: 120, beatsSec: [0.5], key: 'C', mode: 'major', levelDb: -22 }, ducking: null,
+    loudness: { integratedLufs: -15, shortTerm: [] },
+    levels: { vocalsDb: null, drumsDb: -22, bassDb: -26, otherDb: -20 },
   }
   const ready = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'ready', window } } }, participant: null, participants: [] }, nothingSaved)
-  assert.match(ready, /audio map \(free\), 0\.0s to 3\.0s of 9\.0s:\n  speech: none\n  sound events: 0\.5s whoosh \(swoosh, -20 dB\)\n  music: 120 BPM, C major, 1 beat in this window/)
+  assert.match(ready, /audio map \(free\), 0\.0s to 3\.0s of 9\.0s:\n  speech: none\n  sound candidates \(measured, not identified\): 1\n    1\. 0\.5s to 1\.0s on other: -20 dB, \+12 over its floor; attack 6 ms/)
+  assert.match(ready, /  music: 120 BPM, C major, 1 beat in this window/)
   const pending = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'pending' } } }, participant: null, participants: [] }, nothingSaved)
   assert.match(pending, /audio map: being measured \(free; ask again shortly\)/)
+})
+
+/**
+ * A heard post window says how to read its evidence sheet, and --save writes the sheet after the keyframes and before
+ * the sound's picture. Break-verified: dropping the sheet from viewImages, or describeEvidenceSheet from viewSummary,
+ * turns this red.
+ */
+test("a post's heard window says how to read its evidence sheet, and --save writes it", async () => {
+  const sheet = {
+    status: 'ready', fromSec: 1, toSec: 3, width: 1292, height: 610, dataUrl: 'data:image/webp;base64,BQ==',
+    frames: [{ atSec: 2 }], words: [], stems: ['vocals', 'drums', 'bass', 'other'], frequencyHz: { min: 20, max: 20000 }, soundsMarked: 0,
+  }
+  const summary = viewSummary({ context: { clip: { contentId: 'post-1', type: 'video', sheet } }, participant: null, participants: [] }, nothingSaved)
+  assert.match(summary, /evidence sheet, 1\.0s to 3\.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem/)
+  body = {
+    context: { clip: { contentId: 'post-1', type: 'video', keyframes: [{ atSec: 2, dataUrl: 'data:image/jpeg;base64,AQ==' }], sheet } },
+    participant: null,
+    participants: [],
+  }
+  const path = join(mkdtempSync(join(tmpdir(), 'ch-view-')), 'sheet.webp')
+  await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--content-id', 'post-1', '--sound', '--from-sec', '1', '--to-sec', '3', '--save', path], { from: 'user' })
+  assert.deepEqual([...readFileSync(path.replace('sheet.webp', 'sheet-1.webp'))], [1])
+  assert.deepEqual([...readFileSync(path.replace('sheet.webp', 'sheet-2.webp'))], [5])
 })
 
 test("--save writes a clip's keyframes, numbered in order", async () => {

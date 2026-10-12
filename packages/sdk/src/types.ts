@@ -539,8 +539,8 @@ export interface GenerationOutput {
   previewUrl?: string | null
   /** The 512px derivative of `url`, for inlining bytes; prefer it over `previewUrl` when attaching. Null where none. */
   visionUrl?: string | null
-  /** Which stem this output is (`voice`, `music` or `effects`), for an `editAudio` split; absent for every other output. */
-  stem?: string
+  /** Which stem this output is (`vocals`, `drums`, `bass` or `other`), for an `editAudio` split; absent for every other output. */
+  stem?: AudioStem
 }
 
 /**
@@ -661,8 +661,8 @@ export interface CanvasPlacementIntent {
 }
 
 /**
- * What `editAudio` does: isolate the voice, enhance (level loudness and clean up noise), or split (voice, music and
- * effects as three files, or three tracks in in-place mode).
+ * What `editAudio` does: isolate the voice, enhance (level loudness and clean up noise), or split (vocals, drums, bass
+ * and other as four files, or four tracks in in-place mode).
  */
 export type EditAudioOperation = 'isolate' | 'enhance' | 'split'
 
@@ -686,7 +686,7 @@ export interface EditAudioRequest {
    *  it refines the estimate (the authoritative charge is the processed duration). */
   durationSeconds?: number
   /** Optional: place the processed audio onto this editor project's timeline in the same call. Omit for a
-   *  standalone library output (today's behavior). A file split makes three files and places none, so it refuses a
+   *  standalone library output (today's behavior). A file split makes four files and places none, so it refuses a
    *  projectId; split clips in place instead. */
   projectId?: string
   /** Optional placement intent; omitted = playhead when `playheadFrame` is given, else append at the end. */
@@ -697,8 +697,8 @@ export interface EditAudioRequest {
    * IN-PLACE mode: enhance or split the audio OF EXISTING CLIPS on `projectId`, rather than processing a standalone
    * file.
    *
-   * Requires `projectId`; the operation is `enhance` (implied) or `split`. A split mutes each clip and places its voice,
-   * music and effects under it, each stem on a track of its own. Omitting `clipIds` while passing
+   * Requires `projectId`; the operation is `enhance` (implied) or `split`. A split mutes each clip and places its vocals,
+   * drums, bass and other under it, each stem on a track of its own. Omitting `clipIds` while passing
    * `inPlace: true` means every audible clip on the timeline, the same whole-timeline default the sibling
    * timeline ops use. Silenced clips are excluded automatically; enhancing audio nobody can hear would spend
    * credits and then overwrite something the user deliberately muted.
@@ -739,7 +739,7 @@ export interface InPlaceAudioJob {
  * The result of `editAudio`, which serves two shapes.
  *
  * FILE mode returns the `GenerateResult` fields; a split answers `processing`, and once it lands its generation has
- * three `outputs`, each naming its `stem` (voice, music, effects). IN-PLACE mode returns `jobs`, one per source, and echoes
+ * four `outputs`, each naming its `stem` (vocals, drums, bass, other). IN-PLACE mode returns `jobs`, one per source, and echoes
  * the first on `outputId` so a single-source project can be awaited without unpacking the list. `status` is
  * `'noop'` when the selection contained no audible audio, which is deliberately distinguishable from a failure.
  */
@@ -2993,16 +2993,47 @@ export interface AudioMapSpan {
   toSec: number
 }
 
-/** One sound event: its AudioSet class, its closest sound-design name, and how loud it is, alone and against the voice. */
-export interface AudioMapEvent extends AudioMapSpan {
-  class: string
-  classScore: number
-  /** Null, with `nameScore`, when no sound-design name fits clearly enough. */
-  name: string | null
-  nameScore: number | null
+/** The stems a recording separates into, in their order: a stem's index is its part wherever it is stored. */
+export type AudioStem = 'vocals' | 'drums' | 'bass' | 'other'
+
+/**
+ * What was measured of one sound candidate, never what it is called: its envelope, where its energy sits in frequency
+ * and how that moves, how noisy or tonal it is, its pitch when it has one, and how wide it sits in the stereo field.
+ */
+export interface AudioMapSoundDescriptors {
+  /** From onset to peak. */
+  attackMs: number
+  /** From peak down 20 dB; null when it does not fall that far before the next sound or the end. */
+  decayMs: number | null
+  peakDb: number
+  /** Spectral centroid at the start, at the peak and at the end. */
+  centroidHz: { start: number; peak: number; end: number }
+  bandwidthHz: number
+  /** 0 tonal to 1 noise. */
+  flatness: number
+  /** Pitch contour across the sound, null where unpitched; null for a sound with no pitch at all. */
+  pitchHz: (number | null)[] | null
+  /** Share of its energy below 250 Hz, 0 to 1. */
+  lowBandShare: number
+  /** 0 mono to 1 wide; null for a mono source. */
+  stereoWidth: number | null
+}
+
+/**
+ * One sound CANDIDATE: an onset that rose above its stem's own recent floor, in the stem it is loudest in, with its
+ * level alone, above that floor and against the voice, and its measured descriptors. A candidate, not a finding: the
+ * reader decides what it is.
+ */
+export interface AudioMapSound {
+  atSec: number
+  endSec: number
+  stem: AudioStem
   levelDb: number
+  /** How far it rose above its stem's recent floor. */
+  riseDb: number
   /** Its level minus the voice's around it; null when no one speaks near it. */
   vsVoiceDb: number | null
+  descriptors: AudioMapSoundDescriptors
 }
 
 export interface AudioMapMusic {
@@ -3021,37 +3052,71 @@ export interface AudioMapDucking {
   dropDb: number
 }
 
+/** The mix's loudness (EBU R128): integrated over the video, and short-term on a fixed step. Null where silent. */
+export interface AudioMapLoudness {
+  integratedLufs: number | null
+  shortTerm: { atSec: number; lufs: number | null }[]
+}
+
 /** Each stem's level across the video; null for a stem that holds no sound. */
 export interface AudioMapLevels {
-  voiceDb: number | null
-  musicDb: number | null
-  effectsDb: number | null
+  vocalsDb: number | null
+  drumsDb: number | null
+  bassDb: number | null
+  otherDb: number | null
 }
 
 /**
- * A stretch of a post video's audio map, in the video's own seconds: speech clipped to it, events overlapping it (at
- * their own times), beats inside it; music, ducking and levels are whole-video facts. `durationSec` is the video's.
+ * A stretch of a post video's audio map, in the video's own seconds: speech clipped to it, sound candidates overlapping
+ * it (at their own times), beats and short-term loudness inside it; music, ducking, integrated loudness and levels are
+ * whole-video facts. `durationSec` is the video's.
  */
 export interface AudioMapWindow {
   fromSec: number
   toSec: number
   durationSec: number
   speech: AudioMapSpan[]
-  events: AudioMapEvent[]
+  sounds: AudioMapSound[]
   music: AudioMapMusic
   ducking: AudioMapDucking | null
+  loudness: AudioMapLoudness
   levels: AudioMapLevels
 }
 
-/** A post video's audio map in a line: how much speech, how many sound events, its music and how far it ducks. */
+/** A post video's audio map in a line: how much speech, how many sound candidates, its music, ducking and loudness. */
 export interface AudioMapSummary {
   durationSec: number
   speechSec: number
-  eventCount: number
+  soundCount: number
   music: { present: boolean; tempoBpm: number | null; key: string | null; mode: 'major' | 'minor' | null }
   /** How far music drops under speech; null without music under speech. */
   duckingDropDb: number | null
+  integratedLufs: number | null
 }
+
+/**
+ * A heard window of a post's video drawn as one picture (`view` with `contentId` and `sound`): its frames along the
+ * top, the spoken words under them, then one spectrogram strip per stem in `stems` order (log frequency over
+ * `frequencyHz`, low at the bottom), all on one time axis in the video's seconds. Each of the window's sound candidates
+ * (`audioMap.window.sounds`) is marked on the strip of the stem it is loudest in, numbered in that list's order.
+ * Pending while the audio map or its stems are being made.
+ */
+export type EvidenceSheet =
+  | {
+      status: 'ready'
+      fromSec: number
+      toSec: number
+      width: number
+      height: number
+      dataUrl: string
+      frames: { atSec: number }[]
+      words: { atSec: number; text: string }[]
+      stems: AudioStem[]
+      frequencyHz: { min: number; max: number }
+      soundsMarked: number
+    }
+  | { status: 'pending'; reason: string }
+  | { status: 'unavailable'; reason: string }
 
 /**
  * A post video's audio map as a reader gets it: `view` carries `window` only, `getContent` always `summary` (and
@@ -3204,7 +3269,7 @@ export interface GetContentOptions {
    */
   cuts?: boolean
   /**
-   * Add each video's audio map window (`ContentVideo.audioMap.window`): speech, sound events, music and levels. Its
+   * Add each video's audio map window (`ContentVideo.audioMap.window`): speech, sound candidates, music, loudness and levels. Its
    * summary is reported either way. `startMs`/`endMs` narrow the window (and then do not imply transcript segments).
    */
   audioMap?: boolean
@@ -3667,7 +3732,9 @@ export interface ViewResult {
    *   waveform above its spectrogram), audioUrl (short-lived) }`, or `{ kind: 'sound', error: { code, message } }`
    *   (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`). A post's video also carries `audioMap`
    *   (`AudioMapAnswer`) on every view of it, frames or sound: ready, its `window` is the window read (an open end
-   *   runs to the video's edge). A clip of yours has none.
+   *   runs to the video's edge). A clip of yours has none. A post's window heard with `sound` also carries `sheet`
+   *   (`EvidenceSheet`): its frames, words and a spectrogram strip per stem on one time axis, its sound candidates
+   *   marked; when it is ready, `sound` carries no `picture` (the sheet holds the window's spectrograms).
    * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
    */
   context: Record<string, unknown> | null

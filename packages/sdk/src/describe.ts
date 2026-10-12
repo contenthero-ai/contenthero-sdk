@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSummary, AudioMapWindow, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentVideo, ContentVideoCuts, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -428,40 +428,87 @@ function audioMapMusicWords(music: { tempoBpm: number | null; key: string | null
   return parts
 }
 
-/** A video's audio map in one line, free: how much speech in how long, how many sound events, and its music. */
+/** Loudness in LUFS, or that the stretch is silent. */
+const lufs = (v: number | null) => (v === null ? 'silent' : `${Math.round(v * 10) / 10} LUFS`)
+
+/** A video's audio map in one line, free: how much speech in how long, how many sound candidates, its music and loudness. */
 export function describeAudioMapSummary(summary: AudioMapSummary): string {
-  const n = summary.eventCount
-  const events = n === 0 ? 'no sound events' : `${n} sound event${n === 1 ? '' : 's'}`
+  const n = summary.soundCount
+  const sounds = n === 0 ? 'no sound candidates' : `${n} sound candidate${n === 1 ? '' : 's'}`
   const words = audioMapMusicWords(summary.music, summary.duckingDropDb)
   const music = !summary.music.present ? 'no music' : words.length ? `music ${words.join(', ')}` : 'music'
-  return `audio map (free): ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${events}, ${music}`
+  return `audio map (free): ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${sounds}, ${music}, mix ${lufs(summary.integratedLufs)}`
+}
+
+const hz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v)}`)
+const share = (v: number) => `${Math.round(v * 100)}%`
+
+/**
+ * One sound candidate in a line, numbered as the evidence sheet marks it: when and on which stem, how loud (alone,
+ * over its stem's floor, against the voice), and what was measured of it. Never a name: the reader decides what it is.
+ */
+export function describeAudioMapSound(sound: AudioMapSound, n: number): string {
+  const d = sound.descriptors
+  const level = `${db(sound.levelDb)}, +${Math.round(sound.riseDb)} over its floor${sound.vsVoiceDb !== null ? `, ${signedDb(sound.vsVoiceDb)} vs voice` : ''}`
+  const pitched = d.pitchHz?.filter((p): p is number => p !== null) ?? []
+  const pitch = pitched.length ? `pitch ${hz(pitched[0]!)}${pitched.length > 1 ? ` to ${hz(pitched[pitched.length - 1]!)}` : ''} Hz` : 'unpitched'
+  const shape = [
+    `attack ${Math.round(d.attackMs)} ms`,
+    `decay ${d.decayMs === null ? 'past its end' : `${Math.round(d.decayMs)} ms`}`,
+    `peak ${db(d.peakDb)}`,
+    `centroid ${hz(d.centroidHz.start)}/${hz(d.centroidHz.peak)}/${hz(d.centroidHz.end)} Hz (start/peak/end)`,
+    `bandwidth ${hz(d.bandwidthHz)} Hz`,
+    `flatness ${Math.round(d.flatness * 100) / 100}`,
+    pitch,
+    `low band ${share(d.lowBandShare)}`,
+    `width ${d.stereoWidth === null ? 'mono' : Math.round(d.stereoWidth * 100) / 100}`,
+  ].join(', ')
+  return `${n}. ${sec1(sound.atSec)} to ${sec1(sound.endSec)} on ${sound.stem}: ${level}; ${shape}`
 }
 
 /**
- * A stretch of a video's audio map in lines, in the video's own seconds: where speech is, each sound event (its
- * sound-design name, its AudioSet class, its level and, with someone speaking near it, its level against the voice),
- * the music with how many beats fall in the stretch, and each stem's level across the whole video.
+ * A stretch of a video's audio map in lines, in the video's own seconds: where speech is, each sound candidate (numbered
+ * as an evidence sheet marks it, with what was measured of it), the music with how many beats fall in the stretch, the
+ * mix's loudness, and each stem's level across the whole video.
  */
 export function describeAudioMapWindow(window: AudioMapWindow): string[] {
   const speech = window.speech.length ? window.speech.map((s) => `${s.fromSec.toFixed(1)}-${sec1(s.toSec)}`).join(', ') : 'none'
-  const events = window.events.length
-    ? window.events
-        .map((e) => `${sec1(e.fromSec)} ${e.name} (${e.class}, ${db(e.levelDb)}${e.vsVoiceDb !== null ? `, ${signedDb(e.vsVoiceDb)} vs voice` : ''})`)
-        .join('; ')
-    : 'none'
   const m = window.music
   const beats = m.beatsSec.length
   const music = m.present
     ? [...audioMapMusicWords(m, window.ducking ? window.ducking.dropDb : null), `${beats} beat${beats === 1 ? '' : 's'} in this window`].join(', ')
     : 'none'
+  const shortTerm = window.loudness.shortTerm.flatMap((p) => (p.lufs === null ? [] : [p.lufs]))
+  const loudness =
+    `mix ${lufs(window.loudness.integratedLufs)} over the video` +
+    (shortTerm.length ? `; short-term ${Math.round(Math.min(...shortTerm))} to ${Math.round(Math.max(...shortTerm))} LUFS in this window` : '')
   const level = (v: number | null) => (v === null ? 'silent' : db(v))
   const l = window.levels
   return [
     `audio map (free), ${sec1(window.fromSec)} to ${sec1(window.toSec)} of ${sec1(window.durationSec)}:`,
     `  speech: ${speech}`,
-    `  sound events: ${events}`,
+    window.sounds.length
+      ? `  sound candidates (measured, not identified): ${window.sounds.length}`
+      : '  sound candidates (measured, not identified): none',
+    ...window.sounds.map((s, i) => `    ${describeAudioMapSound(s, i + 1)}`),
     `  music: ${music}`,
-    `  levels: voice ${level(l.voiceDb)}, music ${level(l.musicDb)}, effects ${level(l.effectsDb)}`,
+    `  loudness: ${loudness}`,
+    `  levels: vocals ${level(l.vocalsDb)}, drums ${level(l.drumsDb)}, bass ${level(l.bassDb)}, other ${level(l.otherDb)}`,
+  ]
+}
+
+/**
+ * A post window's evidence sheet in lines: what the attached picture holds and how to read it, or why there is none
+ * yet. The picture itself rides as an image beside these lines.
+ */
+export function describeEvidenceSheet(sheet: EvidenceSheet | null | undefined): string[] {
+  if (!sheet) return []
+  if (sheet.status !== 'ready') return [`evidence sheet: ${sheet.status === 'pending' ? 'being made' : 'unavailable'} (${sheet.reason.trim().replace(/\.+$/, '')})`]
+  const marked = sheet.soundsMarked === 0 ? 'no sound candidates in this window' : `its ${sheet.soundsMarked} sound candidate${sheet.soundsMarked === 1 ? '' : 's'} marked on the stem each is loudest in, numbered as listed under sound candidates`
+  return [
+    `evidence sheet, ${sec1(sheet.fromSec)} to ${sec1(sheet.toSec)}: frames along the top, the spoken words under them, then one spectrogram ` +
+      `strip per stem (${sheet.stems.join(', ')}; log frequency ${hz(sheet.frequencyHz.min)} Hz to ${hz(sheet.frequencyHz.max)} Hz, low at the bottom), ` +
+      `on one time axis in the video's seconds; ${marked}.`,
   ]
 }
 

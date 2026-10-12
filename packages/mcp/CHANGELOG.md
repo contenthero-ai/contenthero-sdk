@@ -8,14 +8,17 @@
   `brandKitId`), and `remove_tracked_account` stops tracking one and keeps its posts. Inspiration accounts count toward
   the plan's limit: the ones past it are listed as not tracked, with the refusal and the ways to continue. Both
   require the `inspiration:write` scope. An empty `list_tracked_accounts` now points to `add_tracked_account`.
-- New: `edit_audio` operation `split`: voice, music and effects as three files (FILE mode, polled with `get_status`,
-  each output named by its stem), or three tracks in place (each clip muted, its stems under it; one job per source,
+- New: `edit_audio` operation `split`: vocals, drums, bass and other as four files (FILE mode, polled with
+  `get_status`, each output named by its stem), or four tracks in place (each clip muted, its stems under it; one job per source,
   every outputId listed). `get_status` names each of a split's outputs by its stem.
 - New: a post video's audio map, made automatically and free once `analyze_content` kind `video` has stored its
-  copy: speech, sound events (AudioSet class, sound-design name, level and level against the voice), music tempo,
-  beats and key, how far the music drops under speech, and each stem's level. `get_content` and `analyze_content`
-  kind `video` print each video's summary; `get_content` `audioMap` adds its window, narrowed by `startMs`/`endMs`.
-  `view` on a post's video prints the map for the window read, or that it is still being measured.
+  copy: speech, music tempo, beats and key, how far the music drops under speech, the mix's loudness, each stem's
+  level, and every sound candidate with what was measured of it (stem, level, rise, level against the voice, attack,
+  decay, centroid, bandwidth, flatness, pitch, low band share, stereo width), numbered and never named. `get_content`
+  and `analyze_content` kind `video` print each video's summary; `get_content` `audioMap` adds its window, narrowed by
+  `startMs`/`endMs`. `view` on a post's video prints the map for the window read, or that it is still being measured;
+  a heard window (`sound`) attaches its evidence sheet as an image: the frames, the spoken words and a spectrogram
+  strip per stem on one time axis, each sound candidate marked by its number.
 
 ## 0.4.36
 

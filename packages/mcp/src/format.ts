@@ -125,8 +125,9 @@ import type {
   EffectDetail,
   CodeDiagnostic,
   BrandImportOutcome,
-  AudioMapAnswer,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeAudioMapWindow, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+  AudioMapAnswer,
+  EvidenceSheet,} from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeAudioMapWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -732,7 +733,7 @@ export function inPlaceAudioResult(result: EditAudioResult, operation: 'enhance'
       : `Enhancing ${jobs.length} sources as separate jobs, because a noise profile is estimated per recording. ${poll} (EVERY id, in one call):`
   const footer = [
     split
-      ? "Each clip is muted and its voice, music and effects are placed under it, each on its own track, automatically when each job lands, so no placement call is needed."
+      ? "Each clip is muted and its stems (vocals, drums, bass, other) are placed under it, each on its own track, automatically when each job lands, so no placement call is needed."
       : 'The enhanced audio is applied to the clips automatically when each job lands, so no placement call is needed.',
     result.silencedClipsExcluded
       ? `${result.silencedClipsExcluded} silenced clip${result.silencedClipsExcluded === 1 ? ' was' : 's were'} skipped.`
@@ -2934,8 +2935,10 @@ function renderedSection(
  * A source a view read (`context.clip`): a clip of the user's by assetId or mediaUrl, or a tracked post's video by
  * contentId and slide. What it is and which window was read, its keyframes as image blocks each labeled with its time
  * in the source, then its sound when asked (its measurement and where its sounds start, `describeSourceSound`, and its
- * picture as an image, as the edit's sound render is shown), a post's audio map for the window (`describeAudioMap`), within what is left of the result's allowance, and why
- * it, its keyframes or its sound could not be read.
+ * picture as an image, as the edit's sound render is shown), a post's audio map for the window (`describeAudioMap`)
+ * and, for a heard post window, its evidence sheet as an image (`describeEvidenceSheet`), within what is left of the
+ * result's allowance, and why it, its keyframes or its sound could not be read. The sheet is admitted before the
+ * sound's picture: it is the window's spectrograms stem by stem, and the server leaves the mix's picture out beside it.
  */
 function clipSection(
   clip: Record<string, unknown>,
@@ -2943,9 +2946,12 @@ function clipSection(
 ): { json: Record<string, unknown>; lines: string[]; blocks: CallToolResult['content'] } {
   const keyframes = parseKeyframes(clip.keyframes)
   const spent = admitWithinBudget(keyframes, budget)
+  const sheet = isPlainRecord(clip.sheet) ? (clip.sheet as unknown as EvidenceSheet) : null
+  const sheetPicture = sheet?.status === 'ready' ? parseDataUrl(sheet.dataUrl) : null
+  const drawn = admitWithinBudget(sheetPicture ? [sheetPicture] : [], spent.remaining)
   const sound = isPlainRecord(clip.sound) ? clip.sound : null
   const soundPicture = sound && isPlainRecord(sound.picture) ? parseDataUrl(sound.picture.dataUrl) : null
-  const heard = admitWithinBudget(soundPicture ? [soundPicture] : [], spent.remaining)
+  const heard = admitWithinBudget(soundPicture ? [soundPicture] : [], drawn.remaining)
   const [what, ...why] = describeClip(clip)
   const lines: string[] = what ? [what] : []
   if (spent.admitted.length > 0) {
@@ -2955,6 +2961,8 @@ function clipSection(
   lines.push(...why)
   lines.push(...describeSourceSound(sound))
   lines.push(...describeAudioMap(isPlainRecord(clip.audioMap) ? (clip.audioMap as unknown as AudioMapAnswer) : null))
+  if (sheet && (sheet.status !== 'ready' || drawn.admitted.length > 0)) lines.push(...describeEvidenceSheet(sheet).map((l) => (sheet.status === 'ready' ? `${l} It is attached below.` : l)))
+  if (drawn.dropped > 0) lines.push("The evidence sheet was not attached: over this result's size limit. Ask for fewer frames, or a narrower window.")
   if (heard.admitted.length > 0) {
     lines.push("A picture of the sound is attached below: its waveform above its spectrogram, on one time axis in seconds from the start of the window.")
   }
@@ -2972,7 +2980,14 @@ function clipSection(
   if (sound && soundPicture && isPlainRecord(sound.picture)) {
     json = { ...json, sound: { ...sound, picture: { ...sound.picture, dataUrl: '[attached as an image below]' } } }
   }
+  if (sheet?.status === 'ready') {
+    json = { ...json, sheet: { ...sheet, dataUrl: drawn.admitted.length > 0 ? '[attached as an image below]' : '[not attached: over the size limit]' } }
+  }
   const blocks: CallToolResult['content'] = keyframeBlocks(spent.admitted)
+  if (drawn.admitted.length > 0) {
+    blocks.push({ type: 'text', text: 'Its evidence sheet:' })
+    for (const img of drawn.admitted) blocks.push({ type: 'image', data: img.data, mimeType: img.mimeType })
+  }
   if (heard.admitted.length > 0) {
     blocks.push({ type: 'text', text: 'Its sound:' })
     for (const img of heard.admitted) blocks.push({ type: 'image', data: img.data, mimeType: img.mimeType })

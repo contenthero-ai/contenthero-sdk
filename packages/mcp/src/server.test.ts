@@ -2736,13 +2736,18 @@ test("get_content reports each video's state, and cuts adds its cut list", async
   assert.match(tools.find((t) => t.name === 'get_content').description, /Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes\./)
 })
 
+const AUDIO_SOUND = {
+  atSec: 1.2, endSec: 1.6, stem: 'other', levelDb: -18, riseDb: 14, vsVoiceDb: 3,
+  descriptors: { attackMs: 4, decayMs: 180, peakDb: -9, centroidHz: { start: 5200, peak: 4100, end: 2600 }, bandwidthHz: 3100, flatness: 0.62, pitchHz: null, lowBandShare: 0.08, stereoWidth: 0.4 },
+}
 const AUDIO_WINDOW = {
   fromSec: 1, toSec: 4, durationSec: 6,
   speech: [{ fromSec: 1, toSec: 2.5 }],
-  events: [{ fromSec: 1.2, toSec: 1.6, class: 'swoosh', classScore: 0.8, name: 'whoosh', nameScore: 0.7, levelDb: -18, vsVoiceDb: 3 }],
+  sounds: [AUDIO_SOUND],
   music: { present: true, tempoBpm: 118, beatsSec: [1.5, 2], key: 'A', mode: 'minor', levelDb: -24 },
   ducking: { musicUnderSpeechDb: -30, musicWithoutSpeechDb: -21, dropDb: 9 },
-  levels: { voiceDb: -16, musicDb: -24, effectsDb: -30 },
+  loudness: { integratedLufs: -14, shortTerm: [{ atSec: 1.5, lufs: -15 }] },
+  levels: { vocalsDb: -16, drumsDb: -24, bassDb: -28, otherDb: -30 },
 }
 
 /**
@@ -2752,7 +2757,7 @@ const AUDIO_WINDOW = {
  */
 test("get_content reports each video's audio map summary, and audioMap adds its window", async () => {
   let asked
-  const summary = { durationSec: 6, speechSec: 1.5, eventCount: 1, music: { present: true, tempoBpm: 118, key: 'A', mode: 'minor' }, duckingDropDb: 9 }
+  const summary = { durationSec: 6, speechSec: 1.5, soundCount: 1, music: { present: true, tempoBpm: 118, key: 'A', mode: 'minor' }, duckingDropDb: 9, integratedLufs: -14 }
   const video = {
     copy: { status: 'ready' },
     videos: [
@@ -2766,8 +2771,8 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
   const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', audioMap: true, startMs: 1000, endMs: 4000 } })
   assert.deepEqual(asked, { audioMap: true, startMs: 1000, endMs: 4000 })
   const body = res.content[0].text
-  assert.match(body, /Slide 1 \(slide: 0\): ready; audio map \(free\): 1\.5s of speech in 6\.0s, 1 sound event, music 118 BPM, A minor, drops 9 dB under speech\./)
-  assert.match(body, /\n {4}audio map \(free\), 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound events: 1\.2s whoosh \(swoosh, -18 dB, \+3 vs voice\)/)
+  assert.match(body, /Slide 1 \(slide: 0\): ready; audio map \(free\): 1\.5s of speech in 6\.0s, 1 sound candidate, music 118 BPM, A minor, drops 9 dB under speech, mix -14 LUFS\./)
+  assert.match(body, /\n {4}audio map \(free\), 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
   assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: being measured \(free; ask again shortly\)\./)
 })
 
@@ -2782,7 +2787,40 @@ test("view on a post's video shows its audio map for the window", async () => {
   const text = res.content[0].text
   assert.match(text, /audio map \(free\), 1\.0s to 4\.0s of 6\.0s:/)
   assert.match(text, /music: 118 BPM, A minor, drops 9 dB under speech, 2 beats in this window/)
-  assert.match(text, /levels: voice -16 dB, music -24 dB, effects -30 dB/)
+  assert.match(text, /levels: vocals -16 dB, drums -24 dB, bass -28 dB, other -30 dB/)
+})
+
+/**
+ * A heard window of a post comes with its evidence sheet: attached as an image after the keyframes and before the
+ * sound's picture, its data URL stripped from the JSON, and a line saying how to read it; pending says why, with no
+ * image. Break-verified: dropping the sheet from clipSection's blocks, or leaving its data URL in the JSON, turns this red.
+ */
+test("view on a post's heard window attaches its evidence sheet and says how to read it", async () => {
+  const sheet = {
+    status: 'ready', fromSec: 1, toSec: 4, width: 1292, height: 610, dataUrl: 'data:image/webp;base64,U0hFRVQ=',
+    frames: [{ atSec: 1.25 }], words: [{ atSec: 1.3, text: 'hi' }], stems: ['vocals', 'drums', 'bass', 'other'], frequencyHz: { min: 20, max: 20000 }, soundsMarked: 1,
+  }
+  const clip = {
+    contentId: 'post-1', type: 'video', fromSec: 1, toSec: 4, durationSeconds: 6,
+    sound: { kind: 'sound', fromSec: 1, toSec: 4, loudness: { integratedLufs: -14 }, onsets: [] },
+    audioMap: { status: 'ready', window: AUDIO_WINDOW },
+    sheet,
+  }
+  const mcp = await connect(fakeClient({ view: async () => ({ context: { clip }, participant: null, participants: [] }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, sound: true } })
+  const text = res.content[0].text
+  assert.match(text, /evidence sheet, 1\.0s to 4\.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem \(vocals, drums, bass, other;/)
+  assert.match(text, /its 1 sound candidate marked on the stem each is loudest in, numbered as listed under sound candidates\. It is attached below\./)
+  assert.doesNotMatch(text, /U0hFRVQ=/)
+  const images = res.content.filter((b) => b.type === 'image')
+  assert.deepEqual(images.map((b) => b.data), ['U0hFRVQ='])
+  assert.ok(res.content.some((b) => b.type === 'text' && b.text === 'Its evidence sheet:'))
+
+  const pending = { ...clip, sheet: { status: 'pending', reason: 'The evidence sheet is drawn once the audio map is ready.' } }
+  const mcp2 = await connect(fakeClient({ view: async () => ({ context: { clip: pending }, participant: null, participants: [] }) }))
+  const res2 = await mcp2.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, sound: true } })
+  assert.match(res2.content[0].text, /evidence sheet: being made \(The evidence sheet is drawn once the audio map is ready\)/)
+  assert.equal(res2.content.filter((b) => b.type === 'image').length, 0)
 })
 
 test('analyze_content says pending when the analysis outlasts the call', async () => {
@@ -5525,5 +5563,5 @@ test('edit_audio splits a file or clips in place, and its outputs name their ste
   const text = clips.content[0].text
   assert.match(text, /^Splitting 2 sources/)
   assert.match(text, /get_status \{ ids: \["j1", "j2"\], kind: "output" \}/)
-  assert.match(text, /voice, music and effects are placed under it/)
+  assert.match(text, /its stems \(vocals, drums, bass, other\) are placed under it/)
 })
