@@ -3238,7 +3238,10 @@ export interface ListContentOptions extends PageOptions, SortOptions<ContentSort
    * `sort` reorders the same relevant set.
    */
   search?: string
-  /** Tracked-account ids. Ids the caller does not own resolve to nothing rather than widening the query. */
+  /**
+   * Your tracked accounts, each by any reference to it: its id or short id, its profile link, its handle, or the
+   * platform's own id for it. One that names none of yours resolves to nothing rather than widening the query.
+   */
   accountIds?: string[]
   /** Only the one-off posts the caller saved by url. */
   addedByYou?: boolean

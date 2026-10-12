@@ -1611,7 +1611,8 @@ export class ContentHero {
 
   /**
    * One tracked account with its performance: content count, totals, averages, top and recent content.
-   * Works for either tier; the tier is reported, not required.
+   * Works for either tier; the tier is reported, not required. `accountId` is any reference to one of your tracked
+   * accounts: its id or short id, its profile link, its handle, or the platform's own id for it.
    */
   async getTrackedAccount(accountId: string): Promise<TrackedAccountDetail> {
     return this.request<TrackedAccountDetail>('GET', `/api/v1/accounts/${encodeURIComponent(accountId)}`)
@@ -1680,8 +1681,9 @@ export class ContentHero {
    * One tracked post in full: engagement, outlier score, hashtags, keywords, mentions, audio info.
    *
    * The transcript is OPT-IN and windowable, because a sixty-minute video is a large document: ask for
-   * `text` or `segments`, and narrow segments with `startMs`/`endMs` or `transcriptSearch`. Throws
-   * NotFoundError both when the post does not exist and when the caller has no relationship to it. Each of the post's
+   * `text` or `segments`, and narrow segments with `startMs`/`endMs` or `transcriptSearch`. `contentId` is any
+   * reference to the post: its id or short id, its link, or the platform's own id for it. Throws NotFoundError when no
+   * tracked post matches it. Each of the post's
    * videos is reported with its state (`video`); once `analyzeContent` kind `video` has downloaded one, `cuts` adds
    * where its picture changes, and `audioMap` adds its audio map window to the summary each video reports.
    */

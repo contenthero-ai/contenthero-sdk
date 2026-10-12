@@ -55,15 +55,16 @@ function mediaRefs(refs: string[] | undefined, { primaryFirst }: { primaryFirst:
 }
 
 /**
- * An account ref: a tracked-account id, a full profile url, or `platform:handle`.
+ * An account ref: a tracked-account id (its UUID or short id), a full profile url, or `platform:handle`.
  *
- * A url carries its own platform, so it needs no prefix. A bare handle cannot say whether it is instagram
- * or youtube, which is why that form takes one.
+ * An id is sent as given and the server resolves it among your tracked accounts. A url carries its own platform, so it
+ * needs no prefix. A bare handle cannot say whether it is instagram or youtube, which is why that form takes one.
  */
 function accountRefs(refs: string[] | undefined) {
   if (!refs?.length) return undefined
   return refs.map((raw) => {
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return raw
+    if (/^[0-9A-Za-z]{8}$/.test(raw)) return raw
     return profileRef(raw)
   })
 }
