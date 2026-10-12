@@ -11,6 +11,8 @@
  *      is still emitted, so the caller can keep polling)
  *   5  limit: a limit refused it (credits, the monthly spend cap, storage, a plan limit); nothing ran and
  *      nothing was charged, and the message says the ways to continue
+ *   6  outdated: the server answered in a shape this CLI could not format; the answer is on stdout as JSON and
+ *      the message says to update
  *
  * SDK errors are mapped here; `CliError` carries an explicit code for problems
  * the CLI itself raises (e.g. no key configured).
@@ -24,6 +26,9 @@ import {
   GenerationInterruptedError,
   LimitError,
   describeLimit,
+  AnswerTally,
+  ContentHeroError,
+  type ContentHero,
 } from '@contenthero/sdk'
 
 export const EXIT = {
@@ -33,7 +38,30 @@ export const EXIT = {
   AUTH: 3,
   TIMEOUT: 4,
   LIMIT: 5,
+  OUTDATED: 6,
 } as const
+
+/** What a CLI older than the server says when it could not format an answer. */
+export const OLDER_CLI_LINE =
+  'This CLI is older than the ContentHero server and could not format this answer. The full answer is below as JSON. ' +
+  'Update it with `npm install -g @contenthero/cli`.'
+
+/** The command's requests (one command per process), so a fault after the server answered is told apart. */
+const tally = new AnswerTally()
+
+/** Record a client's requests for this command (`AnswerTally`). */
+export function observeAnswers(client: ContentHero): void {
+  client.observeResponses((event) => tally.record(event))
+}
+
+/**
+ * The server's answer when `err` is this CLI's own fault after the server answered everything it was asked: a newer
+ * server's shape this CLI could not format. Null for the server's errors and failed requests.
+ */
+export function answerBehindFault(err: unknown): { body: unknown } | null {
+  if (err instanceof ContentHeroError || err instanceof CliError) return null
+  return tally.settledAnswer()
+}
 
 /** An error the CLI raises itself, carrying the exit code it should produce. */
 export class CliError extends Error {

@@ -15,7 +15,8 @@
 import { ContentHero } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import { readConfig, readCredential } from './config.js'
-import { CliError, EXIT } from './errors.js'
+import { CliError, EXIT, observeAnswers } from './errors.js'
+import { CLI_VERSION } from './version.js'
 
 /** Where the active key came from (for diagnostics, never the key itself). */
 export type KeySource = 'flag' | 'env' | 'file' | 'none'
@@ -99,17 +100,11 @@ export function makeClient(command: Command): { client: ContentHero; ctx: Contex
   const client = new ContentHero({
     apiKey: ctx.apiKey,
     baseUrl: ctx.baseUrl,
-    // Tag spends from the CLI as the 'cli' transport channel (the CLI spends
-    // through an api key, so this header is what distinguishes it from raw api).
-    fetch: (input, init) =>
-      fetch(input, {
-        ...init,
-        headers: {
-          ...(init?.headers as Record<string, string> | undefined),
-          'X-ContentHero-Channel': 'cli',
-        },
-      }),
+    // Tag spends from the CLI as the 'cli' transport channel (the CLI spends through an api key, so the channel is
+    // what distinguishes it from raw api), and name this installed version so the server knows who is behind it.
+    client: { channel: 'cli', version: CLI_VERSION },
   })
+  observeAnswers(client)
   activeClients.push(client)
   return { client, ctx }
 }

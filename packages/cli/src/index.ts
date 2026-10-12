@@ -11,7 +11,7 @@
 import { CommanderError } from 'commander'
 import pc from 'picocolors'
 import { buildProgram } from './program.js'
-import { EXIT, errorFieldsFor, exitCodeForError, messageForError } from './errors.js'
+import { EXIT, OLDER_CLI_LINE, answerBehindFault, errorFieldsFor, exitCodeForError, messageForError } from './errors.js'
 import { releaseCliPresence } from './context.js'
 
 /**
@@ -59,6 +59,13 @@ async function main(): Promise<void> {
     // Commander already wrote the message; we only set the exit code.
     if (err instanceof CommanderError) {
       exitCode = err.exitCode === 0 ? EXIT.OK : EXIT.USAGE
+    } else if (answerBehindFault(err)) {
+      // The server answered and this CLI could not format it: the answer is the result, so it goes to stdout as
+      // JSON, and the way out goes to stderr.
+      exitCode = EXIT.OUTDATED
+      process.stdout.write(JSON.stringify(answerBehindFault(err)!.body, null, 2) + '\n')
+      if (process.argv.includes('--human')) process.stderr.write(pc.yellow(OLDER_CLI_LINE) + '\n')
+      else process.stderr.write(JSON.stringify({ error: OLDER_CLI_LINE, exitCode }, null, 2) + '\n')
     } else {
       exitCode = exitCodeForError(err)
       const message = messageForError(err)

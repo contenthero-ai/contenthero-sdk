@@ -20,7 +20,7 @@
  * Reads, plus tracking and moving accounts.
  */
 
-import { chargeSentence, contentVideoLabel, contentVideosPending, describeAccountIdsNotFound, describeLimit, describeAudioMapWindow, describeContentVideo, describeVideoCostDetail, describeSegmentWords, describeWordTiming, statusTarget, type Charge, type ContentAnalysisCostEstimate, type ContentVideoResolution } from '@contenthero/sdk'
+import { chargeSentence, contentVideoLabel, contentVideosPending, describeAccountIdsNotFound, describeLimit, describeContentVideoWindow, describeContentVideo, describeVideoCostDetail, describeSegmentWords, describeWordTiming, statusTarget, type Charge, type ContentAnalysisCostEstimate, type ContentVideoResolution } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -505,7 +505,7 @@ function postVideosText(video: ContentVideos): string {
     head,
     ...video.videos.flatMap((v) => [
       `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`,
-      ...(v.audioMap?.status === 'ready' && v.audioMap.window ? describeAudioMapWindow(v.audioMap.window).map((l) => `    ${l}`) : []),
+      ...describeContentVideoWindow(v).map((l) => `    ${l}`),
     ]),
   ].join('\n')
 }

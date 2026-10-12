@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -360,7 +360,7 @@ test('describeEvidenceSheet reads a ready sheet, and the pending and unavailable
     soundsMarked: 3,
   }
   assert.deepEqual(describeEvidenceSheet(ready), [
-    "evidence sheet, 2.0s to 4.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem (vocals, drums, bass, other; log frequency 20 Hz to 20k Hz, low at the bottom), on one time axis in the video's seconds; its 3 sound candidates marked on the stem each is loudest in, numbered as listed under sound candidates.",
+    "evidence sheet, 2.0s to 4.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem (vocals, drums, bass, other; log frequency 20 Hz to 20k Hz, low at the bottom), on one time axis in the file's seconds (a rendered range's from the start of the range); its 3 sound candidates marked on the stem each is loudest in, numbered as listed under sound candidates.",
   ])
   assert.match(describeEvidenceSheet({ ...ready, soundsMarked: 0 })[0]!, /no sound candidates in this window\.$/)
   assert.deepEqual(describeEvidenceSheet({ status: 'pending', reason: 'The stems are being separated again.' }), ['evidence sheet: being made (The stems are being separated again)'])
@@ -390,4 +390,43 @@ test('a copy reads with its detail, an upgrade under way keeps it readable, and 
   assert.deepEqual(describeVideoCostDetail({ getCost: true, creditsEstimate: 5, videos: [{ stored: null, offered: [] }] }), ['Not downloaded yet.'])
   // An older server reports none of it.
   assert.deepEqual(describeVideoCostDetail({ getCost: true, creditsEstimate: 5 }), [])
+})
+
+/**
+ * An older client never throws on a newer server's audio map: a version it does not know, or a status it does not
+ * know, reads as one line saying to update, on every reader (the map, a post video's line and its window lines). A map
+ * with no version (servers before it was declared) reads as today. An unknown value inside a known format (a stem
+ * this client has no name for) is printed as it came. Break-verified: removing the guard from describeAudioMap throws
+ * on the v1-shaped window below (it has `events`, not `sounds`).
+ */
+test('an audio map in a newer format reads as an update line, never a throw', () => {
+  const newer = 'audio map: ' + NEWER_FORMAT_LINE
+  // A future format: an unknown version with a window this client cannot read (v1's shape, no `sounds`).
+  const v3 = { status: 'ready', version: 3, window: { fromSec: 0, toSec: 6, durationSec: 30, events: [] } } as never
+  assert.doesNotThrow(() => describeAudioMap(v3))
+  assert.deepEqual(describeAudioMap(v3), [newer])
+  assert.equal(describeContentVideo({ copy: { status: 'ready' }, audioMap: v3 }), `ready; ${newer}.`)
+  assert.deepEqual(describeContentVideoWindow({ audioMap: v3 }), [])
+
+  // An unknown status (enum value) reads the same way.
+  const queued = { status: 'queued' } as never
+  assert.deepEqual(describeAudioMap(queued), [newer])
+  assert.equal(describeContentVideo({ copy: { status: 'ready' }, audioMap: queued }), `ready; ${newer}.`)
+
+  // The current version, declared or not, still reads; an unknown stem inside it prints as it came.
+  const window = {
+    fromSec: 0, toSec: 1, durationSec: 1, speech: [],
+    sounds: [{ atSec: 0, endSec: 0.5, stem: 'piano', levelDb: -20, riseDb: 6, vsVoiceDb: null, beatOffsetMs: null, pattern: null,
+      descriptors: { attackMs: 1, decayMs: 10, peakDb: -10, centroidHz: { start: 100, peak: 100, end: 100 }, bandwidthHz: 50, flatness: 0.1, pitchHz: null, lowBandShare: 0.5, stereoWidth: null } }],
+    music: { present: false, tempoBpm: null, beatsSec: [], key: null, mode: null, levelDb: null },
+    ducking: null,
+    loudness: { integratedLufs: null, shortTerm: [] },
+    levels: { vocalsDb: null, drumsDb: null, bassDb: null, otherDb: null },
+  } as never
+  for (const map of [{ status: 'ready', version: 2, window }, { status: 'ready', window }] as never[]) {
+    const lines = describeAudioMap(map)
+    assert.equal(lines[0], 'audio map (free), 0.0s to 1.0s of 1.0s:')
+    assert.match(lines[3]!, / on piano: /)
+    assert.deepEqual(describeContentVideoWindow({ audioMap: map }), lines)
+  }
 })

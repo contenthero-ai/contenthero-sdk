@@ -22,6 +22,7 @@
  */
 
 import { ContentHero } from '@contenthero/sdk'
+import { PACKAGE_VERSION } from './widget/generation.js'
 import { configDir, resolveAuth } from '@contenthero/sdk/credentials'
 
 let cached: ContentHero | undefined
@@ -42,17 +43,10 @@ export function getClient(): ContentHero {
   cached = new ContentHero({
     apiKey,
     baseUrl,
-    // Tag spends from the stdio MCP as the 'mcp' transport channel, matching the
-    // hosted OAuth MCP. The MCP spends through an api key, so this header is what
-    // distinguishes it from a raw api-key or cli caller on credit_transactions.
-    fetch: (input, init) =>
-      fetch(input, {
-        ...init,
-        headers: {
-          ...(init?.headers as Record<string, string> | undefined),
-          'X-ContentHero-Channel': 'mcp',
-        },
-      }),
+    // Tag spends from the stdio MCP as the 'mcp' transport channel, matching the hosted OAuth MCP (the MCP spends
+    // through an api key, so the channel is what distinguishes it from a raw api-key or cli caller on
+    // credit_transactions), and name this installed version so the server knows who is behind it.
+    client: { channel: 'mcp', version: PACKAGE_VERSION },
   })
   return cached
 }

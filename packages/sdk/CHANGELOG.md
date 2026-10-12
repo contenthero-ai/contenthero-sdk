@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- New: an older client never misreads a newer server's audio map. `AudioMapAnswer` ready may carry `version`;
+  `isNewerAudioMap` (with `KNOWN_AUDIO_MAP_VERSION`) treats an unknown version or status as newer, and
+  `describeAudioMap` and `describeContentVideo` then say so in one line (`NEWER_FORMAT_LINE`) instead of throwing.
+  `describeContentVideoWindow(video)` gives a post video's window lines, the one copy the MCP and CLI share.
+- New: `client: { channel, version }` sends `X-ContentHero-Channel` and `X-ContentHero-Client` on every request.
+  `observeResponses(listener)` hears each request (`ResponseEvent`: sent, answered with its body, or failed), and
+  `AnswerTally` keeps them for one unit of work to tell a formatting fault after the server answered from a failed
+  request. An upload's failed PUT is now a `ContentHeroError` with its status.
 - Breaking: `EditAudioRequest.enhanceClips` is now `inPlace`, since it starts a split as well as an enhancement, and
   `EnhanceClipsJob` is now `InPlaceAudioJob`. No alias: the API no longer reads `enhanceClips`.
 - New: `addTrackedAccounts({ accounts, accountType?, brandKitId? })` tracks social accounts by handle or profile URL

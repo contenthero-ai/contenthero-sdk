@@ -7,10 +7,8 @@
  * codes in one place.
  */
 
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 import { Command } from 'commander'
+import { CLI_VERSION } from './version.js'
 import { registerAuth } from './commands/auth.js'
 import { registerConfig } from './commands/config.js'
 import { registerAccount } from './commands/account.js'
@@ -41,19 +39,6 @@ import { registerShare } from './commands/share.js'
 import { registerProject } from './commands/project.js'
 import { registerView } from './commands/view.js'
 
-/** Read our own version from package.json (kept in lockstep with sdk + mcp). */
-function readVersion(): string {
-  try {
-    const here = dirname(fileURLToPath(import.meta.url))
-    const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as {
-      version?: string
-    }
-    return pkg.version ?? '0.0.0'
-  } catch {
-    return '0.0.0'
-  }
-}
-
 export function buildProgram(): Command {
   const program = new Command()
 
@@ -62,7 +47,7 @@ export function buildProgram(): Command {
     .description(
       'ContentHero CLI: generate media, run the content pipeline, and read your brand and research context.',
     )
-    .version(readVersion(), '-v, --version', 'print the CLI version')
+    .version(CLI_VERSION, '-v, --version', 'print the CLI version')
     .option('--json', 'output raw JSON (the default)')
     .option('--human', 'render human-readable output instead of JSON')
     .option('--api-key <key>', 'API key (overrides env and the stored credential)')

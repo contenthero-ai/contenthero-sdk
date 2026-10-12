@@ -20,7 +20,8 @@ export type {
   MediaListSource,
   MediaListType,
 } from './types.js'
-export type { ContentHeroOptions, FetchLike } from './client.js'
+export { AnswerTally } from './answers.js'
+export type { ClientIdentity, ContentHeroOptions, FetchLike, ResponseEvent, ResponseListener } from './client.js'
 export type {
   References,
   GenerateRequest,
@@ -357,4 +358,4 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'
+export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'

@@ -27,6 +27,7 @@ const WIDGET_META = {
   'openai/outputTemplate': GENERATION_WIDGET_URI,
 } as const
 import { GENERATION_WIDGET_URI } from './widget-resource.js'
+import { lastAnswer } from './answer-capture.js'
 import type {
   Avatar,
   AvatarListResult,
@@ -128,7 +129,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeAudioMapWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2582,7 +2583,7 @@ function postVideoLines(video: ContentDetail['video']): string[] {
     head,
     ...video.videos.flatMap((v) => [
       `  ${contentVideoLabel(v)}: ${describeContentVideo(v)}`,
-      ...(v.audioMap?.status === 'ready' && v.audioMap.window ? describeAudioMapWindow(v.audioMap.window).map((l) => `    ${l}`) : []),
+      ...describeContentVideoWindow(v).map((l) => `    ${l}`),
     ]),
   ]
 }
@@ -2788,10 +2789,30 @@ export function errorResult(err: unknown): CallToolResult {
     const wait = err.retryAfter != null ? ` Retry in ${err.retryAfter}s.` : ' Retry the same call in a few seconds.'
     return text(`${err.message}${wait}`, true)
   }
-  if (err instanceof ContentHeroError || err instanceof Error) {
-    return text(err.message, true)
-  }
+  if (err instanceof ContentHeroError) return text(err.message, true)
+  // Not the server's error, and the server did answer: this connector could not read that answer (a newer server's
+  // shape). Hand the answer over as data with the way out, as a success, so the agent can still use it.
+  const answered = lastAnswer()
+  if (answered) return olderConnectorResult(answered.body)
+  if (err instanceof Error) return text(err.message, true)
   return text('Unknown error', true)
+}
+
+/** What a connector older than the server says above an answer it could not format. */
+export const OLDER_CONNECTOR_LINE =
+  'This connector is older than the ContentHero server and could not format this answer. The full answer is below as ' +
+  'data. Update the ContentHero connector to read it in words: restarting the app that runs it picks up the newest version.'
+
+/** A server answer this connector could not format: the update line, then the answer itself as text and as data. */
+export function olderConnectorResult(body: unknown): CallToolResult {
+  const structured = isPlainRecord(body) ? body : { answer: body }
+  return {
+    content: [
+      { type: 'text', text: OLDER_CONNECTOR_LINE },
+      { type: 'text', text: JSON.stringify(body, null, 2) ?? 'null' },
+    ],
+    structuredContent: structured,
+  }
 }
 
 // -- editor / canvas ops ------------------------------------------------------
@@ -2970,11 +2991,24 @@ function renderedSection(
         ": over this result's size limit. Ask for fewer frames, a narrower range, a smaller width, or a region.",
     )
   }
+  // A heard range's sound analysis, and its evidence sheet within what is left of the allowance.
+  const audioMap = isPlainRecord(rendered.audioMap) ? (rendered.audioMap as unknown as AudioMapAnswer) : null
+  lines.push(...describeAudioMap(audioMap))
+  const evidence = isPlainRecord(rendered.sheet) ? (rendered.sheet as unknown as EvidenceSheet) : null
+  const evidencePicture = evidence?.status === 'ready' ? parseDataUrl(evidence.dataUrl) : null
+  const drawn = admitWithinBudget(evidencePicture ? [evidencePicture] : [], shown.remaining)
+  if (evidence && (evidence.status !== 'ready' || drawn.admitted.length > 0)) {
+    lines.push(...describeEvidenceSheet(evidence).map((l) => (evidence.status === 'ready' ? `${l} It is attached below.` : l)))
+  }
+  if (drawn.dropped > 0) lines.push("The evidence sheet was not attached: over this result's size limit. Ask for a narrower range.")
+  if (evidence?.status === 'ready') {
+    json = { ...json, sheet: { ...evidence, dataUrl: drawn.admitted.length > 0 ? '[attached as an image below]' : '[not attached: over the size limit]' } }
+  }
   const failure = describeRenderFailure(rendered)
   if (failure) lines.push(failure)
   const warned = describeCodeWarnings(Array.isArray(rendered.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
   if (warned) lines.push(warned)
-  return { json, lines, images: shown.admitted, remaining: shown.remaining }
+  return { json, lines, images: [...shown.admitted, ...drawn.admitted], remaining: drawn.remaining }
 }
 
 /**

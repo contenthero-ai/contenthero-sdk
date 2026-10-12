@@ -77,6 +77,7 @@ import {
   isSourceView,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
+import { observeClient, runToolCall } from './answer-capture.js'
 
 
 /**
@@ -1136,7 +1137,9 @@ const MEDIA_UPLOAD_BATCH_MAX = 25
  * read through list_models and get_model, and the backend client is resolved per call.
  */
 export function registerTools(server: McpServer, opts: RegisterToolsOptions): void {
-  const { getClient } = opts
+  // Every client a tool resolves records the server's answers into the call that asked (`answer-capture`), so a
+  // formatting fault after the server answered still hands that answer over (`errorResult`).
+  const getClient: GetClient = async (extra) => observeClient(await opts.getClient(extra))
   const jobWait = opts.jobWait ?? { waitMs: JOB_WAIT_MS, pollMs: JOB_POLL_MS }
 
   /**
@@ -1261,7 +1264,21 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       shape && typeof shape === 'object' && !(shape instanceof z.ZodType)
         ? z.object(shape as z.ZodRawShape).strict()
         : shape
-    return rawRegisterTool(name, { ...config, inputSchema: strict } as never, cb as never)
+    // THE MCP-WIDE NET FOR A CONNECTOR OLDER THAN THE SERVER. Each call runs in its own answer slot (`answer-capture`),
+    // and a fault no tool caught goes through `errorResult` like the ones they do, so a formatting fault after the
+    // server answered hands that answer over on every tool, including the ones written after this line.
+    const inCall =
+      typeof cb === 'function'
+        ? (...args: unknown[]) =>
+            runToolCall(async () => {
+              try {
+                return await (cb as (...a: unknown[]) => unknown)(...args)
+              } catch (err) {
+                return errorResult(err)
+              }
+            })
+        : cb
+    return rawRegisterTool(name, { ...config, inputSchema: strict } as never, inCall as never)
   }) as typeof server.registerTool
 
   /**
@@ -1991,7 +2008,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // its own (the route reads the file's length, which costs nothing). A file whose length cannot
       // be read answers a null price that says it is known only once transcribed.
       description:
-        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='segments'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
+        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='words'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
       inputSchema: {
         audioUrl: z.string().optional().describe('Public URL of the audio file to transcribe. Pass this or contentId.'),
         contentId: z
@@ -4670,7 +4687,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'View',
       annotations: READ,
       description:
-        "See what the user is looking at, and see or hear your own work. With no render input it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. It is fast and does not disturb the page. Set capture to also get a picture of the user's screen as shown now, including unsaved and transient state; capturing takes a moment and briefly interrupts the page. To see your work as it will play, rendered from the saved project: render shows one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for an editor timeline, frames, perSecond over a range, or count over a range name several frames, which come back one by one when they fit one result and otherwise as contact sheets with each frame's number under its tile, in pages. sound renders a range of the mix as an export mixes it and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured. To see and hear a source rather than your edit, name a clip of the user's with assetId or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec. Its frames come spread across the window, at the seconds atSec names, or perSecond across it, in pages; layout tiles a source's frames into contact sheets, each frame labeled with its second; chosen by size when not named. A source read carries the source alone, never the live context. sound measures the window as it is, beside any frames; with video you watch it play. On any stored source (a post's video, a library file, a clip's source), every view also carries its sound analysis for the window read: speech, sound candidates with their measured descriptors, levels against the voice, offset from the beat and repetition pattern, music and beats, loudness, and each stem's level; free, made once per file, and pending the first time its sound is read. With sound, the window also comes as one evidence sheet: its frames, the spoken words and a spectrogram strip per stem on one time axis, each sound candidate marked by its number. A candidate is measured, never named: judge what it is from its strip and its descriptors. A render is a job: what finishes within the call comes back with a renderId, and the rest is read by calling again with renderId and page. Renders are ephemeral, count against nothing and need no live tab, only a projectId when no one is viewing. Check your work here, never with export, which makes a file the user keeps. Requires the context:read scope.",
+        "See what the user is looking at, and see or hear your own work. With no render input it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. It is fast and does not disturb the page. Set capture to also get a picture of the user's screen as shown now, including unsaved and transient state; capturing takes a moment and briefly interrupts the page. To see your work as it will play, rendered from the saved project: render shows one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for an editor timeline, frames, perSecond over a range, or count over a range name several frames, which come back one by one when they fit one result and otherwise as contact sheets with each frame's number under its tile, in pages. sound renders a range of the mix as an export mixes it and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. Its sound is also analyzed and drawn as one evidence sheet, as a source's window is below, on the sound's own seconds from the start of the range; the measurement stays the loudness to deliver by. video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured. To see and hear a source rather than your edit, name a clip of the user's with assetId or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec. Its frames come spread across the window, at the seconds atSec names, or perSecond across it, in pages; layout tiles a source's frames into contact sheets, each frame labeled with its second; chosen by size when not named. A source read carries the source alone, never the live context. sound measures the window as it is, beside any frames; with video you watch it play. On any stored source (a post's video, a library file, a clip's source), every view also carries its sound analysis for the window read: speech, sound candidates with their measured descriptors, levels against the voice, offset from the beat and repetition pattern, music and beats, loudness, and each stem's level; free, made once per file, and pending the first time its sound is read. With sound, the window also comes as one evidence sheet: its frames, the spoken words and a spectrogram strip per stem on one time axis, each sound candidate marked by its number. A candidate is measured, never named: judge what it is from its strip and its descriptors. A render is a job: what finishes within the call comes back with a renderId, and the rest is read by calling again with renderId and page. Renders are ephemeral, count against nothing and need no live tab, only a projectId when no one is viewing. Check your work here, never with export, which makes a file the user keeps. Requires the context:read scope.",
       inputSchema: {
         projectId: z.string().optional().describe("The project to view or render. Omit for the surface the user is on now. Needed to render when no one is viewing."),
         capture: z.boolean().optional().describe("Also return a picture of the user's screen as shown now, including unsaved and transient state. Use it only when the task depends on what the screen shows; to see your work, render it instead."),

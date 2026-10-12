@@ -518,7 +518,7 @@ export function describeEvidenceSheet(sheet: EvidenceSheet | null | undefined): 
   return [
     `evidence sheet, ${sec1(sheet.fromSec)} to ${sec1(sheet.toSec)}: frames along the top, the spoken words under them, then one spectrogram ` +
       `strip per stem (${sheet.stems.join(', ')}; log frequency ${hz(sheet.frequencyHz.min)} Hz to ${hz(sheet.frequencyHz.max)} Hz, low at the bottom), ` +
-      `on one time axis in the video's seconds; ${marked}.`,
+      `on one time axis in the file's seconds (a rendered range's from the start of the range); ${marked}.`,
   ]
 }
 
@@ -537,14 +537,49 @@ export function describeWordTiming(transcript: { wordTimed?: boolean } | null | 
 }
 
 /**
+ * What a reader is told of an answer in a format newer than this client reads, after the answer's own name. Every
+ * surface (the MCP and the CLI) prints it, so it names both.
+ */
+export const NEWER_FORMAT_LINE = 'in a newer format than this version of ContentHero reads; update the connector or CLI to read it'
+
+/** The audio map format this client reads (MAP v2). */
+export const KNOWN_AUDIO_MAP_VERSION = 2
+
+const AUDIO_MAP_STATUSES: ReadonlySet<string> = new Set(['ready', 'pending', 'unavailable'])
+
+/**
+ * Whether an audio map answer is in a format newer than this client reads: a status it does not know, or a declared
+ * version other than the one it reads. A ready answer with no version is the current format (servers before the
+ * version was declared). The ONE check every audio map reader goes through, so an older client says to update
+ * instead of reading a shape it was never built for.
+ */
+export function isNewerAudioMap(answer: AudioMapAnswer): boolean {
+  const status: unknown = (answer as { status?: unknown }).status
+  if (typeof status !== 'string' || !AUDIO_MAP_STATUSES.has(status)) return true
+  const version: unknown = (answer as { version?: unknown }).version
+  return status === 'ready' && version !== undefined && version !== KNOWN_AUDIO_MAP_VERSION
+}
+
+/**
  * A video's audio map as a reader got it, in lines: being measured (free, so asking again costs nothing), why it is
- * unavailable, or its summary and the window read, whichever came back.
+ * unavailable, or its summary and the window read, whichever came back; in a newer format, that the client needs
+ * updating.
  */
 export function describeAudioMap(answer: AudioMapAnswer | null | undefined): string[] {
   if (!answer) return []
+  if (isNewerAudioMap(answer)) return [`audio map: ${NEWER_FORMAT_LINE}`]
   if (answer.status === 'pending') return ['audio map: the sound analysis is still being made: read this window again to get it']
   if (answer.status === 'unavailable') return [`audio map: unavailable (${answer.reason.trim().replace(/\.+$/, '')})`]
   return [...(answer.summary ? [describeAudioMapSummary(answer.summary)] : []), ...(answer.window ? describeAudioMapWindow(answer.window) : [])]
+}
+
+/**
+ * A post video's audio map window as lines of their own, under the video's line (`describeContentVideo` carries its
+ * summary): empty when no window was read, or when the map is newer than this client reads (that line says so).
+ */
+export function describeContentVideoWindow(video: Pick<ContentVideo, 'audioMap'>): string[] {
+  const map = video.audioMap
+  return map?.status === 'ready' && !isNewerAudioMap(map) && map.window ? describeAudioMapWindow(map.window) : []
 }
 
 /**
@@ -569,7 +604,7 @@ export function describeContentVideo(video: ContentVideo): string {
             ? `unavailable: ${c.reason.trim().replace(/\.+$/, '')}`
             : 'not downloaded yet'
   const map = video.audioMap
-  const mapLine = !map ? null : map.status === 'ready' ? (map.summary ? describeAudioMapSummary(map.summary) : null) : describeAudioMap(map)[0]!
+  const mapLine = !map ? null : map.status === 'ready' && !isNewerAudioMap(map) ? (map.summary ? describeAudioMapSummary(map.summary) : null) : describeAudioMap(map)[0]!
   return `${state}${video.cuts ? `; ${describeContentVideoCuts(video.cuts)}` : ''}${mapLine ? `; ${mapLine}` : ''}.`
 }
 

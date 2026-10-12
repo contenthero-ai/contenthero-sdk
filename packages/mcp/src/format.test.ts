@@ -849,3 +849,10 @@ test("a finished split's outputs are named by their stem", () => {
   assert.match(out, /sp1-1 \(vocals\)/)
   assert.match(out, /sp1-4 \(other\)/)
 })
+
+/** Outside a tool call there is no answer to hand over, so errorResult reports a fault as it always did. */
+test('errorResult outside a tool call reports a fault as an error', () => {
+  const r = errorResult(new TypeError("Cannot read properties of undefined (reading 'length')"))
+  assert.equal(r.isError, true)
+  assert.equal(r.structuredContent, undefined)
+})

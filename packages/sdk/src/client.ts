@@ -197,7 +197,29 @@ export interface ContentHeroOptions {
   baseUrl?: string
   /** Custom fetch implementation. Defaults to the global `fetch`. */
   fetch?: FetchLike
+  /**
+   * Which ContentHero client is calling, sent on every request: `channel` as `X-ContentHero-Channel` (it attributes
+   * spends to the MCP or the CLI) and `channel/version` as `X-ContentHero-Client` (it tells the server which installed
+   * clients are behind it). Omit for a direct SDK caller.
+   */
+  client?: ClientIdentity
 }
+
+/** A ContentHero client by surface and installed version. */
+export interface ClientIdentity {
+  channel: 'mcp' | 'cli'
+  version: string
+}
+
+/**
+ * One request as a response listener hears it, in the caller's async context: `sent` as it leaves, then `answered`
+ * with the parsed body once the server answered it successfully, or `failed` (an error response or no response). A
+ * surface uses it to keep the server's answer for a call, so a formatting fault after the server answered can still
+ * hand that answer over, and a failed request is never mistaken for one.
+ */
+export type ResponseEvent = { type: 'sent' } | { type: 'answered'; body: unknown } | { type: 'failed' }
+
+export type ResponseListener = (event: ResponseEvent) => void
 
 const DEFAULT_BASE_URL = 'https://app.contenthero.ai'
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed'])
@@ -214,6 +236,9 @@ export class ContentHero {
    */
   readonly baseUrl: string
   private readonly fetchImpl: FetchLike
+  /** The identity headers every request carries (`ContentHeroOptions.client`), empty for a direct SDK caller. */
+  private readonly identityHeaders: Record<string, string>
+  private readonly responseListeners = new Set<ResponseListener>()
   /** Per-project last-touched timestamp (ms). Presence is lit SERVER-SIDE (every project-scoped route broadcasts
    *  the badge), so this no longer drives per-call pings; it records which projects this client operated on so
    *  releaseProjectActivity / flushRelease can clear their badges promptly on exit, and debounces any explicit
@@ -241,6 +266,18 @@ export class ContentHero {
       '',
     )
     this.fetchImpl = fetchImpl
+    this.identityHeaders = options.client
+      ? { 'X-ContentHero-Channel': options.client.channel, 'X-ContentHero-Client': `${options.client.channel}/${options.client.version}` }
+      : {}
+  }
+
+  /**
+   * Hear each request: sent, then answered or failed (`ResponseEvent`). Returns the function that stops listening. A
+   * listener that throws is ignored: observing an answer never fails the call that got it.
+   */
+  observeResponses(listener: ResponseListener): () => void {
+    this.responseListeners.add(listener)
+    return () => this.responseListeners.delete(listener)
   }
 
   /**
@@ -1061,14 +1098,23 @@ export class ContentHero {
     // Falls back to Content-Type so an older API that does not return
     // uploadHeaders keeps working, which is what makes the two deployable in
     // either order.
-    const put = await this.fetchImpl(created.uploadUrl, {
-      method: 'PUT',
-      headers: created.uploadHeaders ?? { 'Content-Type': opts.contentType },
-      body: data as BodyInit,
-    })
+    // The PUT goes to storage, not through `request`, so its failure is reported to response listeners here: a failed
+    // upload is never mistaken for this client misreading an answer.
+    let put: Response
+    try {
+      put = await this.fetchImpl(created.uploadUrl, {
+        method: 'PUT',
+        headers: created.uploadHeaders ?? { 'Content-Type': opts.contentType },
+        body: data as BodyInit,
+      })
+    } catch (err) {
+      this.notifyResponse({ type: 'failed' })
+      throw err
+    }
     if (!put.ok) {
+      this.notifyResponse({ type: 'failed' })
       const detail = await put.text().catch(() => '')
-      throw new Error(`Upload PUT failed (HTTP ${put.status})${detail ? `: ${detail}` : ''}`)
+      throw new ContentHeroError(`Upload PUT failed (HTTP ${put.status})${detail ? `: ${detail}` : ''}`, { status: put.status })
     }
     return this.completeMediaUpload(created.outputId)
   }
@@ -2281,6 +2327,7 @@ export class ContentHero {
   /** Issue an authenticated request and map non-2xx responses to typed errors. `signal` cuts it (a wait's deadline). */
   private async request<T>(method: string, path: string, body?: unknown, init: { signal?: AbortSignal } = {}): Promise<T> {
     const headers: Record<string, string> = {
+      ...this.identityHeaders,
       Authorization: `Bearer ${this.apiKey}`,
       Accept: 'application/json',
     }
@@ -2294,14 +2341,27 @@ export class ContentHero {
       if (typeof pid === 'string' && pid) this.activityPingedAt.set(pid, Date.now())
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      ...(init.signal ? { signal: init.signal } : {}),
-    })
+    this.notifyResponse({ type: 'sent' })
+    let response: Response
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        ...(init.signal ? { signal: init.signal } : {}),
+      })
+    } catch (err) {
+      this.notifyResponse({ type: 'failed' })
+      throw err
+    }
 
-    const text = await response.text()
+    let text: string
+    try {
+      text = await response.text()
+    } catch (err) {
+      this.notifyResponse({ type: 'failed' })
+      throw err
+    }
     let data: unknown = undefined
     let nonJson = false
     if (text) {
@@ -2314,9 +2374,22 @@ export class ContentHero {
     }
 
     if (!response.ok) {
+      this.notifyResponse({ type: 'failed' })
       throw errorFromResponse(response.status, data, { requestId: response.headers.get('x-vercel-id') ?? undefined, nonJson })
     }
+    this.notifyResponse({ type: 'answered', body: data })
     return data as T
+  }
+
+  /** Tell every response listener; one that throws is ignored, so observing never fails the call. */
+  private notifyResponse(event: ResponseEvent): void {
+    for (const listener of this.responseListeners) {
+      try {
+        listener(event)
+      } catch {
+        // Observing an answer never fails the call that got it.
+      }
+    }
   }
 }
 

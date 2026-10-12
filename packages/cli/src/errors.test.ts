@@ -56,3 +56,20 @@ test('a limit refusal exits 5, says its message and ways to continue, and names 
   assert.deepEqual(errorFieldsFor(err), { code: 'spend_cap_reached', actions })
   assert.deepEqual(errorFieldsFor(new ContentHeroError('boom')), {})
 })
+
+/**
+ * A CLI older than the server: a fault of its own after the server answered everything is told apart from the
+ * server's errors and from failed requests, so the answer goes out with the update line instead of a crash.
+ * Break-verified: returning the tally's answer for a ContentHeroError turns the second assertion red.
+ */
+test('answerBehindFault gives the answer only for this CLI\'s own fault after the server answered', async () => {
+  const { ContentHero, ContentHeroError } = await import('@contenthero/sdk')
+  const { answerBehindFault, observeAnswers, CliError } = await import('./errors.js')
+  const body = { id: 'c1' }
+  const client = new ContentHero({ apiKey: 'ch_live_test', baseUrl: 'https://example.test', fetch: async () => new Response(JSON.stringify(body), { status: 200 }) })
+  observeAnswers(client)
+  await client.getStatus('x').catch(() => {})
+  assert.deepEqual(answerBehindFault(new TypeError("Cannot read properties of undefined (reading 'length')")), { body })
+  assert.equal(answerBehindFault(new ContentHeroError('from the server')), null)
+  assert.equal(answerBehindFault(new CliError('bad flag')), null)
+})

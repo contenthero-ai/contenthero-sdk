@@ -1673,3 +1673,44 @@ test('addTrackedAccounts throws PlanLimitError when none could be tracked', asyn
     (err: unknown) => err instanceof PlanLimitError && err.feature === 'inspiration_accounts' && err.limit === 3,
   )
 })
+
+/**
+ * A surface's identity rides every request, and response listeners hear each request: sent, then answered with the
+ * body or failed (an error response or none). This is what lets the MCP and the CLI tell their own formatting fault
+ * from a failed request. Break-verified: dropping the failed notice on an error response makes the second tally settle.
+ */
+test('client identity headers and response events', async () => {
+  const { AnswerTally } = await import('./answers.js')
+  const { fetch, calls } = stubFetch([{ status: 200, body: { id: 'a' } }, { status: 500, body: { error: 'down' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, client: { channel: 'mcp', version: '9.9.9' } })
+  const events: unknown[] = []
+  const tally = new AnswerTally()
+  const stop = client.observeResponses((e) => {
+    events.push(e)
+    tally.record(e)
+  })
+  await client.getStatus('x').catch(() => {})
+  const headers = calls[0]!.init!.headers as Record<string, string>
+  assert.equal(headers['X-ContentHero-Channel'], 'mcp')
+  assert.equal(headers['X-ContentHero-Client'], 'mcp/9.9.9')
+  assert.deepEqual(events, [{ type: 'sent' }, { type: 'answered', body: { id: 'a' } }])
+  assert.deepEqual(tally.settledAnswer(), { body: { id: 'a' } })
+
+  await assert.rejects(client.getStatus('y'))
+  assert.deepEqual(events.slice(2), [{ type: 'sent' }, { type: 'failed' }])
+  assert.equal(tally.settledAnswer(), null)
+
+  const offline = new ContentHero({ apiKey: 'ch_live_test', fetch: (async () => { throw new TypeError('fetch failed') }) as FetchLike })
+  const offlineTally = new AnswerTally()
+  offline.observeResponses((e) => offlineTally.record(e))
+  await assert.rejects(offline.getStatus('z'))
+  assert.equal(offlineTally.settledAnswer(), null)
+
+  stop()
+  await client.getStatus('w').catch(() => {})
+  assert.equal(events.length, 4)
+
+  const plain = stubFetch([{ status: 200, body: {} }])
+  await new ContentHero({ apiKey: 'ch_live_test', fetch: plain.fetch }).getStatus('v').catch(() => {})
+  assert.equal((plain.calls[0]!.init!.headers as Record<string, string>)['X-ContentHero-Client'], undefined)
+})

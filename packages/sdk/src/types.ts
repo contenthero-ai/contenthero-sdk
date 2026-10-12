@@ -3145,9 +3145,9 @@ export interface AudioMapSummary {
 }
 
 /**
- * A heard window of a post's video drawn as one picture (`view` with `contentId` and `sound`): its frames along the
- * top, the spoken words under them, then one spectrogram strip per stem in `stems` order (log frequency over
- * `frequencyHz`, low at the bottom), all on one time axis in the video's seconds. Each of the window's sound candidates
+ * A heard window drawn as one picture (`view` with `sound`, of a source's window or a range of your edit): its frames
+ * along the top, the spoken words under them, then one spectrogram strip per stem in `stems` order (log frequency over
+ * `frequencyHz`, low at the bottom), all on one time axis in the file's seconds. Each of the window's sound candidates
  * (`audioMap.window.sounds`) is marked on the strip of the stem it is loudest in, numbered in that list's order.
  * Pending while the audio map or its stems are being made.
  */
@@ -3173,7 +3173,13 @@ export type EvidenceSheet =
  * `window` when asked). Made automatically and free once the video's copy is stored; `pending` while it is made.
  */
 export type AudioMapAnswer =
-  | { status: 'ready'; summary?: AudioMapSummary; window?: AudioMapWindow }
+  | {
+      status: 'ready'
+      /** The map's format. A version this client does not know reads as newer (`isNewerAudioMap`); absent is the current one. */
+      version?: number
+      summary?: AudioMapSummary
+      window?: AudioMapWindow
+    }
   | { status: 'pending' }
   | { status: 'unavailable'; reason: string }
 
@@ -3776,7 +3782,10 @@ export interface LiveViewResult {
    * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object carrying
    * the focus (e.g. `focusedSlideId`, `playheadFrame`) and current selection. A short-lived `snapshotUrl` of
    * the live viewport is included ONLY when the read was made with `capture: true`. It may also carry:
-   * - `rendered`: the picture or sound job answer, when the read rendered or read a render.
+   * - `rendered`: the picture or sound job answer, when the read rendered or read a render. A finished sound answer
+   *   also carries `audioMap` (`AudioMapAnswer`, the rendered range's sound analysis, started by asking for sound) and
+   *   `sheet` (`EvidenceSheet`), both on the sound's own seconds from the range's start; its own measurement stays the
+   *   loudness of record.
    * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
    *   `rendered` and its sound measurement here, a sound answer of the same shape as a sound `rendered`.
    * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
@@ -3875,7 +3884,8 @@ export interface ViewInput {
    * toFrame; or a source's window as it is, by fromSec and toSec, beside any frames asked for. Either is measured the
    * same way (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band
    * balance), with a waveform and spectrogram picture and a short-lived link to the audio. A source's sound comes back
-   * as `clip.sound`; alone, it returns no frames unless `atSec`, `count` or `perSecond` names some.
+   * as `clip.sound`; alone, it returns no frames unless `atSec`, `count` or `perSecond` names some. Either is also
+   * analyzed (`audioMap`) and drawn as its evidence sheet (`sheet`) on the first page.
    */
   sound?: boolean
   /**

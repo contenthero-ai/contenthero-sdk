@@ -81,14 +81,15 @@ function parseFrames(value: string): number[] {
 const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 
-/** Every image a render returned, in order: one frame or slide, frames one by one, contact sheets, or a sound's picture. */
+/** Every image a render returned, in order: one frame or slide, frames one by one, contact sheets, or a sound's picture or its evidence sheet. */
 function renderedImages(rendered: Record<string, unknown> | null): Buffer[] {
   if (!rendered) return []
   const listed = [rendered.frames, rendered.sheets].flatMap((list) =>
     Array.isArray(list) ? (list as Array<Record<string, unknown>>).map((item) => bufferFromDataUrl(item.dataUrl)) : [],
   )
   const picture = record(rendered.picture) ? bufferFromDataUrl((rendered.picture as Record<string, unknown>).dataUrl) : null
-  return [bufferFromDataUrl(rendered.dataUrl), ...listed, picture].filter((b): b is Buffer => b !== null)
+  const sheet = record(rendered.sheet) ? bufferFromDataUrl((rendered.sheet as Record<string, unknown>).dataUrl) : null
+  return [bufferFromDataUrl(rendered.dataUrl), ...listed, picture, sheet].filter((b): b is Buffer => b !== null)
 }
 
 /** Every image a view returned, in order: the render and the range's sound beside it, or a source's page of keyframes or contact sheets, its evidence sheet and its sound's picture. */
@@ -117,15 +118,22 @@ function numberedPath(base: string, i: number): string {
   return dot > 0 ? `${base.slice(0, dot)}-${i}${base.slice(dot)}` : `${base}-${i}`
 }
 
-/** One render answer's lines, the same for the picture and the sound beside it: measurement, audio, progress, failure. */
+/**
+ * One render answer's lines, the same for the picture and the sound beside it: measurement, audio, a heard range's
+ * audio map and evidence sheet, progress, failure.
+ */
 function renderedLines(rendered: Record<string, unknown> | null): string[] {
   if (!rendered) return []
   const sound = describeSoundMeasurement(rendered)
   const audio = typeof rendered.audioUrl === 'string' ? `The audio, until ${String(rendered.audioExpiresAt)}: ${rendered.audioUrl}` : null
+  const heard = [
+    ...describeAudioMap(record(rendered.audioMap) as AudioMapAnswer | null),
+    ...describeEvidenceSheet(record(rendered.sheet) as EvidenceSheet | null),
+  ]
   const progress = describeRenderProgress(rendered)
   const failure = describeRenderFailure(rendered)
   const warned = describeCodeWarnings(Array.isArray(rendered.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
-  return [sound, audio, progress, failure, warned].filter((line): line is string => Boolean(line))
+  return [sound, audio, ...heard, progress, failure, warned].filter((line): line is string => Boolean(line))
 }
 
 /**
@@ -190,7 +198,7 @@ export function registerView(program: Command): void {
     .option('--from-sec <n>', "start of a source's window, in its own seconds (omit to start at its beginning)", (v) => Number(v))
     .option('--to-sec <n>', "end of a source's window, in its own seconds (omit to run to its end)", (v) => Number(v))
     .option('--at-sec <list>', "frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window, separated by commas", parseSeconds)
-    .option('--save <path>', "write the produced image(s), a render's, or a source's keyframes, a post's evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
+    .option('--save <path>', "write the produced image(s), a render's (with a heard range's evidence sheet), or a source's keyframes, its evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const sound = Boolean(opts.sound)

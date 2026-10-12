@@ -3423,6 +3423,38 @@ test("view attaches a sound's picture and says what it measured", async () => {
   assert.doesNotMatch(res.content[0].text, /V0FWRQ==/)
 })
 
+/**
+ * A heard range of your own edit comes with its sound analysis and evidence sheet, as a source's window does: the sheet
+ * attached after the render, its data URL stripped from the JSON, the measurement still read as the loudness; pending
+ * says why, with no image. Break-verified: dropping the sheet from renderedSection turns this red.
+ */
+test("view on a rendered sound attaches its evidence sheet and its audio map", async () => {
+  const sheet = {
+    status: 'ready', fromSec: 0, toSec: 4, width: 1292, height: 610, dataUrl: 'data:image/webp;base64,UkVOREVS',
+    frames: [{ atSec: 0.4 }], words: [{ atSec: 0.5, text: 'hi' }], stems: ['vocals', 'drums', 'bass', 'other'], frequencyHz: { min: 20, max: 20000 }, soundsMarked: 0,
+  }
+  const rendered = {
+    renderId: 'r4', state: 'done', kind: 'sound', fromFrame: 0, toFrame: 119,
+    loudness: { integratedLufs: -14, truePeakDbtp: -1, loudnessRangeLu: 5, samplePeakDbfs: -1.2 }, onsets: [],
+    audioMap: { status: 'ready', version: 2, window: AUDIO_WINDOW },
+    sheet,
+  }
+  const mcp = await connect(noTabFirst(rendered))
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', sound: true, fromFrame: 0, toFrame: 119 } })
+  const text = res.content[0].text
+  assert.match(text, /Integrated loudness -14 LUFS/)
+  assert.match(text, /music: 118 BPM, A minor, drops 9 dB under speech/)
+  assert.match(text, /evidence sheet, 0\.0s to 4\.0s: frames along the top[^\n]*It is attached below\./)
+  assert.doesNotMatch(text, /UkVOREVS/)
+  assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['UkVOREVS'])
+
+  const pending = { ...rendered, audioMap: { status: 'pending' }, sheet: { status: 'pending', reason: 'The evidence sheet is drawn once the sound analysis is ready: read this window again to get it.' } }
+  const mcp2 = await connect(noTabFirst(pending))
+  const res2 = await mcp2.callTool({ name: 'view', arguments: { projectId: 'p1', sound: true } })
+  assert.match(res2.content[0].text, /evidence sheet: being made \(The evidence sheet is drawn once the sound analysis is ready: read this window again to get it\)/)
+  assert.equal(res2.content.filter((c) => c.type === 'image').length, 0)
+})
+
 test('view forwards the new render inputs, and waits only when it renders', async () => {
   const seen = []
   const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
@@ -5668,4 +5700,48 @@ test('edit_audio splits a file or clips in place, and its outputs name their ste
   assert.match(text, /^Splitting 2 sources/)
   assert.match(text, /get_status \{ ids: \["j1", "j2"\], kind: "output" \}/)
   assert.match(text, /its stems \(vocals, drums, bass, other\) are placed under it/)
+})
+
+/**
+ * PHASE 5 ITEM 9: AN OLDER CONNECTOR NEVER CRASHES ON A NEWER SERVER'S DATA. The case measured 2026-10-12: a connector
+ * built for one audio map shape read another, and its formatter threw after the server answered. Here the server
+ * answers get_content with a map in a shape this connector does not know (undeclared version, so the SDK's version
+ * guard passes it on) and a status enum it does not know; the MCP-wide net hands the answer over as data with the
+ * update line, as a success. A server error and a network failure stay errors. Break-verified: dropping the net's
+ * branch from errorResult turns the first assertions red (the raw TypeError comes back as an error).
+ */
+test('a formatting fault after the server answered returns the answer as data with the update line, on any tool', async () => {
+  const answer = {
+    id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' },
+    video: {
+      copy: { status: 'ready' },
+      videos: [
+        { slide: 0, copy: { status: 'ready' }, audioMap: { status: 'ready', summary: { eventCount: 3 }, window: { events: [] } } },
+        { slide: 1, copy: { status: 'ready' }, audioMap: { status: 'queued' } },
+      ],
+    },
+  }
+  const serving = (status, body) => new ContentHero({
+    apiKey: 'ch_live_test',
+    baseUrl: 'https://example.test',
+    fetch: async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }),
+  })
+  const mcp = await connect(serving(200, answer))
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', audioMap: true } })
+  assert.notEqual(res.isError, true)
+  assert.match(res.content[0].text, /^This connector is older than the ContentHero server and could not format this answer\./)
+  assert.deepEqual(JSON.parse(res.content[1].text), answer)
+  assert.deepEqual(res.structuredContent, answer)
+
+  // The server's own error is still the call's error.
+  const failing = await connect(serving(500, { error: 'Something went wrong on our side.' }))
+  const err = await failing.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.equal(err.isError, true)
+  assert.doesNotMatch(err.content[0].text, /older than the ContentHero server/)
+
+  // No answer at all (the network failed) is still the call's error.
+  const offline = await connect(new ContentHero({ apiKey: 'ch_live_test', baseUrl: 'https://example.test', fetch: async () => { throw new TypeError('fetch failed') } }))
+  const off = await offline.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.equal(off.isError, true)
+  assert.equal(off.content[0].text, 'fetch failed')
 })

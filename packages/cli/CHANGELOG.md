@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- New: a CLI older than the server never crashes on its answer. When formatting fails after the server answered, the
+  answer goes to stdout as JSON with a line on stderr saying to update, and the CLI exits 6. Requests name this version
+  (`X-ContentHero-Client`).
 - Breaking: `audio enhance-clips` and `audio split-clips` send the in-place flag by its new API name, `inPlace`
   (their flags are unchanged). Earlier CLI versions' in-place commands no longer work, since the API no longer reads
   `enhanceClips`.
