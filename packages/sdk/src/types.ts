@@ -3033,6 +3033,10 @@ export interface AudioMapSound {
   riseDb: number
   /** Its level minus the voice's around it; null when no one speaks near it. */
   vsVoiceDb: number | null
+  /** Its signed offset from the nearest beat in milliseconds (negative: early); null without a beat near it. */
+  beatOffsetMs: number | null
+  /** The repetition pattern it belongs to (sounds sharing a number repeat as one figure); null when it repeats in none. */
+  pattern: number | null
   descriptors: AudioMapSoundDescriptors
 }
 
