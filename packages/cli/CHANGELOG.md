@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.27
+
 - New: a CLI older than the server never crashes on its answer. When formatting fails after the server answered, the
   answer goes to stdout as JSON with a line on stderr saying to update, and the CLI exits 6. Requests name this version
   (`X-ContentHero-Client`).

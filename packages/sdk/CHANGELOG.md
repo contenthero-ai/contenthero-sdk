@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.30
+
 - New: an older client never misreads a newer server's audio map. `AudioMapAnswer` ready may carry `version`;
   `isNewerAudioMap` (with `KNOWN_AUDIO_MAP_VERSION`) treats an unknown version or status as newer, and
   `describeAudioMap` and `describeContentVideo` then say so in one line (`NEWER_FORMAT_LINE`) instead of throwing.

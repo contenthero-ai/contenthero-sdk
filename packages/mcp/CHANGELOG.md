@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.37
+
 - New: a connector older than the server never crashes on its answer. When formatting fails after the server answered,
   any tool returns the answer itself (as text and `structuredContent`) with a line saying to update the connector, as
   a success. A fault no tool caught goes through the same path. Requests name this version (`X-ContentHero-Client`).
