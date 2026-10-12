@@ -1513,6 +1513,16 @@ function parseSheets(sheets: unknown): Array<{ data: string; mimeType: string; a
  */
 const EXACT_VALUES_POINTER = 'Exact values for computing are in the structured data beside this text.'
 
+/**
+ * Structured data that stands alone. ⭐ A host may hand the model `structuredContent` INSTEAD of the text (measured on
+ * claude.ai 2026-09-30, and in Claude Code 2026-10-12: a get_content and a view answered with the JSON alone, the
+ * readable lines never arrived). So structured data always carries the readable text as `summary`: whichever channel
+ * a host shows, the agent reads both what it means and the exact values.
+ */
+export function standaloneStructured(summary: string, data: Record<string, unknown>): Record<string, unknown> {
+  return { summary, ...data }
+}
+
 /** Keyframes of a view clip that did not fit the result. */
 function keyframesNotShown(dropped: number): string {
   return `${dropped} keyframe(s) not shown: too large for this reply. Ask for fewer frames or a narrower fromSec/toSec.`
@@ -2546,7 +2556,9 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
   )
   // The exact values, as the API returned them, for an agent to compute with: the word timing asked for, and each
   // video's audio map window. The text above rounds for reading.
-  return exactData ? { ...result, structuredContent: exactData } : result
+  if (!exactData) return result
+  const summary = result.content.flatMap((c) => (c.type === 'text' ? [c.text] : [])).join('\n')
+  return { ...result, structuredContent: standaloneStructured(summary, exactData) }
 }
 
 /** The parts of a post an agent computes with, exact, when they were asked for; null when none was. */
@@ -3112,7 +3124,7 @@ export function viewResult(
     const { audioMap: _exact, ...readable } = clipped.json
     return {
       content: [{ type: 'text', text: `${clipped.lines.join('\n')}\n\n${JSON.stringify(readable)}` }, ...clipped.blocks],
-      structuredContent: { clip: clipped.json },
+      structuredContent: standaloneStructured(clipped.lines.join('\n'), { clip: clipped.json }),
     }
   }
   const { context, participant, participants } = result

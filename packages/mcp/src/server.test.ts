@@ -2799,7 +2799,10 @@ test('get_content and view carry the exact audio map in structuredContent, besid
   const mcp = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' }, video }) }))
   const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', audioMap: true } })
   assert.match(res.content[0].text, /Exact values for computing are in the structured data beside this text\./)
-  assert.deepEqual(res.structuredContent, { contentId: 'c1', videos: [{ slide: 0, audioMap: { status: 'ready', window: AUDIO_WINDOW } }] })
+  // A host may show the structured data alone, so it stands alone: the readable text rides in it as `summary`.
+  const { summary, ...exact } = res.structuredContent as Record<string, unknown>
+  assert.deepEqual(exact, { contentId: 'c1', videos: [{ slide: 0, audioMap: { status: 'ready', window: AUDIO_WINDOW } }] })
+  assert.equal(summary, res.content[0].text)
   // Nothing exact was asked for: no structured data, no pointer.
   const plain = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' } }) }))
   const bare = await plain.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
@@ -2809,7 +2812,9 @@ test('get_content and view carry the exact audio map in structuredContent, besid
   const clip = { contentId: 'post-1', type: 'video', fromSec: 1, toSec: 4, audioMap: { status: 'ready', window: AUDIO_WINDOW } }
   const viewer = await connect(fakeClient({ view: async () => ({ clip }) }))
   const seen = await viewer.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4 } })
-  assert.deepEqual(seen.structuredContent, { clip })
+  const { summary: seenSummary, ...seenExact } = seen.structuredContent as Record<string, unknown>
+  assert.deepEqual(seenExact, { clip })
+  assert.match(String(seenSummary), /Exact values for computing are in the structured data beside this text\./)
   assert.match(seen.content[0].text, /Exact values for computing are in the structured data beside this text\./)
   // The map is in the structured data once; the text's JSON carries the clip without it.
   assert.doesNotMatch(seen.content[0].text, /"audioMap"/)
@@ -2830,7 +2835,8 @@ test('get_content shows each word at its exact time when words are asked for', a
   const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', transcript: 'words' } })
   assert.deepEqual(asked, { transcript: 'words' })
   assert.match(res.content[0].text, /\[1\.2s\] Hello there\.\n {4}Hello@1\.2s-1\.48s there\.@1\.505s-1\.85s/)
-  assert.deepEqual(res.structuredContent, { contentId: 'c1', transcript })
+  const { summary: _summary, ...exactWords } = res.structuredContent as Record<string, unknown>
+  assert.deepEqual(exactWords, { contentId: 'c1', transcript })
 
   const unTimed = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' }, transcript: { status: 'complete', language: 'en', wordTimed: false, segments: [{ startMs: 0, endMs: 2000, text: 'Hi', speaker: null }] } }) }))
   const phrases = await unTimed.callTool({ name: 'get_content', arguments: { contentId: 'c1', transcript: 'words' } })
