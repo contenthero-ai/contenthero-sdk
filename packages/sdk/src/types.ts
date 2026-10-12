@@ -1629,10 +1629,11 @@ export interface UpdateBrandKitInput {
    * Linked tracked accounts, declarative: pass the whole set and what is absent is unlinked. Undefined leaves
    * a list untouched, `[]` clears it.
    *
-   * The two lists mean opposite things and stay separate: `brandAccounts` are the user's OWN profiles,
+   * The two lists mean opposite things and stay separate: `brandAccounts` are the brand's own profiles, linked as the
+   * kit's brand side (linking never marks them as the user's own),
    * `inspirationAccounts` are competitors and creators they watch.
    *
-   * An entry is either an existing tracked-account id, or `{ platform?, handleOrUrl }` to ADD a profile that
+   * An entry is either a tracked account by any reference (id, short id, profile link, handle, platform id), or `{ platform?, handleOrUrl }` to ADD a profile that
    * is not tracked yet. Adding one is what STARTS ingestion: it sets the account pending, and the dispatcher
    * drains pending accounts every 5 minutes. A full profile url carries its own platform, so `platform` is
    * only needed for a bare handle.

@@ -55,7 +55,7 @@ function mediaRefs(refs: string[] | undefined, { primaryFirst }: { primaryFirst:
 }
 
 /**
- * An account ref: a tracked-account id (its UUID or short id), a full profile url, or `platform:handle`.
+ * An account ref: a tracked account by any reference (id, short id, profile url, handle), or `platform:handle`.
  *
  * An id is sent as given and the server resolves it among your tracked accounts. A url carries its own platform, so it
  * needs no prefix. A bare handle cannot say whether it is instagram or youtube, which is why that form takes one.
@@ -86,7 +86,7 @@ function identityOptions(cmd: Command, mode: 'create' | 'update'): Command {
   return cmd
     .option(
       '--brand-account <ref>',
-      `the owner's OWN profile: a tracked-account id, or a profile url / platform:handle to ADD one. Repeatable${replaces}`,
+      `the brand's own profile, linked as the kit's brand side (linking does not mark it as yours): a tracked account by any reference, or a profile url / platform:handle to ADD one. Repeatable${replaces}`,
       collect,
     )
     .option('--inspiration-account <ref>', `a competitor/creator profile: same forms as --brand-account. Repeatable${replaces}`, collect)
