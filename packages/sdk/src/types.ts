@@ -3035,7 +3035,7 @@ export interface AudioMapSound {
   vsVoiceDb: number | null
   /** Its signed offset from the nearest beat in milliseconds (negative: early); null without a beat near it. */
   beatOffsetMs: number | null
-  /** The repetition pattern it belongs to (sounds sharing a number repeat as one figure); null when it repeats in none. */
+  /** The repetition pattern it belongs to, numbered from 1 (sounds sharing a number repeat as one figure); null when it repeats in none. */
   pattern: number | null
   descriptors: AudioMapSoundDescriptors
 }
