@@ -3006,6 +3006,7 @@ function renderedSection(
   // A heard range's sound analysis, and its evidence sheet within what is left of the allowance.
   const audioMap = isPlainRecord(rendered.audioMap) ? (rendered.audioMap as unknown as AudioMapAnswer) : null
   lines.push(...describeAudioMap(audioMap))
+  if (audioMap?.status === 'ready') lines.push(EXACT_VALUES_POINTER)
   const evidence = isPlainRecord(rendered.sheet) ? (rendered.sheet as unknown as EvidenceSheet) : null
   const evidencePicture = evidence?.status === 'ready' ? parseDataUrl(evidence.dataUrl) : null
   const drawn = admitWithinBudget(evidencePicture ? [evidencePicture] : [], shown.remaining)
@@ -3159,10 +3160,21 @@ export function viewResult(
   if (picture) lines.push(...picture.lines)
   if (sound) lines.push(...sound.lines)
 
+  // A render's exact audio map rides once, in the structured data (with the readable lines as its summary), never
+  // repeated in the JSON text: a six-second sound render's map, pretty-printed in the text, passed a host's 25k-token
+  // reply limit (measured 2026-10-12).
+  const withoutMap = (json: Record<string, unknown>) => {
+    const { audioMap: _exact, ...rest } = json
+    return rest
+  }
+  const exactMaps = {
+    ...(picture && isPlainRecord(picture.json.audioMap) ? { rendered: { audioMap: picture.json.audioMap } } : {}),
+    ...(sound && isPlainRecord(sound.json.audioMap) ? { renderedSound: { audioMap: sound.json.audioMap } } : {}),
+  }
   const contextForJson = {
     ...context,
-    ...(picture ? { rendered: picture.json } : {}),
-    ...(sound ? { renderedSound: sound.json } : {}),
+    ...(picture ? { rendered: withoutMap(picture.json) } : {}),
+    ...(sound ? { renderedSound: withoutMap(sound.json) } : {}),
   }
   const content: CallToolResult['content'] = [
     { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(contextForJson, null, 2)}` },
@@ -3173,7 +3185,7 @@ export function viewResult(
     content.push({ type: 'text', text: 'The sound of the same range:' })
   }
   for (const img of sound?.images ?? []) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
-  return { content }
+  return Object.keys(exactMaps).length > 0 ? { content, structuredContent: standaloneStructured(lines.join('\n'), exactMaps) } : { content }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

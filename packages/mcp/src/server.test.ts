@@ -2794,6 +2794,17 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
  * structuredContent for computing, once, with a line saying where. Break-verified: dropping structuredContent from
  * inspirationContentResult or clipSection turns this red; leaving the map in the view's JSON text, the size assertion.
  */
+test("a render's exact audio map rides once, in the structured data, never in the text's JSON", async () => {
+  const rendered = { renderId: 'r1', state: 'done', kind: 'sound', audioMap: { status: 'ready', window: AUDIO_WINDOW } }
+  const viewer = await connect(fakeClient({ view: async () => ({ context: { rendered }, participant: null, participants: [] }) }))
+  const seen = await viewer.callTool({ name: 'view', arguments: { renderId: 'r1' } })
+  assert.doesNotMatch(seen.content[0].text, /"audioMap"/)
+  assert.match(seen.content[0].text, /Exact values for computing are in the structured data beside this text\./)
+  const { summary, ...exact } = seen.structuredContent as Record<string, unknown>
+  assert.deepEqual(exact, { rendered: { audioMap: { status: 'ready', window: AUDIO_WINDOW } } })
+  assert.match(String(summary), /the render is from the saved project/)
+})
+
 test('get_content and view carry the exact audio map in structuredContent, beside the readable text', async () => {
   const video = { copy: { status: 'ready' }, videos: [{ slide: 0, copy: { status: 'ready' }, audioMap: { status: 'ready', window: AUDIO_WINDOW } }] }
   const mcp = await connect(fakeClient({ getContent: async () => ({ id: 'c1', title: 'x', hashtags: [], analysis: { status: 'absent' }, video }) }))
