@@ -1376,7 +1376,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       .string()
       .optional()
       .describe(
-        "ADD an inspiration post: a tracked post's content id, as list_content and get_content use it and as get_card returns it (the asset's contentId). It lands on the card's Inspiration tab.",
+        "ADD an inspiration post, by its id or short id, its link, or the platform's own id for it. It lands on the card's Inspiration tab.",
       ),
     projectId: z.string().optional().describe('ADD a link to an editor or canvas project: its project id.'),
     assetType: z
@@ -2014,7 +2014,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         contentId: z
           .string()
           .optional()
-          .describe("The tracked post whose video to transcribe, from list_content or get_tracked_account. Its video must be downloaded first with analyze_content kind video. Pass this or audioUrl."),
+          .describe("The tracked post whose video to transcribe: its id or short id, its link, or the platform's own id for it. Its video must be downloaded first with analyze_content kind video. Pass this or audioUrl."),
         slide: z
           .number()
           .int()
@@ -4153,7 +4153,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Get one tracked account with how its content actually performs: post count, total and average views/likes/comments, average engagement and outlier score, plus its top posts by outlier score and its most recent ones. Works for either kind of account: use it on one of the owner's OWN accounts to ground decisions in their real numbers, or on a creator they watch to study what works for that creator.",
       inputSchema: {
-        accountId: z.string().describe('The account id from list_tracked_accounts.'),
+        accountId: z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
       },
     },
     async (args, extra) => {
@@ -4176,7 +4176,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Move a tracked account within its list (its kind's: the creators they watch, or their own profiles), after or before another of the same kind, or to an end. Returns the account with its performance, as get_tracked_account does. Requires the inspiration:write scope.",
       inputSchema: {
-        accountId: z.string().describe('The account id from list_tracked_accounts.'),
+        accountId: z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
         ...placementInput(),
       },
     },
@@ -4239,7 +4239,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         'Stop tracking a social account. Its posts and analyses are kept, and adding it again restores it. Requires the inspiration:write scope.',
       inputSchema: {
-        accountId: z.string().describe('The account id from list_tracked_accounts.'),
+        accountId: z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
       },
     },
     async (args, extra) => {
@@ -4288,7 +4288,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             'Finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance. Returns only the posts judged relevant, so an empty result means nothing matched.',
           ),
         ...sortInput('content'),
-        accountIds: z.array(z.string()).optional().describe('Limit to these tracked account ids (from list_tracked_accounts).'),
+        accountIds: z.array(z.string()).optional().describe("Limit to these tracked accounts, each by its id or short id, its profile link, its handle, or the platform's own id for it."),
         addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),
         brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit.'),
         favorited: z.boolean().optional().describe('Only content the account has favorited.'),
@@ -4314,7 +4314,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said. Scenes are descriptions only: see a scene's frames with view, by contentId and atSec in its range. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes. Each video also reports its audio map summary (speech, sound candidates, music, loudness), free; audioMap adds the map for the window. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
       inputSchema: {
-        contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
+        contentId: z.string().describe("The post: its id or short id, its link, or the platform's own id for it."),
         transcript: z
           .enum(['none', 'text', 'segments', 'words'])
           .optional()
@@ -4362,7 +4362,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       description:
         "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes maps the post's scenes: each one's range, what happens and what is said in it; see a scene's frames with view. video downloads every video the post holds, its one video or each video slide of a carousel, into shared analysis copies, which the reading tools use; nothing lands in your library or counts against your storage. Once stored, each video answers with its cut list, where it changes scene, free. A post with no video says so: its images are already stored and readable. Sound is not analyzed on download: view the video with sound, or split it, to analyze its sound (free). Viewing an existing result is free; creating one spends credits (video is charged for what its downloads moved, holding the most they may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
       inputSchema: {
-        contentId: z.string().describe('The content id from list_content, get_tracked_account, or a get_card inspiration asset.'),
+        contentId: z.string().describe("The post: its id or short id, its link, or the platform's own id for it."),
         kind: z
           .enum(['breakdown', 'scenes', 'video'])
           .optional()
@@ -4722,7 +4722,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .describe("Render only this rectangle, { x, y, width, height } in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without width, it renders at native scale. For a source, the rectangle is in its own pixels, and each of its frames is cut to it."),
         assetId: z.string().optional().describe("A clip of the user's to see and hear, by its asset id, rather than your edit. Or pass mediaUrl or contentId."),
         mediaUrl: z.string().optional().describe("A clip of the user's to see and hear, by its media URL, rather than your edit. Or pass assetId or contentId."),
-        contentId: z.string().optional().describe("A tracked post's video to see and hear, by its content id, once analyze_content kind video has downloaded it. Or pass assetId or mediaUrl."),
+        contentId: z.string().optional().describe("A tracked post's video to see and hear, by its id or short id, its link, or the platform's own id for it, once analyze_content kind video has downloaded it. Or pass assetId or mediaUrl."),
         slide: z.number().int().min(0).optional().describe('Which video of a carousel post, by the slide analyze_content reports for it. Only with contentId.'),
         fromSec: z.number().min(0).optional().describe("Start of a source's window, in its own seconds. Omit to start at its beginning."),
         toSec: z.number().min(0).optional().describe("End of a source's window, in its own seconds. Omit to run to its end."),

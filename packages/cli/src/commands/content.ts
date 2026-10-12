@@ -157,7 +157,7 @@ export function registerTrackedAccount(program: Command): void {
     account
       .command('update')
       .description('Move a tracked account within its list (requires inspiration:write)')
-      .argument('<id>', 'the tracked account id'),
+      .argument('<id>', "one of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it"),
   ).action(async (id: string, opts: Record<string, unknown>, command: Command) => {
     const placement = placementFrom(opts)
     if (Object.keys(placement).length === 0) throw new CliError('Name where it goes: --after, --before or --position.', EXIT.USAGE)
@@ -197,7 +197,7 @@ export function registerTrackedAccount(program: Command): void {
   account
     .command('remove')
     .description('Stop tracking an account; its posts are kept (requires inspiration:write)')
-    .argument('<id>', 'the tracked account id')
+    .argument('<id>', "one of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it")
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
       emit(await client.removeTrackedAccount(id), ctx, (r: { id: string }) => `Stopped tracking ${r.id}. Its posts are kept.`)
@@ -206,7 +206,7 @@ export function registerTrackedAccount(program: Command): void {
   account
     .command('get')
     .description('Get one tracked account with its performance and top content')
-    .argument('<id>', 'the tracked account id')
+    .argument('<id>', "one of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it")
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
       emit(await client.getTrackedAccount(id), ctx, accountDetailHuman)
@@ -240,7 +240,7 @@ export function registerContent(program: Command): void {
         '--search <text>',
         'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance; returns only the posts judged relevant, so no rows means nothing matched',
       )
-      .option('--account <id>', 'limit to this tracked account; repeatable', collectAccount)
+      .option('--account <id>', "limit to this tracked account, by its id or short id, its profile link, its handle, or the platform's own id for it; repeatable", collectAccount)
       .option('--added-by-you', 'only the one-off posts saved by url')
       .option('--brand-kit <id>', 'scope to the accounts linked to this brand kit')
       .option('--favorite', 'only content the account has favorited'),
@@ -288,7 +288,7 @@ export function registerContent(program: Command): void {
   content
     .command('get')
     .description('Get one tracked post in full (engagement, hashtags, optional transcript and Break It Down analysis)')
-    .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
+    .argument('<id>', "the post: its id or short id, its link, or the platform's own id for it")
     .option('--transcript [grain]', `include the transcript: ${GRAINS.join(', ')} (default none); 'words' adds each word's start and end to the segments, where the post has word timing`)
     .option('--start-ms <n>', 'window start, ms into the media: narrows transcript segments, scenes and cut lists', toInt)
     .option('--end-ms <n>', 'window end, ms into the media: narrows transcript segments, scenes and cut lists', toInt)
@@ -377,7 +377,7 @@ export function registerContent(program: Command): void {
   content
     .command('analyze')
     .description("Analyze a tracked post: Break It Down, its scenes with --kind scenes, or its videos with --kind video (every video the post holds, its one video or each video slide of a carousel, downloaded into shared analysis copies, each with its cut list once stored, never your library). Free when the result exists, otherwise it spends credits (see --cost)")
-    .argument('<id>', 'the content id (from content list, a tracked account, or a card inspiration asset)')
+    .argument('<id>', "the post: its id or short id, its link, or the platform's own id for it")
     .option('--kind <kind>', "breakdown (default), scenes (the scene map, each scene's range, what happens and what is said, priced per minute of video), or video (every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved)")
     .option('--cost', 'show the credit cost instead of analyzing (nothing runs, nothing is charged)')
     .option('--resolution <720p|1080p>', 'Most detail for the stored copy (kind video); the best offered up to it is downloaded')

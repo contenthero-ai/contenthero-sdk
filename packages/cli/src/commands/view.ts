@@ -194,7 +194,7 @@ export function registerView(program: Command): void {
     .option('--region <x,y,w,h>', "image: render only this rectangle, x,y,width,height in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without --width, it renders at native scale. For a source, the rectangle is in its own pixels, and each of its frames is cut to it.", parseRegion)
     .option('--asset <id>', "a clip of the user's to see and hear, by its asset id, rather than your edit (or --media-url or --content-id)")
     .option('--media-url <url>', "a clip of the user's to see and hear, by its media URL, rather than your edit (or --asset or --content-id)")
-    .option('--content-id <id>', "a tracked post's video to see and hear, by its content id, once content analyze --kind video has downloaded it (or --asset or --media-url); --slide names a carousel's video")
+    .option('--content-id <id>', "a tracked post's video to see and hear, by its id or short id, its link, or the platform's own id for it, once content analyze --kind video has downloaded it (or --asset or --media-url); --slide names a carousel's video")
     .option('--from-sec <n>', "start of a source's window, in its own seconds (omit to start at its beginning)", (v) => Number(v))
     .option('--to-sec <n>', "end of a source's window, in its own seconds (omit to run to its end)", (v) => Number(v))
     .option('--at-sec <list>', "frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window, separated by commas", parseSeconds)

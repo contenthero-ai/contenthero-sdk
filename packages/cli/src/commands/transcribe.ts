@@ -24,7 +24,7 @@ export function registerTranscribe(program: Command): void {
     .command('transcribe')
     .description("Transcribe speech to text: an audio URL, or a tracked post's downloaded video with --content-id (spends credits; price it first with --cost)")
     .argument('[audioUrl]', 'public URL of the audio to transcribe (or name a post with --content-id)')
-    .option('--content-id <id>', "a tracked post whose video to transcribe, once content analyze --kind video has downloaded it")
+    .option('--content-id <id>', "the tracked post whose video to transcribe: its id or short id, its link, or the platform's own id for it, once content analyze --kind video has downloaded it")
     .option('--slide <n>', "which video of a carousel post, by the 0-based slide content analyze reports (with --content-id)", toInt)
     .option('--cost', 'show what transcribing costs instead of transcribing (nothing runs, nothing is charged)')
     .option('--language <code>', 'ISO language hint for an audio file (auto-detected when omitted)')
