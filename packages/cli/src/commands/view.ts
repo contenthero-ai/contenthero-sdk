@@ -20,7 +20,7 @@
  * per second (`--per-second`), and `--sound` measures the window as it is, beside any frames. `--width` and `--region`
  * say what the MCP's `view` fields say (copied by hand until one source holds every field's description). `--save`
  * writes whichever images were produced (render preferred over snapshot: frames, contact sheets, a sound's picture,
- * or a source's keyframes and its sound's picture) to files.
+ * or a source's keyframes, a post's evidence sheet and its sound's picture) to files.
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
@@ -191,7 +191,7 @@ export function registerView(program: Command): void {
     .option('--from-sec <n>', "start of a source's window, in its own seconds (omit to start at its beginning)", (v) => Number(v))
     .option('--to-sec <n>', "end of a source's window, in its own seconds (omit to run to its end)", (v) => Number(v))
     .option('--at-sec <list>', "frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window, separated by commas", parseSeconds)
-    .option('--save <path>', "write the produced image(s), a render's, or a source's keyframes and its sound's picture, to this file (several append -1, -2, ...)")
+    .option('--save <path>', "write the produced image(s), a render's, or a source's keyframes, a post's evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const sound = Boolean(opts.sound)

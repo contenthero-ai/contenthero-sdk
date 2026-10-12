@@ -100,7 +100,7 @@ export function registerAudio(program: Command): void {
 
   audio
     .command('split')
-    .description('Split an audio or video file into voice, music and effects (three files). Asynchronous.')
+    .description('Split an audio or video file into vocals, drums, bass and other sounds (four files). Asynchronous.')
     .argument('<source>', 'source file (URL or output id) to split: one of your stored files')
     .option('--duration <seconds>', 'source length in seconds (required for --cost)', toFloat)
     .option('--cost', 'estimate the credit cost instead of running')
@@ -122,9 +122,7 @@ export function registerAudio(program: Command): void {
 
   audio
     .command('split-clips')
-    .description(
-      'Split the audio OF EXISTING CLIPS on an editor timeline into voice, music and effects, in place: each clip is muted and its stems are placed under it, each on its own track. One job per SOURCE recording.',
-    )
+    .description('Split the audio of clips into vocals, drums, bass and other sounds, in place.')
     .argument('<projectId>', 'the editor project whose clips to split')
     .option('--clips <ids...>', 'clip ids to split (omit for every audible clip on the timeline)')
     .option('--no-wait', 'return the outputIds immediately instead of waiting')

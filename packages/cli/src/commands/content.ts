@@ -298,7 +298,7 @@ export function registerContent(program: Command): void {
     .option('--analysis-sections <list>', 'only these analysis sections, comma-separated (names come from the availability line)', toList)
     .option('--scenes <grain>', "the post's scenes: map, each scene's range, what happens and what is said (view --content-id --at-sec shows its frames); --start-ms/--end-ms narrow them")
     .option('--cuts', "add each downloaded video's cut list: the seconds where its picture changes, measured once and free; --start-ms/--end-ms narrow the lists")
-    .option('--audio-map', "add each video's audio map window: speech, sound events, music and levels, measured once and free; each video's summary reports either way; --start-ms/--end-ms narrow the window")
+    .option('--audio-map', "add each video's audio map window: speech, sound candidates with their measured descriptors, music, loudness and each stem's level, measured once and free; each video's summary reports either way; --start-ms/--end-ms narrow the window")
     .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
       const scenes = opts.scenes as string | undefined
       if (scenes === 'frames') {
