@@ -2929,7 +2929,7 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
             .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
             .join('\n')}\n`
         : '') +
-      // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Draft wording.
+      // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Wording approved 2026-10-13 (W13, W14).
       describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `${l}\n`).join('') +
       `\n` +
       JSON.stringify(p.state, null, 2),

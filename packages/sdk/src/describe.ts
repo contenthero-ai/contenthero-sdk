@@ -386,7 +386,7 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
     lines.push('Code:')
     for (const d of diagnostics) lines.push(...codeDiagnosticLines(d))
   }
-  // Draft wording, for Taylan's review.
+  // Wording approved 2026-10-13 (gap closure W14).
   lines.push(...describeDocumentFindings(r.documentWarnings, 'Left in the project by this edit:'))
   return lines.join('\n')
 }

@@ -43,6 +43,7 @@ export function getProjectDescription(audience: ToolTextAudience): string {
     "Read a project: its title, revision and settings (its canvas size, and for a video project its frame rate, delivery loudness, magnetic main track, linkage and the kinds of track linkage reaches), with a summary of its composition by default or the whole composition with detail 'full'.",
     "The summary is each track's id, name, type and whether it is the main track, and each clip's id, type, place on the timeline, speed and source: a clip plays a file (its assetId, the same id view and get_media take, and the window of the file it plays, in the file's seconds) or code (the project modules it imports). Clips that share an assetId were cut from one recording; a clip's id never says so. For a canvas, the summary is each slide with its layers' ids, types and the start of each text layer's text.",
     "A timeline read can be narrowed to a frame window or one track, and a canvas read to one slide; a narrowed full read carries only the modules its clips import and names the rest. Read one clip's or one module's code with clipIds or moduleNames. sourceAssetId with atSec says where moments of a recording play on the timeline: every clip and frame each second lands on, none where it was cut out.",
+    "A video project's read also lists the problems its code and modules hold, whatever part of it is returned: code reading what a project module does not provide, the compiler's warnings, and modules no clip imports.",
     'Pass the returned revision as expectedRevision for an edit that must not overwrite a concurrent change. update_project changes the settings.',
     ...(audience === 'mcp' ? ['Requires the editor:read scope.'] : []),
   ].join(' ')
@@ -54,7 +55,7 @@ export function updateTimelineDescription(audience: ToolTextAudience): string {
     'Edit a video timeline with a batch of operations, the same ones every ContentHero agent uses, applied by the server and shown in the open editor at once. Each operation is an object with an `op` name and its fields.',
     "get_schema kind 'timeline' lists every operation with its shape and the rules they all follow; read an operation in full by its name before using one you have not read, and build a clip from its type's example there. A code clip imports project modules, which an operation sets.",
     `Read clip, track and transition ids from ${IDS_FROM[audience]}.`,
-    'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result reports each operation, with what the compiler found in any code an operation wrote.',
+    'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result reports each operation, with what the compiler found in any code an operation wrote, and what the edit left in the project that may not draw as intended, clip by clip.',
     'Prefer an edit the person can review and turn back over one that cannot be reversed, and make a destructive one only when they asked for it. A clip\'s length on the timeline follows its source and its speed: change its speed, not its length.',
     'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
     ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
@@ -67,7 +68,7 @@ export function updateCanvasDescription(audience: ToolTextAudience): string {
     'Edit a canvas (slides and layers) with a batch of operations, applied by the server and shown in the open editor at once. Each operation is an object with an `op` name and its fields.',
     "get_schema kind 'layer' lists every operation with its shape and the rules they all follow; read an operation or a layer type in full by its name before using one you have not read.",
     `Read slide and layer ids from ${IDS_FROM[audience]}.`,
-    'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why.',
+    'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result also reports what the edit left in the project that may not draw as intended, layer by layer.',
     'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
     ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
   ].join(' ')
