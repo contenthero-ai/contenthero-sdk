@@ -994,10 +994,13 @@ export type TranscribeRequest = TranscribeAudioRequest | TranscribePostRequest
 interface TranscriptionSource {
   /** The stored transcript record, for an audio file. A post's words live on the post, so it has none. */
   outputId?: string
-  /** Its stored record's short id and app link. Absent when no record was kept (the account's own key paid, or a post). */
+  /**
+   * The source's handle, which every answer names it by: for a post, the post's short id and page; for an audio file,
+   * its stored record's (absent when no record was kept, because the account's own key paid).
+   */
   shortId?: string
   appUrl?: string
-  /** The post transcribed, for a post. */
+  /** The post transcribed, for a post (its internal id; name it by `shortId`). */
   contentId?: string
   /** The carousel slide transcribed (0-based), for a carousel post's video. */
   slide?: number
@@ -1044,8 +1047,11 @@ export type Transcription = CompletedTranscription | RunningTranscription | Fail
 export interface TranscribeCostEstimate extends Omit<CostEstimate, 'creditsEstimate'> {
   /** Null only for an audio file whose length could not be read: its price is known once it is transcribed (`note`). */
   creditsEstimate: number | null
-  /** The post priced, for a post. */
+  /** The post priced, for a post (its internal id; name it by `shortId`). */
   contentId?: string
+  /** The post's short id and page, for a post: what an answer names it by. */
+  shortId?: string
+  appUrl?: string
   /** The carousel slide priced (0-based), for a carousel post's video. */
   slide?: number
   /** The audio file priced, for an audio file. */
