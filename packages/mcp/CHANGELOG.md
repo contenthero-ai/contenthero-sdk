@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.4.39
+
+- `view` and `get_project` take the new inputs (`live`, `trackIds`, `clipIds`; `clipIds`, `moduleNames`,
+  `sourceAssetId` with `atSec`) and print what the server changed, the scope drawn, the cost, and a pending part's
+  readWith; their descriptions and `update_timeline`'s and `update_canvas`'s are the approved 2026-10-13 texts, and the
+  edit tools point at get_schema instead of listing operations.
+- Edits print what they left in the project ("Left in the project by this edit:"), and `get_project` prints the
+  project's problems ("Problems in the project:").
+- `transcribe` names a post by its short id and page. Uses sdk 0.4.32.
+
 ## 0.4.38
 
 - Tracked accounts are labeled by their kind (`[brand]` or `[inspiration]`) instead of `[yours]` and `[watching]`;

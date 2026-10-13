@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.29
+
+- `project get` takes `--clips`, `--modules`, `--source-asset` with `--at-sec`, and prints where those seconds play
+  and the project's problems; `project apply` prints what an edit left in the project.
+- `context` prints what a view changed, the scope drawn, its cost and a pending part's read-again inputs.
+- `transcribe` names a post by its short id and page. Uses sdk 0.4.32.
+
 ## 0.3.28
 
 - Tracked-account tables and details show the account's kind (`brand` or `inspiration`) instead of `yours` and

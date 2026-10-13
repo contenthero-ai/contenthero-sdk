@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.4.32
+
+- `ViewResult` answers with the parts a view names (`live`, `rendered`, `renderedSound`, `clip`); `isSourceView` is
+  gone. New inputs `live`, `trackIds`, `clipIds`; answers carry `adjusted`, `sampled`, `scope`, `cost`, a source's
+  `pixels`, and a pending part's `since`, `expectedBy`, `readWith` and `reason` (`describePending`).
+- `getProject` takes `clipIds`, `moduleNames`, and `sourceAssetId` with `atSec`; `ProjectDetail` carries `sourceTimes`
+  and `findings`, and a clip's source names its `assetId`.
+- New: `DocumentFinding`, `ApplyEditorOpsResult.documentWarnings`, `describeFinding`, `describeDocumentFindings`; edits
+  and reads name what the project's code and modules hold that is wrong or unused.
+- New: `tool-text.ts` holds the descriptions of view, get_project, update_timeline and update_canvas, once for every
+  surface.
+- `transcriptionSource` names a post by its short id and page; `itemHandle` is the one handle formatter.
+
 ## 0.4.31
 
 - Removed: `isOwn` on `ContentSummary` (and so on content reads). Whose a post is reads from its account's
