@@ -6,7 +6,7 @@
  */
 
 export { ContentHero, importedMediaFrom } from './client.js'
-export { LIST_SORTS, TRACKABLE_PLATFORMS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS, KINDS_NAMED_BY_KIND, statusTarget, statusTargetOf, isSourceView } from './types.js'
+export { LIST_SORTS, TRACKABLE_PLATFORMS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS, KINDS_NAMED_BY_KIND, statusTarget, statusTargetOf } from './types.js'
 export type {
   SortableList,
   SortFieldOf,
@@ -288,7 +288,11 @@ export type {
   LiveContextParticipant,
   ViewResult,
   LiveViewResult,
-  SourceViewResult,
+  GetProjectOptions,
+  ClipSourceSummary,
+  PendingPart,
+  FailedPart,
+  Adjustment,
   ViewInput,
   CompositionRegion,
   ListProjectsInput,
@@ -358,4 +362,5 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'
+export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, describeTranscribeCost, describeTranscriptionState } from './describe.js'
+export { viewDescription, getProjectDescription, updateTimelineDescription, updateCanvasDescription, type ToolTextAudience } from './tool-text.js'

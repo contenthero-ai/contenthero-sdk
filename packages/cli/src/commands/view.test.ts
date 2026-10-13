@@ -18,13 +18,14 @@ import { viewSummary } from './view.js'
  * the `render && failure` branch from `--save` turns the fifth red (it blamed a missing snapshot instead).
  */
 
-const noTab = (rendered: Record<string, unknown>): ViewResult => ({ context: { rendered }, participant: null, participants: [] })
+// A render comes back alone: the parts a view named (gap closure D4).
+const noTab = (rendered: Record<string, unknown>): ViewResult => ({ rendered })
 const nothingSaved = { count: 0, path: '' }
 
 test('a render with no live tab is shown, not reported as no context', () => {
   const out = viewSummary(noTab({ mode: 'image', frame: 12, dataUrl: 'data:image/webp;base64,AQID' }), nothingSaved)
-  assert.match(out, /the render is from the saved project/)
   assert.doesNotMatch(out, /No live context/)
+  assert.doesNotMatch(out, /Live context/)
 })
 
 test('a render that produced no image says why', () => {
@@ -91,16 +92,11 @@ test('--save with a failed render reports the render, not a missing snapshot', a
 test("a video range's sound is measured beside its frames", () => {
   const out = viewSummary(
     {
-      context: {
-        rendered: { kind: 'picture', frames: [{ frame: 0, dataUrl: 'data:image/webp;base64,AQID' }] },
-        renderedSound: { kind: 'sound', state: 'done', loudness: { integratedLufs: -15, truePeakDbtp: -1.5 }, onsets: [], stereo: null },
-      },
-      participant: null,
-      participants: [],
+      rendered: { kind: 'picture', frames: [{ frame: 0, dataUrl: 'data:image/webp;base64,AQID' }] },
+      renderedSound: { kind: 'sound', status: 'ready', loudness: { integratedLufs: -15, truePeakDbtp: -1.5 }, onsets: [], stereo: null },
     },
     nothingSaved,
   )
-  assert.match(out, /the render is from the saved project/)
   assert.match(out, /Integrated loudness -15 LUFS, true peak -1\.5 dBTP/)
 })
 
@@ -172,7 +168,7 @@ test("--save writes a clip's keyframes, numbered in order", async () => {
  * dropping the sound's picture from viewImages, the third.
  */
 test('--content-id and --slide name a post, --at-sec the seconds, and --sound comes beside the frames', async () => {
-  body = { context: null, participant: null, participants: [] }
+  body = { live: { context: null, participant: null, participants: [] } }
   await buildProgram().parseAsync(
     ['--api-key', 'k', '--base-url', baseUrl, '--json', 'view', '--content-id', 'post-1', '--slide', '4', '--at-sec', '1,3.5', '--sound'],
     { from: 'user' },

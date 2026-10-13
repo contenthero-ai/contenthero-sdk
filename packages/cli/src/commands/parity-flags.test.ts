@@ -197,7 +197,7 @@ test('media watch is gone, and view cuts a clip to a region', async () => {
   assert.equal(clip.query.get('render'), null)
   const view = buildProgram().commands.find((c) => c.name() === 'view')
   const region = view?.options.find((o) => o.long === '--region')
-  assert.match(region?.description ?? '', /For a source, the rectangle is in its own pixels, and each of its frames is cut to it\.$/)
+  assert.match(region?.description ?? '', /For a source, the rectangle is in its own pixels\.$/)
   const zoom = buildProgram().commands.find((c) => c.name() === 'media')?.commands.find((c) => c.name() === 'zoom')
   assert.match(zoom?.description() ?? '', /^Cut a region from an image's original/)
 })

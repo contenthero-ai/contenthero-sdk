@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -94,15 +94,15 @@ test('a generation lists what it was made from, one line per input, as Studio la
 // second; printing a missing measure as a number, the third.
 test('describeRenderProgress names the id to read a render with, and how much is ready', () => {
   assert.equal(
-    describeRenderProgress({ renderId: 'r1', state: 'rendering', kind: 'picture', frameCount: 400, renderedFrameCount: 120, readyPages: [1, 2], pages: 8, page: 1 }),
-    'Still rendering: 120 of 400 frames are drawn; ready: pages 1, 2 of 8. Read the rest with renderId r1 and a page number.',
+    describeRenderProgress({ renderId: 'r1', status: 'pending', readWith: { renderId: 'r1', page: 3 }, kind: 'picture', frameCount: 400, renderedFrameCount: 120, readyPages: [1, 2], pages: 8, page: 3 }),
+    'Still rendering: 120 of 400 frames are drawn; ready: pages 1, 2 of 8. Read this page with renderId r1 and page 3, and the rest with renderId r1 and a page number.',
   )
-  assert.equal(describeRenderProgress({ renderId: 'r2', state: 'rendering', kind: 'sound' }), 'The sound is still rendering. Read it with renderId r2.')
+  assert.equal(describeRenderProgress({ renderId: 'r2', status: 'pending', readWith: { renderId: 'r2' }, kind: 'sound' }), 'The sound is still rendering. Read it with renderId r2.')
 })
 
 test('describeRenderProgress says which page a finished render is on, and nothing for one page', () => {
-  assert.equal(describeRenderProgress({ renderId: 'r1', state: 'done', pages: 3, page: 2 }), 'Page 2 of 3. Read another page with renderId r1 and its page number.')
-  assert.equal(describeRenderProgress({ renderId: 'r1', state: 'done', pages: 1, page: 1 }), null)
+  assert.equal(describeRenderProgress({ renderId: 'r1', status: 'ready', pages: 3, page: 2 }), 'Page 2 of 3. Read another page with renderId r1 and its page number.')
+  assert.equal(describeRenderProgress({ renderId: 'r1', status: 'ready', pages: 1, page: 1 }), null)
   assert.equal(describeRenderProgress({ dataUrl: 'x' }), null)
 })
 
@@ -347,7 +347,12 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
   const { voiceOverBed: _, ...older } = window
   assert.equal(describeAudioMapWindow(older)[6], '  voice: not measured')
 
-  assert.deepEqual(describeAudioMap({ status: 'pending' }), ['audio map: the sound analysis is still being made: read this window again to get it'])
+  assert.deepEqual(describeAudioMap({ status: 'pending', since: 'T0' }), ['audio map: the sound analysis is still being made (since T0): read this window again to get it.'])
+  // A pending part says how and when it ends (gap closure D3): read it with the render it names, and why it is late.
+  assert.deepEqual(describeAudioMap({ status: 'pending', since: 'T0', expectedBy: 'T1', readWith: { renderId: 'r9' }, reason: 'The queue this work runs on is paused.' }), [
+    'audio map: the sound analysis is still being made (since T0, expected by T1): read it again with renderId r9. The queue this work runs on is paused.',
+  ])
+  assert.deepEqual(describeAudioMap({ status: 'failed', since: 'T0', reason: 'It failed: out of memory.' }), ['audio map: the sound analysis failed (It failed: out of memory)'])
   assert.deepEqual(describeAudioMap({ status: 'unavailable', reason: 'The audio map could not be measured just now.' }), [
     'audio map: unavailable (The audio map could not be measured just now)',
   ])
@@ -378,7 +383,7 @@ test('describeEvidenceSheet reads a ready sheet, and the pending and unavailable
     "evidence sheet, 2.0s to 4.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem (vocals, drums, bass, other; log frequency 20 Hz to 20k Hz, low at the bottom), on one time axis in the file's seconds (a rendered range's from the start of the range); its 3 sound candidates marked on the stem each is loudest in, numbered as listed under sound candidates.",
   ])
   assert.match(describeEvidenceSheet({ ...ready, soundsMarked: 0 })[0]!, /no sound candidates in this window\.$/)
-  assert.deepEqual(describeEvidenceSheet({ status: 'pending', reason: 'The stems are being separated again.' }), ['evidence sheet: being made (The stems are being separated again)'])
+  assert.deepEqual(describeEvidenceSheet({ status: 'pending', since: 'T0', reason: 'The stems are being separated again.' }), ['evidence sheet is still being made (since T0): The stems are being separated again.'])
   assert.deepEqual(describeEvidenceSheet(null), [])
 })
 
@@ -444,4 +449,11 @@ test('an audio map in a newer format reads as an update line, never a throw', ()
     assert.match(lines[3]!, / on piano: /)
     assert.deepEqual(describeContentVideoWindow({ audioMap: map }), lines)
   }
+})
+
+test('describeAdjusted names each change the server made, with why; nothing when it ran as asked', () => {
+  assert.deepEqual(describeAdjusted([{ field: 'width', asked: 4000, used: 1920, reason: "a render is never wider than the project's own size" }]), [
+    "adjusted width: asked 4000, used 1920 (a render is never wider than the project's own size).",
+  ])
+  assert.deepEqual(describeAdjusted(undefined), [])
 })
