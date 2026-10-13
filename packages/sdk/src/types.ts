@@ -3676,6 +3676,30 @@ export interface ApplyEditorOpsResult {
   // value under two names is what this change removed.
   revision: number
   results: EditorOpResult[]
+  /**
+   * What the batch left wrong, or possibly wrong, that the project did not hold before it: a clip reading what a module
+   * no longer provides, a module's change reaching the clips that import it, a compiler warning in code it reached.
+   * Present only when the batch added any.
+   */
+  documentWarnings?: DocumentFinding[]
+}
+
+/**
+ * One problem the project's code or modules hold, as the editor's problems list shows it: the same derivation for an
+ * edit's `documentWarnings` and a read's `findings`.
+ */
+export interface DocumentFinding {
+  /** The clip, the project module (by its name without the `@project/` prefix) or the track it is in. */
+  subject: { clipId: string } | { module: string } | { trackId: string }
+  severity: 'error' | 'warning' | 'info'
+  /** The compiler's code for it, as `missing-export`, `missing-member` or `unused-module`. */
+  code: string
+  message: string
+  /** 1-based, on the subject's own code. */
+  line?: number
+  column?: number
+  snippet?: string
+  source: 'compile' | 'reference' | 'render' | 'purity'
 }
 
 /**
@@ -3761,6 +3785,11 @@ export interface ProjectDetail extends ProjectSummary, ProjectSettings {
    * from that recording that plays it and the timeline frame it lands on, none where it was cut out (gap closure D6).
    */
   sourceTimes?: Array<{ atSec: number; frames: Array<{ clipId: string; frame: number }> }>
+  /**
+   * What the project's code and modules hold that is wrong or unused, over the whole project whatever part the read
+   * returned. Editor projects with code only; absent when there are none.
+   */
+  findings?: DocumentFinding[]
   /**
    * The coordinate space LAYER GEOMETRY is expressed in. This is NOT `width`/`height`.
    *

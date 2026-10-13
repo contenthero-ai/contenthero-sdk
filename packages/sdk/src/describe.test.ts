@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -182,13 +182,14 @@ test('describeClip says the region each frame was cut to, or why it could not be
   )
   assert.equal(describeCrop(undefined, 'The region is outside the file.'), 'zoom not shown: The region is outside the file.')
   assert.equal(describeCrop(undefined, undefined), null)
-  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', type: 'video', crop }), [
+  // A clip's cut is its `pixels` (gap closure D2): the region, and the frames' size and scale.
+  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', type: 'video', pixels: crop }), [
     'Raw source clip (video): https://media.test/c.mp4',
     "Zoom: 960x540 at (960, 540) in the file's pixels, shown at 640x360 (0.6667 px per file px)",
   ])
-  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', cropError: 'The region is outside the clip.' }), [
+  // Whole frames carry no region, so no zoom line.
+  assert.deepEqual(describeClip({ url: 'https://media.test/c.mp4', pixels: { width: 640, pixelsPerSourcePixel: 0.3333 } }), [
     'Raw source clip: https://media.test/c.mp4',
-    'Zoom not shown: The region is outside the clip.',
   ])
 })
 
@@ -456,4 +457,18 @@ test('describeAdjusted names each change the server made, with why; nothing when
     "adjusted width: asked 4000, used 1920 (a render is never wider than the project's own size).",
   ])
   assert.deepEqual(describeAdjusted(undefined), [])
+})
+
+/** Break-verified: dropping the findings line from describeEditorOps turns this red. */
+test('an edit names what it left wrong in the project, a line per finding, in the app’s own form', () => {
+  const warning = { subject: { clipId: 'c1' }, severity: 'warning' as const, code: 'missing-member', message: 'reads THEME.ink, which @project/style does not provide', line: 4, source: 'reference' as const }
+  const unused = { subject: { module: 'old' }, severity: 'info' as const, code: 'unused-module', message: 'no clip imports it', source: 'reference' as const }
+  assert.deepEqual(describeDocumentFindings([warning, unused], 'Heading:'), [
+    'Heading:',
+    '  - warning in c1, line 4: reads THEME.ink, which @project/style does not provide',
+    '  - info in @project/old: no clip imports it',
+  ])
+  assert.deepEqual(describeDocumentFindings(undefined, 'Heading:'), [])
+  const text = describeEditorOps({ revision: 3, results: [{ op: 'set_project_module', ok: true }], documentWarnings: [warning] } as never)
+  assert.match(text, /\n {2}- warning in c1, line 4: /)
 })

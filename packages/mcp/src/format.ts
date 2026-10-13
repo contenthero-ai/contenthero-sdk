@@ -129,7 +129,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2871,6 +2871,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   state: 'rendered',
   scope: 'rendered',
   sourceTimes: 'rendered',
+  findings: 'rendered',
   brandKitId: 'rendered',
   appUrl: 'rendered',
   shortId: 'omitted: the appUrl carries it, and every tool accepts either id',
@@ -2928,6 +2929,8 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
             .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
             .join('\n')}\n`
         : '') +
+      // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Draft wording.
+      describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `${l}\n`).join('') +
       `\n` +
       JSON.stringify(p.state, null, 2),
   )

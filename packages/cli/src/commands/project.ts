@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
 import {
   LIST_SORTS,
+  describeDocumentFindings,
   describeEditorOps,
   describeLoudness,
   describeProjectShareLink,
@@ -156,6 +157,8 @@ export function registerProject(program: Command): void {
               .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
               .join('\n')}`
           : '') +
+        // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Draft wording.
+        describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `\n${l}`).join('') +
         (p.groups?.length
           ? `\nGroups: ${p.groups
               .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)

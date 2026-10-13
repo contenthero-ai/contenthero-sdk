@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -386,7 +386,20 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
     lines.push('Code:')
     for (const d of diagnostics) lines.push(...codeDiagnosticLines(d))
   }
+  // Draft wording, for Taylan's review.
+  lines.push(...describeDocumentFindings(r.documentWarnings, 'Left in the project by this edit:'))
   return lines.join('\n')
+}
+
+/** A finding as one line: its subject, its place, and what it says (the app's own form, `describeFinding`). */
+export function describeFinding(f: DocumentFinding): string {
+  const subject = 'clipId' in f.subject ? f.subject.clipId : 'module' in f.subject ? `@project/${f.subject.module}` : f.subject.trackId
+  return `${f.severity} in ${subject}${f.line != null ? `, line ${f.line}` : ''}: ${f.message}`
+}
+
+/** Findings under a heading, a line each; nothing when there are none. */
+export function describeDocumentFindings(findings: readonly DocumentFinding[] | null | undefined, heading: string): string[] {
+  return findings?.length ? [heading, ...findings.map((f) => `  - ${describeFinding(f)}`)] : []
 }
 
 /**

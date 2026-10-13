@@ -279,6 +279,7 @@ export type {
   EditorOpResult,
   CodeDiagnostic,
   ApplyEditorOpsResult,
+  DocumentFinding,
   ProjectType,
   ProjectKind,
   ProjectSurface,
@@ -362,5 +363,5 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeTranscriptionState } from './describe.js'
+export { chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeDocumentFindings, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeTranscriptionState } from './describe.js'
 export { viewDescription, getProjectDescription, updateTimelineDescription, updateCanvasDescription, type ToolTextAudience } from './tool-text.js'
