@@ -74,7 +74,7 @@ export function transcriptionHuman(t: Transcription): string {
   const post = transcriptionSource(t)
   const state = describeTranscriptionState(t)
   if (t.status === 'running') {
-    const again = `contenthero transcribe --content-id ${t.contentId}${t.slide !== undefined ? ` --slide ${t.slide}` : ''}`
+    const again = `contenthero transcribe --content-id ${t.shortId ?? t.contentId}${t.slide !== undefined ? ` --slide ${t.slide}` : ''}`
     return keyValues([['Status', `${state} Run \`${again}\` again to follow it, which is free.`], ...costRows(t.charge)])
   }
   if (t.status === 'failed') return keyValues([['Status', state ?? t.error], ...costRows(t.charge)])
@@ -87,6 +87,6 @@ export function transcriptionHuman(t: Transcription): string {
     ...(t.durationSeconds != null ? [['Duration (s)', t.durationSeconds] as [string, number]] : []),
     ...costRows(t.charge),
     ['Transcript', post && t.wordCount === 0 ? 'No speech was heard.' : t.transcript],
-    ...(post && t.slide === undefined ? [['Read it word-timed', `contenthero content get ${t.contentId} --transcript segments`] as [string, string]] : []),
+    ...(post && t.slide === undefined ? [['Read it word-timed', `contenthero content get ${t.shortId ?? t.contentId} --transcript segments`] as [string, string]] : []),
   ])
 }

@@ -18,6 +18,8 @@ import {
   tagListResult,
   errorResult,
   editorOpsResult,
+  transcriptResult,
+  transcribeCostResult,
 } from './format.js'
 
 /** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
@@ -855,4 +857,26 @@ test('errorResult outside a tool call reports a fault as an error', () => {
   const r = errorResult(new TypeError("Cannot read properties of undefined (reading 'length')"))
   assert.equal(r.isError, true)
   assert.equal(r.structuredContent, undefined)
+})
+
+/**
+ * transcribe names a post by its handle in every state (gap closure, 2026-10-13): its short id and its page, never the
+ * internal UUID, which every answer used to carry. A server older than the handle still names it by `contentId`.
+ */
+test('transcribe names a post by its short id and page in every state, never a UUID', () => {
+  const uuid = '8281e078-d8c4-41a3-b46b-443095c3fd38'
+  const post = { contentId: uuid, shortId: 'Con12345', appUrl: 'https://app.contenthero.ai/content/Con12345' }
+  const states = [
+    textOf(transcribeCostResult({ getCost: true, creditsEstimate: 8, ...post } as never)),
+    textOf(transcriptResult({ status: 'running', ...post } as never)),
+    textOf(transcriptResult({ status: 'completed', transcript: 'Hello', wordCount: 1, durationSeconds: 3, ...post } as never)),
+    textOf(transcriptResult({ status: 'completed', transcript: 'Hello', wordCount: 1, durationSeconds: 3, slide: 2, ...post } as never)),
+  ]
+  for (const out of states) {
+    assert.match(out, /Con12345/)
+    assert.match(out, /appUrl https:\/\/app\.contenthero\.ai\/content\/Con12345/)
+    assert.doesNotMatch(out, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
+  }
+  assert.match(states[3], /slide 2/)
+  assert.match(textOf(transcriptResult({ status: 'running', contentId: uuid } as never)), new RegExp(uuid))
 })

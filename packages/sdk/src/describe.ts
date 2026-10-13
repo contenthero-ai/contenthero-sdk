@@ -648,10 +648,21 @@ export function describeVideoCostDetail(est: ContentAnalysisCostEstimate): strin
   return out
 }
 
-/** The post a transcription (or its price) names, with the carousel slide when there is one; null for an audio file. */
-export function transcriptionSource(t: { contentId?: string; slide?: number }): string | null {
+/**
+ * An item as every answer names it: its short id (the one `get_status` and every tool take), else its id, with its page
+ * in the app when known. The one handle formatter: the MCP's `jobName` and the CLI print through it.
+ */
+export function itemHandle(item: { id: string; shortId?: string | null; appUrl?: string | null }): string {
+  return `${item.shortId || item.id}${item.appUrl ? ` (appUrl ${item.appUrl})` : ''}`
+}
+
+/**
+ * The post a transcription (or its price) names, by its handle, with the carousel slide when there is one; null for an
+ * audio file. A server older than the handle sends only `contentId`, which is named instead.
+ */
+export function transcriptionSource(t: { contentId?: string; shortId?: string; appUrl?: string; slide?: number }): string | null {
   if (!t.contentId) return null
-  return `post ${t.contentId}${t.slide !== undefined ? `, slide ${t.slide}` : ''}`
+  return `post ${itemHandle({ id: t.contentId, shortId: t.shortId, appUrl: t.appUrl })}${t.slide !== undefined ? `, slide ${t.slide}` : ''}`
 }
 
 /** What transcribing a post's video or an audio file costs, with nothing run or charged. */

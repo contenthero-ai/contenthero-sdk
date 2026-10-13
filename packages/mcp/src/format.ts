@@ -129,7 +129,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -564,9 +564,9 @@ export function statusCallFor(jobs: readonly JobHandle[]): string {
   return getStatusCall(targets.map((t) => t.id), targets.find((t) => t.kind)?.kind)
 }
 
-/** A job by the id `get_status` follows it by, with its link when known. */
+/** A job by the id `get_status` follows it by, with its link when known (the SDK's one handle formatter). */
 export function jobName(job: Omit<JobHandle, 'kind'>): string {
-  return `${job.shortId || job.id}${linkAfter(job.appUrl)}`
+  return itemHandle(job)
 }
 
 /** What a still-running generation already knows about the shape of its own result. */
@@ -964,7 +964,7 @@ export function transcriptResult(t: Transcription): CallToolResult {
   const post = transcriptionSource(t)
   const state = describeTranscriptionState(t)
   if (t.status === 'running') {
-    const follow = `Call transcribe again with contentId "${t.contentId}"${t.slide !== undefined ? ` and slide ${t.slide}` : ''} to follow it, which is free.`
+    const follow = `Call transcribe again with contentId "${t.shortId ?? t.contentId}"${t.slide !== undefined ? ` and slide ${t.slide}` : ''} to follow it, which is free.`
     return withCharge(text(`${state} ${follow}`), t.charge)
   }
   if (t.status === 'failed') return withCharge(text(state ?? t.error, true), t.charge)
