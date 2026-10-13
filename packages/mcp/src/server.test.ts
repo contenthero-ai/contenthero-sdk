@@ -3588,6 +3588,22 @@ test('view shows the frames and the sound of a video range', async () => {
 })
 
 /**
+ * A project window asked only of its picture analysis answers in numbers, with no live context, and the inputs reach the
+ * client. Break-verified: dropping the picture part from viewResult turns this red (it reads as no live context).
+ */
+test('view answers a project window\'s picture analysis in numbers', async () => {
+  let asked: Record<string, unknown> = {}
+  const picture = { status: 'ready', version: 1, fps: 30, fromFrame: 0, toFrame: 300, sources: [], unseenClips: 0 }
+  const mcp = await connect(fakeClient({ view: async (input: Record<string, unknown>) => ((asked = input), { picture }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', find: 'a face', where: true, fromFrame: 0, toFrame: 300 } })
+  assert.equal(asked.find, 'a face')
+  assert.equal(asked.where, true)
+  assert.match(res.content[0].text, /The picture analysis of the project's window/)
+  assert.match(res.content[0].text, /"unseenClips":0/)
+  assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
+})
+
+/**
  * A raw clip's keyframes come back as images, each labeled with its time in the clip, within the one result budget,
  * with no live tab. Break-verified: dropping the clip from the "No live context" check turns both red; dropping the
  * time labels turns the first red; admitting keyframes without the budget turns the second red.

@@ -1952,7 +1952,8 @@ export class ContentHero {
    * its frames come spread across the window, at the seconds `atSec` names, or `perSecond` across it, and `sound`
    * measures the window as it is. The answer holds the parts the request named (`ViewResult`): `live` for a view that
    * renders nothing and names no source (or adds `live: true`), `rendered` (and `renderedSound`) for a render, `clip`
-   * for a source, its frames in pages. Renders are ephemeral and do not need a live tab. Optionally scope to one
+   * for a source, its frames in pages. `find`, `where` and `picture` ask a source's window (on `clip.picture`) or a
+   * project's window (`picture`) of its picture analysis. Renders are ephemeral and do not need a live tab. Optionally scope to one
    * project. Requires the `context:read` scope.
    */
   async view(input: ViewInput = {}): Promise<ViewResult> {
@@ -1989,6 +1990,9 @@ export class ContentHero {
     if (typeof input.fromSec === 'number') params.set('fromSec', String(input.fromSec))
     if (typeof input.toSec === 'number') params.set('toSec', String(input.toSec))
     if (input.atSec?.length) params.set('atSec', input.atSec.join(','))
+    if (input.find) params.set('find', input.find)
+    if (input.where) params.set('where', 'true')
+    if (input.picture) params.set('picture', 'true')
     // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the
     // RFC-3986 query encoding; emit %20 so the URL is canonical (both decode to a space server-side).
     const query = params.toString().replace(/\+/g, '%20')

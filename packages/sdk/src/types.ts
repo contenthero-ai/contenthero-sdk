@@ -3920,6 +3920,8 @@ export interface ViewResult {
   rendered?: Record<string, unknown>
   renderedSound?: Record<string, unknown>
   clip?: Record<string, unknown>
+  /** A project window's picture analysis, from its clips' sources (a source's rides on `clip.picture`). */
+  picture?: Record<string, unknown>
 }
 
 /** Options for `view`. */
@@ -4025,6 +4027,12 @@ export interface ViewInput {
   toSec?: number
   /** Frames at exactly these seconds of a source, instead of spread across a window. Not with `count` or `perSecond`. */
   atSec?: number[]
+  /** What to look for in the picture of a source's window or a project's window (`VIEW_PICTURE_INPUT_TEXT.find`). */
+  find?: string
+  /** With `find`: where each thing appears in the frame, with frame-exact edges. */
+  where?: boolean
+  /** The window's picture analysis: cuts, fades, black, camera movement, text on screen and faces. */
+  picture?: boolean
 }
 
 /** A rectangle in composition units: the space layer geometry is expressed in (`ProjectDetail.compositionSpace`). */

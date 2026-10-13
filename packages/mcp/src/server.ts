@@ -75,6 +75,7 @@ import {
   type SortableList,
   contentVideosPending,
   viewDescription,
+  VIEW_PICTURE_INPUT_TEXT,
   getProjectDescription,
   updateTimelineDescription,
   updateCanvasDescription,
@@ -4739,6 +4740,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         live: z.boolean().optional().describe('Also return what the user is looking at beside a render.'),
         trackIds: z.array(z.string()).min(1).optional().describe("Render only these tracks, every clip on them, picture and sound, on the timeline's own frame numbers. The project is untouched."),
         clipIds: z.array(z.string()).min(1).optional().describe("Render only these clips, picture and sound, on the timeline's own frame numbers. The project is untouched."),
+        find: z.string().min(1).max(200).optional().describe(VIEW_PICTURE_INPUT_TEXT.find),
+        where: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.where),
+        picture: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.picture),
       },
     },
     async (args, extra) => {
@@ -4775,6 +4779,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           live: args.live,
           trackIds: args.trackIds,
           clipIds: args.clipIds,
+          find: args.find,
+          where: args.where,
+          picture: args.picture,
         })
         // Only the live part has a screen capture (gap closure D4: a view answers with the parts it names).
         const snapshotUrl = typeof result.live?.context?.snapshotUrl === 'string' ? result.live.context.snapshotUrl : null

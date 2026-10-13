@@ -7,6 +7,7 @@
  *        [--layout <frames|sheets>] [--sound] [--video] [--render-id <id>] [--page <n>] [--wait <seconds>]
  *        [--width <n>] [--region <x,y,w,h>] [--asset <id> | --media-url <url> | --content-id <id> [--slide <n>]]
  *        [--from-sec <n>] [--to-sec <n>] [--at-sec <list>] [--live] [--tracks <ids>] [--clips <ids>] [--save <path>]
+ *        [--find <text> [--where]] [--picture]
  *
  * Returns the parts the view names: the live context (the most-recent-active session's surface + focus + selection,
  * plus the live participant set) for a view that renders nothing, a render, or a source. `--live` adds the live context
@@ -22,11 +23,12 @@
  * per second (`--per-second`), and `--sound` measures the window as it is, beside any frames. `--width` and `--region`
  * say what the MCP's `view` fields say (copied by hand until one source holds every field's description). `--save`
  * writes whichever images were produced (render preferred over snapshot: frames, contact sheets, a sound's picture,
- * or a source's keyframes, a post's evidence sheet and its sound's picture) to files.
+ * or a source's keyframes, a post's evidence sheet and its sound's picture) to files. `--find`, `--where` and `--picture`
+ * ask a source's window, or a project's window over `--from-frame` and `--to-frame`, of its picture analysis, in numbers.
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
-import type { CompositionRegion, ViewResult } from '@contenthero/sdk'
+import { VIEW_PICTURE_INPUT_TEXT, type CompositionRegion, type ViewResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -165,6 +167,11 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
   const live = result.live
   const rendered = record(result.rendered)
   const renderedSound = record(result.renderedSound)
+  const projectPicture = record(result.picture)
+  // A project window asked of its picture analysis: its numbers are the structured output.
+  if (projectPicture && !rendered && !renderedSound && !live) {
+    return "The picture analysis of the project's window, read from its clips' sources (see the structured output)."
+  }
   // The parts the view named: a render alone, the live context alone, or both.
   if (!rendered && !renderedSound && !live?.context) {
     return 'No live context: no one is currently viewing this in the app.'
@@ -211,6 +218,9 @@ export function registerView(program: Command): void {
     .option('--live', 'also return what the user is looking at beside a render')
     .option('--tracks <ids>', "render only these tracks, every clip on them, picture and sound, on the timeline's own frame numbers; the project is untouched (separated by commas)", parseIds)
     .option('--clips <ids>', "render only these clips, picture and sound, on the timeline's own frame numbers; the project is untouched (separated by commas)", parseIds)
+    .option('--find <text>', VIEW_PICTURE_INPUT_TEXT.find)
+    .option('--where', VIEW_PICTURE_INPUT_TEXT.where)
+    .option('--picture', VIEW_PICTURE_INPUT_TEXT.picture)
     .option('--save <path>', "write the produced image(s), a render's (with a heard range's evidence sheet), or a source's keyframes, its evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -226,12 +236,14 @@ export function registerView(program: Command): void {
           throw new CliError("--slide with --content-id is a carousel slide's 0-based order, as content analyze reports it.", EXIT.USAGE)
         }
       }
+      // A view asked of its picture analysis renders nothing, so its window (--from-frame, --to-frame) implies no render.
+      const asksPicture = opts.find != null || Boolean(opts.where) || Boolean(opts.picture)
       // A picture flag implies a render, unless it shapes a sound, a video or a clip, which are renders of their own.
       const render =
         Boolean(opts.render) ||
         (!sound && !video && !clip &&
           (opts.frame != null || (opts.slide != null && !post) || opts.slideIndex != null ||
-            opts.fromFrame != null || opts.toFrame != null || opts.width != null || opts.region != null ||
+            (!asksPicture && (opts.fromFrame != null || opts.toFrame != null)) || opts.width != null || opts.region != null ||
             opts.frames != null || opts.perSecond != null || opts.layout != null || opts.count != null ||
             opts.tracks != null || opts.clips != null))
       if (opts.layout != null && opts.layout !== 'frames' && opts.layout !== 'sheets') {
@@ -272,6 +284,9 @@ export function registerView(program: Command): void {
         live: Boolean(opts.live) || undefined,
         trackIds: opts.tracks as string[] | undefined,
         clipIds: opts.clips as string[] | undefined,
+        find: opts.find as string | undefined,
+        where: Boolean(opts.where) || undefined,
+        picture: Boolean(opts.picture) || undefined,
       })
 
       const rendered = record(result.rendered)

@@ -30,12 +30,20 @@ export function viewDescription(audience: ToolTextAudience): string {
         ? 'video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured.'
         : 'video watches a range play with its sound.'),
     "To see and hear a source rather than your edit, name a clip of the user's with assetId (the id get_project reports in a clip's source) or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec in its own seconds. A source's frames follow the same rules as your edit's, labeled with their seconds. A source read carries the source alone. sound measures the window as it is, beside any frames; with video you watch it play. On any stored source, every view also carries its sound analysis for the window read: speech, sound candidates with their measured descriptors, levels against the voice, offset from the beat and repetition pattern, music and beats, loudness, and each stem's level; free, made once per file, and made the first time its sound is read. With sound, the window also comes as one evidence sheet: its frames, the spoken words and a spectrogram strip per stem on one time axis, each sound candidate marked by its number. A candidate is measured, never named: judge what it is from its strip and its descriptors.",
+    "find, where and picture ask a source, or a project's window over fromFrame and toFrame, of its picture analysis and answer in numbers rather than images, so a view with only them returns no frames. A file's picture analysis is made once and shared: a coarse one, one picture per shot, exists from upload, and the full one is made the first time the file is studied; until the full one is ready, the answer says it is coarse and how the full one stands.",
     "Anything not ready yet (a render's page, a sound analysis, an evidence sheet) says when it started, when it is expected, the exact inputs that read it again (readWith), and why it has not ended when it is blocked or late. Read it again with exactly those inputs: asking for the same render again starts nothing new, since an identical render is the one already made. Every render reports what it cost. Renders are ephemeral and need no live tab, only a projectId when no one is viewing. Check your work here, never with export, which makes a file the user keeps.",
     audience === 'mcp'
       ? 'Requires the context:read scope.'
       : 'A video is watched whole, so the longest you can watch is the most video your context holds at once; watch a longer stretch in parts.',
   ].join(' ')
 }
+
+/** `view`'s picture inputs, described once for every surface (the MCP's schema and the in-app agent's parameters). */
+export const VIEW_PICTURE_INPUT_TEXT = {
+  find: "Describe what to look for in the picture. Returns the moments of the source or project window that show it, best first, as times (and timeline frames for a project), matching what is pictured, the text on screen and the words spoken over it. The moments are candidates: confirm the ones that matter by viewing frames at their times, or ask where.",
+  where: "Also where each thing that find describes appears in the frame: one track per thing in one place, with its box normalized to the frame and its edges at the exact frame where it appears and leaves. Slower the first time a phrase is asked of a file, and a read after that; the answer names the step it swept at, so something on screen for less than that step may be missed.",
+  picture: "The window's picture analysis: its cuts, fades, black, camera movement, the text on screen and where faces are (never who), each with its times and position. For a project it reads each clip's source and maps it to the timeline; it does not see what covers a clip or what has no source, which a render of the range shows.",
+} as const
 
 /** `get_project`: read a project, its settings, and its composition, summarized or whole. */
 export function getProjectDescription(audience: ToolTextAudience): string {

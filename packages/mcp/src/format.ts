@@ -3155,10 +3155,15 @@ export function viewResult(
       structuredContent: standaloneStructured(clipped.lines.join('\n'), { clip: clipped.json }),
     }
   }
-  // The parts the request named (gap closure D4): the live context when asked, a render, the range's sound beside it.
+  // The parts the request named (gap closure D4): the live context when asked, a render, the range's sound beside it,
+  // and a project window's picture analysis (numbers only, no images).
   const live = result.live ?? null
   const rendered = isPlainRecord(result.rendered) ? result.rendered : null
   const renderedSound = isPlainRecord(result.renderedSound) ? result.renderedSound : null
+  const projectPicture = isPlainRecord(result.picture) ? result.picture : null
+  if (projectPicture && !rendered && !renderedSound && !live) {
+    return text(`The picture analysis of the project's window, read from its clips' sources:\n\n${JSON.stringify(projectPicture)}`)
+  }
   if (!rendered && !renderedSound && !live?.context) {
     return text(
       'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
@@ -3198,6 +3203,7 @@ export function viewResult(
     ...(live ? { live } : {}),
     ...(picture ? { rendered: withoutMap(picture.json) } : {}),
     ...(sound ? { renderedSound: withoutMap(sound.json) } : {}),
+    ...(projectPicture ? { picture: projectPicture } : {}),
   }
   const content: CallToolResult['content'] = [
     { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(answer, null, 2)}` },
