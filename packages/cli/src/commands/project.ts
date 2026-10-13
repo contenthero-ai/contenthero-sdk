@@ -105,6 +105,10 @@ export function registerProject(program: Command): void {
       )
     })
 
+  /** A comma-separated option as a list, or undefined when it was not given. */
+  const list = (value: unknown): string[] | undefined =>
+    typeof value === 'string' ? value.split(',').map((v) => v.trim()).filter(Boolean) : undefined
+
   project
     .command('get')
     .description("Read a project's composition + revision (summary by default; requires editor:read)")
@@ -114,6 +118,10 @@ export function registerProject(program: Command): void {
     .option('--to <frame>', 'timeline only: end frame of the window')
     .option('--track <trackId>', 'timeline only: scope to one track by id')
     .option('--slide <slideId>', "canvas only: scope to one slide by id (applies to --detail full too)")
+    .option('--clips <ids>', 'read these clips whole, every property and their code, with the modules they import; nothing else of the project (separated by commas)')
+    .option('--modules <names>', "read these project modules' code (separated by commas)")
+    .option('--source-asset <id>', "with --at-sec: the recording whose moments to place on the timeline, by the assetId a clip's source names")
+    .option('--at-sec <list>', 'with --source-asset: the seconds of that recording to place (separated by commas)')
     // ⛔ No `--include-render-url` (retired 2026-10-04): a read must not render and save a cover. See a project with
     // `context --project <id> --render`.
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
@@ -124,6 +132,10 @@ export function registerProject(program: Command): void {
         toFrame: opts.to != null ? Number(opts.to) : undefined,
         trackId: typeof opts.track === 'string' ? opts.track : undefined,
         slideId: typeof opts.slide === 'string' ? opts.slide : undefined,
+        clipIds: list(opts.clips),
+        moduleNames: list(opts.modules),
+        sourceAssetId: typeof opts.sourceAsset === 'string' ? opts.sourceAsset : undefined,
+        atSec: list(opts.atSec)?.map(Number),
       })
       emit(p, ctx, () =>
         `Project ${p.id} "${p.title}" (${p.type}), revision ${p.revision}` +
@@ -138,6 +150,12 @@ export function registerProject(program: Command): void {
             `\n  Full-frame layer: layerWidth ${p.compositionSpace.width}, layerHeight ${p.compositionSpace.height}`
           : '') +
         settingsText(p) +
+        // Where the seconds asked for play on the timeline (gap closure D6), a line per second.
+        (p.sourceTimes?.length
+          ? `\nWhere those seconds play:\n${p.sourceTimes
+              .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
+              .join('\n')}`
+          : '') +
         (p.groups?.length
           ? `\nGroups: ${p.groups
               .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)

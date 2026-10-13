@@ -1,0 +1,74 @@
+/**
+ * The descriptions of the tools every ContentHero agent shares, written once (gap closure D7): the MCP registers them
+ * from here, and the app's in-app agent imports them from this package once it is published, so the two surfaces can no
+ * longer describe one tool two ways. Until then the app holds the same strings, and its own test holds them free of
+ * values.
+ *
+ * Each text is principle-based: it says what the tool does and the rules it follows, never an example value or a limit
+ * the server enforces, because a restated limit is wrong the moment the server changes. Where a text names the place an
+ * agent reads ids from, it says it for its audience: get_project for an MCP agent, the editorContext system message for
+ * the in-app agent.
+ */
+
+/** Who reads a description: an MCP agent, or the in-app agent. */
+export type ToolTextAudience = 'mcp' | 'in-app'
+
+const IDS_FROM: Record<ToolTextAudience, string> = {
+  mcp: 'get_project',
+  'in-app': 'the editorContext system message',
+}
+
+/** `view`: see what the user is looking at, and see or hear your own work or a source. */
+export function viewDescription(audience: ToolTextAudience): string {
+  return [
+    "See what the user is looking at, and see or hear your own work or a source. A view returns only what it names: your render, a source, or the user's screen; add live to a render to also get what the user is looking at.",
+    "With nothing to render and no source, it returns the live context of the open app: the active surface, the focused element, the playhead and the selection, from the most recently active session, with the live participants. capture adds a picture of the user's screen as shown now, including unsaved and transient state; it takes a moment and briefly interrupts the page.",
+    "render shows your work as it will play, rendered from the saved project: one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another; for a timeline, frames, a count over a range, or perSecond over a range name several. count spreads that many frames from the first frame of the window to its last; perSecond steps from the first; frames and atSec are exact. Several frames come back one by one when they fit one result and otherwise as contact sheets with each frame labeled under its tile, in pages; nothing caps how many. width is the width of each image returned, the crop's when a region is named; without width a region comes back at native pixels. sampled names the frames drawn, and anything the server changed is listed in adjusted with why.",
+    "trackIds and clipIds render only those tracks and clips, picture and sound, on the timeline's own frame numbers, leaving the project untouched, so the person can keep editing while you review.",
+    "sound renders a range of the mix as an export mixes it, before an export's delivery leveling, and measures it (integrated loudness, true peak, loudness range, sample peak, where sounds start, stereo width, band balance), with a waveform and spectrogram picture and a link to the audio. Its sound is also analyzed and drawn as one evidence sheet, as a source's window is below, on the sound's own seconds from the start of the range; the measurement stays the loudness to deliver by. " +
+      (audience === 'mcp'
+        ? 'video watches a range play with its sound; where video cannot be received, as here, it returns frames across the range and the sound measured.'
+        : 'video watches a range play with its sound.'),
+    "To see and hear a source rather than your edit, name a clip of the user's with assetId (the id get_project reports in a clip's source) or mediaUrl, or a tracked post's video with contentId (and slide for a carousel) once analyze_content kind video has downloaded it, and window it with fromSec and toSec in its own seconds. A source's frames follow the same rules as your edit's, labeled with their seconds. A source read carries the source alone. sound measures the window as it is, beside any frames; with video you watch it play. On any stored source, every view also carries its sound analysis for the window read: speech, sound candidates with their measured descriptors, levels against the voice, offset from the beat and repetition pattern, music and beats, loudness, and each stem's level; free, made once per file, and made the first time its sound is read. With sound, the window also comes as one evidence sheet: its frames, the spoken words and a spectrogram strip per stem on one time axis, each sound candidate marked by its number. A candidate is measured, never named: judge what it is from its strip and its descriptors.",
+    "Anything not ready yet (a render's page, a sound analysis, an evidence sheet) says when it started, when it is expected, the exact inputs that read it again (readWith), and why it has not ended when it is blocked or late. Read it again with exactly those inputs: asking for the same render again starts nothing new, since an identical render is the one already made. Every render reports what it cost. Renders are ephemeral and need no live tab, only a projectId when no one is viewing. Check your work here, never with export, which makes a file the user keeps.",
+    audience === 'mcp'
+      ? 'Requires the context:read scope.'
+      : 'A video is watched whole, so the longest you can watch is the most video your context holds at once; watch a longer stretch in parts.',
+  ].join(' ')
+}
+
+/** `get_project`: read a project, its settings, and its composition, summarized or whole. */
+export function getProjectDescription(audience: ToolTextAudience): string {
+  return [
+    "Read a project: its title, revision and settings (its canvas size, and for a video project its frame rate, delivery loudness, magnetic main track, linkage and the kinds of track linkage reaches), with a summary of its composition by default or the whole composition with detail 'full'.",
+    "The summary is each track's id, name, type and whether it is the main track, and each clip's id, type, place on the timeline, speed and source: a clip plays a file (its assetId, the same id view and get_media take, and the window of the file it plays, in the file's seconds) or code (the project modules it imports). Clips that share an assetId were cut from one recording; a clip's id never says so. For a canvas, the summary is each slide with its layers' ids, types and the start of each text layer's text.",
+    "A timeline read can be narrowed to a frame window or one track, and a canvas read to one slide; a narrowed full read carries only the modules its clips import and names the rest. Read one clip's or one module's code with clipIds or moduleNames. sourceAssetId with atSec says where moments of a recording play on the timeline: every clip and frame each second lands on, none where it was cut out.",
+    'Pass the returned revision as expectedRevision for an edit that must not overwrite a concurrent change. update_project changes the settings.',
+    ...(audience === 'mcp' ? ['Requires the editor:read scope.'] : []),
+  ].join(' ')
+}
+
+/** `update_timeline`: edit a video timeline with a batch of operations read from the catalog. */
+export function updateTimelineDescription(audience: ToolTextAudience): string {
+  return [
+    'Edit a video timeline with a batch of operations, the same ones every ContentHero agent uses, applied by the server and shown in the open editor at once. Each operation is an object with an `op` name and its fields.',
+    "get_schema kind 'timeline' lists every operation with its shape and the rules they all follow; read an operation in full by its name before using one you have not read, and build a clip from its type's example there. A code clip imports project modules, which an operation sets.",
+    `Read clip, track and transition ids from ${IDS_FROM[audience]}.`,
+    'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result reports each operation, with what the compiler found in any code an operation wrote.',
+    'Prefer an edit the person can review and turn back over one that cannot be reversed, and make a destructive one only when they asked for it. A clip\'s length on the timeline follows its source and its speed: change its speed, not its length.',
+    'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
+    ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
+  ].join(' ')
+}
+
+/** `update_canvas`: edit a canvas with a batch of operations read from the catalog. */
+export function updateCanvasDescription(audience: ToolTextAudience): string {
+  return [
+    'Edit a canvas (slides and layers) with a batch of operations, applied by the server and shown in the open editor at once. Each operation is an object with an `op` name and its fields.',
+    "get_schema kind 'layer' lists every operation with its shape and the rules they all follow; read an operation or a layer type in full by its name before using one you have not read.",
+    `Read slide and layer ids from ${IDS_FROM[audience]}.`,
+    'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why.',
+    'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
+    ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
+  ].join(' ')
+}

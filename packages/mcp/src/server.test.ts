@@ -454,7 +454,7 @@ function fakeClient(overrides = {}) {
       nextCursor: null,
     }),
     getProject: async (projectId, options) => ({ id: projectId, type: 'editor', kind: 'editor', title: 'My Edit', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'editor', revision: 4, state: { tracks: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
-    view: async (input) => ({ context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] }),
+    view: async (input) => ({ live: { context: { surface: 'canvas', focusedSlideId: 's1', selectedLayerIds: ['l1'], snapshotUrl: 'https://x/snap.webp' }, participant: { userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: input?.projectId ?? 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'canvas', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] } }),
     createProject: async (input) => ({ id: 'new1', type: input.type ?? 'editor', kind: input.type ?? 'editor', title: input.title ?? 'Untitled', orientation: input.orientation ?? '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: input.type ?? 'editor', revision: 0, state: {}, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
     deleteProject: async () => {},
     importProject: async (input) => ({ id: 'imp1', type: 'canvas', kind: 'canvas', title: input.title ?? 'Imported deck', orientation: '16:9', width: 1920, height: 1080, thumbnailUrl: null, isArchived: false, isFavorited: false, createdAt: null, updatedAt: null, surface: 'canvas', revision: 0, state: { slides: [] }, assetReferences: [], brandKitId: null, exportedCardId: null, exportedUrl: null, shareId: null, favoritedAt: null, archivedAt: null }),
@@ -2796,13 +2796,14 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
  */
 test("a render's exact audio map rides once, in the structured data, never in the text's JSON", async () => {
   const rendered = { renderId: 'r1', state: 'done', kind: 'sound', audioMap: { status: 'ready', window: AUDIO_WINDOW } }
-  const viewer = await connect(fakeClient({ view: async () => ({ context: { rendered }, participant: null, participants: [] }) }))
+  const viewer = await connect(fakeClient({ view: async () => ({ rendered }) }))
   const seen = await viewer.callTool({ name: 'view', arguments: { renderId: 'r1' } })
   assert.doesNotMatch(seen.content[0].text, /"audioMap"/)
   assert.match(seen.content[0].text, /Exact values for computing are in the structured data beside this text\./)
   const { summary, ...exact } = seen.structuredContent as Record<string, unknown>
   assert.deepEqual(exact, { rendered: { audioMap: { status: 'ready', window: AUDIO_WINDOW } } })
-  assert.match(String(summary), /the render is from the saved project/)
+  // A render alone carries no live context (gap closure D4).
+  assert.doesNotMatch(String(summary), /Live context/)
 })
 
 test('get_content and view carry the exact audio map in structuredContent, beside the readable text', async () => {
@@ -2912,10 +2913,10 @@ test("view on a post's heard window attaches its evidence sheet and says how to 
   assert.deepEqual(images.map((b) => b.data), ['U0hFRVQ='])
   assert.ok(res.content.some((b) => b.type === 'text' && b.text === 'Its evidence sheet:'))
 
-  const pending = { ...clip, sheet: { status: 'pending', reason: 'The evidence sheet is drawn once the audio map is ready.' } }
+  const pending = { ...clip, sheet: { status: 'pending', since: '2026-10-13T10:00:00Z', reason: 'The evidence sheet is drawn once the audio map is ready.' } }
   const mcp2 = await connect(fakeClient({ view: async () => ({ clip: pending }) }))
   const res2 = await mcp2.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, sound: true } })
-  assert.match(res2.content[0].text, /evidence sheet: being made \(The evidence sheet is drawn once the audio map is ready\)/)
+  assert.match(res2.content[0].text, /evidence sheet is still being made \(since 2026-10-13T10:00:00Z\): The evidence sheet is drawn once the audio map is ready\./)
   assert.equal(res2.content.filter((b) => b.type === 'image').length, 0)
 })
 
@@ -3332,9 +3333,8 @@ test('view render returns the composed-output as an inline image block', async (
   const mcp = await connect(
     fakeClient({
       view: async () => ({
-        context: { surface: 'editor', playheadFrame: 34, rendered },
-        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' },
-        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }],
+        live: { context: { surface: 'editor', playheadFrame: 34 }, participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] },
+        rendered,
       }),
     }),
   )
@@ -3360,9 +3360,8 @@ test('view returns one image block per frame across a range', async () => {
   const mcp = await connect(
     fakeClient({
       view: async () => ({
-        context: { surface: 'editor', playheadFrame: 0, rendered },
-        participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' },
-        participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }],
+        live: { context: { surface: 'editor', playheadFrame: 0 }, participant: { userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 'sess', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-07-12T00:00:00Z' }] },
+        rendered,
       }),
     }),
   )
@@ -3383,7 +3382,7 @@ test('view returns one image block per frame across a range', async () => {
  * third; sending a wait on a structured read, or none on a render, the fourth.
  */
 function noTabFirst(rendered) {
-  return fakeClient({ view: async () => ({ context: { rendered }, participant: null, participants: [] }) })
+  return fakeClient({ view: async () => ({ rendered }) })
 }
 
 test('view attaches contact sheets as images and keeps their frames in the text', async () => {
@@ -3410,11 +3409,11 @@ test('view attaches contact sheets as images and keeps their frames in the text'
 })
 
 test('view says a render still going is read with its id, and shows what is ready', async () => {
-  const rendered = { renderId: 'r2', state: 'rendering', kind: 'picture', layout: 'sheets', page: 1, pages: 6, readyPages: [], frameCount: 600, renderedFrameCount: 0 }
+  const rendered = { renderId: 'r2', status: 'pending', since: '2026-10-13T10:00:00Z', readWith: { renderId: 'r2', page: 1 }, kind: 'picture', layout: 'sheets', page: 1, pages: 6, readyPages: [], frameCount: 600, renderedFrameCount: 0 }
   const mcp = await connect(noTabFirst(rendered))
   const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, count: 600 } })
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
-  assert.match(res.content[0].text, /Still rendering: 0 of 600 frames are drawn\. Read the rest with renderId r2 and a page number\./)
+  assert.match(res.content[0].text, /Still rendering: 0 of 600 frames are drawn\. Read this page with renderId r2 and page 1, and the rest with renderId r2 and a page number\./)
   assert.doesNotMatch(res.content[0].text, /The render produced no image/)
 })
 
@@ -3465,16 +3464,22 @@ test("view on a rendered sound attaches its evidence sheet and its audio map", a
   assert.doesNotMatch(text, /UkVOREVS/)
   assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['UkVOREVS'])
 
-  const pending = { ...rendered, audioMap: { status: 'pending' }, sheet: { status: 'pending', reason: 'The evidence sheet is drawn once the sound analysis is ready: read this window again to get it.' } }
+  const pending = {
+    ...rendered,
+    audioMap: { status: 'pending', since: '2026-10-13T10:00:00Z', readWith: { renderId: 'r4' } },
+    sheet: { status: 'pending', since: '2026-10-13T10:00:00Z', readWith: { renderId: 'r4' }, reason: 'The evidence sheet is drawn once the sound analysis is ready: read this render again by its id to get it.' },
+  }
   const mcp2 = await connect(noTabFirst(pending))
   const res2 = await mcp2.callTool({ name: 'view', arguments: { projectId: 'p1', sound: true } })
-  assert.match(res2.content[0].text, /evidence sheet: being made \(The evidence sheet is drawn once the sound analysis is ready: read this window again to get it\)/)
+  // A pending part names the render to read, never the range (gap closure D3).
+  assert.match(res2.content[0].text, /audio map: the sound analysis is still being made \(since 2026-10-13T10:00:00Z\): read it again with renderId r4\./)
+  assert.match(res2.content[0].text, /evidence sheet is still being made \(since 2026-10-13T10:00:00Z\): read it again with renderId r4\./)
   assert.equal(res2.content.filter((c) => c.type === 'image').length, 0)
 })
 
 test('view forwards the new render inputs, and waits only when it renders', async () => {
   const seen = []
-  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { live: { context: null, participant: null, participants: [] } }) }))
   await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, frames: [4, 2], layout: 'frames' } })
   await mcp.callTool({ name: 'view', arguments: { renderId: 'r1', page: 2 } })
   await mcp.callTool({ name: 'view', arguments: { projectId: 'p1' } })
@@ -3491,7 +3496,7 @@ test('view forwards the new render inputs, and waits only when it renders', asyn
 // dropping video from the wait condition, or any clip field from the forwarded input, turns this red.
 test('view forwards video and a raw clip, and waits for video', async () => {
   const seen = []
-  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { live: { context: null, participant: null, participants: [] } }) }))
   await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', video: true, fromFrame: 0, toFrame: 90 } })
   await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 1.5, toSec: 4, count: 6, width: 480 } })
   await mcp.callTool({ name: 'view', arguments: { mediaUrl: 'https://media.contenthero.ai/c.mp4' } })
@@ -3508,7 +3513,7 @@ test('view forwards video and a raw clip, and waits for video', async () => {
 // dropping contentId, slide or atSec from the forwarded input turns this red.
 test('view forwards a tracked post, its slide, frames at named seconds and sound on a source', async () => {
   const seen = []
-  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => (seen.push(input), { live: { context: null, participant: null, participants: [] } }) }))
   await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', slide: 4, atSec: [1, 3.5], sound: true } })
   await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', fromSec: 2, toSec: 4, perSecond: 2 } })
   assert.deepEqual(
@@ -3572,7 +3577,7 @@ test('view shows the frames and the sound of a video range', async () => {
     onsets: [], stereo: null,
     picture: { width: 1240, height: 402, dataUrl: 'data:image/webp;base64,U05E' },
   }
-  const mcp = await connect(fakeClient({ view: async () => ({ context: { rendered, renderedSound }, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async () => ({ rendered, renderedSound }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', video: true, fromFrame: 0, toFrame: 60 } })
   assert.deepEqual(res.content.filter((c) => c.type === 'image').map((i) => i.data), ['RjA=', 'RjE=', 'U05E'])
   assert.match(res.content[0].text, /2 rendered frames are attached below, in order\./)
@@ -3615,23 +3620,24 @@ test("view cuts a clip's frames to a region and says how they map back", async (
       view: async () => ({
         clip: {
           url: 'https://media.contenthero.ai/c.mp4', type: 'video',
-          crop: { width: 640, height: 360, region: { x: 960, y: 540, width: 960, height: 540 }, pixelsPerSourcePixel: 0.6667 },
+          // How the frames map back to the source (gap closure D2: `pixels`, the region cut by the service).
+          pixels: { width: 640, height: 360, region: { x: 960, y: 540, width: 960, height: 540 }, pixelsPerSourcePixel: 0.6667 },
         },
       }),
     }),
   )
   const { tools } = await mcp.listTools()
   const region = tools.find((t) => t.name === 'view').inputSchema.properties.region
-  assert.match(region.description, /For a source, the rectangle is in its own pixels, and each of its frames is cut to it\.$/)
+  assert.match(region.description, /For a source, the rectangle is in its own pixels\.$/)
   const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', region: { x: 960, y: 540, width: 960, height: 540 } } })
   assert.match(res.content[0].text, /Zoom: 960x540 at \(960, 540\) in the file's pixels, shown at 640x360 \(0\.6667 px per file px\)/)
   const failed = await connect(
     fakeClient({
-      view: async () => ({ clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', cropError: 'The region is outside the clip.' } }),
+      view: async () => ({ clip: { url: 'https://media.contenthero.ai/c.mp4', type: 'video', keyframeError: 'The region has no area inside the 1920x1080 video.' } }),
     }),
   )
   const why = await failed.callTool({ name: 'view', arguments: { assetId: 'a1', region: { x: 0, y: 0, width: 10, height: 10 } } })
-  assert.match(why.content[0].text, /Zoom not shown: The region is outside the clip\./)
+  assert.match(why.content[0].text, /Keyframes not shown: The region has no area inside the 1920x1080 video\./)
 })
 
 test('view keyframes spend the one result budget, and a clip that failed says why', async () => {
@@ -3665,7 +3671,7 @@ test('view keyframes spend the one result budget, and a clip that failed says wh
  * fourth red.
  */
 const noTab = (rendered) =>
-  fakeClient({ view: async () => ({ context: { rendered }, participant: null, participants: [] }) })
+  fakeClient({ view: async () => ({ rendered }) })
 
 test('view shows a render with no live tab', async () => {
   const mcp = await connect(noTab({ surface: 'editor', frame: 12, dataUrl: 'data:image/webp;base64,AQIDBA==' }))
@@ -3673,7 +3679,7 @@ test('view shows a render with no live tab', async () => {
   const image = res.content.find((c) => c.type === 'image')
   assert.ok(image, 'the render must come back even though no one is viewing the project')
   assert.equal(image.data, 'AQIDBA==')
-  assert.match(res.content[0].text, /render is from the saved project/)
+  assert.doesNotMatch(res.content[0].text, /Live context/)
   assert.doesNotMatch(res.content[0].text, /No live context/)
 })
 
@@ -3695,9 +3701,8 @@ test('view names the frames of a range that did not render', async () => {
   const mcp = await connect(
     fakeClient({
       view: async () => ({
-        context: { surface: 'editor', rendered },
-        participant: { userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' },
-        participants: [{ userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' }],
+        live: { context: { surface: 'editor' }, participant: { userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' }, participants: [{ userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-04T00:00:00Z' }] },
+        rendered,
       }),
     }),
   )
@@ -3712,7 +3717,7 @@ test('view names the frames of a range that did not render', async () => {
  */
 test('view accepts a native-width render and forwards a region', async () => {
   let seen
-  const mcp = await connect(fakeClient({ view: async (input) => ((seen = input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => ((seen = input), { live: { context: null, participant: null, participants: [] } }) }))
   const res = await mcp.callTool({
     name: 'view',
     arguments: { projectId: 'p1', render: true, width: 3840, region: { x: 480, y: 270, width: 240, height: 135 } },
@@ -3742,7 +3747,7 @@ test('view frames spend the one result budget and name the frames that did not f
  */
 test('view takes no mode, and get_preview is gone', async () => {
   let sent
-  const mcp = await connect(fakeClient({ view: async (input) => ((sent = input), { context: null, participant: null, participants: [] }) }))
+  const mcp = await connect(fakeClient({ view: async (input) => ((sent = input), { live: { context: null, participant: null, participants: [] } }) }))
   const { tools } = await mcp.listTools()
   assert.equal(tools.some((t) => t.name === 'get_preview'), false)
   const schema = tools.find((t) => t.name === 'view')?.inputSchema
@@ -3908,14 +3913,14 @@ test("get_schema kind 'timeline' reads the index, one entry by name, or the whol
   assert.match((refused.content[0]).text, /kind 'code' takes no detail; it belongs to kinds 'timeline' and 'layer'\./)
 })
 
-test('update_timeline and update_canvas say a batch applies whole or not at all; get_project names the main track', async () => {
+test('update_timeline and update_canvas say a batch is atomic; get_project names the main track', async () => {
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()
   const description = (name: string) => tools.find((t) => t.name === name)!.description ?? ''
   for (const name of ['update_timeline', 'update_canvas']) {
-    assert.match(description(name), /A batch applies whole or not at all: when any op is refused, nothing is stored/)
+    assert.match(description(name), /A batch is ordered and atomic: when any operation is refused, nothing is stored/)
   }
-  assert.match(description('get_project'), /isPrimary: true on the main \(magnetic\) track/)
+  assert.match(description('get_project'), /whether it is the main track/)
 })
 
 // F23: `solid` was retired 2026-09-13; the tool description offered it to agents for weeks after.
@@ -5761,4 +5766,54 @@ test('a formatting fault after the server answered returns the answer as data wi
   const off = await offline.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
   assert.equal(off.isError, true)
   assert.equal(off.content[0].text, 'fetch failed')
+})
+
+/**
+ * The edit tools describe themselves from the one catalog (gap closure D7): their descriptions name no operation, so the
+ * operation list lives once, in get_schema; and the shared descriptions state no values.
+ * Break-verified: listing an operation in either description, or writing a number into view's or get_project's, turns
+ * this red.
+ */
+test('update_timeline and update_canvas list no operation; view and get_project state no values', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const description = (name: string) => tools.find((t) => t.name === name)!.description ?? ''
+  const tools_named = new Set(tools.map((t) => t.name))
+  for (const name of ['update_timeline', 'update_canvas']) {
+    // An operation is a snake_case word that is not a tool's name; none may appear.
+    const words = description(name).match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []
+    assert.deepEqual(words.filter((w) => !tools_named.has(w)), [], name)
+    assert.doesNotMatch(description(name), /\{ op:/)
+  }
+  for (const name of ['view', 'get_project']) assert.doesNotMatch(description(name), /\d/, name)
+})
+
+/**
+ * A view answers with the parts it names (gap closure D4), and a render says what was drawn and changed (D2), what it
+ * was narrowed to (D1) and what it cost (D5).
+ * Break-verified: folding the render under a live context, or dropping the adjusted, scope or cost lines, turns this red.
+ */
+test('view shows a render alone with what was changed, its scope and its cost; live adds the screen context', async () => {
+  const rendered = {
+    renderId: 'r7', status: 'ready', since: '2026-10-13T10:00:00Z', kind: 'picture', frame: 3, width: 1920, height: 1080,
+    dataUrl: 'data:image/webp;base64,QUJD',
+    adjusted: [{ field: 'width', asked: 4000, used: 1920, reason: "a render is never wider than the project's own size or the plan's export ceiling" }],
+    scope: { trackIds: ['t2'] }, missingIds: ['gone'], cost: { estimatedUsd: 0.00021 },
+  }
+  const alone = await connect(fakeClient({ view: async () => ({ rendered }) }))
+  const res = await alone.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, width: 3000, trackIds: ['t2', 'gone'] } })
+  const text = res.content[0].text
+  assert.doesNotMatch(text, /Live context/)
+  assert.match(text, /adjusted width: asked 4000, used 1920 \(a render is never wider/)
+  assert.match(text, /Only tracks t2 drawn, on the timeline's own frame numbers\. These named nothing on the timeline: gone\./)
+  assert.match(text, /This render cost about \$0\.0002 \(Remotion's estimate\)\./)
+  const both = await connect(fakeClient({
+    view: async () => ({
+      live: { context: { surface: 'editor', playheadFrame: 3 }, participant: { userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-13T10:00:00Z' }, participants: [] },
+      rendered,
+    }),
+  }))
+  const res2 = await both.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, live: true } })
+  assert.match(res2.content[0].text, /Live context on the editor surface/)
+  assert.match(res2.content[0].text, /"live": \{/)
 })

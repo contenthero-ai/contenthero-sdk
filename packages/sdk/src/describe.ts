@@ -112,17 +112,58 @@ export function describeRenderProgress(rendered: Record<string, unknown> | null 
   const id = rendered.renderId
   const pages = typeof rendered.pages === 'number' ? rendered.pages : 1
   const page = typeof rendered.page === 'number' ? rendered.page : 1
-  if (rendered.state === 'rendering') {
-    if (rendered.kind === 'sound') return `The sound is still rendering. Read it with renderId ${id}.`
+  if (rendered.status === 'pending') {
+    const readWith = readWithText(rendered.readWith) ?? `renderId ${id}`
+    if (rendered.kind === 'sound') return `The sound is still rendering. Read it with ${readWith}.`
     const ready = Array.isArray(rendered.readyPages) ? (rendered.readyPages as unknown[]) : []
     const drawn = typeof rendered.renderedFrameCount === 'number' ? rendered.renderedFrameCount : 0
     const total = typeof rendered.frameCount === 'number' ? rendered.frameCount : null
     const progress = total !== null ? `${drawn} of ${total} frames are drawn` : 'Frames are still drawing'
     const readyText = ready.length ? `; ready: ${ready.length === 1 ? 'page' : 'pages'} ${ready.join(', ')} of ${pages}` : ''
-    return `Still rendering: ${progress}${readyText}. Read the rest with renderId ${id} and a page number.`
+    return `Still rendering: ${progress}${readyText}. Read this page with ${readWith}, and the rest with renderId ${id} and a page number.`
   }
   if (pages > 1) return `Page ${page} of ${pages}. Read another page with renderId ${id} and its page number.`
   return null
+}
+
+/** The inputs a pending part names to read it again, in words, or null when it names none. */
+function readWithText(readWith: unknown): string | null {
+  if (!readWith || typeof readWith !== 'object') return null
+  const { renderId, page } = readWith as { renderId?: unknown; page?: unknown }
+  if (typeof renderId !== 'string') return null
+  return `renderId ${renderId}${typeof page === 'number' ? ` and page ${page}` : ''}`
+}
+
+/**
+ * Something not ready yet, in one line (gap closure D3): what it is, since when, by when it is expected, how to read it
+ * again (its `readWith`, else `fallback`), and why it has not ended when it is blocked or late. The one wording for a
+ * pending analysis, evidence sheet or render part on every surface.
+ */
+export function describePending(
+  what: string,
+  part: { since?: string; expectedBy?: string; readWith?: unknown; reason?: string },
+  fallback: string,
+): string {
+  const when = [part.since ? `since ${part.since}` : null, part.expectedBy ? `expected by ${part.expectedBy}` : null].filter(Boolean).join(', ')
+  const readWith = readWithText(part.readWith)
+  const how = readWith ? `read it again with ${readWith}` : fallback
+  const why = part.reason ? ` ${part.reason.trim().replace(/\.+$/, '')}.` : ''
+  return `${what} is still being made${when ? ` (${when})` : ''}: ${how}.${why}`
+}
+
+/**
+ * What the server changed in a request (gap closure D2), one line per change: the field, what was asked, what was used
+ * and why. Empty when it ran as asked.
+ */
+export function describeAdjusted(adjusted: unknown): string[] {
+  if (!Array.isArray(adjusted)) return []
+  return adjusted.flatMap((a) => {
+    if (!a || typeof a !== 'object') return []
+    const { field, asked, used, reason } = a as { field?: unknown; asked?: unknown; used?: unknown; reason?: unknown }
+    if (typeof field !== 'string') return []
+    const show = (v: unknown) => (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))
+    return [`adjusted ${field}: asked ${show(asked)}, used ${show(used)}${typeof reason === 'string' && reason ? ` (${reason})` : ''}.`]
+  })
 }
 
 /**
@@ -160,10 +201,15 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
       ? `Tracked post ${post}, its video${slide}${length}${window}`
       : `Raw source clip${typeof clip.type === 'string' ? ` (${clip.type})` : ''}${length}${window}: ${String(clip.url ?? '')}`,
   ]
-  const crop = clip.crop && typeof clip.crop === 'object' && !Array.isArray(clip.crop) ? (clip.crop as ResolvedMediaBatchItem['crop']) : null
-  const zoom = describeCrop(crop, typeof clip.cropError === 'string' ? clip.cropError : null)
+  // How the frames map to the source: a region's cut, read from `pixels` (gap closure D2).
+  const pixels = clip.pixels && typeof clip.pixels === 'object' && !Array.isArray(clip.pixels) ? (clip.pixels as Record<string, unknown>) : null
+  const crop = pixels?.region ? (pixels as unknown as ResolvedMediaBatchItem['crop']) : null
+  const zoom = describeCrop(crop, null)
   if (zoom) lines.push(`${zoom[0]!.toUpperCase()}${zoom.slice(1)}`)
   if (typeof clip.keyframeError === 'string' && clip.keyframeError) lines.push(`Keyframes not shown: ${clip.keyframeError}`)
+  const missing = Array.isArray(clip.missingAtSec) ? (clip.missingAtSec as unknown[]) : []
+  if (missing.length) lines.push(`No frame came back at ${missing.map((t) => `${String(t)}s`).join(', ')}: a moment the source holds no picture at.`)
+  lines.push(...describeAdjusted(clip.adjusted))
   // A source's frames come in pages: which one this is, and how to read the next, so nothing past it is lost silently.
   const page = typeof clip.page === 'number' ? clip.page : null
   const pages = typeof clip.pages === 'number' ? clip.pages : null
@@ -525,7 +571,8 @@ export function describeAudioMapWindow(window: AudioMapWindow): string[] {
  */
 export function describeEvidenceSheet(sheet: EvidenceSheet | null | undefined): string[] {
   if (!sheet) return []
-  if (sheet.status !== 'ready') return [`evidence sheet: ${sheet.status === 'pending' ? 'being made' : 'unavailable'} (${sheet.reason.trim().replace(/\.+$/, '')})`]
+  if (sheet.status === 'pending') return [describePending('evidence sheet', { ...sheet, reason: undefined }, sheet.reason.trim().replace(/\.+$/, ''))]
+  if (sheet.status !== 'ready') return [`evidence sheet: unavailable (${sheet.reason.trim().replace(/\.+$/, '')})`]
   const marked = sheet.soundsMarked === 0 ? 'no sound candidates in this window' : `its ${sheet.soundsMarked} sound candidate${sheet.soundsMarked === 1 ? '' : 's'} marked on the stem each is loudest in, numbered as listed under sound candidates`
   return [
     `evidence sheet, ${sec1(sheet.fromSec)} to ${sec1(sheet.toSec)}: frames along the top, the spoken words under them, then one spectrogram ` +
@@ -557,7 +604,7 @@ export const NEWER_FORMAT_LINE = 'in a newer format than this version of Content
 /** The audio map format this client reads (MAP v2). */
 export const KNOWN_AUDIO_MAP_VERSION = 2
 
-const AUDIO_MAP_STATUSES: ReadonlySet<string> = new Set(['ready', 'pending', 'unavailable'])
+const AUDIO_MAP_STATUSES: ReadonlySet<string> = new Set(['ready', 'pending', 'failed', 'unavailable'])
 
 /**
  * Whether an audio map answer is in a format newer than this client reads: a status it does not know, or a declared
@@ -580,7 +627,8 @@ export function isNewerAudioMap(answer: AudioMapAnswer): boolean {
 export function describeAudioMap(answer: AudioMapAnswer | null | undefined): string[] {
   if (!answer) return []
   if (isNewerAudioMap(answer)) return [`audio map: ${NEWER_FORMAT_LINE}`]
-  if (answer.status === 'pending') return ['audio map: the sound analysis is still being made: read this window again to get it']
+  if (answer.status === 'pending') return [describePending('audio map: the sound analysis', answer, 'read this window again to get it')]
+  if (answer.status === 'failed') return [`audio map: the sound analysis failed (${answer.reason.trim().replace(/\.+$/, '')})`]
   if (answer.status === 'unavailable') return [`audio map: unavailable (${answer.reason.trim().replace(/\.+$/, '')})`]
   return [...(answer.summary ? [describeAudioMapSummary(answer.summary)] : []), ...(answer.window ? describeAudioMapWindow(answer.window) : [])]
 }

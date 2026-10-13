@@ -88,6 +88,7 @@ import type {
   ProjectDetail,
   ViewResult,
   ViewInput,
+  GetProjectOptions,
   ListProjectsInput,
   CreateProjectInput,
   ImportProjectInput,
@@ -1919,22 +1920,17 @@ export class ContentHero {
    * detail does not pay for the whole deck. A canvas summary echoes each text layer's `text` (truncated), which is
    * what identifies it. Requires the `editor:read` scope.
    */
-  async getProject(
-    projectId: string,
-    options: {
-      detail?: 'summary' | 'full'
-      fromFrame?: number
-      toFrame?: number
-      trackId?: string
-      slideId?: string
-    } = {},
-  ): Promise<ProjectDetail> {
+  async getProject(projectId: string, options: GetProjectOptions = {}): Promise<ProjectDetail> {
     const params = new URLSearchParams()
     if (options.detail === 'full') params.set('detail', 'full')
     if (typeof options.fromFrame === 'number') params.set('fromFrame', String(options.fromFrame))
     if (typeof options.toFrame === 'number') params.set('toFrame', String(options.toFrame))
     if (options.trackId) params.set('trackId', options.trackId)
     if (options.slideId) params.set('slideId', options.slideId)
+    if (options.clipIds?.length) params.set('clipIds', options.clipIds.join(','))
+    if (options.moduleNames?.length) params.set('moduleNames', options.moduleNames.join(','))
+    if (options.sourceAssetId) params.set('sourceAssetId', options.sourceAssetId)
+    if (options.atSec?.length) params.set('atSec', options.atSec.join(','))
     const qs = params.toString() ? `?${params.toString()}` : ''
     const { project } = await this.request<{ project: ProjectDetail }>(
       'GET',
@@ -1954,11 +1950,10 @@ export class ContentHero {
    * edit, name a clip of yours with `assetId` or `mediaUrl`, or a tracked post's video with `contentId` (and `slide`
    * for a carousel) once `analyzeContent` kind `video` has downloaded it, and window it with `fromSec` and `toSec`;
    * its frames come spread across the window, at the seconds `atSec` names, or `perSecond` across it, and `sound`
-   * measures the window as it is. A source read answers with the source alone (`SourceViewResult`, `{ clip }`), its
-   * frames in pages, one by one or as contact sheets (`layout`, `page`). Renders are ephemeral and do not need a live
-   * tab. A view that names no source returns the most-recent-active session's context plus the full live participant
-   * set (`LiveViewResult`); `isSourceView` tells the two apart. Optionally scope to one project. Requires the
-   * `context:read` scope.
+   * measures the window as it is. The answer holds the parts the request named (`ViewResult`): `live` for a view that
+   * renders nothing and names no source (or adds `live: true`), `rendered` (and `renderedSound`) for a render, `clip`
+   * for a source, its frames in pages. Renders are ephemeral and do not need a live tab. Optionally scope to one
+   * project. Requires the `context:read` scope.
    */
   async view(input: ViewInput = {}): Promise<ViewResult> {
     const params = new URLSearchParams()
@@ -1968,6 +1963,9 @@ export class ContentHero {
     if (typeof input.frame === 'number') params.set('frame', String(input.frame))
     if (input.slideId) params.set('slideId', input.slideId)
     if (typeof input.slideIndex === 'number') params.set('slideIndex', String(input.slideIndex))
+    if (input.live) params.set('live', 'true')
+    if (input.trackIds?.length) params.set('trackIds', input.trackIds.join(','))
+    if (input.clipIds?.length) params.set('clipIds', input.clipIds.join(','))
     if (typeof input.fromFrame === 'number') params.set('fromFrame', String(input.fromFrame))
     if (typeof input.toFrame === 'number') params.set('toFrame', String(input.toFrame))
     if (typeof input.count === 'number') params.set('count', String(input.count))

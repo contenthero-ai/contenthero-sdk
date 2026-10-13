@@ -129,7 +129,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2870,6 +2870,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   groups: 'rendered',
   state: 'rendered',
   scope: 'rendered',
+  sourceTimes: 'rendered',
   brandKitId: 'rendered',
   appUrl: 'rendered',
   shortId: 'omitted: the appUrl carries it, and every tool accepts either id',
@@ -2920,6 +2921,12 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
             .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)
             .join('; ')}\n` +
           `  Rename with update_group; bulk-edit a whole group with update_clips { groupId }.\n`
+        : '') +
+      // Where the seconds asked for play on the timeline (gap closure D6), a line per second.
+      (p.sourceTimes?.length
+        ? `Where those seconds play on the timeline:\n${p.sourceTimes
+            .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
+            .join('\n')}\n`
         : '') +
       `\n` +
       JSON.stringify(p.state, null, 2),
@@ -2990,6 +2997,13 @@ function renderedSection(
   if (sound) lines.push(sound)
   const progress = describeRenderProgress(rendered)
   if (progress) lines.push(progress)
+  // What was drawn and what the server changed to draw it (gap closure D2), the scope it was narrowed to (D1), and what
+  // it cost (D5).
+  lines.push(...describeAdjusted(rendered.adjusted))
+  const scope = describeRenderScope(rendered)
+  if (scope) lines.push(scope)
+  const cost = isPlainRecord(rendered.cost) && typeof rendered.cost.estimatedUsd === 'number' ? rendered.cost.estimatedUsd : null
+  if (cost !== null) lines.push(`This render cost about $${cost.toFixed(4)} (Remotion's estimate).`)
   if (shown.dropped > 0) {
     const notShown = renderImages
       .slice(shown.admitted.length)
@@ -3022,8 +3036,20 @@ function renderedSection(
   return { json, lines, images: [...shown.admitted, ...drawn.admitted], remaining: drawn.remaining }
 }
 
+/** What a render was narrowed to (`trackIds`, `clipIds`), and the ids that named nothing; null for a whole render. */
+function describeRenderScope(rendered: Record<string, unknown>): string | null {
+  if (!isPlainRecord(rendered.scope)) return null
+  const { trackIds, clipIds } = rendered.scope as { trackIds?: unknown; clipIds?: unknown }
+  const named = [
+    Array.isArray(trackIds) && trackIds.length ? `tracks ${trackIds.join(', ')}` : null,
+    Array.isArray(clipIds) && clipIds.length ? `clips ${clipIds.join(', ')}` : null,
+  ].filter(Boolean)
+  const missing = Array.isArray(rendered.missingIds) && rendered.missingIds.length ? ` These named nothing on the timeline: ${rendered.missingIds.join(', ')}.` : ''
+  return `Only ${named.join(' and ')} drawn, on the timeline's own frame numbers.${missing}`
+}
+
 /**
- * A source a view read (`context.clip`): a clip of the user's by assetId or mediaUrl, or a tracked post's video by
+ * A source a view read (`clip`): a clip of the user's by assetId or mediaUrl, or a tracked post's video by
  * contentId and slide. What it is and which window was read, its keyframes as image blocks each labeled with its time
  * in the source, then its sound when asked (its measurement and where its sounds start, `describeSourceSound`, and its
  * picture as an image, as the edit's sound render is shown), a post's audio map for the window (`describeAudioMap`)
@@ -3098,12 +3124,12 @@ function clipSection(
 }
 
 /**
- * The view tool. Returns a text summary + the discriminated context JSON, plus IMAGE content block(s) so the calling
- * model can actually SEE: the viewport `snapshot` (capture) when the user's screen was requested, the composed-output
- * render (`context.rendered`), the range's sound beside frames when video could not be received
- * (`context.renderedSound`, formatted exactly as a sound `rendered`), or a source read alone (`clip`): a page of its
- * keyframes or contact sheets and its sound, with its exact audio map in `structuredContent`. The heavy data URLs are
- * stripped from the JSON text (they ride only as image blocks).
+ * The view tool. Returns a text summary + the parts the view named as JSON, plus IMAGE content block(s) so the calling
+ * model can actually SEE: the viewport `snapshot` (capture) when the user's screen was requested (`live`), the
+ * composed-output render (`rendered`), the range's sound beside frames when video could not be received
+ * (`renderedSound`, formatted exactly as a sound `rendered`), or a source read alone (`clip`): a page of its keyframes or
+ * contact sheets and its sound, with its exact audio map in `structuredContent`. The heavy data URLs are stripped from
+ * the JSON text (they ride only as image blocks).
  */
 export function viewResult(
   result: ViewResult,
@@ -3116,42 +3142,38 @@ export function viewResult(
    */
   budget: number,
 ): CallToolResult {
-  // A source read is the source alone (`SourceViewResult`), never the live context of the user's screen. Its text is the
-  // readable lines and the clip's JSON without its audio map, which is in `structuredContent` once, exact.
-  if ('clip' in result) {
-    const clipped = clipSection(isPlainRecord(result.clip) ? result.clip : {}, budget)
+  // A source read is the source alone, never the live context of the user's screen. Its text is the readable lines and
+  // the clip's JSON without its audio map, which is in `structuredContent` once, exact.
+  if (isPlainRecord(result.clip)) {
+    const clipped = clipSection(result.clip, budget)
     const { audioMap: _exact, ...readable } = clipped.json
     return {
       content: [{ type: 'text', text: `${clipped.lines.join('\n')}\n\n${JSON.stringify(readable)}` }, ...clipped.blocks],
       structuredContent: standaloneStructured(clipped.lines.join('\n'), { clip: clipped.json }),
     }
   }
-  const { context, participant, participants } = result
-  const rendered = context && isPlainRecord(context.rendered) ? context.rendered : null
-  const renderedSound = context && isPlainRecord(context.renderedSound) ? context.renderedSound : null
-  /**
-   * ⭐ A RENDER IS SHOWN WITH OR WITHOUT A LIVE TAB. Render works from the saved project, and the API returns it
-   * with `participant: null` when no one is viewing. This returned "No live context" whenever the participant was
-   * null, so a render requested with a projectId and no open tab could never reach the agent, image or error.
-   */
-  if (!context || (!participant && !rendered && !renderedSound)) {
+  // The parts the request named (gap closure D4): the live context when asked, a render, the range's sound beside it.
+  const live = result.live ?? null
+  const rendered = isPlainRecord(result.rendered) ? result.rendered : null
+  const renderedSound = isPlainRecord(result.renderedSound) ? result.renderedSound : null
+  if (!rendered && !renderedSound && !live?.context) {
     return text(
       'No live context: no one is currently viewing this in the open app (no session within the presence window). ' +
         'The user may not have the editor/studio/content open right now.',
     )
   }
 
-  // The screen capture first, because it is what `capture` asked for; then the render, its sound, and a clip, in order.
+  // The screen capture first, because it is what `capture` asked for; then the render and its sound, in order.
   const screen = admitWithinBudget(snapshot ? [snapshot] : [], budget)
   const picture = rendered ? renderedSection(rendered, screen.remaining) : null
   const sound = renderedSound ? renderedSection(renderedSound, picture?.remaining ?? screen.remaining) : null
 
   const lines: string[] = []
-  if (participant) {
-    const others = participants.length > 1 ? ` (${participants.length} live participants; showing the most recent)` : ''
-    lines.push(`Live context on the ${String(context.surface)} surface${others}, updated ${participant.updatedAt}.`)
-  } else if (rendered || renderedSound) {
-    lines.push('No one is viewing this in the open app right now; the render is from the saved project.')
+  if (live?.participant && live.context) {
+    const others = live.participants.length > 1 ? ` (${live.participants.length} live participants; showing the most recent)` : ''
+    lines.push(`Live context on the ${String(live.context.surface)} surface${others}, updated ${live.participant.updatedAt}.`)
+  } else if (live) {
+    lines.push('No one is viewing this in the open app right now.')
   }
   if (screen.admitted.length > 0) lines.push('An image of what the user is looking at (their screen) is attached below.')
   if (screen.dropped > 0) lines.push("The screen capture was not attached: it is over this result's size limit.")
@@ -3169,13 +3191,13 @@ export function viewResult(
     ...(picture && isPlainRecord(picture.json.audioMap) ? { rendered: { audioMap: picture.json.audioMap } } : {}),
     ...(sound && isPlainRecord(sound.json.audioMap) ? { renderedSound: { audioMap: sound.json.audioMap } } : {}),
   }
-  const contextForJson = {
-    ...context,
+  const answer = {
+    ...(live ? { live } : {}),
     ...(picture ? { rendered: withoutMap(picture.json) } : {}),
     ...(sound ? { renderedSound: withoutMap(sound.json) } : {}),
   }
   const content: CallToolResult['content'] = [
-    { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(contextForJson, null, 2)}` },
+    { type: 'text', text: `${lines.join('\n')}\n\n${JSON.stringify(answer, null, 2)}` },
   ]
   for (const img of screen.admitted) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })
   for (const img of picture?.images ?? []) content.push({ type: 'image', data: img.data, mimeType: img.mimeType })

@@ -6,9 +6,11 @@
  *        [--frames <list>] [--from-frame <n>] [--to-frame <n>] [--count <n>] [--per-second <n>]
  *        [--layout <frames|sheets>] [--sound] [--video] [--render-id <id>] [--page <n>] [--wait <seconds>]
  *        [--width <n>] [--region <x,y,w,h>] [--asset <id> | --media-url <url> | --content-id <id> [--slide <n>]]
- *        [--from-sec <n>] [--to-sec <n>] [--at-sec <list>] [--save <path>]
+ *        [--from-sec <n>] [--to-sec <n>] [--at-sec <list>] [--live] [--tracks <ids>] [--clips <ids>] [--save <path>]
  *
- * Returns the most-recent-active session's surface + focus + selection, plus the live participant set.
+ * Returns the parts the view names: the live context (the most-recent-active session's surface + focus + selection,
+ * plus the live participant set) for a view that renders nothing, a render, or a source. `--live` adds the live context
+ * to a render; `--tracks` and `--clips` render only those tracks and clips, the project untouched.
  * Structured by default. `--capture` pings the live tab for a fresh viewport screenshot (the user's SCREEN).
  * `--render` renders the COMPOSED OUTPUT (the editor frames / canvas slide), ephemeral and stored nowhere;
  * `--sound` renders and measures a range's mix instead, and `--video` watches a range play: a terminal cannot take
@@ -35,6 +37,7 @@ import {
   describeCodeWarnings,
   describeRenderFailure,
   describeRenderProgress,
+  describeAdjusted,
   describeSoundMeasurement,
   describeSourceSound,
   type AudioMapAnswer,
@@ -69,6 +72,13 @@ function parseSeconds(value: string): number[] {
   return seconds
 }
 
+/** A comma-separated list of ids, as the API's `trackIds` and `clipIds` take them. */
+function parseIds(value: string): string[] {
+  const ids = value.split(',').map((v) => v.trim()).filter(Boolean)
+  if (!ids.length) throw new CliError('--tracks and --clips take ids separated by commas.', EXIT.USAGE)
+  return ids
+}
+
 /** A comma-separated list of whole frame numbers, as the API's `frames` takes them. */
 function parseFrames(value: string): number[] {
   const frames = value.split(',').map((v) => Number(v.trim()))
@@ -94,7 +104,7 @@ function renderedImages(rendered: Record<string, unknown> | null): Buffer[] {
 
 /** Every image a view returned, in order: the render and the range's sound beside it, or a source's page of keyframes or contact sheets, its evidence sheet and its sound's picture. */
 function viewImages(result: ViewResult): Buffer[] {
-  if ('clip' in result) {
+  if (result.clip) {
     const clip = record(result.clip)
     const pictures = [clip?.keyframes, clip?.sheets].flatMap((list) =>
       Array.isArray(list) ? (list as Array<Record<string, unknown>>).map((item) => bufferFromDataUrl(item.dataUrl)) : [],
@@ -102,8 +112,7 @@ function viewImages(result: ViewResult): Buffer[] {
     const sheet = record(clip?.sheet)
     return [...pictures, sheet ? bufferFromDataUrl(sheet.dataUrl) : null, ...renderedImages(record(clip?.sound))].filter((b): b is Buffer => b !== null)
   }
-  const context = result.context
-  return [...renderedImages(record(context?.rendered)), ...renderedImages(record(context?.renderedSound))]
+  return [...renderedImages(record(result.rendered)), ...renderedImages(record(result.renderedSound))]
 }
 
 /** A source's sound in lines: its measurement and where its sounds start, or why it could not be heard, and its audio. */
@@ -133,7 +142,7 @@ function renderedLines(rendered: Record<string, unknown> | null): string[] {
   const progress = describeRenderProgress(rendered)
   const failure = describeRenderFailure(rendered)
   const warned = describeCodeWarnings(Array.isArray(rendered.warnings) ? (rendered.warnings as CodeDiagnostic[]) : null)
-  return [sound, audio, ...heard, progress, failure, warned].filter((line): line is string => Boolean(line))
+  return [sound, audio, ...heard, progress, ...describeAdjusted(rendered.adjusted), failure, warned].filter((line): line is string => Boolean(line))
 }
 
 /**
@@ -143,7 +152,7 @@ function renderedLines(rendered: Record<string, unknown> | null): string[] {
 export function viewSummary(result: ViewResult, saved: { count: number; path: string }): string {
   const savedLine = saved.count > 0 ? [`${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}`] : []
   // A source read is the source alone, never the live context.
-  if ('clip' in result) {
+  if (result.clip) {
     const clip = record(result.clip)
     return [
       ...describeClip(clip),
@@ -153,18 +162,19 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
       ...savedLine,
     ].join('\n')
   }
-  const c = result.context
-  const rendered = record(c?.rendered)
-  const renderedSound = record(c?.renderedSound)
-  // A render comes back with no live tab (it works without one), so only a context with none is empty.
-  if (!c || (!result.participant && !rendered && !renderedSound)) {
+  const live = result.live
+  const rendered = record(result.rendered)
+  const renderedSound = record(result.renderedSound)
+  // The parts the view named: a render alone, the live context alone, or both.
+  if (!rendered && !renderedSound && !live?.context) {
     return 'No live context: no one is currently viewing this in the app.'
   }
-  const head = result.participant
-    ? [`Live context on the ${String(c.surface)} surface (updated ${result.participant.updatedAt}).`, `${result.participants.length} live participant(s).`]
-    : rendered || renderedSound
-      ? ['No one is viewing this in the app right now; the render is from the saved project.']
-      : []
+  const head =
+    live?.participant && live.context
+      ? [`Live context on the ${String(live.context.surface)} surface (updated ${live.participant.updatedAt}).`, `${live.participants.length} live participant(s).`]
+      : live
+        ? ['No one is viewing this in the app right now.']
+        : []
   return [...head, ...renderedLines(rendered), ...renderedLines(renderedSound), ...savedLine].join('\n')
 }
 
@@ -182,22 +192,25 @@ export function registerView(program: Command): void {
     .option('--frames <list>', 'image (editor): exactly these timeline frames, in this order, separated by commas', parseFrames)
     .option('--from-frame <n>', 'start timeline frame of the range (several frames, sound or video)', (v) => parseInt(v, 10))
     .option('--to-frame <n>', 'end timeline frame of the range', (v) => parseInt(v, 10))
-    .option('--count <n>', "how many frames to spread evenly across the range, or across a source's window (omit for one at the focus point, or about one a second of a range)", (v) => parseInt(v, 10))
-    .option('--per-second <n>', "how many frames to take per second of the range, up to every frame, or of a source's window", (v) => Number(v))
+    .option('--count <n>', "how many frames to spread from the first frame of the range, or of a source's window, to its last, both included (omit for one at the focus point, or about one a second of a range)", (v) => parseInt(v, 10))
+    .option('--per-second <n>', "how many frames to take per second of the range, or of a source's window, stepping from its first frame; never more than the footage has", (v) => Number(v))
     .option('--layout <layout>', "'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, an edit's frames numbered and a source's labeled with its second under each tile (omit to choose by how many fit one response)")
     .option('--sound', "hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by --from-frame and --to-frame; or a source's window as it is, by --from-sec and --to-sec, beside any frames asked for")
     .option('--video', "watch the range play with its sound, to judge motion, timing, transitions and pacing; a terminal cannot take video, so it returns frames across the range and the sound measured. Takes --from-frame and --to-frame, or a source's window")
     .option('--render-id <id>', 'read a render already started, by the renderId it returned')
     .option('--page <n>', "which page of the render, or of a source's frames, to read, starting at 1", (v) => parseInt(v, 10))
     .option('--wait <seconds>', 'how long to wait for results before answering; what is not ready is read later with --render-id', (v) => Number(v))
-    .option('--width <n>', "image: the width in pixels to render at, or of a source's frames, to check legibility at the size it will be seen. Height follows the aspect ratio. The size used is reported with the result.", (v) => parseInt(v, 10))
-    .option('--region <x,y,w,h>', "image: render only this rectangle, x,y,width,height in composition units (get_project's compositionSpace), to inspect detail at full resolution. Without --width, it renders at native scale. For a source, the rectangle is in its own pixels, and each of its frames is cut to it.", parseRegion)
-    .option('--asset <id>', "a clip of the user's to see and hear, by its asset id, rather than your edit (or --media-url or --content-id)")
+    .option('--width <n>', "image: the width in pixels of each image returned, the crop's when a region is named, to check legibility at the size it will be seen. Height follows the aspect ratio. Anything the server changed is listed in adjusted.", (v) => parseInt(v, 10))
+    .option('--region <x,y,w,h>', "image: render only this rectangle, x,y,width,height in composition units (get_project's compositionSpace), to inspect detail. Without --width it comes back at native pixels. For a source, the rectangle is in its own pixels.", parseRegion)
+    .option('--asset <id>', "a clip of the user's to see and hear, by its asset id: the id get_project reports in a clip's source (or --media-url or --content-id)")
     .option('--media-url <url>', "a clip of the user's to see and hear, by its media URL, rather than your edit (or --asset or --content-id)")
     .option('--content-id <id>', "a tracked post's video to see and hear, by its id or short id, its link, or the platform's own id for it, once content analyze --kind video has downloaded it (or --asset or --media-url); --slide names a carousel's video")
     .option('--from-sec <n>', "start of a source's window, in its own seconds (omit to start at its beginning)", (v) => Number(v))
     .option('--to-sec <n>', "end of a source's window, in its own seconds (omit to run to its end)", (v) => Number(v))
-    .option('--at-sec <list>', "frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window, separated by commas", parseSeconds)
+    .option('--at-sec <list>', 'frames at exactly these seconds of a source, instead of spread across a window, separated by commas', parseSeconds)
+    .option('--live', 'also return what the user is looking at beside a render')
+    .option('--tracks <ids>', "render only these tracks, every clip on them, picture and sound, on the timeline's own frame numbers; the project is untouched (separated by commas)", parseIds)
+    .option('--clips <ids>', "render only these clips, picture and sound, on the timeline's own frame numbers; the project is untouched (separated by commas)", parseIds)
     .option('--save <path>', "write the produced image(s), a render's (with a heard range's evidence sheet), or a source's keyframes, its evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -219,7 +232,8 @@ export function registerView(program: Command): void {
         (!sound && !video && !clip &&
           (opts.frame != null || (opts.slide != null && !post) || opts.slideIndex != null ||
             opts.fromFrame != null || opts.toFrame != null || opts.width != null || opts.region != null ||
-            opts.frames != null || opts.perSecond != null || opts.layout != null || opts.count != null))
+            opts.frames != null || opts.perSecond != null || opts.layout != null || opts.count != null ||
+            opts.tracks != null || opts.clips != null))
       if (opts.layout != null && opts.layout !== 'frames' && opts.layout !== 'sheets') {
         throw new CliError("--layout takes 'frames' or 'sheets'.", EXIT.USAGE)
       }
@@ -255,11 +269,13 @@ export function registerView(program: Command): void {
         fromSec: opts.fromSec as number | undefined,
         toSec: opts.toSec as number | undefined,
         atSec: opts.atSec as number[] | undefined,
+        live: Boolean(opts.live) || undefined,
+        trackIds: opts.tracks as string[] | undefined,
+        clipIds: opts.clips as string[] | undefined,
       })
 
-      const c = 'clip' in result ? null : result.context
-      const rendered = record(c?.rendered)
-      const failure = describeRenderFailure(rendered) ?? describeRenderFailure(record(c?.renderedSound))
+      const rendered = record(result.rendered)
+      const failure = describeRenderFailure(rendered) ?? describeRenderFailure(record(result.renderedSound))
       let savedCount = 0
       if (opts.save) {
         const images = viewImages(result)
@@ -271,7 +287,7 @@ export function registerView(program: Command): void {
         } else if (images.length === 1) {
           writeFileSync(opts.save as string, images[0] as Buffer)
           savedCount = 1
-        } else if (renders && rendered?.state === 'rendering') {
+        } else if (renders && rendered?.status === 'pending') {
           // Still rendering: the summary says how to read it, and there is nothing to save yet.
         } else if (renders && failure) {
           // The render was asked for and said why it has no image: that is the answer, not a missing snapshot.
@@ -279,7 +295,7 @@ export function registerView(program: Command): void {
         } else if (clip) {
           // A source with no keyframes and no sound picture: the summary says why, and there is nothing to save.
         } else {
-          const url = typeof c?.snapshotUrl === 'string' ? c.snapshotUrl : null
+          const url = typeof result.live?.context?.snapshotUrl === 'string' ? result.live.context.snapshotUrl : null
           if (!url) throw new CliError('No image available for the current context (try --render or --capture).', EXIT.USAGE)
           const res = await fetch(url)
           if (!res.ok) throw new CliError(`Failed to download snapshot (HTTP ${res.status}).`, EXIT.GENERAL)

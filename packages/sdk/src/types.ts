@@ -1764,7 +1764,7 @@ export interface MediaSummary {
   /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
   durationSeconds: number | null
   /**
-   * The asset this item's file belongs to: the same id `getProject` reports as a clip's `sourceId`, so a clip can be
+   * The asset this item's file belongs to: the same id `getProject` reports as a clip's `source.assetId`, so a clip can be
    * matched to the library item it was cut from, and `getMedia` / `getMediaBatch` accept it as a `mediaId`. Null when
    * the file is not one of our registered objects; absent from a server that predates it.
    */
@@ -3177,7 +3177,7 @@ export type EvidenceSheet =
       frequencyHz: { min: number; max: number }
       soundsMarked: number
     }
-  | { status: 'pending'; reason: string }
+  | (PendingPart & { reason: string })
   | { status: 'unavailable'; reason: string }
 
 /**
@@ -3192,7 +3192,8 @@ export type AudioMapAnswer =
       summary?: AudioMapSummary
       window?: AudioMapWindow
     }
-  | { status: 'pending' }
+  | PendingPart
+  | FailedPart
   | { status: 'unavailable'; reason: string }
 
 /**
@@ -3750,6 +3751,11 @@ export interface ProjectDetail extends ProjectSummary, ProjectSettings {
    */
   scope?: ProjectReadScope
   /**
+   * Where the seconds a read named (`sourceAssetId` with `atSec`) play on the timeline: for each second, every clip cut
+   * from that recording that plays it and the timeline frame it lands on, none where it was cut out (gap closure D6).
+   */
+  sourceTimes?: Array<{ atSec: number; frames: Array<{ clipId: string; frame: number }> }>
+  /**
    * The coordinate space LAYER GEOMETRY is expressed in. This is NOT `width`/`height`.
    *
    * `width`/`height` are the project's OUTPUT resolution (what a render produces). Layer boxes and
@@ -3763,6 +3769,31 @@ export interface ProjectDetail extends ProjectSummary, ProjectSettings {
   compositionSpace?: { width: number; height: number }
 }
 
+
+/**
+ * Where a summarized clip's content comes from (gap closure D6): a file (its `assetId`, the id `view` and `getMedia`
+ * take, and the window of the file it plays, in the file's seconds) or code (the project modules it imports). Text and
+ * shape clips have none. `assetId` is absent for a file that is not one of the account's stored objects.
+ */
+export type ClipSourceSummary =
+  | { kind: 'file'; assetId?: string; inSec: number; outSec: number }
+  | { kind: 'code'; imports: string[] }
+
+/** Options for `getProject`. */
+export interface GetProjectOptions {
+  detail?: 'summary' | 'full'
+  fromFrame?: number
+  toFrame?: number
+  trackId?: string
+  slideId?: string
+  /** Read exactly these clips, every property and their code, with the modules they import (`state.clips`). */
+  clipIds?: string[]
+  /** Read exactly these project modules' code (`state.modules`). */
+  moduleNames?: string[]
+  /** With `atSec`: where those seconds of this asset play on the timeline (`ProjectDetail.sourceTimes`). */
+  sourceAssetId?: string
+  atSec?: number[]
+}
 
 /** What a `getProject` read was narrowed to (see `ProjectDetail.scope`). */
 export interface ProjectReadScope {
@@ -3785,22 +3816,42 @@ export interface LiveContextParticipant {
 }
 
 /**
- * The result of a `view` that names no source: the most-recent-active session's live context, the full participant
- * set, and whatever was rendered.
+ * Something a `view` answer carries that is not ready yet (gap closure D3): a render's page, a sound analysis, an evidence
+ * sheet's frames. It says since when, by when it is expected (from how long the same work recently took; absent when
+ * nothing measured says), the exact inputs that read it again (`readWith`: a render's id and page, never the request
+ * that started it, which would render it again), and why it has not ended when it is blocked or late.
+ */
+export interface PendingPart {
+  status: 'pending'
+  since: string
+  expectedBy?: string
+  readWith?: { renderId: string; page?: number }
+  reason?: string
+}
+
+/** Something a `view` answer carries that could not be made, with why. */
+export interface FailedPart {
+  status: 'failed'
+  since: string
+  reason: string
+}
+
+/** One change the server made to a request, with why: what was asked, what was used. */
+export interface Adjustment {
+  field: string
+  asked: unknown
+  used: unknown
+  reason: string
+}
+
+/**
+ * The live part of a `view`: what the user is looking at.
+ *
+ * `context` is the most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object carrying
+ * the focus (e.g. `focusedSlideId`, `playheadFrame`) and current selection, with a short-lived `snapshotUrl` of the live
+ * viewport ONLY when the read was made with `capture: true`. Null when no session is live.
  */
 export interface LiveViewResult {
-  /**
-   * The most-recent-active session's context: a discriminated `{ surface, ...surfaceState }` object carrying
-   * the focus (e.g. `focusedSlideId`, `playheadFrame`) and current selection. A short-lived `snapshotUrl` of
-   * the live viewport is included ONLY when the read was made with `capture: true`. It may also carry:
-   * - `rendered`: the picture or sound job answer, when the read rendered or read a render. A finished sound answer
-   *   also carries `audioMap` (`AudioMapAnswer`, the rendered range's sound analysis, started by asking for sound) and
-   *   `sheet` (`EvidenceSheet`), both on the sound's own seconds from the range's start; its own measurement stays the
-   *   loudness of record.
-   * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
-   *   `rendered` and its sound measurement here, a sound answer of the same shape as a sound `rendered`.
-   * With no live tab it holds only what was rendered. Null when no session is live and nothing was rendered.
-   */
   context: Record<string, unknown> | null
   /** Metadata for that default participant, or null when no one is live. */
   participant: LiveContextParticipant | null
@@ -3809,39 +3860,31 @@ export interface LiveViewResult {
 }
 
 /**
- * The result of a `view` of a source (`assetId`, `mediaUrl` or `contentId`): the source alone, never the live context
- * of the user's screen, which is what a view that names no source returns.
+ * The result of `view` (gap closure D4): the parts the request named, each present only when asked.
  *
- * `clip` is `{ url | contentId and slide?, type: 'video' | 'image', fromSec?, toSec?, durationSeconds?, layout?, page?,
- * pages?, keyframes?: [{ atSec, dataUrl }], sheets?: [{ atSec: number[], columns, rows, width, height, dataUrl }],
- * keyframeError?, crop?, cropError?, sound?, audioMap?, sheet?, error?: { code, message } }`.
- * - Its frames come in pages (`page` of `pages`): one by one in `keyframes` (`layout: 'frames'`), or tiled into
- *   contact sheets in `sheets` (`layout: 'sheets'`), each tile labeled with its second of the source. Ask for the next
- *   page with `page`. The window's `sound`, `audioMap` and `sheet` describe the whole window and come on the first page.
- * - A post is named by its `contentId` (and `slide`) in place of a `url`: its copy's address is never handed out. A
- *   source that cannot be read says why in `error`: `clip_not_found`, `host_not_allowed` (an address on a host
- *   ContentHero does not read from), `not_a_clip`, `invalid_page`, and for a post `post_not_found`, `no_video`,
- *   `slide_required`, `not_a_carousel`, `not_a_video_slide`, `video_not_downloaded`, `video_downloading` or
- *   `video_failed`.
- * - `sound`, when asked, is the window measured as it is: `{ kind: 'sound', fromSec, toSec, sampleRate, channels,
- *   durationSeconds, loudness, stereo, bands, onsets: [{ seconds }] (in the source's own seconds), picture: { width,
- *   height, dataUrl } (its waveform above its spectrogram), audioUrl (short-lived) }`, or `{ kind: 'sound', error: {
- *   code, message } }` (`no_sound`, `window_too_long`, `empty_window`, `sound_unavailable`).
- * - A stored source (a post's video, a library file, a clip's source) carries `audioMap` (`AudioMapAnswer`) when its
- *   analysis exists or its sound was read: ready, its `window` is the window read (an open end runs to the file's
- *   edge). Heard with `sound`, it also carries `sheet` (`EvidenceSheet`): its frames, words and a spectrogram strip per
- *   stem on one time axis, its sound candidates marked; when it is ready, `sound` carries no `picture`.
+ * - `live` (`LiveViewResult`): what the user is looking at, for a view that renders nothing and names no source, or one
+ *   that adds `live: true` to a render.
+ * - `rendered`: the picture or sound job answer: `{ renderId, status: 'ready' | 'pending' | 'failed', since, readWith?
+ *   (while pending), reason?, expiresAt, kind, ... }`. A picture carries its page's images (`dataUrl`, `frames`, or
+ *   `sheets`), `sampled: { count, frames }` (what was drawn), `adjusted?: Adjustment[]` (what the server changed, with
+ *   why), `width`, `height`, `pixelsPerCompositionUnit`, `region?`, `scope?` and `missingIds?` (a render narrowed by
+ *   `trackIds`/`clipIds`), `cost?: { estimatedUsd }`. A sound carries its measurement, `leveled: false` (before an
+ *   export's delivery leveling), `audioMap` (`AudioMapAnswer`) and `sheet` (`EvidenceSheet`) on the first page, both
+ *   on the sound's own seconds from the range's start; a pending one names the render to read in `readWith`.
+ * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
+ *   `rendered` and its sound measurement here.
+ * - `clip`: a source (`assetId`, `mediaUrl` or `contentId`): `{ url | contentId and slide?, type, fromSec?, toSec?,
+ *   durationSeconds?, layout?, page?, pages?, sampled?: { count, atSec }, adjusted?, pixels?: { width, height,
+ *   pixelsPerSourcePixel, region? }, missingAtSec?, keyframes?: [{ atSec, dataUrl }], sheets?: [{ atSec: number[],
+ *   columns, rows, width, height, dataUrl }], keyframeError?, sound?, audioMap?, sheet?, error?: { code, message } }`.
+ *   Its frames come in pages; the window's `sound`, `audioMap` and `sheet` describe the whole window and come on the
+ *   first page. A post is named by its `contentId` (and `slide`) in place of a `url`.
  */
-export interface SourceViewResult {
-  clip: Record<string, unknown>
-}
-
-/** The result of `view`: the live context (with what was rendered), or a source alone. */
-export type ViewResult = LiveViewResult | SourceViewResult
-
-/** Whether a `view` result is a source read (`SourceViewResult`). */
-export function isSourceView(result: ViewResult): result is SourceViewResult {
-  return 'clip' in result && result.clip !== null && typeof result.clip === 'object'
+export interface ViewResult {
+  live?: LiveViewResult
+  rendered?: Record<string, unknown>
+  renderedSound?: Record<string, unknown>
+  clip?: Record<string, unknown>
 }
 
 /** Options for `view`. */
@@ -3872,18 +3915,26 @@ export interface ViewInput {
   slideId?: string
   /** Canvas: which slide (1-based index; alternative to `slideId`). */
   slideIndex?: number
+  /** Add what the user is looking at (`live`) to a render. A view that renders nothing returns it already. */
+  live?: boolean
+  /**
+   * Render only these tracks (every clip on them) and clips, picture and sound, on the timeline's own frame numbers,
+   * leaving the project untouched. Either or both; the union draws. The answer echoes `scope` and any `missingIds`.
+   */
+  trackIds?: string[]
+  clipIds?: string[]
   /** Start timeline frame of the range (edit space), for several frames, sound or video. Omit to start at the beginning. */
   fromFrame?: number
   /** End timeline frame of the range. Omit to run to the end. */
   toFrame?: number
   /**
-   * How many frames to spread evenly across the range, or across a source's window. Omit for one frame at the focus
-   * point, or about one a second of a range.
+   * How many frames to spread from the first frame of the range, or of a source's window, to its last, both included.
+   * Omit for one frame at the focus point, or about one a second of a range.
    */
   count?: number
   /** Editor: exactly these timeline frames, in this order. */
   frames?: number[]
-  /** How many frames to take per second of the range, up to every frame, or of a source's window. */
+  /** How many frames to take per second of the range, or of a source's window, stepping from its first frame. */
   perSecond?: number
   /**
    * `frames` returns each frame as its own image; `sheets` tiles them into contact sheets, an edit's frames numbered and
@@ -3912,17 +3963,17 @@ export interface ViewInput {
   /** How long to wait for results before answering, in seconds. What is not ready by then is read later with `renderId`. */
   wait?: number
   /**
-   * The width in pixels to render at, or of a source's frames, to check legibility at the size it will be seen (a
-   * thumbnail, a feed card). Height follows the aspect ratio. The size used is reported in `rendered`.
+   * The width in pixels of each image returned, the crop's when a `region` is named. Height follows the aspect ratio.
+   * Anything the server changed is listed in `adjusted`.
    */
   width?: number
   /**
-   * Render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect
-   * detail at full resolution. Without `width`, it renders at native scale; `rendered` reports
-   * `pixelsPerCompositionUnit`. For a source, the rectangle is in its own pixels, and each of its frames is cut to it.
+   * Render only this rectangle, in composition units (`ProjectDetail.compositionSpace`), to inspect detail. Without
+   * `width` it comes back at native pixels; `rendered` reports `pixelsPerCompositionUnit`. For a source, the rectangle
+   * is in its own pixels.
    */
   region?: CompositionRegion
-  /** A clip of yours to see and hear, by its asset id, rather than your edit. Or pass `mediaUrl` or `contentId`. */
+  /** A clip of yours to see and hear, by its asset id: the id `getProject` reports in a clip's `source`. */
   assetId?: string
   /** A clip of yours to see and hear, by its media URL, rather than your edit. Or pass `assetId` or `contentId`. */
   mediaUrl?: string
@@ -3937,10 +3988,7 @@ export interface ViewInput {
   fromSec?: number
   /** End of a source's window, in its own seconds. Omit to run to its end. */
   toSec?: number
-  /**
-   * Frames at exactly these seconds of a source, such as its cut list's times, instead of spread across a window. Not
-   * with `count` or `perSecond`.
-   */
+  /** Frames at exactly these seconds of a source, instead of spread across a window. Not with `count` or `perSecond`. */
   atSec?: number[]
 }
 
