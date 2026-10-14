@@ -113,9 +113,9 @@ export function registerTemplate(program: Command): void {
       .command('list')
       .description("List ContentHero's templates and your own, without their code")
       .option('--scope <scope>', 'system | user | all (default all)')
-      .option('--kind <kind>', 'code | shape | emoji | logo')
+      .option('--kind <kind>', 'code | shape | emoji | logo (logos are listed only with this)')
       .option('--category <category>', 'only this category; repeatable', collect)
-      .option('--search <text>', 'every word, in any order, in the name or the tags')
+      .option('--search <text>', "every word, in any order, in the name or the tags; for logos, also in a logo's other names, best match first")
       .option('--archived', 'only archived templates, to restore one'),
   )
     .action(async (opts: { scope?: string; kind?: string; category?: string[]; search?: string; archived?: boolean; cursor?: string; limit?: number }, command: Command) => {
