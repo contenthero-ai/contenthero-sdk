@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.4.33
+
+- `ViewInput` takes `find`, `where` and `picture`: a source's or a project window's picture analysis (moments ranked by
+  what is seen, read and said; where a thing is on screen; cuts, camera, text and faces). `ViewResult.picture` carries
+  the answer, or a pending part while the analysis runs.
+- `VIEW_PICTURE_INPUT_TEXT` describes the three inputs once for every surface; `view`'s description asks the picture
+  before frames.
+
 ## 0.4.32
 
 - `ViewResult` answers with the parts a view names (`live`, `rendered`, `renderedSound`, `clip`); `isSourceView` is

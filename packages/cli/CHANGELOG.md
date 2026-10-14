@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.30
+
+- `view` takes `--find`, `--where` and `--picture`. Uses sdk 0.4.33.
+
 ## 0.3.29
 
 - `project get` takes `--clips`, `--modules`, `--source-asset` with `--at-sec`, and prints where those seconds play

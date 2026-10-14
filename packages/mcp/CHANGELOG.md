@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.40
+
+- `view` takes `find`, `where` and `picture` and prints a source's or a project window's picture part. Uses sdk 0.4.33.
+
 ## 0.4.39
 
 - `view` and `get_project` take the new inputs (`live`, `trackIds`, `clipIds`; `clipIds`, `moduleNames`,
