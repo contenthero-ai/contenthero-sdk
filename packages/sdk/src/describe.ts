@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPicturePart, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -749,4 +749,51 @@ export function describeTranscriptionState(t: Transcription): string | null {
   if (t.status === 'running') return `Still transcribing ${what}.`
   if (t.status === 'failed') return `${t.error.trim()} Nothing was charged for it.`
   return null
+}
+
+/** A part of a picture answer that is not there, in a line: being made, failed, or why it cannot be. */
+function pictureNotReadyLine(what: string, part: PictureNotReady): string {
+  if (part.status === 'pending') return describePending(what, part, 'read the same window again to get it')
+  return `${what}: ${part.status === 'failed' ? 'failed' : 'unavailable'} (${part.reason.trim().replace(/\.+$/, '')})`
+}
+
+/**
+ * A source's picture answer (`view`'s `find`, `where`, `picture`) in lines: whether it is coarse while the full analysis
+ * is made, which of its parts are not ready and why, and what answering it was billed. Its numbers are in the answer
+ * itself, said once; whether more pages follow is each surface's own line (`moreLine`).
+ */
+export function describePicturePart(part: PicturePart | null | undefined, what = 'the picture analysis'): string[] {
+  if (!part) return []
+  if (part.status !== 'ready') return [pictureNotReadyLine(what, part)]
+  const lines: string[] = []
+  if (part.tier === 'shots') {
+    lines.push(
+      part.remeasuring
+        ? `${what} is coarse (one picture per shot; no text, faces or motion yet). ${part.remeasuring.status === 'pending' ? describePending('The full one', part.remeasuring, 'read again to get it') : `The full one failed (${part.remeasuring.reason.trim().replace(/\.+$/, '')}).`}`
+        : `${what} is coarse (one picture per shot; no text, faces or motion).`,
+    )
+  }
+  if (part.find && 'status' in part.find) lines.push(pictureNotReadyLine('find', part.find))
+  if (part.where && 'status' in part.where) lines.push(pictureNotReadyLine('where', part.where))
+  if (part.cost) lines.push(`Answering it was billed $${part.cost.usd.toFixed(4)}.`)
+  return lines
+}
+
+/**
+ * A project window's picture answer in lines: why there is none, each source not ready, the clips it does not see (they
+ * are listed in `unseen`, with why), and what answering it was billed. More pages are each surface's own line.
+ */
+export function describeProjectPicture(part: ProjectPicturePart | null | undefined): string[] {
+  if (!part) return []
+  if (part.status !== 'ready') return [`The picture analysis of the project's window: unavailable (${part.reason.trim().replace(/\.+$/, '')})`]
+  const lines = [`The picture analysis of the project's window, frames ${part.fromFrame} to ${part.toFrame}, read from its clips' sources.`]
+  for (const source of part.sources ?? []) {
+    const { cost: _cost, ...withoutCost } = source.part as PicturePart & { cost?: unknown }
+    lines.push(...describePicturePart(withoutCost as PicturePart, `source ${source.assetId}`))
+  }
+  // Read as a list that may be absent: an answer from a server before the list existed carries none.
+  const unseen = part.unseen ?? []
+  if (unseen.length) lines.push(`${unseen.length} clip${unseen.length === 1 ? '' : 's'} on this page ${unseen.length === 1 ? 'is' : 'are'} not seen by it, listed in unseen with why.`)
+  if (part.cost) lines.push(`Answering it was billed $${part.cost.usd.toFixed(4)}.`)
+  return lines
 }

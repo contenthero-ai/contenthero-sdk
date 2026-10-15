@@ -86,6 +86,7 @@ import type {
   ApplyEditorOpsInput,
   ApplyEditorOpsResult,
   ProjectDetail,
+  ProjectParts,
   ViewResult,
   ViewInput,
   GetProjectOptions,
@@ -1920,7 +1921,11 @@ export class ContentHero {
    * detail does not pay for the whole deck. A canvas summary echoes each text layer's `text` (truncated), which is
    * what identifies it. Requires the `editor:read` scope.
    */
-  async getProject(projectId: string, options: GetProjectOptions = {}): Promise<ProjectDetail> {
+  async getProject(projectId: string, options: GetProjectOptions & { clipIds: string[] }): Promise<ProjectParts>
+  async getProject(projectId: string, options: GetProjectOptions & { moduleNames: string[] }): Promise<ProjectParts>
+  async getProject(projectId: string, options: GetProjectOptions & { sourceAssetId: string }): Promise<ProjectParts>
+  async getProject(projectId: string, options?: GetProjectOptions): Promise<ProjectDetail | ProjectParts>
+  async getProject(projectId: string, options: GetProjectOptions = {}): Promise<ProjectDetail | ProjectParts> {
     const params = new URLSearchParams()
     if (options.detail === 'full') params.set('detail', 'full')
     if (typeof options.fromFrame === 'number') params.set('fromFrame', String(options.fromFrame))
@@ -1932,7 +1937,7 @@ export class ContentHero {
     if (options.sourceAssetId) params.set('sourceAssetId', options.sourceAssetId)
     if (options.atSec?.length) params.set('atSec', options.atSec.join(','))
     const qs = params.toString() ? `?${params.toString()}` : ''
-    const { project } = await this.request<{ project: ProjectDetail }>(
+    const { project } = await this.request<{ project: ProjectDetail | ProjectParts }>(
       'GET',
       `/api/v1/projects/${encodeURIComponent(projectId)}${qs}`,
     )
@@ -1993,6 +1998,8 @@ export class ContentHero {
     if (input.find) params.set('find', input.find)
     if (input.where) params.set('where', 'true')
     if (input.picture) params.set('picture', 'true')
+    if (typeof input.limit === 'number') params.set('limit', String(input.limit))
+    if (input.cursor) params.set('cursor', input.cursor)
     // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the
     // RFC-3986 query encoding; emit %20 so the URL is canonical (both decode to a space server-side).
     const query = params.toString().replace(/\+/g, '%20')
@@ -2299,9 +2306,10 @@ export class ContentHero {
    * update_timeline (disable_ranges / set_disabled / delete_ranges). Scope with `search` (substring) or
    * `startMs`/`endMs` (source-media time) to fetch only the part you need. Pass `granularity: 'word'` for
    * word-level timing (with absolute timeline frames), per-word confidence + speaker, derived silence gaps, and
-   * non-speech audio events. `paceThresholdMs` (minimum pause to report as silence) and `paddingStartMs` /
-   * `paddingEndMs` (breathing room kept around speech; negative tightens) tune the silence detection and default
-   * to the project's saved pace/padding. Requires the `editor:read` scope.
+   * non-speech audio events, each a row of values in the order `fields` names. `paceThresholdMs` (minimum pause to
+   * report as silence) and `paddingStartMs` / `paddingEndMs` (breathing room kept around speech; negative tightens)
+   * tune the silence detection and default to the project's saved pace/padding. Segments come a page at a time:
+   * pass `nextCursor` back as `cursor` for the next; `limit` sets the page size. Requires the `editor:read` scope.
    */
   async getTranscript(
     projectId: string,
@@ -2313,6 +2321,10 @@ export class ContentHero {
       paceThresholdMs?: number
       paddingStartMs?: number
       paddingEndMs?: number
+      /** How many segments a page holds. */
+      limit?: number
+      /** The `nextCursor` of the page before. */
+      cursor?: string
     } = {},
   ): Promise<TranscriptResult> {
     const params = new URLSearchParams({ projectId })
@@ -2323,6 +2335,8 @@ export class ContentHero {
     if (options.paceThresholdMs !== undefined) params.set('paceThresholdMs', String(options.paceThresholdMs))
     if (options.paddingStartMs !== undefined) params.set('paddingStartMs', String(options.paddingStartMs))
     if (options.paddingEndMs !== undefined) params.set('paddingEndMs', String(options.paddingEndMs))
+    if (options.limit !== undefined) params.set('limit', String(options.limit))
+    if (options.cursor) params.set('cursor', options.cursor)
     return this.request<TranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
   }
 

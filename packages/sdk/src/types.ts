@@ -3781,13 +3781,8 @@ export interface ProjectDetail extends ProjectSummary, ProjectSettings {
    */
   scope?: ProjectReadScope
   /**
-   * Where the seconds a read named (`sourceAssetId` with `atSec`) play on the timeline: for each second, every clip cut
-   * from that recording that plays it and the timeline frame it lands on, none where it was cut out (gap closure D6).
-   */
-  sourceTimes?: Array<{ atSec: number; frames: Array<{ clipId: string; frame: number }> }>
-  /**
-   * What the project's code and modules hold that is wrong or unused, over the whole project whatever part the read
-   * returned. Editor projects with code only; absent when there are none.
+   * What the project's code and modules hold that is wrong or unused, over the whole project. Editor projects with code
+   * only; absent when there are none.
    */
   findings?: DocumentFinding[]
   /**
@@ -3814,6 +3809,45 @@ export type ClipSourceSummary =
   | { kind: 'file'; assetId?: string; inSec: number; outSec: number }
   | { kind: 'code'; imports: string[] }
 
+/** Where one second of a recording plays on the timeline: every clip cut from it that plays it, and the frame. */
+export interface SourceTime {
+  atSec: number
+  frames: Array<{ clipId: string; frame: number }>
+}
+
+/** A part a `getProject` read named. */
+export type ProjectPartName = 'clips' | 'modules' | 'sourceTimes'
+
+/**
+ * A `getProject` read that names parts (`clipIds`, `moduleNames`, `sourceAssetId` with `atSec`): the project named and
+ * exactly those parts, nothing else of the document; `parts` says which. `state.clips` holds each clip named (its
+ * summary line, or every property and its code at `detail: 'full'`, with the modules it imports), `state.modules` each
+ * module named with its code, `state.missing` the names that named nothing. `sourceTimes` places each second asked:
+ * every clip cut from that recording that plays it and its frame, none where it was cut out. `findings` lists only the
+ * problems of what was returned. Tell it from a whole read with `isProjectParts`.
+ */
+export interface ProjectParts {
+  id: string
+  shortId: string
+  appUrl: string
+  type: string
+  title: string
+  revision: number
+  /** The rate every frame number here counts at. */
+  fps: number
+  parts: ProjectPartName[]
+  /** The layer space a full clip's geometry is in (`ProjectDetail.compositionSpace`), with full clips only. */
+  compositionSpace?: { width: number; height: number }
+  state?: { clips?: Array<Record<string, unknown>>; modules?: Record<string, string>; modulesNotIncluded?: unknown[]; missing?: string[] }
+  sourceTimes?: SourceTime[]
+  findings?: DocumentFinding[]
+}
+
+/** Whether a `getProject` answer is a read of named parts rather than the whole project. */
+export function isProjectParts(p: ProjectDetail | ProjectParts): p is ProjectParts {
+  return Array.isArray((p as ProjectParts).parts)
+}
+
 /** Options for `getProject`. */
 export interface GetProjectOptions {
   detail?: 'summary' | 'full'
@@ -3821,11 +3855,14 @@ export interface GetProjectOptions {
   toFrame?: number
   trackId?: string
   slideId?: string
-  /** Read exactly these clips, every property and their code, with the modules they import (`state.clips`). */
+  /**
+   * Read exactly these clips and nothing else of the project (`ProjectParts`): each clip's summary line, or every
+   * property and its code with the modules it imports at `detail: 'full'`. Not with a frame window, track or slide.
+   */
   clipIds?: string[]
-  /** Read exactly these project modules' code (`state.modules`). */
+  /** Read exactly these project modules' code (`ProjectParts`). */
   moduleNames?: string[]
-  /** With `atSec`: where those seconds of this asset play on the timeline (`ProjectDetail.sourceTimes`). */
+  /** With `atSec`: where those seconds of this asset play on the timeline (`ProjectParts.sourceTimes`). */
   sourceAssetId?: string
   atSec?: number[]
 }
@@ -3909,11 +3946,15 @@ export interface LiveViewResult {
  * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
  *   `rendered` and its sound measurement here.
  * - `clip`: a source (`assetId`, `mediaUrl` or `contentId`): `{ url | contentId and slide?, type, fromSec?, toSec?,
- *   durationSeconds?, layout?, page?, pages?, sampled?: { count, atSec }, adjusted?, pixels?: { width, height,
+ *   durationSeconds?, layout?, page?, pages?, sampled?: { count, atSec? }, adjusted?, pixels?: { width, height,
  *   pixelsPerSourcePixel, region? }, missingAtSec?, keyframes?: [{ atSec, dataUrl }], sheets?: [{ atSec: number[],
- *   columns, rows, width, height, dataUrl }], keyframeError?, sound?, audioMap?, sheet?, error?: { code, message } }`.
- *   Its frames come in pages; the window's `sound`, `audioMap` and `sheet` describe the whole window and come on the
- *   first page. A post is named by its `contentId` (and `slide`) in place of a `url`.
+ *   columns, rows, width, height, dataUrl }], keyframeError?, sound?, audioMap?, sheet?, picture?, error?: { code,
+ *   message } }`. Its frames come in pages, each image naming its seconds; `sampled.count` is how many were drawn across
+ *   every page (`sampled.atSec` only on a page whose frames could not be read). `sound`, `audioMap` and `sheet` are the
+ *   sound part: present only when `sound` was asked, over the window named, on the first page. A post is named by its
+ *   `contentId` (and `slide`) in place of a `url`.
+ * - `picture` (and `clip.picture` for a source): the picture analysis asked by `find`, `where` and `picture`
+ *   (`PicturePart`, `ProjectPicturePart`), or why there is none yet.
  */
 export interface ViewResult {
   live?: LiveViewResult
@@ -3921,8 +3962,90 @@ export interface ViewResult {
   renderedSound?: Record<string, unknown>
   clip?: Record<string, unknown>
   /** A project window's picture analysis, from its clips' sources (a source's rides on `clip.picture`). */
-  picture?: Record<string, unknown>
+  picture?: ProjectPicturePart
 }
+
+/** A located box, normalized to the frame. */
+export interface PictureBox {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** One clip a project's moment or track plays on, in timeline frames. */
+export interface PictureOnTimeline {
+  clipId: string
+  trackId: string
+  fromFrame: number
+  toFrame: number
+}
+
+/** A moment `find` names: its span, its best sample, and what found it (`picture`, `screen` or `words`). */
+export interface PictureMoment {
+  fromSec: number
+  toSec: number
+  peakSec: number
+  score: number
+  by: Array<'picture' | 'screen' | 'words'>
+  /** The on-screen text that matched, when the screen found it. */
+  screenText?: string
+  timeline?: PictureOnTimeline[]
+}
+
+/** A part of a picture answer that is not there, with why. */
+export type PictureNotReady = PendingPart | FailedPart | { status: 'unavailable'; reason: string }
+
+/**
+ * A source's picture analysis over a window (`find`, `where`, `picture`), or why there is none yet. Every list in it
+ * pages by one cursor: a page holds `limit` of each, and `nextCursor`, passed back as `cursor`, reads the next page of
+ * all of them. `cost.usd` is what answering it was billed, when anything was. Times are the source's seconds.
+ */
+export type PicturePart =
+  | {
+      status: 'ready'
+      version: number
+      source: { durationSec: number; width: number; height: number; frameRate: number; stepSec: number }
+      /** `full`, or `shots` (coarse: one picture per shot) while the full analysis is made, which `remeasuring` follows. */
+      tier: 'shots' | 'full'
+      remeasuring?: PendingPart | FailedPart
+      find?: { query: string; moments: PictureMoment[] } | PictureNotReady
+      where?:
+        | { query: string; stepSec: number; tracks: Array<{ fromSec: number; toSec: number; box: PictureBox; score: number; edges: string[]; timeline?: PictureOnTimeline[] }> }
+        | PictureNotReady
+      picture?: {
+        fromSec: number
+        toSec: number
+        cuts: number[]
+        fades: unknown[]
+        black: unknown[]
+        camera: unknown[]
+        text: Array<{ fromSec: number; toSec: number; text: string } & PictureBox>
+        faces: Array<{ fromSec: number; toSec: number } & PictureBox>
+      }
+      nextCursor?: string
+      cost?: { usd: number }
+    }
+  | PictureNotReady
+
+/**
+ * A project window's picture analysis: each source its clips play, by its `assetId`, with its part (every moment and
+ * track naming the clips it plays on), the clips the analysis does not see and why (`no_file`: code, text or a shape;
+ * `still`: an image; `not_stored`: a file not stored here), one `nextCursor` for every list, and `cost.usd`.
+ */
+export type ProjectPicturePart =
+  | {
+      status: 'ready'
+      version: number
+      fps: number
+      fromFrame: number
+      toFrame: number
+      sources: Array<{ assetId: string; part: PicturePart }>
+      unseen: Array<PictureOnTimeline & { why: 'no_file' | 'still' | 'not_stored' }>
+      nextCursor?: string
+      cost?: { usd: number }
+    }
+  | { status: 'unavailable'; reason: string }
 
 /** Options for `view`. */
 export interface ViewInput {
@@ -4033,6 +4156,10 @@ export interface ViewInput {
   where?: boolean
   /** The window's picture analysis: cuts, fades, black, camera movement, text on screen and faces. */
   picture?: boolean
+  /** How many items of each list a page of `find`, `where` or `picture` holds (`VIEW_PICTURE_INPUT_TEXT.limit`). */
+  limit?: number
+  /** The `nextCursor` of the answer before, to read the next page of every list (`VIEW_PICTURE_INPUT_TEXT.cursor`). */
+  cursor?: string
 }
 
 /** A rectangle in composition units: the space layer geometry is expressed in (`ProjectDetail.compositionSpace`). */
@@ -4708,41 +4835,23 @@ export interface EditorSchemaOptions extends TypeCatalogOptions {
   detail?: 'full'
 }
 
-/** A spoken word with source-media timing, ABSOLUTE timeline frames, and per-word metadata (granularity 'word'). */
-export interface WordTiming {
-  text: string
-  /** Start within the SOURCE media, in ms. */
-  startMs: number
-  /** End within the SOURCE media, in ms (exclusive). */
-  endMs: number
-  /** Absolute timeline frame this word starts on (feed straight into update_timeline split / range ops). */
-  startFrame: number
-  /** Absolute timeline frame this word ends on. */
-  endFrame: number
-  /** Diarized speaker, when known. */
-  speakerId: string | null
-  /** Normalized 0-1 confidence, when known. */
-  confidence: number | null
+/**
+ * The order of the values in each word, silence and audio event row of a word-mode transcript (`TranscriptResult.fields`):
+ * one compact form, the legend said once per answer. Times are the SOURCE media's ms; frames are ABSOLUTE timeline
+ * frames (feed them straight into update_timeline split and range ops).
+ */
+export interface TranscriptFields {
+  words: readonly ['text', 'startMs', 'endMs', 'startFrame', 'endFrame', 'speakerId', 'confidence']
+  silences: readonly ['startMs', 'endMs', 'startFrame', 'endFrame']
+  audioEvents: readonly ['text', 'startMs', 'endMs', 'startFrame', 'endFrame', 'speakerId']
 }
 
-/** A derived dead-air gap between words within a clip: source-media range + timeline frames + duration. */
-export interface Silence {
-  startMs: number
-  endMs: number
-  durationMs: number
-  startFrame: number
-  endFrame: number
-}
-
-/** A non-speech audio event (e.g. "[chuckles]", "[sighs]") with source-media timing + timeline frames. */
-export interface AudioEvent {
-  text: string
-  startMs: number
-  endMs: number
-  startFrame: number
-  endFrame: number
-  speakerId: string | null
-}
+/** A spoken word: text, source ms, timeline frames, diarized speaker (when known), 0-1 confidence (when known). */
+export type WordTuple = [text: string, startMs: number, endMs: number, startFrame: number, endFrame: number, speakerId: string | null, confidence: number | null]
+/** A derived dead-air gap between words, already inset to the cuttable region: source ms and timeline frames. */
+export type SilenceTuple = [startMs: number, endMs: number, startFrame: number, endFrame: number]
+/** A non-speech audio event: its text, source ms, timeline frames and speaker. */
+export type AudioEventTuple = [text: string, startMs: number, endMs: number, startFrame: number, endFrame: number, speakerId: string | null]
 
 /** One timeline clip's transcript segment: the words spoken within it plus its current enabled/disabled state. */
 export interface TranscriptSegment {
@@ -4764,12 +4873,12 @@ export interface TranscriptSegment {
   durationFrames: number
   /** The words spoken within this clip, space-joined. Empty for a silence gap or untranscribed clip. */
   text: string
-  /** Word-level timing (granularity 'word' only), scoped to the requested window when given. */
-  words?: WordTiming[]
-  /** Derived dead-air gaps within this clip (granularity 'word' only). */
-  silences?: Silence[]
-  /** Non-speech audio events within this clip (granularity 'word' only; empty for pre-token-store media). */
-  audioEvents?: AudioEvent[]
+  /** Word-level timing (granularity 'word' only), scoped to the requested window when given: rows in `fields.words` order. */
+  words?: WordTuple[]
+  /** Derived dead-air gaps within this clip (granularity 'word' only): rows in `fields.silences` order. */
+  silences?: SilenceTuple[]
+  /** Non-speech audio events within this clip (granularity 'word' only; empty for pre-token-store media): `fields.audioEvents` order. */
+  audioEvents?: AudioEventTuple[]
 }
 
 export interface TranscriptResult {
@@ -4783,8 +4892,14 @@ export interface TranscriptResult {
   fps: number
   /** true when at least one clip's source media had a stored transcript. */
   mediaTranscribed: boolean
+  /** How many segments match, across every page. */
   segmentCount: number
+  /** A page of them, in timeline order. */
   segments: TranscriptSegment[]
+  /** The next page's cursor (pass it back as `cursor`), or null on the last. */
+  nextCursor: string | null
+  /** In word mode: the order of the values in each word, silence and audio event row. */
+  fields?: TranscriptFields
   /** The distinct diarized speakers present across the returned transcript, sorted. */
   speakers?: string[]
   /** Present only when nothing has been transcribed yet, explaining the empty result. */
