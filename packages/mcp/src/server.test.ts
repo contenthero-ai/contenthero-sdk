@@ -2826,7 +2826,11 @@ test('get_content and view carry the exact audio map in structuredContent, besid
   const seen = await viewer.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4 } })
   const { summary: seenSummary, ...seenExact } = seen.structuredContent as Record<string, unknown>
   assert.deepEqual(seenExact, { clip })
-  assert.match(String(seenSummary), /Exact values for computing are in the structured data beside this text\./)
+  // Each channel says each fact once (2026-10-15): the summary beside the exact map says where its window is, and never
+  // lists the window's lines again.
+  assert.match(String(seenSummary), /Its window is in clip\.audioMap\./)
+  assert.doesNotMatch(String(seenSummary), /speech:/)
+  assert.match(seen.content[0].text, /speech:/)
   assert.match(seen.content[0].text, /Exact values for computing are in the structured data beside this text\./)
   // The map is in the structured data once; the text's JSON carries the clip without it.
   assert.doesNotMatch(seen.content[0].text, /"audioMap"/)
@@ -3593,13 +3597,18 @@ test('view shows the frames and the sound of a video range', async () => {
  */
 test('view answers a project window\'s picture analysis in numbers', async () => {
   let asked: Record<string, unknown> = {}
-  const picture = { status: 'ready', version: 1, fps: 30, fromFrame: 0, toFrame: 300, sources: [], unseenClips: 0 }
+  const unseen = [{ clipId: 'code-1', trackId: 'fx', fromFrame: 0, toFrame: 90, why: 'no_file' }]
+  const picture = { status: 'ready', version: 1, fps: 30, fromFrame: 0, toFrame: 300, sources: [], unseen, nextCursor: 'NEXT', cost: { usd: 0.0012 } }
   const mcp = await connect(fakeClient({ view: async (input: Record<string, unknown>) => ((asked = input), { picture }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', find: 'a face', where: true, fromFrame: 0, toFrame: 300 } })
   assert.equal(asked.find, 'a face')
   assert.equal(asked.where, true)
   assert.match(res.content[0].text, /The picture analysis of the project's window/)
-  assert.match(res.content[0].text, /"unseenClips":0/)
+  // The clips it cannot see are named, with why, once (in the JSON); the lines say how many and where to find them.
+  assert.match(res.content[0].text, /1 clip on this page is not seen by it, listed in unseen with why\./)
+  assert.equal(res.content[0].text.match(/"code-1"/g)?.length, 1)
+  assert.match(res.content[0].text, /Answering it was billed \$0\.0012\./)
+  assert.match(res.content[0].text, /More: pass cursor "NEXT"\./)
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
 })
 
@@ -5832,4 +5841,70 @@ test('view shows a render alone with what was changed, its scope and its cost; l
   const res2 = await both.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, live: true } })
   assert.match(res2.content[0].text, /Live context on the editor surface/)
   assert.match(res2.content[0].text, /"live": \{/)
+})
+
+/**
+ * The answer contract (2026-10-15): a read of named parts is those parts alone; a transcript says each clip once and its
+ * words as rows; a source's picture says what is not ready and where the next page is; the paging inputs reach the
+ * client. Break-verified: printing a parts read as a whole project, a transcript's clips again in JSON, or dropping the
+ * picture's pending or more line, turns these red.
+ */
+test('get_project answers a read of named parts with those parts alone', async () => {
+  const parts = {
+    id: 'p1', shortId: 'abc', appUrl: 'https://app.contenthero.ai/editor/abc', type: 'editor', title: 'My Edit', revision: 4, fps: 30,
+    parts: ['sourceTimes'], sourceTimes: [{ atSec: 843.3, frames: [{ clipId: 'c7', frame: 24648 }] }, { atSec: 1020, frames: [] }],
+  }
+  let asked: Record<string, unknown> = {}
+  const mcp = await connect(fakeClient({ getProject: async (_id: string, o: Record<string, unknown>) => ((asked = o), parts) }))
+  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', sourceAssetId: 'a1', atSec: [843.3, 1020] } })
+  const body = res.content[0].text
+  assert.deepEqual(asked.atSec, [843.3, 1020])
+  assert.match(body, /The sourceTimes asked for, and nothing else of it\./)
+  assert.match(body, /843\.3s: clip c7 at frame 24648/)
+  assert.match(body, /1020s: nowhere \(cut out, or on no clip\)/)
+  assert.doesNotMatch(body, /Layer geometry|Frame rate:|Groups:/)
+})
+
+test('get_transcript says each clip once, its words as rows in the order fields names, and the next page', async () => {
+  const fields = {
+    words: ['text', 'startMs', 'endMs', 'startFrame', 'endFrame', 'speakerId', 'confidence'],
+    silences: ['startMs', 'endMs', 'startFrame', 'endFrame'],
+    audioEvents: ['text', 'startMs', 'endMs', 'startFrame', 'endFrame', 'speakerId'],
+  } as const
+  const segment = {
+    clipId: 'c1', disabled: false, disabledReason: null, disabledNote: null, sourceStartMs: 0, sourceEndMs: 1000, fromFrame: 0, durationFrames: 30,
+    text: 'hello there', words: [['hello', 100, 400, 3, 12, 'A', 0.98], ['there', 450, 800, 13, 24, 'A', 0.97]], silences: [], audioEvents: [],
+  }
+  const result = { projectId: 'p1', revision: 4, fps: 30, mediaTranscribed: true, segmentCount: 2, segments: [segment], nextCursor: 'NEXT', fields, speakers: ['A'] }
+  let asked: Record<string, unknown> = {}
+  const mcp = await connect(fakeClient({ getTranscript: async (_id: string, o: Record<string, unknown>) => ((asked = o), result) }))
+  const res = await mcp.callTool({ name: 'get_transcript', arguments: { projectId: 'p1', granularity: 'word', limit: 1, cursor: 'PREV' } })
+  const body = res.content[0].text
+  assert.equal(asked.limit, 1)
+  assert.equal(asked.cursor, 'PREV')
+  assert.match(body, /1 of 2 clip segment\(s\) on this page/)
+  assert.equal(body.match(/hello there/g)?.length, 1)
+  assert.match(body, /\["hello",100,400,3,12,"A",0\.98\]/)
+  assert.doesNotMatch(body, /"sourceStartMs"/)
+  assert.match(body, /More: pass cursor "NEXT"\./)
+})
+
+test("view says what of a source's picture is not ready, and where its next page is", async () => {
+  let asked: Record<string, unknown> = {}
+  const picture = {
+    status: 'ready', version: 1, tier: 'shots', source: { durationSec: 60, width: 1920, height: 1080, frameRate: 30, stepSec: 0.5 },
+    remeasuring: { status: 'pending', since: '2026-10-15T14:00:00.000Z', expectedBy: '2026-10-15T14:10:00.000Z' },
+    where: { status: 'pending', since: '2026-10-15T14:19:14.663Z', expectedBy: '2026-10-15T14:22:58.000Z' },
+    find: { query: 'a button', moments: [] },
+    nextCursor: 'NEXT',
+  }
+  const clip = { url: 'https://media.contenthero.ai/u/take.mp4', type: 'video', picture }
+  const mcp = await connect(fakeClient({ view: async (input: Record<string, unknown>) => ((asked = input), { clip }) }))
+  const res = await mcp.callTool({ name: 'view', arguments: { assetId: 'a1', find: 'a button', where: true, limit: 5, cursor: 'PREV' } })
+  const body = res.content[0].text
+  assert.equal(asked.limit, 5)
+  assert.equal(asked.cursor, 'PREV')
+  assert.match(body, /coarse \(one picture per shot/)
+  assert.match(body, /where is still being made \(since 2026-10-15T14:19:14\.663Z, expected by 2026-10-15T14:22:58\.000Z\)/)
+  assert.match(body, /More: pass cursor "NEXT"\./)
 })

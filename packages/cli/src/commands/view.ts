@@ -7,7 +7,7 @@
  *        [--layout <frames|sheets>] [--sound] [--video] [--render-id <id>] [--page <n>] [--wait <seconds>]
  *        [--width <n>] [--region <x,y,w,h>] [--asset <id> | --media-url <url> | --content-id <id> [--slide <n>]]
  *        [--from-sec <n>] [--to-sec <n>] [--at-sec <list>] [--live] [--tracks <ids>] [--clips <ids>] [--save <path>]
- *        [--find <text> [--where]] [--picture]
+ *        [--find <text> [--where]] [--picture] [--limit <n>] [--cursor <cursor>]
  *
  * Returns the parts the view names: the live context (the most-recent-active session's surface + focus + selection,
  * plus the live participant set) for a view that renders nothing, a render, or a source. `--live` adds the live context
@@ -28,9 +28,9 @@
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
-import { VIEW_PICTURE_INPUT_TEXT, type CompositionRegion, type ViewResult } from '@contenthero/sdk'
+import { VIEW_PICTURE_INPUT_TEXT, describePicturePart, describeProjectPicture, type CompositionRegion, type PicturePart, type ProjectPicturePart, type ViewResult } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit } from '../output.js'
+import { emit, moreLine } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import {
   describeAudioMap,
@@ -151,6 +151,12 @@ function renderedLines(rendered: Record<string, unknown> | null): string[] {
  * The human summary of a view: who is viewing, what a render measured or why it has no image, a clip with its sound and
  * a post's audio map for the window and its evidence sheet, and what was saved.
  */
+/** A source's picture answer in lines, and the next page when there is one. */
+function pictureLines(part: PicturePart | null): string[] {
+  if (!part) return []
+  return [...describePicturePart(part), ...[moreLine(part.status === 'ready' ? part.nextCursor : null)].filter((l): l is string => l !== null)]
+}
+
 export function viewSummary(result: ViewResult, saved: { count: number; path: string }): string {
   const savedLine = saved.count > 0 ? [`${saved.count} image(s) saved to ${saved.path}${saved.count > 1 ? ' (-1, -2, ...)' : ''}`] : []
   // A source read is the source alone, never the live context.
@@ -161,6 +167,7 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
       ...sourceSoundLines(record(clip?.sound)),
       ...describeAudioMap(record(clip?.audioMap) as AudioMapAnswer | null),
       ...describeEvidenceSheet(record(clip?.sheet) as EvidenceSheet | null),
+      ...pictureLines(record(clip?.picture) as PicturePart | null),
       ...savedLine,
     ].join('\n')
   }
@@ -170,7 +177,8 @@ export function viewSummary(result: ViewResult, saved: { count: number; path: st
   const projectPicture = record(result.picture)
   // A project window asked of its picture analysis: its numbers are the structured output.
   if (projectPicture && !rendered && !renderedSound && !live) {
-    return "The picture analysis of the project's window, read from its clips' sources (see the structured output)."
+    const part = projectPicture as unknown as ProjectPicturePart
+    return [...describeProjectPicture(part), 'Its numbers are in the structured output.', ...[moreLine(part.status === 'ready' ? part.nextCursor : null)].filter((l): l is string => l !== null)].join('\n')
   }
   // The parts the view named: a render alone, the live context alone, or both.
   if (!rendered && !renderedSound && !live?.context) {
@@ -221,6 +229,8 @@ export function registerView(program: Command): void {
     .option('--find <text>', VIEW_PICTURE_INPUT_TEXT.find)
     .option('--where', VIEW_PICTURE_INPUT_TEXT.where)
     .option('--picture', VIEW_PICTURE_INPUT_TEXT.picture)
+    .option('--limit <n>', VIEW_PICTURE_INPUT_TEXT.limit, (v) => parseInt(v, 10))
+    .option('--cursor <cursor>', VIEW_PICTURE_INPUT_TEXT.cursor)
     .option('--save <path>', "write the produced image(s), a render's (with a heard range's evidence sheet), or a source's keyframes, its evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -287,6 +297,8 @@ export function registerView(program: Command): void {
         find: opts.find as string | undefined,
         where: Boolean(opts.where) || undefined,
         picture: Boolean(opts.picture) || undefined,
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
 
       const rendered = record(result.rendered)

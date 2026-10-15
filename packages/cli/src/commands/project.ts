@@ -32,6 +32,7 @@ import {
   describeLoudness,
   describeProjectShareLink,
   describeScope,
+  isProjectParts,
   type EditorOp,
   type Loudness,
   type ProjectCoverChoice,
@@ -46,7 +47,7 @@ import {
   type UpdateProjectInput,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
-import { emit, keyValues, statusCommandFor, table, withMore } from '../output.js'
+import { emit, keyValues, moreLine, statusCommandFor, table, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { isClear, toFloat, toInt, toJson, toLoudness, withPageFlags, withSortFlags } from '../args.js'
 
@@ -119,7 +120,7 @@ export function registerProject(program: Command): void {
     .option('--to <frame>', 'timeline only: end frame of the window')
     .option('--track <trackId>', 'timeline only: scope to one track by id')
     .option('--slide <slideId>', "canvas only: scope to one slide by id (applies to --detail full too)")
-    .option('--clips <ids>', 'read these clips whole, every property and their code, with the modules they import; nothing else of the project (separated by commas)')
+    .option('--clips <ids>', "read only these clips: each one's summary line, or whole with its code and the modules it imports with --detail full; nothing else of the project (separated by commas)")
     .option('--modules <names>', "read these project modules' code (separated by commas)")
     .option('--source-asset <id>', "with --at-sec: the recording whose moments to place on the timeline, by the assetId a clip's source names")
     .option('--at-sec <list>', 'with --source-asset: the seconds of that recording to place (separated by commas)')
@@ -138,6 +139,21 @@ export function registerProject(program: Command): void {
         sourceAssetId: typeof opts.sourceAsset === 'string' ? opts.sourceAsset : undefined,
         atSec: list(opts.atSec)?.map(Number),
       })
+      // A read of named parts is those parts alone, said as the MCP's get_project says them.
+      if (isProjectParts(p)) {
+        emit(p, ctx, () =>
+          `Project ${p.id} "${p.title}", revision ${p.revision}, ${p.fps} fps. The ${p.parts.join(', ')} asked for, and nothing else of it.` +
+          (p.state?.missing?.length ? `\nThese named nothing in the project: ${p.state.missing.join(', ')}.` : '') +
+          (p.sourceTimes?.length
+            ? `\nWhere those seconds play:\n${p.sourceTimes
+                .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
+                .join('\n')}`
+            : '') +
+          describeDocumentFindings(p.findings, 'Problems in what was read:').map((l) => `\n${l}`).join('') +
+          (p.state ? `\n${JSON.stringify(p.state, null, 2)}` : ''),
+        )
+        return
+      }
       emit(p, ctx, () =>
         `Project ${p.id} "${p.title}" (${p.type}), revision ${p.revision}` +
         // A windowed read is part of the document; the same sentence the MCP's get_project gives.
@@ -151,12 +167,6 @@ export function registerProject(program: Command): void {
             `\n  Full-frame layer: layerWidth ${p.compositionSpace.width}, layerHeight ${p.compositionSpace.height}`
           : '') +
         settingsText(p) +
-        // Where the seconds asked for play on the timeline (gap closure D6), a line per second.
-        (p.sourceTimes?.length
-          ? `\nWhere those seconds play:\n${p.sourceTimes
-              .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
-              .join('\n')}`
-          : '') +
         // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Wording approved 2026-10-13 (W13, W14).
         describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `\n${l}`).join('') +
         (p.groups?.length
@@ -180,6 +190,8 @@ export function registerProject(program: Command): void {
     .option('--pace-threshold <ms>', 'word mode: minimum pause (ms) to report as a silence ("Pace"); defaults to the project setting, else 500', toInt)
     .option('--padding-start <ms>', 'word mode: breathing room (ms) kept after speech at a silence start edge (negative tightens)', toInt)
     .option('--padding-end <ms>', 'word mode: breathing room (ms) kept before speech at a silence end edge (negative tightens)', toInt)
+    .option('--limit <n>', 'how many clip segments a page holds', toInt)
+    .option('--cursor <cursor>', "the previous page's nextCursor, to read the next page")
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const granularity = opts.granularity as string | undefined
@@ -194,10 +206,12 @@ export function registerProject(program: Command): void {
         paceThresholdMs: opts.paceThreshold as number | undefined,
         paddingStartMs: opts.paddingStart as number | undefined,
         paddingEndMs: opts.paddingEnd as number | undefined,
+        limit: opts.limit as number | undefined,
+        cursor: opts.cursor as string | undefined,
       })
       emit(r, ctx, () =>
         r.mediaTranscribed
-          ? `Transcript for ${r.projectId}: ${r.segmentCount} clip segment(s)${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n` +
+          ? `Transcript for ${r.projectId}: ${r.segments.length} of ${r.segmentCount} clip segment(s)${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n` +
             r.segments
               .map((s) => {
                 const tag = s.disabled ? `[disabled${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[enabled]'
@@ -207,7 +221,8 @@ export function registerProject(program: Command): void {
                     : ''
                 return `${tag} ${s.clipId}${extra}: ${s.text || '(no speech)'}`
               })
-              .join('\n')
+              .join('\n') +
+            (moreLine(r.nextCursor) ? `\n${moreLine(r.nextCursor)}` : '')
           : (r.note ?? 'No transcript available yet.'),
       )
     })

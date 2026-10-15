@@ -4666,7 +4666,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         toFrame: z.number().int().min(0).optional().describe('Timeline only: end of the frame window (see fromFrame).'),
         trackId: z.string().optional().describe('Timeline only: scope the read to a single track by id.'),
         slideId: z.string().optional().describe('Canvas only: scope the read to a single slide by id. Applies to detail:\'full\' as well. An id matching no slide returns every slide rather than nothing.'),
-        clipIds: z.array(z.string()).min(1).optional().describe('Read these clips whole, every property and their code, with the modules they import; nothing else of the project.'),
+        clipIds: z.array(z.string()).min(1).optional().describe("Read only these clips: each one's summary line, or whole with its code and the modules it imports with detail 'full'; nothing else of the project."),
         moduleNames: z.array(z.string()).min(1).optional().describe("Read these project modules' code."),
         sourceAssetId: z.string().optional().describe("With atSec: the recording whose moments to place on the timeline, by the assetId a clip's source names."),
         atSec: z.array(z.number().min(0)).min(1).optional().describe('With sourceAssetId: the seconds of that recording to place.'),
@@ -4743,6 +4743,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         find: z.string().min(1).max(200).optional().describe(VIEW_PICTURE_INPUT_TEXT.find),
         where: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.where),
         picture: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.picture),
+        limit: z.number().int().min(1).optional().describe(VIEW_PICTURE_INPUT_TEXT.limit),
+        cursor: z.string().optional().describe(VIEW_PICTURE_INPUT_TEXT.cursor),
       },
     },
     async (args, extra) => {
@@ -4782,6 +4784,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           find: args.find,
           where: args.where,
           picture: args.picture,
+          limit: args.limit,
+          cursor: args.cursor,
         })
         // Only the live part has a screen capture (gap closure D4: a view answers with the parts it names).
         const snapshotUrl = typeof result.live?.context?.snapshotUrl === 'string' ? result.live.context.snapshotUrl : null
@@ -4803,7 +4807,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Transcript',
       annotations: READ,
       description:
-        "Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current state ([disabled] = cut/excluded from the render, [enabled] = kept) and its exact clipId. Use this to read what is said, see which parts are already disabled, then target the exact clipId(s) or source-time ranges with update_timeline (disable_ranges to non-destructively cut, set_disabled to toggle a whole clip). Pass `granularity: 'word'` to also get, per segment: word-level timing with ABSOLUTE timeline frames (so split / range ops are exact), per-word confidence + speaker, the derived silence gaps (for dead-air removal; already inset to the cuttable region so cutting them keeps breathing room), and the non-speech audio events (e.g. \"[chuckles]\"); plus the distinct speaker set at the top level. Word mode can be large, so scope it with `search` (a phrase to find) or `startMs`/`endMs` (a source-media window, which also clips the returned words) to page a long clip. Also returns the project's current `revision` so you can edit right away without a separate get_project: pass it as update_timeline's expectedRevision for a concurrency-safe edit, or omit expectedRevision to just apply to the current state. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
+        "Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current state ([disabled] = cut/excluded from the render, [enabled] = kept) and its exact clipId. Use this to read what is said, see which parts are already disabled, then target the exact clipId(s) or source-time ranges with update_timeline (disable_ranges to non-destructively cut, set_disabled to toggle a whole clip). Pass `granularity: 'word'` to also get, per segment: word-level timing with ABSOLUTE timeline frames (so split / range ops are exact), per-word confidence + speaker, the derived silence gaps (for dead-air removal; already inset to the cuttable region so cutting them keeps breathing room), and the non-speech audio events (e.g. \"[chuckles]\"); plus the distinct speaker set at the top level. In word mode each word, silence and audio event is a row of values in the order `fields` names. Segments come a page at a time in timeline order: pass the answer's nextCursor back as cursor for the next page, and limit sets how many a page holds. Scope it with `search` (a phrase to find) or `startMs`/`endMs` (a source-media window, which also clips the returned words) to read only the part that matters. Also returns the project's current `revision` so you can edit right away without a separate get_project: pass it as update_timeline's expectedRevision for a concurrency-safe edit, or omit expectedRevision to just apply to the current state. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
       inputSchema: {
         projectId: z.string().describe('The editor project id.'),
         search: z.string().optional().describe('Case-insensitive substring; returns only clip segments whose text contains it.'),
@@ -4813,6 +4817,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         paceThresholdMs: z.number().int().min(0).optional().describe('Word mode: minimum pause (ms) to report as a silence / dead-air region ("Pace"). Defaults to the project\'s saved pace, else 500.'),
         paddingStartMs: z.number().int().optional().describe('Word mode: breathing room (ms) kept after speech at a silence start edge (negative tightens). Defaults to the saved padding, else 200.'),
         paddingEndMs: z.number().int().optional().describe('Word mode: breathing room (ms) kept before speech at a silence end edge (negative tightens). Defaults to the saved padding, else 200.'),
+        limit: z.number().int().min(1).optional().describe('How many clip segments a page holds. Omit for the default.'),
+        cursor: z.string().optional().describe("The answer's nextCursor, to read the next page of segments with the same other inputs."),
       },
     },
     async (args, extra) => {

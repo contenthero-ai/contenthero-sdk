@@ -29,6 +29,9 @@ const WIDGET_META = {
 import { GENERATION_WIDGET_URI } from './widget-resource.js'
 import { lastAnswer } from './answer-capture.js'
 import type {
+  PicturePart,
+  ProjectPicturePart,
+  ProjectParts,
   Avatar,
   AvatarListResult,
   VoiceListResult,
@@ -129,7 +132,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2870,7 +2873,6 @@ const PROJECT_DETAIL_EXPOSURE = {
   groups: 'rendered',
   state: 'rendered',
   scope: 'rendered',
-  sourceTimes: 'rendered',
   findings: 'rendered',
   brandKitId: 'rendered',
   appUrl: 'rendered',
@@ -2894,8 +2896,28 @@ const PROJECT_DETAIL_EXPOSURE = {
 } satisfies Record<keyof ProjectDetail, string>
 void PROJECT_DETAIL_EXPOSURE
 
-/** A single project's full detail (read-before-write): metadata, type, revision, and the state JSON. */
-export function projectDetailResult(p: ProjectDetail): CallToolResult {
+/**
+ * A read of named parts (`ProjectParts`): the project named, which parts, where each second asked plays, the problems
+ * of what was returned, and the parts' JSON. Nothing else of the project, as the read asked.
+ */
+function projectPartsResult(p: ProjectParts): CallToolResult {
+  return text(
+    `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}", revision ${p.revision}, ${p.fps} fps. The ${p.parts.join(', ')} asked for, and nothing else of it.\n` +
+      (p.compositionSpace ? `Layer geometry is in composition space ${p.compositionSpace.width}x${p.compositionSpace.height} (center-relative px).\n` : '') +
+      (p.state?.missing?.length ? `These named nothing in the project: ${p.state.missing.join(', ')}.\n` : '') +
+      (p.sourceTimes?.length
+        ? `Where those seconds play on the timeline:\n${p.sourceTimes
+            .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
+            .join('\n')}\n`
+        : '') +
+      describeDocumentFindings(p.findings, 'Problems in what was read:').map((l) => `${l}\n`).join('') +
+      (p.state ? `\n${JSON.stringify(p.state, null, 2)}` : ''),
+  )
+}
+
+/** A single project's detail (read-before-write): metadata, type, revision, and the state JSON; or the parts named. */
+export function projectDetailResult(p: ProjectDetail | ProjectParts): CallToolResult {
+  if (isProjectParts(p)) return projectPartsResult(p)
   return text(
     `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `Pass this revision back as expectedRevision when you edit.\n` +
@@ -2922,12 +2944,6 @@ export function projectDetailResult(p: ProjectDetail): CallToolResult {
             .map((g) => `${g.name || `Group ${g.ordinal ?? '?'}`} [${g.id}] (${g.memberClipIds.length} clips)`)
             .join('; ')}\n` +
           `  Rename with update_group; bulk-edit a whole group with update_clips { groupId }.\n`
-        : '') +
-      // Where the seconds asked for play on the timeline (gap closure D6), a line per second.
-      (p.sourceTimes?.length
-        ? `Where those seconds play on the timeline:\n${p.sourceTimes
-            .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
-            .join('\n')}\n`
         : '') +
       // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Wording approved 2026-10-13 (W13, W14).
       describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `${l}\n`).join('') +
@@ -3063,7 +3079,7 @@ function describeRenderScope(rendered: Record<string, unknown>): string | null {
 function clipSection(
   clip: Record<string, unknown>,
   budget: number,
-): { json: Record<string, unknown>; lines: string[]; blocks: CallToolResult['content'] } {
+): { json: Record<string, unknown>; lines: string[]; brief: string[]; blocks: CallToolResult['content'] } {
   // A page of a source's frames comes one by one (`keyframes`) or tiled into contact sheets (`sheets`); both spend the
   // same allowance, in order, and what does not fit is named.
   const keyframes = [...parseKeyframes(clip.keyframes), ...parseSheets(clip.sheets)]
@@ -3088,14 +3104,28 @@ function clipSection(
   lines.push(...why)
   lines.push(...describeSourceSound(sound))
   const audioMap = isPlainRecord(clip.audioMap) ? (clip.audioMap as unknown as AudioMapAnswer) : null
-  lines.push(...describeAudioMap(audioMap))
-  if (audioMap?.status === 'ready') lines.push(EXACT_VALUES_POINTER)
+  // The structured data carries the map exact, so its summary says the map in one line, never its window again.
+  const brief = [...lines]
+  const mapLines = describeAudioMap(audioMap)
+  lines.push(...mapLines)
+  if (audioMap?.status === 'ready') {
+    lines.push(EXACT_VALUES_POINTER)
+    brief.push(audioMap.summary ? describeAudioMapSummary(audioMap.summary) : 'audio map (free) for the window:', 'Its window is in clip.audioMap.')
+  } else {
+    brief.push(...mapLines)
+  }
+  const picturePart = isPlainRecord(clip.picture) ? (clip.picture as unknown as PicturePart) : null
+  const pictureLines = [...describePicturePart(picturePart), ...[moreLine(picturePart?.status === 'ready' ? picturePart.nextCursor : null)].filter((l): l is string => l !== null)]
+  lines.push(...pictureLines)
+  brief.push(...pictureLines)
+  const sheetStart = lines.length
   if (sheet && (sheet.status !== 'ready' || drawn.admitted.length > 0)) lines.push(...describeEvidenceSheet(sheet).map((l) => (sheet.status === 'ready' ? `${l} It is attached below.` : l)))
   if (drawn.dropped > 0) lines.push("The evidence sheet was not attached: over this result's size limit. Ask for fewer frames, or a narrower window.")
   if (heard.admitted.length > 0) {
     lines.push("A picture of the sound is attached below: its waveform above its spectrogram, on one time axis in seconds from the start of the window.")
   }
   if (heard.dropped > 0) lines.push("The picture of the sound was not attached: over this result's size limit. Ask for fewer frames or a narrower window.")
+  brief.push(...lines.slice(sheetStart))
   let json: Record<string, unknown> = clip
   for (const key of ['keyframes', 'sheets'] as const) {
     if (Array.isArray(clip[key])) {
@@ -3123,7 +3153,7 @@ function clipSection(
     blocks.push({ type: 'text', text: 'Its sound:' })
     for (const img of heard.admitted) blocks.push({ type: 'image', data: img.data, mimeType: img.mimeType })
   }
-  return { json, lines, blocks }
+  return { json, lines, brief, blocks }
 }
 
 /**
@@ -3152,7 +3182,9 @@ export function viewResult(
     const { audioMap: _exact, ...readable } = clipped.json
     return {
       content: [{ type: 'text', text: `${clipped.lines.join('\n')}\n\n${JSON.stringify(readable)}` }, ...clipped.blocks],
-      structuredContent: standaloneStructured(clipped.lines.join('\n'), { clip: clipped.json }),
+      // Each channel says each fact once: the text has the map in lines and no exact map; the structured data has the
+      // exact map and a summary that does not say its window again.
+      structuredContent: standaloneStructured(clipped.brief.join('\n'), { clip: clipped.json }),
     }
   }
   // The parts the request named (gap closure D4): the live context when asked, a render, the range's sound beside it,
@@ -3162,7 +3194,9 @@ export function viewResult(
   const renderedSound = isPlainRecord(result.renderedSound) ? result.renderedSound : null
   const projectPicture = isPlainRecord(result.picture) ? result.picture : null
   if (projectPicture && !rendered && !renderedSound && !live) {
-    return text(`The picture analysis of the project's window, read from its clips' sources:\n\n${JSON.stringify(projectPicture)}`)
+    const part = projectPicture as unknown as ProjectPicturePart
+    const said = [...describeProjectPicture(part), ...[moreLine(part.status === 'ready' ? part.nextCursor : null)].filter((l): l is string => l !== null)]
+    return text(`${said.join('\n')}\n\n${JSON.stringify(projectPicture)}`)
   }
   if (!rendered && !renderedSound && !live?.context) {
     return text(
@@ -3562,32 +3596,36 @@ export function linkFormatsResult(f: LinkFormats): CallToolResult {
   )
 }
 
-/** The editor timeline clip + track-type catalog as readable text + the JSON. */
+/**
+ * A project's transcript, a page of it, each fact once (the answer contract, 2026-10-15): one line per clip in timeline
+ * order (its state, id, source ms, timeline frames and words), and in word mode each clip's words, silences and audio
+ * events as rows of values in the order `fields` names, without the line's facts again. A page's clip lines were once
+ * printed twice, in lines and in JSON.
+ */
 export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
   if (!r.mediaTranscribed) {
     return text(r.note ?? 'No transcript available for this project yet.')
   }
-  // A readable, clip-by-clip transcript in timeline order: each line is one clip, marked [disabled] when it is
-  // cut (excluded from the render) so the agent sees what is already removed. In word mode each line also
-  // summarizes its word / silence / event counts. The full structured data (clipIds, timeline frames, word
-  // timing, silences, audio events) follows as JSON for exact targeting via update_timeline.
   const lines = r.segments.map((s) => {
     const tag = s.disabled ? `[disabled${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[enabled]'
     const body = s.text ? s.text : '(no speech)'
-    const extra =
-      s.words || s.silences || s.audioEvents
-        ? ` {${s.words?.length ?? 0} words, ${s.silences?.length ?? 0} silences, ${s.audioEvents?.length ?? 0} events}`
-        : ''
-    return `${tag} ${s.clipId}  ${s.sourceStartMs}-${s.sourceEndMs}ms (frames ${s.fromFrame}-${s.fromFrame + s.durationFrames}):${extra} ${body}`
+    const note = s.disabledNote ? ` (note: ${s.disabledNote})` : ''
+    return `${tag} ${s.clipId}  ${s.sourceStartMs}-${s.sourceEndMs}ms (frames ${s.fromFrame}-${s.fromFrame + s.durationFrames}):${note} ${body}`
   })
   const speakerLine = r.speakers && r.speakers.length > 0 ? `Speakers: ${r.speakers.join(', ')}.\n` : ''
+  const rows = r.fields
+    ? `\n\n${JSON.stringify({ fields: r.fields, segments: r.segments.map((s) => ({ clipId: s.clipId, words: s.words ?? [], silences: s.silences ?? [], audioEvents: s.audioEvents ?? [] })) })}`
+    : ''
+  const more = moreLine(r.nextCursor)
   return text(
-    `Transcript for ${r.projectId} (${r.segmentCount} clip segment(s), ${r.fps}fps, revision ${r.revision}). [disabled] = cut/excluded from the render, [enabled] = kept.\n` +
-      `Cut non-destructively with update_timeline disable_ranges (source-media ranges) or set_disabled (whole clip); restore with set_disabled disabled:false. Word timing + timeline frames + silences + audio events are in the JSON when granularity 'word' was requested.\n` +
+    `Transcript for ${r.projectId}: ${r.segments.length} of ${r.segmentCount} clip segment(s) on this page, ${r.fps}fps, revision ${r.revision}. [disabled] = cut/excluded from the render, [enabled] = kept.\n` +
+      `Cut non-destructively with update_timeline disable_ranges (source-media ranges) or set_disabled (whole clip); restore with set_disabled disabled:false.` +
+      (r.fields ? ` Each clip's words, silences and audio events follow as rows of values, in the order fields names.\n` : '\n') +
       speakerLine +
       `To edit safely against a concurrent change, pass revision ${r.revision} as expectedRevision; or omit expectedRevision to just apply to the current state.\n\n` +
-      `${lines.join('\n')}\n\n` +
-      JSON.stringify(r, null, 2),
+      lines.join('\n') +
+      (more ? `\n${more}` : '') +
+      rows,
   )
 }
 
