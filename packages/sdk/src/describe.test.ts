@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -273,19 +273,19 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
     duckingDropDb: 9.2,
     integratedLufs: -14.26,
   }
-  assert.equal(describeAudioMapSummary(summary), 'audio map (free): 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, mix -14.3 LUFS')
+  assert.equal(describeAudioMapSummary(summary), 'audio map: 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, mix -14.3 LUFS')
   assert.equal(
     describeAudioMapSummary({ ...summary, soundCount: 1, music: { present: true, tempoBpm: null, key: null, mode: null }, duckingDropDb: null }),
-    'audio map (free): 12.3s of speech in 30.0s, 1 sound candidate, music, mix -14.3 LUFS',
+    'audio map: 12.3s of speech in 30.0s, 1 sound candidate, music, mix -14.3 LUFS',
   )
   assert.equal(
     describeAudioMapSummary({ ...summary, soundCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null, integratedLufs: null }),
-    'audio map (free): 12.3s of speech in 30.0s, no sound candidates, no music, mix silent',
+    'audio map: 12.3s of speech in 30.0s, no sound candidates, no music, mix silent',
   )
   // The voice over its bed when measured; an analysis without it (made before it was measured) says nothing of it.
   assert.equal(
     describeAudioMapSummary({ ...summary, voiceOverBedDb: 14.2 }),
-    'audio map (free): 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, voice 14 dB over the bed while speaking, mix -14.3 LUFS',
+    'audio map: 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, voice 14 dB over the bed while speaking, mix -14.3 LUFS',
   )
   assert.equal(describeAudioMapSummary({ ...summary, voiceOverBedDb: null }), describeAudioMapSummary(summary))
 
@@ -326,7 +326,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
     levels: { vocalsDb: -16.2, drumsDb: -24, bassDb: -28.4, otherDb: null },
   }
   assert.deepEqual(describeAudioMapWindow(window), [
-    'audio map (free), 0.0s to 6.0s of 30.0s:',
+    'audio map, 0.0s to 6.0s of 30.0s:',
     '  speech: 0.0-3.4s, 4.1-6.0s',
     '  sound candidates (measured, not identified): 2',
     '    1. 1.2s to 1.8s on other: -18 dB, +14 over its floor, +3 vs voice, -12 ms off the beat, pattern 2; attack 4 ms, decay 180 ms, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, unpitched, low band 8%, width 0.4',
@@ -361,7 +361,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
   assert.deepEqual(describeAudioMap(undefined), [])
   assert.equal(
     describeContentVideo({ copy: { status: 'ready' }, audioMap: { status: 'ready', summary } }),
-    'ready; audio map (free): 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, mix -14.3 LUFS.',
+    'ready; audio map: 12.3s of speech in 30.0s, 7 sound candidates, music 118 BPM, A minor, drops 9 dB under speech, mix -14.3 LUFS.',
   )
 })
 
@@ -446,7 +446,7 @@ test('an audio map in a newer format reads as an update line, never a throw', ()
   } as never
   for (const map of [{ status: 'ready', version: 2, window }, { status: 'ready', window }] as never[]) {
     const lines = describeAudioMap(map)
-    assert.equal(lines[0], 'audio map (free), 0.0s to 1.0s of 1.0s:')
+    assert.equal(lines[0], 'audio map, 0.0s to 1.0s of 1.0s:')
     assert.match(lines[3]!, / on piano: /)
     assert.deepEqual(describeContentVideoWindow({ audioMap: map }), lines)
   }
@@ -471,4 +471,24 @@ test('an edit names what it left wrong in the project, a line per finding, in th
   assert.deepEqual(describeDocumentFindings(undefined, 'Heading:'), [])
   const text = describeEditorOps({ revision: 3, results: [{ op: 'set_project_module', ok: true }], documentWarnings: [warning] } as never)
   assert.match(text, /\n {2}- warning in c1, line 4: /)
+})
+
+/**
+ * An answer states a cost only when the user was charged, and then in credits (the cost rule, 2026-10-16): no USD
+ * anywhere, nothing for work the platform pays for. A priced analysis that is still being made states its price.
+ *
+ * Break-verified: printing the price or the charge as dollars, or printing a cost line with no cost, turns this red.
+ */
+test('a charge is said in credits, a price before it, and nothing is said when there was none', () => {
+  const ready = { status: 'ready', version: 1, tier: 'full' } as never
+  assert.deepEqual(describePicturePart(ready), [])
+  assert.deepEqual(describePicturePart({ ...(ready as object), cost: { credits: 15 } } as never), ['Answering it was charged 15 credits.'])
+  assert.deepEqual(describePicturePart({ ...(ready as object), cost: { credits: 1 } } as never), ['Answering it was charged 1 credit.'])
+  const pending = describeAudioMap({ status: 'pending', since: '2026-10-16T10:00:00Z', price: { credits: 4 } })
+  assert.match(pending[0], /It costs 4 credits, charged when it is done\./)
+  assert.doesNotMatch(describeAudioMap({ status: 'pending', since: '2026-10-16T10:00:00Z' })[0], /costs/)
+  const summary = { speechSec: 1, durationSec: 2, soundCount: 0, music: { present: false }, integratedLufs: null } as never
+  const charged = describeAudioMap({ status: 'ready', summary, cost: { credits: 2 } } as never)
+  assert.equal(charged[charged.length - 1], 'The sound analysis was charged 2 credits.')
+  assert.ok(![...pending, ...charged].some((line) => line.includes('$')))
 })

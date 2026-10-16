@@ -2743,7 +2743,7 @@ test("get_content reports each video's state, and cuts adds its cut list", async
   assert.deepEqual(asked, { cuts: true, startMs: 1000 })
   const body = res.content[0].text
   assert.match(body, /videos: not downloaded \(analyze_content with kind video downloads them\)/)
-  assert.match(body, /Slide 2 \(slide: 1\): ready; cut list \(free\): 2 cuts in 6\.0s, at 1\.50s, 4\.00s\./)
+  assert.match(body, /Slide 2 \(slide: 1\): ready; cut list: 2 cuts in 6\.0s, at 1\.50s, 4\.00s\./)
   assert.match(body, /Slide 4 \(slide: 3\): not downloaded yet\./)
   const { tools } = await mcp.listTools()
   assert.match(tools.find((t) => t.name === 'get_content').description, /Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes\./)
@@ -2784,8 +2784,8 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
   const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1', audioMap: true, startMs: 1000, endMs: 4000 } })
   assert.deepEqual(asked, { audioMap: true, startMs: 1000, endMs: 4000 })
   const body = res.content[0].text
-  assert.match(body, /Slide 1 \(slide: 0\): ready; audio map \(free\): 1\.5s of speech in 6\.0s, 1 sound candidate, music 118 BPM, A minor, drops 9 dB under speech, mix -14 LUFS\./)
-  assert.match(body, /\n {4}audio map \(free\), 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
+  assert.match(body, /Slide 1 \(slide: 0\): ready; audio map: 1\.5s of speech in 6\.0s, 1 sound candidate, music 118 BPM, A minor, drops 9 dB under speech, mix -14 LUFS\./)
+  assert.match(body, /\n {4}audio map, 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
   assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: the sound analysis is still being made: read this window again to get it\./)
 })
 
@@ -2886,7 +2886,7 @@ test("view on a post's video shows its audio map for the window", async () => {
   const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, count: 1 } })
   const text = res.content[0].text
-  assert.match(text, /audio map \(free\), 1\.0s to 4\.0s of 6\.0s:/)
+  assert.match(text, /audio map, 1\.0s to 4\.0s of 6\.0s:/)
   assert.match(text, /music: 118 BPM, A minor, drops 9 dB under speech, 2 beats in this window/)
   assert.match(text, /levels: vocals -16 dB, drums -24 dB, bass -28 dB, other -30 dB/)
 })
@@ -3598,7 +3598,7 @@ test('view shows the frames and the sound of a video range', async () => {
 test('view answers a project window\'s picture analysis in numbers', async () => {
   let asked: Record<string, unknown> = {}
   const unseen = [{ clipId: 'code-1', trackId: 'fx', fromFrame: 0, toFrame: 90, why: 'no_file' }]
-  const picture = { status: 'ready', version: 1, fps: 30, fromFrame: 0, toFrame: 300, sources: [], unseen, nextCursor: 'NEXT', cost: { usd: 0.0012 } }
+  const picture = { status: 'ready', version: 1, fps: 30, fromFrame: 0, toFrame: 300, sources: [], unseen, nextCursor: 'NEXT', cost: { credits: 12 } }
   const mcp = await connect(fakeClient({ view: async (input: Record<string, unknown>) => ((asked = input), { picture }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', find: 'a face', where: true, fromFrame: 0, toFrame: 300 } })
   assert.equal(asked.find, 'a face')
@@ -3607,7 +3607,7 @@ test('view answers a project window\'s picture analysis in numbers', async () =>
   // The clips it cannot see are named, with why, once (in the JSON); the lines say how many and where to find them.
   assert.match(res.content[0].text, /1 clip on this page is not seen by it, listed in unseen with why\./)
   assert.equal(res.content[0].text.match(/"code-1"/g)?.length, 1)
-  assert.match(res.content[0].text, /Answering it was billed \$0\.0012\./)
+  assert.match(res.content[0].text, /Answering it was charged 12 credits\./)
   assert.match(res.content[0].text, /More: pass cursor "NEXT"\./)
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
 })
@@ -4068,7 +4068,7 @@ test('analyze_content kind video asks again while its copy downloads, then names
   assert.equal(asked, 2)
   assert.match(res.content[0].text, /Con00001/)
   assert.match(res.content[0].text, /Its video is ready in the post's shared analysis copies/)
-  assert.match(res.content[0].text, /Video: ready; cut list \(free\): 2 cuts in 9\.0s, at 1\.50s, 4\.25s\./)
+  assert.match(res.content[0].text, /Video: ready; cut list: 2 cuts in 9\.0s, at 1\.50s, 4\.25s\./)
   assert.equal(res.structuredContent.status, 'ready')
   assert.deepEqual(res.structuredContent.videos[0].cuts.boundaries, [1.5, 4.25])
   assert.equal(res.structuredContent.cuts, undefined)
@@ -4119,7 +4119,7 @@ test('analyze_content kind video on a carousel reports each video slide, by slid
   assert.ok(!res.isError)
   const text = res.content[0].text
   assert.match(text, /A download failed: one slide could not be read\. Asking again tries once more\./)
-  assert.match(text, /Slide 2 \(slide: 1\): ready; cut list \(free\): 1 cut in 6\.0s, at 2\.00s\./)
+  assert.match(text, /Slide 2 \(slide: 1\): ready; cut list: 1 cut in 6\.0s, at 2\.00s\./)
   assert.match(text, /Slide 4 \(slide: 3\): the download failed: the page listed no file\./)
   assert.deepEqual(res.structuredContent.videos.map((v) => v.slide), [1, 3])
 })
@@ -5815,15 +5815,15 @@ test('update_timeline and update_canvas list no operation; view and get_project 
 
 /**
  * A view answers with the parts it names (gap closure D4), and a render says what was drawn and changed (D2), what it
- * was narrowed to (D1) and what it cost (D5).
- * Break-verified: folding the render under a live context, or dropping the adjusted, scope or cost lines, turns this red.
+ * was narrowed to (D1); it states no cost, the platform paying for renders (the cost rule, 2026-10-16).
+ * Break-verified: folding the render under a live context, or dropping the adjusted or scope lines, turns this red.
  */
-test('view shows a render alone with what was changed, its scope and its cost; live adds the screen context', async () => {
+test('view shows a render alone with what was changed and its scope; live adds the screen context', async () => {
   const rendered = {
     renderId: 'r7', status: 'ready', since: '2026-10-13T10:00:00Z', kind: 'picture', frame: 3, width: 1920, height: 1080,
     dataUrl: 'data:image/webp;base64,QUJD',
     adjusted: [{ field: 'width', asked: 4000, used: 1920, reason: "a render is never wider than the project's own size or the plan's export ceiling" }],
-    scope: { trackIds: ['t2'] }, missingIds: ['gone'], cost: { estimatedUsd: 0.00021 },
+    scope: { trackIds: ['t2'] }, missingIds: ['gone'],
   }
   const alone = await connect(fakeClient({ view: async () => ({ rendered }) }))
   const res = await alone.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, width: 3000, trackIds: ['t2', 'gone'] } })
@@ -5831,7 +5831,8 @@ test('view shows a render alone with what was changed, its scope and its cost; l
   assert.doesNotMatch(text, /Live context/)
   assert.match(text, /adjusted width: asked 4000, used 1920 \(a render is never wider/)
   assert.match(text, /Only tracks t2 drawn, on the timeline's own frame numbers\. These named nothing on the timeline: gone\./)
-  assert.match(text, /This render cost about \$0\.0002 \(Remotion's estimate\)\./)
+  // A render is the platform's to pay: the answer states no cost.
+  assert.doesNotMatch(text, /cost|\$/i)
   const both = await connect(fakeClient({
     view: async () => ({
       live: { context: { surface: 'editor', playheadFrame: 3 }, participant: { userId: 'u1', sessionId: 's', surface: 'editor', projectId: 'p1', cardId: null, updatedAt: '2026-10-13T10:00:00Z' }, participants: [] },

@@ -3197,6 +3197,8 @@ export type AudioMapAnswer =
       version?: number
       summary?: AudioMapSummary
       window?: AudioMapWindow
+      /** What the user was charged for making this analysis, in credits: present only when they were. */
+      cost?: { credits: number }
     }
   | PendingPart
   | FailedPart
@@ -3899,6 +3901,8 @@ export interface PendingPart {
   expectedBy?: string
   readWith?: { renderId: string; page?: number }
   reason?: string
+  /** What the user pays when the work is done, in credits: present only for work that is priced. */
+  price?: { credits: number }
 }
 
 /** Something a `view` answer carries that could not be made, with why. */
@@ -3940,7 +3944,7 @@ export interface LiveViewResult {
  *   (while pending), reason?, expiresAt, kind, ... }`. A picture carries its page's images (`dataUrl`, `frames`, or
  *   `sheets`), `sampled: { count, frames }` (what was drawn), `adjusted?: Adjustment[]` (what the server changed, with
  *   why), `width`, `height`, `pixelsPerCompositionUnit`, `region?`, `scope?` and `missingIds?` (a render narrowed by
- *   `trackIds`/`clipIds`), `cost?: { estimatedUsd }`. A sound carries its measurement, `leveled: false` (before an
+ *   `trackIds`/`clipIds`). A sound carries its measurement, `leveled: false` (before an
  *   export's delivery leveling), `audioMap` (`AudioMapAnswer`) and `sheet` (`EvidenceSheet`) on the first page, both
  *   on the sound's own seconds from the range's start; a pending one names the render to read in `readWith`.
  * - `renderedSound`: when `video` was asked on a surface that cannot take video, the range's frames come back in
@@ -3999,7 +4003,7 @@ export type PictureNotReady = PendingPart | FailedPart | { status: 'unavailable'
 /**
  * A source's picture analysis over a window (`find`, `where`, `picture`), or why there is none yet. Every list in it
  * pages by one cursor: a page holds `limit` of each, and `nextCursor`, passed back as `cursor`, reads the next page of
- * all of them. `cost.usd` is what answering it was billed, when anything was. Times are the source's seconds.
+ * all of them. `cost.credits` is what the user was charged for answering it, when they were charged. Times are the source's seconds.
  */
 export type PicturePart =
   | {
@@ -4024,14 +4028,14 @@ export type PicturePart =
         faces: Array<{ fromSec: number; toSec: number } & PictureBox>
       }
       nextCursor?: string
-      cost?: { usd: number }
+      cost?: { credits: number }
     }
   | PictureNotReady
 
 /**
  * A project window's picture analysis: each source its clips play, by its `assetId`, with its part (every moment and
  * track naming the clips it plays on), the clips the analysis does not see and why (`no_file`: code, text or a shape;
- * `still`: an image; `not_stored`: a file not stored here), one `nextCursor` for every list, and `cost.usd`.
+ * `still`: an image; `not_stored`: a file not stored here), one `nextCursor` for every list, and `cost.credits` when the user was charged.
  */
 export type ProjectPicturePart =
   | {
@@ -4043,7 +4047,7 @@ export type ProjectPicturePart =
       sources: Array<{ assetId: string; part: PicturePart }>
       unseen: Array<PictureOnTimeline & { why: 'no_file' | 'still' | 'not_stored' }>
       nextCursor?: string
-      cost?: { usd: number }
+      cost?: { credits: number }
     }
   | { status: 'unavailable'; reason: string }
 

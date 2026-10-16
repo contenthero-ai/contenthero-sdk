@@ -141,14 +141,15 @@ function readWithText(readWith: unknown): string | null {
  */
 export function describePending(
   what: string,
-  part: { since?: string; expectedBy?: string; readWith?: unknown; reason?: string },
+  part: { since?: string; expectedBy?: string; readWith?: unknown; reason?: string; price?: { credits: number } },
   fallback: string,
 ): string {
   const when = [part.since ? `since ${part.since}` : null, part.expectedBy ? `expected by ${part.expectedBy}` : null].filter(Boolean).join(', ')
   const readWith = readWithText(part.readWith)
   const how = readWith ? `read it again with ${readWith}` : fallback
   const why = part.reason ? ` ${part.reason.trim().replace(/\.+$/, '')}.` : ''
-  return `${what} is still being made${when ? ` (${when})` : ''}: ${how}.${why}`
+  const price = part.price ? ` It costs ${credits(part.price.credits)}, charged when it is done.` : ''
+  return `${what} is still being made${when ? ` (${when})` : ''}: ${how}.${why}${price}`
 }
 
 /**
@@ -468,12 +469,12 @@ export function contentVideoLabel(video: ContentVideo): string {
   return video.slide === undefined ? 'Video' : `Slide ${video.slide + 1} (slide: ${video.slide})`
 }
 
-/** A video's cut list, free: how many cuts in how long, and where. */
+/** A video's cut list: how many cuts in how long, and where. */
 export function describeContentVideoCuts(cuts: ContentVideoCuts): string {
   const length = `${cuts.durationSec.toFixed(1)}s`
-  if (!cuts.boundaries.length) return `cut list (free): no cuts in ${length}`
+  if (!cuts.boundaries.length) return `cut list: no cuts in ${length}`
   const n = cuts.boundaries.length
-  return `cut list (free): ${n} cut${n === 1 ? '' : 's'} in ${length}, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}`
+  return `cut list: ${n} cut${n === 1 ? '' : 's'} in ${length}, at ${cuts.boundaries.map((b) => `${b.toFixed(2)}s`).join(', ')}`
 }
 
 /** Seconds to a tenth and decibels whole: the audio map's precision in words, finer than any ear or edit needs. */
@@ -504,7 +505,7 @@ function voiceOverBedLine(v: AudioMapWindow['voiceOverBed']): string {
 const lufs = (v: number | null) => (v === null ? 'silent' : `${Math.round(v * 10) / 10} LUFS`)
 
 /**
- * A video's audio map in one line, free: how much speech in how long, how many sound candidates, its music, how far the
+ * A video's audio map in one line: how much speech in how long, how many sound candidates, its music, how far the
  * voice sits over the bed while speaking (when measured) and loudness.
  */
 export function describeAudioMapSummary(summary: AudioMapSummary): string {
@@ -513,7 +514,7 @@ export function describeAudioMapSummary(summary: AudioMapSummary): string {
   const words = audioMapMusicWords(summary.music, summary.duckingDropDb)
   const music = !summary.music.present ? 'no music' : words.length ? `music ${words.join(', ')}` : 'music'
   const voice = summary.voiceOverBedDb != null ? `, voice ${db(summary.voiceOverBedDb)} over the bed while speaking` : ''
-  return `audio map (free): ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${sounds}, ${music}${voice}, mix ${lufs(summary.integratedLufs)}`
+  return `audio map: ${sec1(summary.speechSec)} of speech in ${sec1(summary.durationSec)}, ${sounds}, ${music}${voice}, mix ${lufs(summary.integratedLufs)}`
 }
 
 const hz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v)}`)
@@ -565,7 +566,7 @@ export function describeAudioMapWindow(window: AudioMapWindow): string[] {
   const level = (v: number | null) => (v === null ? 'silent' : db(v))
   const l = window.levels
   return [
-    `audio map (free), ${sec1(window.fromSec)} to ${sec1(window.toSec)} of ${sec1(window.durationSec)}:`,
+    `audio map, ${sec1(window.fromSec)} to ${sec1(window.toSec)} of ${sec1(window.durationSec)}:`,
     `  speech: ${speech}`,
     window.sounds.length
       ? `  sound candidates (measured, not identified): ${window.sounds.length}`
@@ -633,7 +634,7 @@ export function isNewerAudioMap(answer: AudioMapAnswer): boolean {
 }
 
 /**
- * A video's audio map as a reader got it, in lines: being measured (free, so asking again costs nothing), why it is
+ * A video's audio map as a reader got it, in lines: being measured (asking again starts nothing), why it is
  * unavailable, or its summary and the window read, whichever came back; in a newer format, that the client needs
  * updating.
  */
@@ -643,7 +644,11 @@ export function describeAudioMap(answer: AudioMapAnswer | null | undefined): str
   if (answer.status === 'pending') return [describePending('audio map: the sound analysis', answer, 'read this window again to get it')]
   if (answer.status === 'failed') return [`audio map: the sound analysis failed (${answer.reason.trim().replace(/\.+$/, '')})`]
   if (answer.status === 'unavailable') return [`audio map: unavailable (${answer.reason.trim().replace(/\.+$/, '')})`]
-  return [...(answer.summary ? [describeAudioMapSummary(answer.summary)] : []), ...(answer.window ? describeAudioMapWindow(answer.window) : [])]
+  return [
+    ...(answer.summary ? [describeAudioMapSummary(answer.summary)] : []),
+    ...(answer.window ? describeAudioMapWindow(answer.window) : []),
+    ...(answer.cost ? [`The sound analysis was charged ${credits(answer.cost.credits)}.`] : []),
+  ]
 }
 
 /**
@@ -759,7 +764,7 @@ function pictureNotReadyLine(what: string, part: PictureNotReady): string {
 
 /**
  * A source's picture answer (`view`'s `find`, `where`, `picture`) in lines: whether it is coarse while the full analysis
- * is made, which of its parts are not ready and why, and what answering it was billed. Its numbers are in the answer
+ * is made, which of its parts are not ready and why, and what the user was charged for answering it. Its numbers are in the answer
  * itself, said once; whether more pages follow is each surface's own line (`moreLine`).
  */
 export function describePicturePart(part: PicturePart | null | undefined, what = 'the picture analysis'): string[] {
@@ -775,13 +780,13 @@ export function describePicturePart(part: PicturePart | null | undefined, what =
   }
   if (part.find && 'status' in part.find) lines.push(pictureNotReadyLine('find', part.find))
   if (part.where && 'status' in part.where) lines.push(pictureNotReadyLine('where', part.where))
-  if (part.cost) lines.push(`Answering it was billed $${part.cost.usd.toFixed(4)}.`)
+  if (part.cost) lines.push(`Answering it was charged ${credits(part.cost.credits)}.`)
   return lines
 }
 
 /**
  * A project window's picture answer in lines: why there is none, each source not ready, the clips it does not see (they
- * are listed in `unseen`, with why), and what answering it was billed. More pages are each surface's own line.
+ * are listed in `unseen`, with why), and what the user was charged for answering it. More pages are each surface's own line.
  */
 export function describeProjectPicture(part: ProjectPicturePart | null | undefined): string[] {
   if (!part) return []
@@ -794,6 +799,6 @@ export function describeProjectPicture(part: ProjectPicturePart | null | undefin
   // Read as a list that may be absent: an answer from a server before the list existed carries none.
   const unseen = part.unseen ?? []
   if (unseen.length) lines.push(`${unseen.length} clip${unseen.length === 1 ? '' : 's'} on this page ${unseen.length === 1 ? 'is' : 'are'} not seen by it, listed in unseen with why.`)
-  if (part.cost) lines.push(`Answering it was billed $${part.cost.usd.toFixed(4)}.`)
+  if (part.cost) lines.push(`Answering it was charged ${credits(part.cost.credits)}.`)
   return lines
 }

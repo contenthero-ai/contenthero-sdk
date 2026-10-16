@@ -3016,13 +3016,10 @@ function renderedSection(
   if (sound) lines.push(sound)
   const progress = describeRenderProgress(rendered)
   if (progress) lines.push(progress)
-  // What was drawn and what the server changed to draw it (gap closure D2), the scope it was narrowed to (D1), and what
-  // it cost (D5).
+  // What was drawn and what the server changed to draw it (gap closure D2), and the scope it was narrowed to (D1).
   lines.push(...describeAdjusted(rendered.adjusted))
   const scope = describeRenderScope(rendered)
   if (scope) lines.push(scope)
-  const cost = isPlainRecord(rendered.cost) && typeof rendered.cost.estimatedUsd === 'number' ? rendered.cost.estimatedUsd : null
-  if (cost !== null) lines.push(`This render cost about $${cost.toFixed(4)} (Remotion's estimate).`)
   if (shown.dropped > 0) {
     const notShown = renderImages
       .slice(shown.admitted.length)
@@ -3110,7 +3107,7 @@ function clipSection(
   lines.push(...mapLines)
   if (audioMap?.status === 'ready') {
     lines.push(EXACT_VALUES_POINTER)
-    brief.push(audioMap.summary ? describeAudioMapSummary(audioMap.summary) : 'audio map (free) for the window:', 'Its window is in clip.audioMap.')
+    brief.push(audioMap.summary ? describeAudioMapSummary(audioMap.summary) : 'audio map for the window:', 'Its window is in clip.audioMap.')
   } else {
     brief.push(...mapLines)
   }

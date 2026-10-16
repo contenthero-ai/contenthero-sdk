@@ -124,7 +124,7 @@ test("content analyze --kind video still downloading names how to follow it; a r
     videos: [{ copy: { status: 'ready' }, cuts: { boundaries: [1.5, 4.25], scores: [0.9, 0.7], durationSec: 9 } }], charge,
   })
   assert.match(ready, /Nothing was added to your library/)
-  assert.match(ready, /Video:\s+ready; cut list \(free\): 2 cuts in 9\.0s, at 1\.50s, 4\.25s\./)
+  assert.match(ready, /Video:\s+ready; cut list: 2 cuts in 9\.0s, at 1\.50s, 4\.25s\./)
   assert.doesNotMatch(ready, /Next/)
 })
 
@@ -139,7 +139,7 @@ test('content analyze --kind video on a carousel prints each video slide, by sli
     ],
     charge,
   })
-  assert.match(out, /Slide 1 \(slide: 0\):\s+ready; cut list \(free\): no cuts in 4\.0s\./)
+  assert.match(out, /Slide 1 \(slide: 0\):\s+ready; cut list: no cuts in 4\.0s\./)
   assert.match(out, /Slide 3 \(slide: 2\):\s+still downloading\./)
   assert.match(out, /--kind video \(free\)/)
 })
@@ -157,7 +157,7 @@ test('content get --cuts asks for the cut lists, and its window does not imply t
   assert.match(asked, /startMs=1000/)
   assert.doesNotMatch(asked, /transcript=/)
   assert.match(out, /Videos: ready/)
-  assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s; audio map \(free\)/)
+  assert.match(out, /Video: ready; cut list: 1 cut in 9\.0s, at 2\.50s; audio map/)
 })
 
 /**
@@ -172,8 +172,8 @@ test('content get --audio-map asks for the audio map window, and its window does
   assert.match(asked, /audioMap=true/)
   assert.match(asked, /startMs=1000/)
   assert.doesNotMatch(asked, /transcript=/)
-  assert.match(out, /Video: ready; cut list \(free\): 1 cut in 9\.0s, at 2\.50s; audio map \(free\): 4\.0s of speech in 9\.0s, no sound candidates, no music, mix -16 LUFS\./)
-  assert.match(out, /\n {4}audio map \(free\), 1\.0s to 9\.0s of 9\.0s:\n {6}speech: 1\.0-5\.0s\n {6}sound candidates \(measured, not identified\): none\n {6}music: none\n {6}voice: not measured\n {6}loudness: mix -16 LUFS over the video\n {6}levels: vocals -16 dB, drums silent, bass silent, other silent/)
+  assert.match(out, /Video: ready; cut list: 1 cut in 9\.0s, at 2\.50s; audio map: 4\.0s of speech in 9\.0s, no sound candidates, no music, mix -16 LUFS\./)
+  assert.match(out, /\n {4}audio map, 1\.0s to 9\.0s of 9\.0s:\n {6}speech: 1\.0-5\.0s\n {6}sound candidates \(measured, not identified\): none\n {6}music: none\n {6}voice: not measured\n {6}loudness: mix -16 LUFS over the video\n {6}levels: vocals -16 dB, drums silent, bass silent, other silent/)
 })
 
 /**
