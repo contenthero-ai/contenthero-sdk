@@ -9,6 +9,14 @@
   check frame, with `by`, `label`, `path` and keyframes), a source part may hold `track`, the picture window lists the
   `pointer`, a project part has `ProjectSourcePart` and `ProjectPictureWindow`, and `PictureFoundBy` is the one
   found-by vocabulary. `where.tracks` is gone.
+- A `where` candidate carries one `box` (its median) and its `check`, never the track's keyframes (`PictureCandidate`
+  no longer has `boxes`); the box on every frame is what `track` answers. A project's `where` and `track` answer on the
+  timeline, as its `picture` does: `ProjectCandidate` and `ProjectTrack` hold `timeline` spans on clips and keyframes
+  on frames of the clips that play them (`PictureOnFrame`, `ProjectKeyframe`), never source seconds. A source's
+  `picture` may be `unavailable` with why when a stored piece cannot be read.
+- `AudioMapWindow.durationSec` is the window's own length (it was the video's, which read as the window's);
+  `describeAudioMapWindow` prints `audio map, A to B:`. A ready `EvidenceSheet` may carry `wordsNote`, and
+  `describeEvidenceSheet` prints it when the words row is empty because the file has no transcript.
 
 ## 0.4.33
 

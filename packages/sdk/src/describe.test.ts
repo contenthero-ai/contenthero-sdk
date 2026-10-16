@@ -326,7 +326,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
     levels: { vocalsDb: -16.2, drumsDb: -24, bassDb: -28.4, otherDb: null },
   }
   assert.deepEqual(describeAudioMapWindow(window), [
-    'audio map, 0.0s to 6.0s of 30.0s:',
+    'audio map, 0.0s to 6.0s:',
     '  speech: 0.0-3.4s, 4.1-6.0s',
     '  sound candidates (measured, not identified): 2',
     '    1. 1.2s to 1.8s on other: -18 dB, +14 over its floor, +3 vs voice, -12 ms off the beat, pattern 2; attack 4 ms, decay 180 ms, peak -9 dB, centroid 5.2k/4.1k/640 Hz (start/peak/end), bandwidth 3.1k Hz, flatness 0.62, unpitched, low band 8%, width 0.4',
@@ -384,6 +384,8 @@ test('describeEvidenceSheet reads a ready sheet, and the pending and unavailable
     "evidence sheet, 2.0s to 4.0s: frames along the top, the spoken words under them, then one spectrogram strip per stem (vocals, drums, bass, other; log frequency 20 Hz to 20k Hz, low at the bottom), on one time axis in the file's seconds (a rendered range's from the start of the range); its 3 sound candidates marked on the stem each is loudest in, numbered as listed under sound candidates.",
   ])
   assert.match(describeEvidenceSheet({ ...ready, soundsMarked: 0 })[0]!, /no sound candidates in this window\.$/)
+  // No transcript while speech is heard: the sheet says why its words row is empty.
+  assert.deepEqual(describeEvidenceSheet({ ...ready, wordsNote: 'No transcript.' }).slice(1), ['  words: No transcript.'])
   assert.deepEqual(describeEvidenceSheet({ status: 'pending', since: 'T0', reason: 'The stems are being separated again.' }), ['evidence sheet is still being made (since T0): The stems are being separated again.'])
   assert.deepEqual(describeEvidenceSheet(null), [])
 })
@@ -446,7 +448,7 @@ test('an audio map in a newer format reads as an update line, never a throw', ()
   } as never
   for (const map of [{ status: 'ready', version: 2, window }, { status: 'ready', window }] as never[]) {
     const lines = describeAudioMap(map)
-    assert.equal(lines[0], 'audio map, 0.0s to 1.0s of 1.0s:')
+    assert.equal(lines[0], 'audio map, 0.0s to 1.0s:')
     assert.match(lines[3]!, / on piano: /)
     assert.deepEqual(describeContentVideoWindow({ audioMap: map }), lines)
   }

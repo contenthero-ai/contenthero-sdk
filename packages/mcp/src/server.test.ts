@@ -2785,7 +2785,7 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
   assert.deepEqual(asked, { audioMap: true, startMs: 1000, endMs: 4000 })
   const body = res.content[0].text
   assert.match(body, /Slide 1 \(slide: 0\): ready; audio map: 1\.5s of speech in 6\.0s, 1 sound candidate, music 118 BPM, A minor, drops 9 dB under speech, mix -14 LUFS\./)
-  assert.match(body, /\n {4}audio map, 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
+  assert.match(body, /\n {4}audio map, 1\.0s to 4\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
   assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: the sound analysis is still being made: read it again with the same inputs\./)
 })
 
@@ -2886,7 +2886,7 @@ test("view on a post's video shows its audio map for the window", async () => {
   const mcp = await connect(fakeClient({ view: async () => ({ clip }) }))
   const res = await mcp.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, count: 1 } })
   const text = res.content[0].text
-  assert.match(text, /audio map, 1\.0s to 4\.0s of 6\.0s:/)
+  assert.match(text, /audio map, 1\.0s to 4\.0s:/)
   assert.match(text, /music: 118 BPM, A minor, drops 9 dB under speech, 2 beats in this window/)
   assert.match(text, /levels: vocals -16 dB, drums -24 dB, bass -28 dB, other -30 dB/)
 })

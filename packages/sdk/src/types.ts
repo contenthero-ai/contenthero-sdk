@@ -3133,7 +3133,7 @@ export interface AudioMapLevels {
 /**
  * A stretch of a post video's audio map, in the video's own seconds: speech clipped to it, sound candidates overlapping
  * it (at their own times), beats and short-term loudness inside it; music, ducking, voice over bed, integrated loudness
- * and levels are whole-video facts. `durationSec` is the video's.
+ * and levels are whole-video facts. `durationSec` is the window's own length; the video's is the summary's.
  */
 export interface AudioMapWindow {
   fromSec: number
@@ -3179,6 +3179,8 @@ export type EvidenceSheet =
       dataUrl: string
       frames: { atSec: number }[]
       words: { atSec: number; text: string }[]
+      /** Why the words row is empty when speech is detected but the file has no transcript (and how one is made). */
+      wordsNote?: string
       stems: AudioStem[]
       frequencyHz: { min: number; max: number }
       soundsMarked: number
@@ -4021,7 +4023,6 @@ export interface PictureTrack {
   by?: Array<Extract<PictureFoundBy, 'detector' | 'screen' | 'pointer'>>
   path?: 'frame' | 'sample'
   boxes: PictureKeyframe[]
-  timeline?: PictureOnTimeline[]
 }
 
 /** The frame that confirms a candidate, and the seed a track of it is followed from: a second of the source and a box on its frame. */
@@ -4030,11 +4031,44 @@ export interface PictureSeed {
   box: PictureBox
 }
 
-/** One thing a `where` found: a track with its `id` (pass it as `track`), its `confidence` (0 to 1) and the `check` frame to view to confirm it. */
-export interface PictureCandidate extends PictureTrack {
+/**
+ * One thing a `where` found: its span, edges, one `box` (the median, never the keyframes: a `track` answers the box on
+ * every frame), what found it, its `id` (pass it as `track`), its `confidence` (0 to 1) and the `check` frame to view
+ * to confirm it.
+ */
+export interface PictureCandidate extends Omit<PictureTrack, 'boxes'> {
   id: string
   confidence: number
   check: PictureSeed
+}
+
+/** A frame of a project's timeline and the clip that plays it there. */
+export interface PictureOnFrame {
+  clipId: string
+  trackId: string
+  frame: number
+}
+
+/**
+ * A candidate on a project's timeline: where it plays as spans of timeline frames on the clips that play it
+ * (`timeline`), never as seconds of its source, and its `check` frame on a clip. Its `id` is the source's, passed to
+ * `track` unchanged.
+ */
+export interface ProjectCandidate extends Omit<PictureCandidate, 'fromSec' | 'toSec' | 'check'> {
+  timeline: PictureOnTimeline[]
+  check: PictureOnFrame & { box: PictureBox }
+}
+
+/** A keyframe of a project's track: its box on a frame of the clip that plays it. */
+export interface ProjectKeyframe extends PictureOnFrame, PictureBox {
+  score?: number
+  label?: string
+}
+
+/** One thing followed through a project's frames: where it plays, and its keyframes on the frames of the clips that play them. */
+export interface ProjectTrack extends Omit<PictureTrack, 'fromSec' | 'toSec' | 'boxes'> {
+  timeline: PictureOnTimeline[]
+  boxes: ProjectKeyframe[]
 }
 
 /** Where a screen recording's pointer rests: its span, its shape (`kind`) and its box. */
@@ -4093,9 +4127,17 @@ export interface ProjectPictureWindow {
   pointer: Array<PictureOnClip<{ kind: string } & PictureBox>>
 }
 
-/** A source's part as a project answers it: find, where and track carry their timeline, the analysis is in frames only, and a source has no cursor of its own. */
+/**
+ * A source's part as a project answers it: a moment carries its timeline beside its seconds; where, track and the
+ * analysis are in timeline frames only (a thing the edit cut out is not in them), and a source has no cursor of its own.
+ */
 export type ProjectSourcePart =
-  | (Omit<Extract<PicturePart, { status: 'ready' }>, 'picture' | 'nextCursor'> & { picture?: ProjectPictureWindow })
+  | (Omit<Extract<PicturePart, { status: 'ready' }>, 'picture' | 'nextCursor' | 'where' | 'track'> & {
+      where?: { query: string; candidates: ProjectCandidate[] } | { detector: 'pointer' | 'face'; candidates: ProjectCandidate[] } | PictureNotReady
+      /** The seed where it plays (absent when the edit cut that second out), and what it followed. */
+      track?: { seed: { box: PictureBox } & Partial<PictureOnFrame>; tracks: ProjectTrack[] } | PictureNotReady
+      picture?: ProjectPictureWindow
+    })
   | PictureNotReady
 
 /**

@@ -576,7 +576,7 @@ export function describeAudioMapWindow(window: AudioMapWindow): string[] {
   const level = (v: number | null) => (v === null ? 'silent' : db(v))
   const l = window.levels
   return [
-    `audio map, ${sec1(window.fromSec)} to ${sec1(window.toSec)} of ${sec1(window.durationSec)}:`,
+    `audio map, ${sec1(window.fromSec)} to ${sec1(window.toSec)}:`,
     `  speech: ${speech}`,
     window.sounds.length
       ? `  sound candidates (measured, not identified): ${window.sounds.length}`
@@ -602,6 +602,7 @@ export function describeEvidenceSheet(sheet: EvidenceSheet | null | undefined): 
     `evidence sheet, ${sec1(sheet.fromSec)} to ${sec1(sheet.toSec)}: frames along the top, the spoken words under them, then one spectrogram ` +
       `strip per stem (${sheet.stems.join(', ')}; log frequency ${hz(sheet.frequencyHz.min)} Hz to ${hz(sheet.frequencyHz.max)} Hz, low at the bottom), ` +
       `on one time axis in the file's seconds (a rendered range's from the start of the range); ${marked}.`,
+    ...(sheet.wordsNote ? [`  words: ${sheet.wordsNote}`] : []),
   ]
 }
 
