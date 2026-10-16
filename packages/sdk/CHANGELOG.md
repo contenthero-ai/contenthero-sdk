@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `view` takes `detector` (`pointer` or `face`) and `track` (a candidate's id, or a time and a box), declared by
+  `ViewInput`, `ViewDetector` and `ViewTrackInput`; `VIEW_PICTURE_INPUT_TEXT` gains `track` and `detector`, and its
+  `where` and `picture` texts are the approved W60 and W63 wording.
+- The picture answer types follow the server: `where` holds `candidates` (`PictureCandidate`: an id, a confidence and a
+  check frame, with `by`, `label`, `path` and keyframes), a source part may hold `track`, the picture window lists the
+  `pointer`, a project part has `ProjectSourcePart` and `ProjectPictureWindow`, and `PictureFoundBy` is the one
+  found-by vocabulary. `where.tracks` is gone.
+
 ## 0.4.33
 
 - `ViewInput` takes `find`, `where` and `picture`: a source's or a project window's picture analysis (moments ranked by

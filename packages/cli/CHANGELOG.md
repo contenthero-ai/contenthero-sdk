@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `view` takes `--detector` and `--track` (a candidate's id, or a seed as JSON), and its `--where` and `--picture` help reads the approved W60 and W63 wording.
+
 ## 0.3.30
 
 - `view` takes `--find`, `--where` and `--picture`. Uses sdk 0.4.33.

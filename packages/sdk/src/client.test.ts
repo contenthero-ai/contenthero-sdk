@@ -715,6 +715,20 @@ test('view sends a region as x,y,width,height', async () => {
   )
 })
 
+test('view sends a track as a candidate id or as its seed in JSON, and a detector as its name', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+    { status: 200, body: { context: null, participant: null, participants: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.view({ assetId: 'a1', track: 'cand_AQAAAAAAAAAAAAAA' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/view?assetId=a1&track=cand_AQAAAAAAAAAAAAAA')
+  await client.view({ assetId: 'a1', where: true, detector: 'pointer', track: { atSec: 2, box: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 } } })
+  const url = new URL(calls[1]?.url ?? '')
+  assert.equal(url.searchParams.get('detector'), 'pointer')
+  assert.deepEqual(JSON.parse(url.searchParams.get('track') ?? ''), { atSec: 2, box: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 } })
+})
+
 // Break-verified: dropping the video line or the clip block from view turns this red.
 test('view sends video, and a raw clip by asset id or media URL with its window', async () => {
   const { fetch, calls } = stubFetch([

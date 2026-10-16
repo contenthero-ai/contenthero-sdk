@@ -4743,6 +4743,17 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         find: z.string().min(1).max(200).optional().describe(VIEW_PICTURE_INPUT_TEXT.find),
         where: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.where),
         picture: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.picture),
+        detector: z.enum(['pointer', 'face']).optional().describe(VIEW_PICTURE_INPUT_TEXT.detector),
+        track: z
+          .union([
+            z.string().min(1),
+            z.object({
+              atSec: z.number().min(0),
+              box: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().positive().max(1), h: z.number().positive().max(1) }),
+            }),
+          ])
+          .optional()
+          .describe(VIEW_PICTURE_INPUT_TEXT.track),
         limit: z.number().int().min(1).optional().describe(VIEW_PICTURE_INPUT_TEXT.limit),
         cursor: z.string().optional().describe(VIEW_PICTURE_INPUT_TEXT.cursor),
       },
@@ -4784,6 +4795,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           find: args.find,
           where: args.where,
           picture: args.picture,
+          detector: args.detector,
+          track: args.track,
           limit: args.limit,
           cursor: args.cursor,
         })

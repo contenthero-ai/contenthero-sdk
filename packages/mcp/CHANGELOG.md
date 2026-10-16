@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `view` takes `detector` and `track`, and its `where` and `picture` inputs read the approved W60 and W63 wording.
+
 ## 0.4.40
 
 - `view` takes `find`, `where` and `picture` and prints a source's or a project window's picture part. Uses sdk 0.4.33.

@@ -28,7 +28,7 @@
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
-import { VIEW_PICTURE_INPUT_TEXT, describePicturePart, describeProjectPicture, type CompositionRegion, type PicturePart, type ProjectPicturePart, type ViewResult } from '@contenthero/sdk'
+import { VIEW_PICTURE_INPUT_TEXT, describePicturePart, describeProjectPicture, type CompositionRegion, type PicturePart, type ProjectPicturePart, type ViewDetector, type ViewResult, type ViewTrackInput } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, moreLine } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -63,6 +63,19 @@ function parseRegion(value: string): CompositionRegion {
     throw new CliError("--region takes four numbers: x,y,width,height (composition units, or a source clip's own pixels).", EXIT.USAGE)
   }
   return { x, y, width, height }
+}
+
+/** A candidate's id as it is, or a seed as JSON ({ atSec, box: { x, y, w, h } }, the box normalized to the frame): what the API's `track` takes. */
+function parseTrack(value: string): ViewTrackInput {
+  const text = value.trim()
+  if (!text.startsWith('{')) return text
+  try {
+    const seed = JSON.parse(text) as ViewTrackInput
+    if (seed && typeof seed === 'object') return seed
+  } catch {
+    // Fall through to the usage error.
+  }
+  throw new CliError('--track takes a candidate id, or a seed as JSON: {"atSec":<seconds>,"box":{"x":..,"y":..,"w":..,"h":..}}.', EXIT.USAGE)
 }
 
 /** A comma-separated list of seconds of a source, as the API's `atSec` takes them. */
@@ -229,6 +242,8 @@ export function registerView(program: Command): void {
     .option('--find <text>', VIEW_PICTURE_INPUT_TEXT.find)
     .option('--where', VIEW_PICTURE_INPUT_TEXT.where)
     .option('--picture', VIEW_PICTURE_INPUT_TEXT.picture)
+    .option('--detector <class>', `${VIEW_PICTURE_INPUT_TEXT.detector} One of: pointer, face.`)
+    .option('--track <id-or-seed>', `${VIEW_PICTURE_INPUT_TEXT.track} Pass a candidate's id, or a seed as JSON: {"atSec":<seconds>,"box":{"x":..,"y":..,"w":..,"h":..}}.`, parseTrack)
     .option('--limit <n>', VIEW_PICTURE_INPUT_TEXT.limit, (v) => parseInt(v, 10))
     .option('--cursor <cursor>', VIEW_PICTURE_INPUT_TEXT.cursor)
     .option('--save <path>', "write the produced image(s), a render's (with a heard range's evidence sheet), or a source's keyframes, its evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
@@ -247,7 +262,7 @@ export function registerView(program: Command): void {
         }
       }
       // A view asked of its picture analysis renders nothing, so its window (--from-frame, --to-frame) implies no render.
-      const asksPicture = opts.find != null || Boolean(opts.where) || Boolean(opts.picture)
+      const asksPicture = opts.find != null || Boolean(opts.where) || Boolean(opts.picture) || opts.detector != null || opts.track != null
       // A picture flag implies a render, unless it shapes a sound, a video or a clip, which are renders of their own.
       const render =
         Boolean(opts.render) ||
@@ -258,6 +273,9 @@ export function registerView(program: Command): void {
             opts.tracks != null || opts.clips != null))
       if (opts.layout != null && opts.layout !== 'frames' && opts.layout !== 'sheets') {
         throw new CliError("--layout takes 'frames' or 'sheets'.", EXIT.USAGE)
+      }
+      if (opts.detector != null && opts.detector !== 'pointer' && opts.detector !== 'face') {
+        throw new CliError("--detector takes 'pointer' or 'face'.", EXIT.USAGE)
       }
       const reading = opts.renderId != null
       const renders = render || sound || video || reading
@@ -297,6 +315,8 @@ export function registerView(program: Command): void {
         find: opts.find as string | undefined,
         where: Boolean(opts.where) || undefined,
         picture: Boolean(opts.picture) || undefined,
+        detector: opts.detector as ViewDetector | undefined,
+        track: opts.track as ViewTrackInput | undefined,
         limit: opts.limit as number | undefined,
         cursor: opts.cursor as string | undefined,
       })

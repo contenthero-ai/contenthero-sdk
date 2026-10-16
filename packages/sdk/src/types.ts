@@ -3985,17 +3985,60 @@ export interface PictureOnTimeline {
   toFrame: number
 }
 
+/** What found a moment or a thing, one vocabulary for `find` and `where`: the picture, text on screen, the spoken words, the open-vocabulary detector, the pointer detector. */
+export type PictureFoundBy = 'picture' | 'screen' | 'words' | 'detector' | 'pointer'
+
 /** A moment `find` names: its span, its best sample, and what found it (`picture`, `screen` or `words`). */
 export interface PictureMoment {
   fromSec: number
   toSec: number
   peakSec: number
   score: number
-  by: Array<'picture' | 'screen' | 'words'>
+  by: Array<Extract<PictureFoundBy, 'picture' | 'screen' | 'words'>>
   /** The on-screen text that matched, when the screen found it. */
   screenText?: string
   timeline?: PictureOnTimeline[]
 }
+
+/** A keyframe of a track: its box at that second, between two the box moves in a straight line. */
+export interface PictureKeyframe extends PictureBox {
+  atSec: number
+  score?: number
+  label?: string
+}
+
+/**
+ * One thing followed through the frames: its span, how each edge was placed, its median box, what found it, and its
+ * keyframes. `path` `frame` means the keyframes are cut from a box on every frame; `sample`, that they are the frames the source read.
+ */
+export interface PictureTrack {
+  fromSec: number
+  toSec: number
+  edges: [string, string]
+  box: PictureBox
+  score: number
+  label?: string
+  by?: Array<Extract<PictureFoundBy, 'detector' | 'screen' | 'pointer'>>
+  path?: 'frame' | 'sample'
+  boxes: PictureKeyframe[]
+  timeline?: PictureOnTimeline[]
+}
+
+/** The frame that confirms a candidate, and the seed a track of it is followed from: a second of the source and a box on its frame. */
+export interface PictureSeed {
+  atSec: number
+  box: PictureBox
+}
+
+/** One thing a `where` found: a track with its `id` (pass it as `track`), its `confidence` (0 to 1) and the `check` frame to view to confirm it. */
+export interface PictureCandidate extends PictureTrack {
+  id: string
+  confidence: number
+  check: PictureSeed
+}
+
+/** Where a screen recording's pointer rests: its span, its shape (`kind`) and its box. */
+export type PicturePointerRest = { fromSec: number; toSec: number; kind: string } & PictureBox
 
 /** A part of a picture answer that is not there, with why. */
 export type PictureNotReady = PendingPart | FailedPart | { status: 'unavailable'; reason: string }
@@ -4014,9 +4057,10 @@ export type PicturePart =
       tier: 'shots' | 'full'
       remeasuring?: PendingPart | FailedPart
       find?: { query: string; moments: PictureMoment[] } | PictureNotReady
-      where?:
-        | { query: string; stepSec: number; tracks: Array<{ fromSec: number; toSec: number; box: PictureBox; score: number; edges: string[]; timeline?: PictureOnTimeline[] }> }
-        | PictureNotReady
+      /** Candidates, best first: for a phrase (`query`), or for a class of thing the file's own scan tracked (`detector`). */
+      where?: { query: string; candidates: PictureCandidate[] } | { detector: 'pointer' | 'face'; candidates: PictureCandidate[] } | PictureNotReady
+      /** One thing followed from its seed: a track per stretch it is seen. */
+      track?: { seed: PictureSeed; tracks: PictureTrack[] } | PictureNotReady
       picture?: {
         fromSec: number
         toSec: number
@@ -4026,10 +4070,32 @@ export type PicturePart =
         camera: unknown[]
         text: Array<{ fromSec: number; toSec: number; text: string } & PictureBox>
         faces: Array<{ fromSec: number; toSec: number } & PictureBox>
+        /** Where a screen recording's pointer rests; none on footage with no pointer. */
+        pointer: PicturePointerRest[]
       }
       nextCursor?: string
       cost?: { credits: number }
     }
+  | PictureNotReady
+
+/** A span of timeline frames on the clip that plays it. */
+type PictureOnClip<T> = PictureOnTimeline & T
+
+/** A project window's picture analysis on the timeline: every time a span of timeline frames, on the clip that shows it. */
+export interface ProjectPictureWindow {
+  /** Frames where a source's own picture cuts, as the timeline shows them. */
+  cuts: number[]
+  fades: Array<PictureOnClip<{ direction: 'in' | 'out'; color: 'black' | 'white' }>>
+  black: PictureOnTimeline[]
+  camera: Array<PictureOnClip<{ move: string }>>
+  text: Array<PictureOnClip<{ text: string } & PictureBox>>
+  faces: Array<PictureOnClip<PictureBox>>
+  pointer: Array<PictureOnClip<{ kind: string } & PictureBox>>
+}
+
+/** A source's part as a project answers it: find, where and track carry their timeline, the analysis is in frames only, and a source has no cursor of its own. */
+export type ProjectSourcePart =
+  | (Omit<Extract<PicturePart, { status: 'ready' }>, 'picture' | 'nextCursor'> & { picture?: ProjectPictureWindow })
   | PictureNotReady
 
 /**
@@ -4044,7 +4110,7 @@ export type ProjectPicturePart =
       fps: number
       fromFrame: number
       toFrame: number
-      sources: Array<{ assetId: string; part: PicturePart }>
+      sources: Array<{ assetId: string; part: ProjectSourcePart }>
       /** The edit's own cuts, in timeline frames: where a clip starts where the one before it ends without playing on from it. Pages with the other lists. */
       editCuts?: number[]
       unseen: Array<PictureOnTimeline & { why: 'no_file' | 'still' | 'not_stored' }>
@@ -4052,6 +4118,12 @@ export type ProjectPicturePart =
       cost?: { credits: number }
     }
   | { status: 'unavailable'; reason: string }
+
+/** The classes of thing a source's own analysis tracks, which `view`'s `detector` takes. */
+export type ViewDetector = 'pointer' | 'face'
+
+/** What `view`'s `track` takes: a candidate's id from a `where` answer, or a time of the source and a box on its frame (normalized to the frame, inside it). */
+export type ViewTrackInput = string | PictureSeed
 
 /** Options for `view`. */
 export interface ViewInput {
@@ -4158,10 +4230,14 @@ export interface ViewInput {
   atSec?: number[]
   /** What to look for in the picture of a source's window or a project's window (`VIEW_PICTURE_INPUT_TEXT.find`). */
   find?: string
-  /** With `find`: where each thing appears in the frame, with frame-exact edges. */
+  /** With `find` or `detector`: where each thing may be in the frame, as candidates to confirm (`VIEW_PICTURE_INPUT_TEXT.where`). */
   where?: boolean
-  /** The window's picture analysis: cuts, fades, black, camera movement, text on screen and faces. */
+  /** The window's picture analysis: cuts, fades, black, camera movement, text on screen, faces and the pointer. */
   picture?: boolean
+  /** The class of thing `where` answers from the file's own analysis, or that a given `track` box is followed as (`VIEW_PICTURE_INPUT_TEXT.detector`). */
+  detector?: ViewDetector
+  /** One thing to follow on every frame of a source's window: a candidate's id, or a seed you found yourself (`VIEW_PICTURE_INPUT_TEXT.track`). */
+  track?: ViewTrackInput
   /** How many items of each list a page of `find`, `where` or `picture` holds (`VIEW_PICTURE_INPUT_TEXT.limit`). */
   limit?: number
   /** The `nextCursor` of the answer before, to read the next page of every list (`VIEW_PICTURE_INPUT_TEXT.cursor`). */

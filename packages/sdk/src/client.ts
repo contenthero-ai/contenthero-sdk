@@ -1998,6 +1998,9 @@ export class ContentHero {
     if (input.find) params.set('find', input.find)
     if (input.where) params.set('where', 'true')
     if (input.picture) params.set('picture', 'true')
+    if (input.detector) params.set('detector', input.detector)
+    // A candidate's id goes as it is; a seed given by hand goes as its JSON, which the server reads back into a time and a box.
+    if (input.track) params.set('track', typeof input.track === 'string' ? input.track : JSON.stringify(input.track))
     if (typeof input.limit === 'number') params.set('limit', String(input.limit))
     if (input.cursor) params.set('cursor', input.cursor)
     // Canonical URI encoding: URLSearchParams renders a space as '+', which is x-www-form-urlencoded, not the

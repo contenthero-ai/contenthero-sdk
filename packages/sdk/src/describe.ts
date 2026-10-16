@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -790,6 +790,7 @@ export function describePicturePart(part: PicturePart | null | undefined, what =
   }
   if (part.find && 'status' in part.find) lines.push(pictureNotReadyLine('find', part.find))
   if (part.where && 'status' in part.where) lines.push(pictureNotReadyLine('where', part.where))
+  if (part.track && 'status' in part.track) lines.push(pictureNotReadyLine('track', part.track))
   if (part.cost) lines.push(`Answering it was charged ${credits(part.cost.credits)}.`)
   return lines
 }
@@ -803,7 +804,7 @@ export function describeProjectPicture(part: ProjectPicturePart | null | undefin
   if (part.status !== 'ready') return [`The picture analysis of the project's window: unavailable (${part.reason.trim().replace(/\.+$/, '')})`]
   const lines = [`The picture analysis of the project's window, frames ${part.fromFrame} to ${part.toFrame}, read from its clips' sources.`]
   for (const source of part.sources ?? []) {
-    const { cost: _cost, ...withoutCost } = source.part as PicturePart & { cost?: unknown }
+    const { cost: _cost, ...withoutCost } = source.part as ProjectSourcePart & { cost?: unknown }
     lines.push(...describePicturePart(withoutCost as PicturePart, `source ${source.assetId}`))
   }
   // Read as a list that may be absent: an answer from a server before the list existed carries none.
