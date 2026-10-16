@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPicturePart, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectShare, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -118,7 +118,7 @@ export function describeRenderProgress(rendered: Record<string, unknown> | null 
     const ready = Array.isArray(rendered.readyPages) ? (rendered.readyPages as unknown[]) : []
     const drawn = typeof rendered.renderedFrameCount === 'number' ? rendered.renderedFrameCount : 0
     const total = typeof rendered.frameCount === 'number' ? rendered.frameCount : null
-    const progress = total !== null ? `${drawn} of ${total} frames are drawn` : 'Frames are still drawing'
+    const progress = total !== null ? `${drawn} of ${total} frames are rendered` : 'Frames are still rendering'
     const readyText = ready.length ? `; ready: ${ready.length === 1 ? 'page' : 'pages'} ${ready.join(', ')} of ${pages}` : ''
     return `Still rendering: ${progress}${readyText}. Read this page with ${readWith}, and the rest with renderId ${id} and a page number.`
   }
@@ -392,6 +392,16 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
   return lines.join('\n')
 }
 
+/** The reminder every read of a project prints, whole or in parts, since an edit that follows it needs the revision. */
+export const PASS_REVISION_LINE = 'Pass this revision back as expectedRevision when you edit.'
+
+const PART_WORDS: Record<ProjectPartName, string> = { clips: 'the clips', modules: 'the modules', sourceTimes: 'where the seconds play' }
+
+/** The parts a read of named parts returned, in words, and that nothing else of the project came with them. */
+export function describePartsAsked(parts: readonly ProjectPartName[]): string {
+  return `Only what was asked for: ${parts.map((p) => PART_WORDS[p] ?? p).join(', ')}. Nothing else of the project.`
+}
+
 /** A finding as one line: its subject, its place, and what it says (the app's own form, `describeFinding`). */
 export function describeFinding(f: DocumentFinding): string {
   const subject = 'clipId' in f.subject ? f.subject.clipId : 'module' in f.subject ? `@project/${f.subject.module}` : f.subject.trackId
@@ -641,7 +651,7 @@ export function isNewerAudioMap(answer: AudioMapAnswer): boolean {
 export function describeAudioMap(answer: AudioMapAnswer | null | undefined): string[] {
   if (!answer) return []
   if (isNewerAudioMap(answer)) return [`audio map: ${NEWER_FORMAT_LINE}`]
-  if (answer.status === 'pending') return [describePending('audio map: the sound analysis', answer, 'read this window again to get it')]
+  if (answer.status === 'pending') return [describePending('audio map: the sound analysis', answer, 'read it again with the same inputs')]
   if (answer.status === 'failed') return [`audio map: the sound analysis failed (${answer.reason.trim().replace(/\.+$/, '')})`]
   if (answer.status === 'unavailable') return [`audio map: unavailable (${answer.reason.trim().replace(/\.+$/, '')})`]
   return [
@@ -758,7 +768,7 @@ export function describeTranscriptionState(t: Transcription): string | null {
 
 /** A part of a picture answer that is not there, in a line: being made, failed, or why it cannot be. */
 function pictureNotReadyLine(what: string, part: PictureNotReady): string {
-  if (part.status === 'pending') return describePending(what, part, 'read the same window again to get it')
+  if (part.status === 'pending') return describePending(what, part, 'read it again with the same inputs')
   return `${what}: ${part.status === 'failed' ? 'failed' : 'unavailable'} (${part.reason.trim().replace(/\.+$/, '')})`
 }
 
@@ -774,7 +784,7 @@ export function describePicturePart(part: PicturePart | null | undefined, what =
   if (part.tier === 'shots') {
     lines.push(
       part.remeasuring
-        ? `${what} is coarse (one picture per shot; no text, faces or motion yet). ${part.remeasuring.status === 'pending' ? describePending('The full one', part.remeasuring, 'read again to get it') : `The full one failed (${part.remeasuring.reason.trim().replace(/\.+$/, '')}).`}`
+        ? `${what} is coarse (one picture per shot; no text, faces or motion yet). ${part.remeasuring.status === 'pending' ? describePending('The full one', part.remeasuring, 'read it again with the same inputs') : `The full one failed (${part.remeasuring.reason.trim().replace(/\.+$/, '')}).`}`
         : `${what} is coarse (one picture per shot; no text, faces or motion).`,
     )
   }
@@ -798,7 +808,7 @@ export function describeProjectPicture(part: ProjectPicturePart | null | undefin
   }
   // Read as a list that may be absent: an answer from a server before the list existed carries none.
   const unseen = part.unseen ?? []
-  if (unseen.length) lines.push(`${unseen.length} clip${unseen.length === 1 ? '' : 's'} on this page ${unseen.length === 1 ? 'is' : 'are'} not seen by it, listed in unseen with why.`)
+  if (unseen.length) lines.push(`${unseen.length} clip${unseen.length === 1 ? '' : 's'} on this page ${unseen.length === 1 ? 'is' : 'are'} not seen by it (code, text or a shape; a still image; a file not stored here), listed in unseen with why.`)
   if (part.cost) lines.push(`Answering it was charged ${credits(part.cost.credits)}.`)
   return lines
 }

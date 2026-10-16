@@ -2786,7 +2786,7 @@ test("get_content reports each video's audio map summary, and audioMap adds its 
   const body = res.content[0].text
   assert.match(body, /Slide 1 \(slide: 0\): ready; audio map: 1\.5s of speech in 6\.0s, 1 sound candidate, music 118 BPM, A minor, drops 9 dB under speech, mix -14 LUFS\./)
   assert.match(body, /\n {4}audio map, 1\.0s to 4\.0s of 6\.0s:\n {6}speech: 1\.0-2\.5s\n {6}sound candidates \(measured, not identified\): 1\n {8}1\. 1\.2s to 1\.6s on other: -18 dB, \+14 over its floor, \+3 vs voice; attack 4 ms/)
-  assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: the sound analysis is still being made: read this window again to get it\./)
+  assert.match(body, /Slide 3 \(slide: 2\): ready; audio map: the sound analysis is still being made: read it again with the same inputs\./)
 })
 
 /**
@@ -2917,10 +2917,10 @@ test("view on a post's heard window attaches its evidence sheet and says how to 
   assert.deepEqual(images.map((b) => b.data), ['U0hFRVQ='])
   assert.ok(res.content.some((b) => b.type === 'text' && b.text === 'Its evidence sheet:'))
 
-  const pending = { ...clip, sheet: { status: 'pending', since: '2026-10-13T10:00:00Z', reason: 'The evidence sheet is drawn once the audio map is ready.' } }
+  const pending = { ...clip, sheet: { status: 'pending', since: '2026-10-13T10:00:00Z', reason: 'The evidence sheet is rendered once the audio map is ready.' } }
   const mcp2 = await connect(fakeClient({ view: async () => ({ clip: pending }) }))
   const res2 = await mcp2.callTool({ name: 'view', arguments: { contentId: 'post-1', fromSec: 1, toSec: 4, sound: true } })
-  assert.match(res2.content[0].text, /evidence sheet is still being made \(since 2026-10-13T10:00:00Z\): The evidence sheet is drawn once the audio map is ready\./)
+  assert.match(res2.content[0].text, /evidence sheet is still being made \(since 2026-10-13T10:00:00Z\): The evidence sheet is rendered once the audio map is ready\./)
   assert.equal(res2.content.filter((b) => b.type === 'image').length, 0)
 })
 
@@ -3417,7 +3417,7 @@ test('view says a render still going is read with its id, and shows what is read
   const mcp = await connect(noTabFirst(rendered))
   const res = await mcp.callTool({ name: 'view', arguments: { projectId: 'p1', render: true, count: 600 } })
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
-  assert.match(res.content[0].text, /Still rendering: 0 of 600 frames are drawn\. Read this page with renderId r2 and page 1, and the rest with renderId r2 and a page number\./)
+  assert.match(res.content[0].text, /Still rendering: 0 of 600 frames are rendered\. Read this page with renderId r2 and page 1, and the rest with renderId r2 and a page number\./)
   assert.doesNotMatch(res.content[0].text, /The render produced no image/)
 })
 
@@ -3471,7 +3471,7 @@ test("view on a rendered sound attaches its evidence sheet and its audio map", a
   const pending = {
     ...rendered,
     audioMap: { status: 'pending', since: '2026-10-13T10:00:00Z', readWith: { renderId: 'r4' } },
-    sheet: { status: 'pending', since: '2026-10-13T10:00:00Z', readWith: { renderId: 'r4' }, reason: 'The evidence sheet is drawn once the sound analysis is ready: read this render again by its id to get it.' },
+    sheet: { status: 'pending', since: '2026-10-13T10:00:00Z', readWith: { renderId: 'r4' }, reason: 'The evidence sheet is rendered once the sound analysis is ready: read this render again by its id to get it.' },
   }
   const mcp2 = await connect(noTabFirst(pending))
   const res2 = await mcp2.callTool({ name: 'view', arguments: { projectId: 'p1', sound: true } })
@@ -3605,7 +3605,7 @@ test('view answers a project window\'s picture analysis in numbers', async () =>
   assert.equal(asked.where, true)
   assert.match(res.content[0].text, /The picture analysis of the project's window/)
   // The clips it cannot see are named, with why, once (in the JSON); the lines say how many and where to find them.
-  assert.match(res.content[0].text, /1 clip on this page is not seen by it, listed in unseen with why\./)
+  assert.match(res.content[0].text, /1 clip on this page is not seen by it \(code, text or a shape; a still image; a file not stored here\), listed in unseen with why\./)
   assert.equal(res.content[0].text.match(/"code-1"/g)?.length, 1)
   assert.match(res.content[0].text, /Answering it was charged 12 credits\./)
   assert.match(res.content[0].text, /More: pass cursor "NEXT"\./)
@@ -5830,7 +5830,7 @@ test('view shows a render alone with what was changed and its scope; live adds t
   const text = res.content[0].text
   assert.doesNotMatch(text, /Live context/)
   assert.match(text, /adjusted width: asked 4000, used 1920 \(a render is never wider/)
-  assert.match(text, /Only tracks t2 drawn, on the timeline's own frame numbers\. These named nothing on the timeline: gone\./)
+  assert.match(text, /Only tracks t2 rendered, on the timeline's own frame numbers\. These named nothing on the timeline: gone\./)
   // A render is the platform's to pay: the answer states no cost.
   assert.doesNotMatch(text, /cost|\$/i)
   const both = await connect(fakeClient({
@@ -5860,7 +5860,7 @@ test('get_project answers a read of named parts with those parts alone', async (
   const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', sourceAssetId: 'a1', atSec: [843.3, 1020] } })
   const body = res.content[0].text
   assert.deepEqual(asked.atSec, [843.3, 1020])
-  assert.match(body, /The sourceTimes asked for, and nothing else of it\./)
+  assert.match(body, /Only what was asked for: where the seconds play\. Nothing else of the project\./)
   assert.match(body, /843\.3s: clip c7 at frame 24648/)
   assert.match(body, /1020s: nowhere \(cut out, or on no clip\)/)
   assert.doesNotMatch(body, /Layer geometry|Frame rate:|Groups:/)

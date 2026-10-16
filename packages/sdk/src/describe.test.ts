@@ -95,7 +95,7 @@ test('a generation lists what it was made from, one line per input, as Studio la
 test('describeRenderProgress names the id to read a render with, and how much is ready', () => {
   assert.equal(
     describeRenderProgress({ renderId: 'r1', status: 'pending', readWith: { renderId: 'r1', page: 3 }, kind: 'picture', frameCount: 400, renderedFrameCount: 120, readyPages: [1, 2], pages: 8, page: 3 }),
-    'Still rendering: 120 of 400 frames are drawn; ready: pages 1, 2 of 8. Read this page with renderId r1 and page 3, and the rest with renderId r1 and a page number.',
+    'Still rendering: 120 of 400 frames are rendered; ready: pages 1, 2 of 8. Read this page with renderId r1 and page 3, and the rest with renderId r1 and a page number.',
   )
   assert.equal(describeRenderProgress({ renderId: 'r2', status: 'pending', readWith: { renderId: 'r2' }, kind: 'sound' }), 'The sound is still rendering. Read it with renderId r2.')
 })
@@ -348,7 +348,7 @@ test('describeAudioMap reads a summary, a window, and the pending and unavailabl
   const { voiceOverBed: _, ...older } = window
   assert.equal(describeAudioMapWindow(older)[6], '  voice: not measured')
 
-  assert.deepEqual(describeAudioMap({ status: 'pending', since: 'T0' }), ['audio map: the sound analysis is still being made (since T0): read this window again to get it.'])
+  assert.deepEqual(describeAudioMap({ status: 'pending', since: 'T0' }), ['audio map: the sound analysis is still being made (since T0): read it again with the same inputs.'])
   // A pending part says how and when it ends (gap closure D3): read it with the render it names, and why it is late.
   assert.deepEqual(describeAudioMap({ status: 'pending', since: 'T0', expectedBy: 'T1', readWith: { renderId: 'r9' }, reason: 'The queue this work runs on is paused.' }), [
     'audio map: the sound analysis is still being made (since T0, expected by T1): read it again with renderId r9. The queue this work runs on is paused.',

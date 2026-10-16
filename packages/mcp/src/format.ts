@@ -132,7 +132,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2902,7 +2902,8 @@ void PROJECT_DETAIL_EXPOSURE
  */
 function projectPartsResult(p: ProjectParts): CallToolResult {
   return text(
-    `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}", revision ${p.revision}, ${p.fps} fps. The ${p.parts.join(', ')} asked for, and nothing else of it.\n` +
+    `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}", revision ${p.revision}, ${p.fps} fps. ${describePartsAsked(p.parts)}\n` +
+      `${PASS_REVISION_LINE}\n` +
       (p.compositionSpace ? `Layer geometry is in composition space ${p.compositionSpace.width}x${p.compositionSpace.height} (center-relative px).\n` : '') +
       (p.state?.missing?.length ? `These named nothing in the project: ${p.state.missing.join(', ')}.\n` : '') +
       (p.sourceTimes?.length
@@ -2920,7 +2921,7 @@ export function projectDetailResult(p: ProjectDetail | ProjectParts): CallToolRe
   if (isProjectParts(p)) return projectPartsResult(p)
   return text(
     `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
-      `Pass this revision back as expectedRevision when you edit.\n` +
+      `${PASS_REVISION_LINE}\n` +
       // A windowed read is part of the document. Said in words, because a full read of one beat looks exactly like a
       // full read of a short timeline, and writing it back as the whole would drop everything outside the window.
       (p.scope ? `${describeScope(p.scope)}\n` : '') +
@@ -3061,7 +3062,7 @@ function describeRenderScope(rendered: Record<string, unknown>): string | null {
     Array.isArray(clipIds) && clipIds.length ? `clips ${clipIds.join(', ')}` : null,
   ].filter(Boolean)
   const missing = Array.isArray(rendered.missingIds) && rendered.missingIds.length ? ` These named nothing on the timeline: ${rendered.missingIds.join(', ')}.` : ''
-  return `Only ${named.join(' and ')} drawn, on the timeline's own frame numbers.${missing}`
+  return `Only ${named.join(' and ')} rendered, on the timeline's own frame numbers.${missing}`
 }
 
 /**

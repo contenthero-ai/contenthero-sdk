@@ -3701,7 +3701,7 @@ export interface DocumentFinding {
   line?: number
   column?: number
   snippet?: string
-  source: 'compile' | 'reference' | 'render' | 'purity'
+  source: 'compile' | 'reference' | 'render' | 'purity' | 'geometry'
 }
 
 /**
@@ -4045,6 +4045,8 @@ export type ProjectPicturePart =
       fromFrame: number
       toFrame: number
       sources: Array<{ assetId: string; part: PicturePart }>
+      /** The edit's own cuts, in timeline frames: where a clip starts where the one before it ends without playing on from it. Pages with the other lists. */
+      editCuts?: number[]
       unseen: Array<PictureOnTimeline & { why: 'no_file' | 'still' | 'not_stored' }>
       nextCursor?: string
       cost?: { credits: number }

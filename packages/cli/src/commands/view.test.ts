@@ -126,7 +126,7 @@ test("a post's video says its audio map for the window, or that it is being meas
   assert.match(ready, /audio map, 0\.0s to 3\.0s of 9\.0s:\n  speech: none\n  sound candidates \(measured, not identified\): 1\n    1\. 0\.5s to 1\.0s on other: -20 dB, \+12 over its floor; attack 6 ms/)
   assert.match(ready, /  music: 120 BPM, C major, 1 beat in this window/)
   const pending = viewSummary({ clip: { contentId: 'post-1', type: 'video', audioMap: { status: 'pending' } } }, nothingSaved)
-  assert.match(pending, /audio map: the sound analysis is still being made: read this window again to get it/)
+  assert.match(pending, /audio map: the sound analysis is still being made: read it again with the same inputs/)
 })
 
 /**

@@ -28,6 +28,8 @@ import { Option, type Command } from 'commander'
 import {
   LIST_SORTS,
   describeDocumentFindings,
+  describePartsAsked,
+  PASS_REVISION_LINE,
   describeEditorOps,
   describeLoudness,
   describeProjectShareLink,
@@ -142,7 +144,7 @@ export function registerProject(program: Command): void {
       // A read of named parts is those parts alone, said as the MCP's get_project says them.
       if (isProjectParts(p)) {
         emit(p, ctx, () =>
-          `Project ${p.id} "${p.title}", revision ${p.revision}, ${p.fps} fps. The ${p.parts.join(', ')} asked for, and nothing else of it.` +
+          `Project ${p.id} "${p.title}", revision ${p.revision}, ${p.fps} fps. ${describePartsAsked(p.parts)}\n${PASS_REVISION_LINE}` +
           (p.state?.missing?.length ? `\nThese named nothing in the project: ${p.state.missing.join(', ')}.` : '') +
           (p.sourceTimes?.length
             ? `\nWhere those seconds play:\n${p.sourceTimes
@@ -190,8 +192,8 @@ export function registerProject(program: Command): void {
     .option('--pace-threshold <ms>', 'word mode: minimum pause (ms) to report as a silence ("Pace"); defaults to the project setting, else 500', toInt)
     .option('--padding-start <ms>', 'word mode: breathing room (ms) kept after speech at a silence start edge (negative tightens)', toInt)
     .option('--padding-end <ms>', 'word mode: breathing room (ms) kept before speech at a silence end edge (negative tightens)', toInt)
-    .option('--limit <n>', 'how many clip segments a page holds', toInt)
-    .option('--cursor <cursor>', "the previous page's nextCursor, to read the next page")
+    .option('--limit <n>', 'How many clip segments a page holds. Omit for the default.', toInt)
+    .option('--cursor <cursor>', "The answer's nextCursor, to read the next page of segments with the same other inputs.")
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const granularity = opts.granularity as string | undefined
@@ -211,7 +213,7 @@ export function registerProject(program: Command): void {
       })
       emit(r, ctx, () =>
         r.mediaTranscribed
-          ? `Transcript for ${r.projectId}: ${r.segments.length} of ${r.segmentCount} clip segment(s)${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n` +
+          ? `Transcript for ${r.projectId}: ${r.segments.length} of ${r.segmentCount} clip segment(s) on this page${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n` +
             r.segments
               .map((s) => {
                 const tag = s.disabled ? `[disabled${s.disabledReason ? `:${s.disabledReason}` : ''}]` : '[enabled]'
