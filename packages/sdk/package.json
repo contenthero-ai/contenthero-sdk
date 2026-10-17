@@ -48,7 +48,7 @@
   "license": "MIT",
   "private": false,
   "devDependencies": {
-    "@types/node": "^22.19.19",
+    "@types/node": "^24.19.1",
     "tsx": "^4.22.3"
   }
 }

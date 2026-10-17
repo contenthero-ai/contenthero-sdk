@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "The shared ContentHero policy lives in contenthero-packages (renovate/default.json); nothing repo-specific here.",
+  "extends": ["local>contenthero-ai/contenthero-packages//renovate/default"]
+}
