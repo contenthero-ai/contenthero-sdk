@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.31
 
 - `view` takes `--detector` and `--track` (a candidate's id, or a seed as JSON), and its `--where` and `--picture` help reads the approved W60 and W63 wording.
+- `view` and `project get` say the same as the MCP through the SDK's describers: each fact once, the picture's not-ready
+  parts and next page, and `--limit` and `--cursor`; a cost shows only when the user is charged, in credits. Uses sdk 0.4.34.
 
 ## 0.3.30
 

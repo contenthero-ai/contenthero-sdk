@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.34
 
 - `view` takes `detector` (`pointer` or `face`) and `track` (a candidate's id, or a time and a box), declared by
   `ViewInput`, `ViewDetector` and `ViewTrackInput`; `VIEW_PICTURE_INPUT_TEXT` gains `track` and `detector`, and its
@@ -17,6 +17,14 @@
 - `AudioMapWindow.durationSec` is the window's own length (it was the video's, which read as the window's);
   `describeAudioMapWindow` prints `audio map, A to B:`. A ready `EvidenceSheet` may carry `wordsNote`, and
   `describeEvidenceSheet` prints it when the words row is empty because the file has no transcript.
+- `getProject` answers a read that names parts with `ProjectParts` (`isProjectParts` tells it from a whole read), with
+  `sourceTimes` inside. A picture answer is typed (`PicturePart`, `ProjectPicturePart`): sources by `assetId`, clips by
+  `clipId`, unseen clips with why, `find`'s `by` as `picture`, `screen` or `words`, one `nextCursor`. `view` takes `limit`
+  and `cursor`; a transcript pages by cursor, its words, silences and events as rows in the order `fields` names.
+  `describePicturePart` and `describeProjectPicture` say what is not ready and what it cost.
+- An answer states a cost only when the user is charged, in credits: `cost.credits` on a user-paid answer and
+  `price.credits` on a priced pending part. `cost.usd` is gone, and the "(free)" labels on the audio map and the cut list
+  go, since a price is data.
 
 ## 0.4.33
 

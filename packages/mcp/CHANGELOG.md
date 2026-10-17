@@ -1,8 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.4.41
 
 - `view` takes `detector` and `track`, and its `where` and `picture` inputs read the approved W60 and W63 wording.
+- Each fact is printed once per answer. `view` says where a source's audio window is instead of listing it again; a
+  source's or project's picture says what is not ready, what it cost and the next page; `limit` and `cursor` reach the
+  client. `get_project` prints a parts read as those parts alone. `get_transcript` prints each clip once, in word mode its
+  words, silences and events as rows in the order `fields` names, and the next page; it takes `limit` and `cursor`.
+- An answer states a cost only when the user is charged, in credits. Uses sdk 0.4.34.
 
 ## 0.4.40
 
