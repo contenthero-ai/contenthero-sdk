@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -411,6 +411,21 @@ export function describeFinding(f: DocumentFinding): string {
 /** Findings under a heading, a line each; nothing when there are none. */
 export function describeDocumentFindings(findings: readonly DocumentFinding[] | null | undefined, heading: string): string[] {
   return findings?.length ? [heading, ...findings.map((f) => `  - ${describeFinding(f)}`)] : []
+}
+
+/**
+ * The style libraries a project pins, as `getProject` reports them: each pin with the newest version, and the notes of
+ * the versions after the pinned one, so a reader sees what moving the pin would bring. Nothing when it pins none.
+ */
+export function describeStyleLibraryPins(pins: readonly ProjectStyleLibrary[] | null | undefined): string[] {
+  if (!pins?.length) return []
+  return [
+    'Style libraries pinned:',
+    ...pins.flatMap((p) => [
+      `  - ${p.name}, version ${p.version}${p.latestVersion === null ? ', no longer readable' : p.latestVersion > p.version ? `, newest ${p.latestVersion}` : ''}`,
+      ...p.newerVersions.map((n) => `      version ${n.version}${n.notes ? `: ${n.notes}` : ''}`),
+    ]),
+  ]
 }
 
 /**

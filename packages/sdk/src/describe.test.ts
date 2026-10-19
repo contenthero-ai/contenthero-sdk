@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -493,4 +493,24 @@ test('a charge is said in credits, a price before it, and nothing is said when t
   const charged = describeAudioMap({ status: 'ready', summary, cost: { credits: 2 } } as never)
   assert.equal(charged[charged.length - 1], 'The sound analysis was charged 2 credits.')
   assert.ok(![...pending, ...charged].some((line) => line.includes('$')))
+})
+
+test('describeStyleLibraryPins says each pin, the newest version, and what the newer versions changed', () => {
+  assert.deepEqual(describeStyleLibraryPins(undefined), [])
+  assert.deepEqual(describeStyleLibraryPins([]), [])
+  assert.deepEqual(
+    describeStyleLibraryPins([
+      { id: 'a', name: 'one', version: 2, latestVersion: 2, newerVersions: [] },
+      { id: 'b', name: 'two', version: 1, latestVersion: 3, newerVersions: [{ version: 2, notes: 'adds a token' }, { version: 3, notes: null }] },
+      { id: 'c', name: 'three', version: 1, latestVersion: null, newerVersions: [] },
+    ]),
+    [
+      'Style libraries pinned:',
+      '  - one, version 2',
+      '  - two, version 1, newest 3',
+      '      version 2: adds a token',
+      '      version 3',
+      '  - three, version 1, no longer readable',
+    ],
+  )
 })
