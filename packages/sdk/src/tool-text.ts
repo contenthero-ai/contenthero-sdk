@@ -85,3 +85,33 @@ export function updateCanvasDescription(audience: ToolTextAudience): string {
     ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
   ].join(' ')
 }
+
+/**
+ * The words of the four style library tools, in one place: the approved texts of the app's
+ * `.claude/plans/style-library-tool-texts-v1.md` (Taylan, 2026-10-19), word for word, which the app holds in
+ * `lib/ai/style-library-tool-text.ts`. The MCP registers them from here and the CLI's help reads them from here.
+ */
+export const LIST_STYLE_LIBRARIES_TEXT =
+  'List the style libraries on this account. A style library is shared code that projects pin and import: components, design tokens, motion and sound cues, never a CSS style. Each entry gives its name, description, latest version and when that version was published. Archived libraries are left out unless archived is true. Returns a page at a time; pass the answer\'s cursor for the next.'
+
+export const GET_STYLE_LIBRARY_TEXT =
+  'Read one style library by name: its description and every published version with its notes, newest first. With a version, read that version\'s modules instead, each by name with its code. A published version never changes. A project uses a library only after set_style_library pins a version in it.'
+
+export const CREATE_STYLE_LIBRARY_TEXT =
+  "Create a style library on this account, and publish its first version when modules are sent. A style library is shared code, not a CSS style. Its modules come from `modules` sent inline, from `fromProject` (modules of one project, read from its saved state, with imports between them rewritten to the library's own), or both; a name sent by both is refused. A library module may import the sandbox's modules and its own library's modules, never a project module. The name is fixed once created, because the code of every clip that imports the library names it. Publishing runs the same checks as saving a project module: code that does not compile, an import it cannot resolve, or a module that reads something another module does not provide is refused with the reason."
+
+export const UPDATE_STYLE_LIBRARY_TEXT =
+  'Publish the next version of a style library, edit its description, or both. A published version never changes: publishing adds one, and `notes` says what changed. Send modules inline (`code`, `edits` against `baseVersion`, or `null` to drop a module), from a project with `fromProject`, or both. A project that pins an earlier version is untouched until its own set_style_library moves it. Archive a style library with the archive tool, never by deleting: its versions are kept so every project that pins one still renders.'
+
+/** The style library parameter descriptions, by parameter name. */
+export const STYLE_LIBRARY_PARAMETER_TEXT = {
+  archived: 'Only archived style libraries.',
+  search: 'Search style library names.',
+  name: 'The style library name.',
+  version: "The version to read, with each module's code.",
+  description: 'What the style library is for.',
+  notes: 'What this version changes.',
+  baseVersion: 'The version the change builds on.',
+  modules: 'Modules by name: { code }, { edits } against baseVersion, or null to drop one.',
+  fromProject: 'Modules of one project: { projectId, modules, revision }. The revision guards against a project that changed.',
+} as const

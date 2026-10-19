@@ -162,6 +162,14 @@ import type {
   TagListResult,
   ListSpacesOptions,
   SpaceListResult,
+  StyleLibrary,
+  StyleLibraryDetail,
+  StyleLibraryWithVersion,
+  StyleLibraryListResult,
+  ListStyleLibrariesOptions,
+  GetStyleLibraryOptions,
+  CreateStyleLibraryRequest,
+  UpdateStyleLibraryRequest,
   TrackedAccountListResult,
   ConnectedAccountListResult,
   UpdateProjectInput,
@@ -1592,6 +1600,60 @@ export class ContentHero {
       'DELETE',
       `/api/v1/spaces/${encodeURIComponent(spaceId)}`,
     )
+  }
+
+  // -------------------------------------------------------------------------
+  // Style libraries (shared code that projects pin and import, published in frozen versions)
+  //
+  // Archiving one is NOT here: it is the cross-entity `archive()` with assetType 'style_library'. There is no delete,
+  // because a version is kept so that every project that pins it still renders. A project pins a version with a
+  // `set_style_library` op on `applyEditorOps`.
+  // -------------------------------------------------------------------------
+
+  /** The account's style libraries, sorted by `sort` and `order`, a page at a time. Archived ones are left out unless `archived` is true. */
+  async listStyleLibraries(options: ListStyleLibrariesOptions = {}): Promise<StyleLibraryListResult> {
+    const q = new URLSearchParams()
+    if (options.archived) q.set('archived', 'true')
+    if (options.search) q.set('search', options.search)
+    setSort(q, options)
+    setPage(q, options)
+    return this.request<StyleLibraryListResult>('GET', `/api/v1/style-libraries${queryOf(q)}`)
+  }
+
+  /**
+   * One style library by name or id: its description and its versions, newest first, a page at a time (`limit`,
+   * `cursor`), with the projects that pin it. With `version`, that version's modules with their code instead.
+   */
+  async getStyleLibrary(name: string, options?: GetStyleLibraryOptions & { version?: undefined }): Promise<StyleLibraryDetail>
+  async getStyleLibrary(name: string, options: GetStyleLibraryOptions & { version: number }): Promise<StyleLibraryWithVersion>
+  async getStyleLibrary(name: string, options: GetStyleLibraryOptions = {}): Promise<StyleLibraryDetail | StyleLibraryWithVersion> {
+    const q = new URLSearchParams()
+    if (options.version !== undefined) q.set('version', String(options.version))
+    else setPage(q, options)
+    const data = await this.request<{ styleLibrary: StyleLibraryDetail | StyleLibraryWithVersion }>(
+      'GET',
+      `/api/v1/style-libraries/${encodeURIComponent(name)}${queryOf(q)}`,
+    )
+    return data.styleLibrary
+  }
+
+  /** Create a style library. With `modules` or `fromProject` it also publishes version 1. The name is fixed once created. */
+  async createStyleLibrary(request: CreateStyleLibraryRequest): Promise<StyleLibrary> {
+    const data = await this.request<{ styleLibrary: StyleLibrary }>('POST', '/api/v1/style-libraries', request)
+    return data.styleLibrary
+  }
+
+  /**
+   * Edit a style library's description, publish its next version, or both: a PATCH, where a field left out is left
+   * alone. A publish builds on `baseVersion`; the server refuses (409) one built on a version that is no longer the newest.
+   */
+  async updateStyleLibrary(name: string, request: UpdateStyleLibraryRequest): Promise<StyleLibrary> {
+    const data = await this.request<{ styleLibrary: StyleLibrary }>(
+      'PATCH',
+      `/api/v1/style-libraries/${encodeURIComponent(name)}`,
+      request,
+    )
+    return data.styleLibrary
   }
 
   // -------------------------------------------------------------------------

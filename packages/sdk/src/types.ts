@@ -148,6 +148,7 @@ export const LIST_SORTS = {
   cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title', 'position'],
   projects: ['updatedAt', 'createdAt', 'title'],
   spaces: ['updatedAt', 'name', 'cardCount'],
+  styleLibraries: ['updatedAt', 'name'],
   content: ['relevance', 'outlierScore', 'publishedAt', 'viewCount', 'engagementRate'],
   media: ['createdAt', 'fileName', 'sizeBytes'],
 } as const
@@ -161,6 +162,7 @@ export type SortFieldOf<L extends SortableList> = (typeof LIST_SORTS)[L][number]
 export type CardSort = SortFieldOf<'cards'>
 export type ProjectSort = SortFieldOf<'projects'>
 export type SpaceSort = SortFieldOf<'spaces'>
+export type StyleLibrarySort = SortFieldOf<'styleLibraries'>
 export type ContentSort = SortFieldOf<'content'>
 export type MediaSort = SortFieldOf<'media'>
 
@@ -3510,6 +3512,125 @@ export interface PlatformSchema {
 }
 
 // ---------------------------------------------------------------------------
+// Style libraries (shared code that projects pin and import, published in frozen versions)
+// ---------------------------------------------------------------------------
+
+/** A style library: shared code an account publishes in versions. It has no page in the app, so no `appUrl`. */
+export interface StyleLibrary {
+  id: string
+  name: string
+  description: string | null
+  /** The newest version, or null for a style library that has none yet. */
+  latestVersion: number | null
+  /** ISO timestamp when it was archived, or null while it is live. */
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** A published version without its code: what a reader needs to choose one. A published version never changes. */
+export interface StyleLibraryVersionSummary {
+  version: number
+  notes: string | null
+  contentHash: string
+  /** Each module's name and size in bytes. */
+  modules: Array<{ name: string; bytes: number }>
+  createdAt: string
+  createdBy: string | null
+  /** The project and revision the version was published from, when it was. */
+  sourceProjectId: string | null
+  sourceRevision: number | null
+}
+
+/** One published version with its code: module name to source. */
+export interface StyleLibraryVersion extends StyleLibraryVersionSummary {
+  code: Record<string, string>
+}
+
+/** A project that pins a style library, and the version it pins. */
+export interface PinningProject {
+  projectId: string
+  title: string | null
+  version: number
+}
+
+/** `getStyleLibrary` without a version: the style library with its versions, newest first, a page at a time. */
+export interface StyleLibraryDetail extends StyleLibrary {
+  versions: StyleLibraryVersionSummary[]
+  /** Pass as `cursor` for the next page of versions; null on the last. */
+  versionsNextCursor: string | null
+  /** The projects of the account that pin this style library. */
+  pinnedBy: PinningProject[]
+}
+
+/** `getStyleLibrary` with a version: the style library with that version's modules and their code. */
+export interface StyleLibraryWithVersion extends StyleLibrary {
+  version: StyleLibraryVersion
+}
+
+/** A style library a project pins, as `getProject` reports it. */
+export interface ProjectStyleLibrary {
+  id: string
+  name: string
+  /** The pinned version. */
+  version: number
+  /** The newest version, or null when the pinned style library can no longer be read. */
+  latestVersion: number | null
+  /** Each version newer than the pinned one, oldest first, with its notes. */
+  newerVersions: Array<{ version: number; notes: string | null }>
+}
+
+/** Options for `listStyleLibraries`. */
+export interface ListStyleLibrariesOptions extends PageOptions, SortOptions<StyleLibrarySort> {
+  /** `true` lists ONLY archived style libraries. Archived ones are left out by default. */
+  archived?: boolean
+  /** A style library name search. */
+  search?: string
+}
+
+/** Result of `listStyleLibraries`: a page of the account's style libraries. */
+export interface StyleLibraryListResult extends Paged {
+  styleLibraries: StyleLibrary[]
+}
+
+/** Options for `getStyleLibrary`. Without `version`, `limit` and `cursor` page the versions. */
+export interface GetStyleLibraryOptions extends PageOptions {
+  /** Read this version's modules, each with its code, instead of the version list. */
+  version?: number
+}
+
+/** One inline module of a publish: its whole `code`, `edits` against the base version's copy (update only), or null to drop it. */
+export type StyleLibraryModuleEntry = { code: string } | { edits: unknown } | null
+
+/** Modules of one project, read from its saved state. The `revision` guards against a project that changed. */
+export interface StyleLibraryFromProject {
+  projectId: string
+  modules: string[]
+  revision?: number
+}
+
+/** What a publish is made of, the same on create and on update. A field left out is not sent. */
+export interface StyleLibraryPublishSources {
+  notes?: string
+  modules?: Record<string, StyleLibraryModuleEntry>
+  fromProject?: StyleLibraryFromProject
+}
+
+/** Input to `createStyleLibrary`. With `modules` or `fromProject` it publishes version 1. */
+export interface CreateStyleLibraryRequest extends StyleLibraryPublishSources {
+  name: string
+  description?: string
+}
+
+/** Input to `updateStyleLibrary`: at least one change. */
+export interface UpdateStyleLibraryRequest extends StyleLibraryPublishSources {
+  /** A string, or null or an empty string to clear it; left out leaves it. */
+  description?: string | null
+  /** The version a publish builds on. */
+  baseVersion?: number
+}
+
+// ---------------------------------------------------------------------------
 // Favorites & archive (universal set/clear across asset types)
 // ---------------------------------------------------------------------------
 
@@ -3527,7 +3648,7 @@ export type FavoriteAssetType =
   | 'space'
 
 /** The asset types that can be archived. */
-export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space' | 'template'
+export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space' | 'template' | 'style_library'
 
 /**
  * The target of a favorite / unfavorite call: a media item by its `mediaId` (one output, `a1B2c3D4-2`, an upload,
@@ -3801,6 +3922,8 @@ export interface ProjectDetail extends ProjectSummary, ProjectSettings {
    * Use it for any absolute geometry, and pass it as layerWidth/layerHeight for a FULL-FRAME layer.
    */
   compositionSpace?: { width: number; height: number }
+  /** The style libraries the project pins, each with the newest version and the notes of the versions after the pinned one. Absent when it pins none. */
+  styleLibraries?: ProjectStyleLibrary[]
 }
 
 

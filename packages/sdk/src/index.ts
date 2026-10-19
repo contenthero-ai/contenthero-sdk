@@ -15,6 +15,7 @@ export type {
   CardSort,
   ProjectSort,
   SpaceSort,
+  StyleLibrarySort,
   ContentSort,
   MediaSort,
   MediaListSource,
@@ -89,6 +90,21 @@ export type {
   TagListResult,
   ListSpacesOptions,
   SpaceListResult,
+  StyleLibrary,
+  StyleLibraryVersionSummary,
+  StyleLibraryVersion,
+  PinningProject,
+  StyleLibraryDetail,
+  StyleLibraryWithVersion,
+  ProjectStyleLibrary,
+  ListStyleLibrariesOptions,
+  StyleLibraryListResult,
+  GetStyleLibraryOptions,
+  StyleLibraryModuleEntry,
+  StyleLibraryFromProject,
+  StyleLibraryPublishSources,
+  CreateStyleLibraryRequest,
+  UpdateStyleLibraryRequest,
   TrackedAccountListResult,
   ConnectedAccountListResult,
   ProjectCoverChoice,
@@ -391,4 +407,11 @@ export {
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
 export { PASS_REVISION_LINE, describePartsAsked, chargeSentence, describeAccountIdsNotFound, describeCharge, describeClip, describeDocumentFindings, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, describePicturePart, describeProjectPicture, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeTranscriptionState } from './describe.js'
-export { viewDescription, VIEW_PICTURE_INPUT_TEXT, getProjectDescription, updateTimelineDescription, updateCanvasDescription, type ToolTextAudience } from './tool-text.js'
+export {
+  LIST_STYLE_LIBRARIES_TEXT,
+  GET_STYLE_LIBRARY_TEXT,
+  CREATE_STYLE_LIBRARY_TEXT,
+  UPDATE_STYLE_LIBRARY_TEXT,
+  STYLE_LIBRARY_PARAMETER_TEXT,
+  viewDescription,
+  VIEW_PICTURE_INPUT_TEXT, getProjectDescription, updateTimelineDescription, updateCanvasDescription, type ToolTextAudience } from './tool-text.js'

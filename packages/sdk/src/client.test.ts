@@ -995,6 +995,7 @@ test('every paged listing sends limit and cursor, never offset, and returns next
     { name: 'searchMedia', path: '/api/v1/media/search', body: { results: [] }, call: (c) => c.searchMedia('q', page) },
     { name: 'getFolder', path: '/api/v1/library/folders/f1', body: { folder: null, items: [] }, call: (c) => c.getFolder('f1', page) },
     { name: 'listCards', path: '/api/v1/cards', body: { cards: [], total: 0, space: { id: 's', name: 'S' } }, call: (c) => c.listCards(page) },
+    { name: 'listStyleLibraries', path: '/api/v1/style-libraries', body: { styleLibraries: [] }, call: (c) => c.listStyleLibraries(page) },
     { name: 'listContent', path: '/api/v1/content', body: { content: [], total: 0 }, call: (c) => c.listContent(page) },
     { name: 'listBrandKnowledge', path: '/api/v1/brand-kits/k1/knowledge', body: { items: [], total: 0 }, call: (c) => c.listBrandKnowledge('k1', page) },
     { name: 'listTemplates', path: '/api/v1/templates', body: { templates: [] }, call: (c) => c.listTemplates(page) },
@@ -1422,10 +1423,11 @@ test('every sortable listing sends sort and order, and only those names', async 
     { name: 'listCards', path: '/api/v1/cards', body: { cards: [], total: 0, space: null }, call: (c) => c.listCards({ sort: LIST_SORTS.cards[3], order: 'asc' }) },
     { name: 'listProjects', path: '/api/v1/projects', body: { projects: [] }, call: (c) => c.listProjects({ sort: LIST_SORTS.projects[2], order: 'asc' }) },
     { name: 'listSpaces', path: '/api/v1/spaces', body: { spaces: [] }, call: (c) => c.listSpaces({ sort: LIST_SORTS.spaces[2], order: 'asc' }) },
+    { name: 'listStyleLibraries', path: '/api/v1/style-libraries', body: { styleLibraries: [] }, call: (c) => c.listStyleLibraries({ sort: LIST_SORTS.styleLibraries[1], order: 'asc' }) },
     { name: 'listContent', path: '/api/v1/content', body: { content: [], total: 0 }, call: (c) => c.listContent({ sort: LIST_SORTS.content[2], order: 'asc' }) },
     { name: 'listMedia', path: '/api/v1/media', body: { media: [] }, call: (c) => c.listMedia({ sort: LIST_SORTS.media[2], order: 'asc' }) },
   ]
-  const expected: Record<string, string> = { listCards: 'title', listProjects: 'title', listSpaces: 'cardCount', listContent: 'publishedAt', listMedia: 'sizeBytes' }
+  const expected: Record<string, string> = { listCards: 'title', listProjects: 'title', listSpaces: 'cardCount', listStyleLibraries: 'name', listContent: 'publishedAt', listMedia: 'sizeBytes' }
   for (const l of listings) {
     const { fetch, calls } = stubFetch([{ status: 200, body: { ...l.body, nextCursor: null } }])
     await l.call(new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' }))
@@ -1727,4 +1729,72 @@ test('client identity headers and response events', async () => {
   const plain = stubFetch([{ status: 200, body: {} }])
   await new ContentHero({ apiKey: 'ch_live_test', fetch: plain.fetch }).getStatus('v').catch(() => {})
   assert.equal((plain.calls[0]!.init!.headers as Record<string, string>)['X-ContentHero-Client'], undefined)
+})
+
+// ---------------------------------------------------------------------------
+// Style libraries
+// ---------------------------------------------------------------------------
+
+const LIBRARY = { id: 'l1', name: 'brand-motion', description: null, latestVersion: 2, archivedAt: null, createdAt: 'a', updatedAt: 'b' }
+
+test('listStyleLibraries sends its filters, sort and paging, and reads the items under styleLibraries', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { styleLibraries: [LIBRARY], nextCursor: 'n1' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const page = await client.listStyleLibraries({ archived: true, search: 'motion', sort: 'name', order: 'desc', limit: 10, cursor: 'c0' })
+  assert.deepEqual(page, { styleLibraries: [LIBRARY], nextCursor: 'n1' })
+  assert.equal(calls[0]?.init?.method, 'GET')
+  const url = new URL(calls[0]!.url)
+  assert.equal(url.pathname, '/api/v1/style-libraries')
+  assert.deepEqual(Object.fromEntries(url.searchParams), { archived: 'true', search: 'motion', sort: 'name', order: 'desc', limit: '10', cursor: 'c0' })
+  // Nothing is sent that was not asked for.
+  const bare = stubFetch([{ status: 200, body: { styleLibraries: [], nextCursor: null } }])
+  await new ContentHero({ apiKey: 'ch_live_test', fetch: bare.fetch, baseUrl: 'https://example.test' }).listStyleLibraries()
+  assert.equal(bare.calls[0]?.url, 'https://example.test/api/v1/style-libraries')
+})
+
+test('getStyleLibrary pages the versions, or reads one version with its code', async () => {
+  const detail = { ...LIBRARY, versions: [], versionsNextCursor: null, pinnedBy: [] }
+  const paged = stubFetch([{ status: 200, body: { styleLibrary: detail } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch: paged.fetch, baseUrl: 'https://example.test' })
+  assert.deepEqual(await client.getStyleLibrary('brand motion', { limit: 5, cursor: 'c1' }), detail)
+  assert.equal(paged.calls[0]?.url, 'https://example.test/api/v1/style-libraries/brand%20motion?limit=5&cursor=c1')
+
+  const withVersion = { ...LIBRARY, version: { version: 2, notes: null, code: { tokens: 'export const a = 1' } } }
+  const one = stubFetch([{ status: 200, body: { styleLibrary: withVersion } }])
+  const result = await new ContentHero({ apiKey: 'ch_live_test', fetch: one.fetch, baseUrl: 'https://example.test' }).getStyleLibrary('brand-motion', { version: 2, limit: 5 })
+  assert.equal(result.version.code.tokens, 'export const a = 1')
+  // Paging parameters are not read with a version, so none is sent.
+  assert.equal(one.calls[0]?.url, 'https://example.test/api/v1/style-libraries/brand-motion?version=2')
+})
+
+test('createStyleLibrary and updateStyleLibrary send only the fields given', async () => {
+  const created = stubFetch([{ status: 201, body: { styleLibrary: LIBRARY } }])
+  const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: created.fetch, baseUrl: 'https://example.test' })
+  assert.deepEqual(await c1.createStyleLibrary({ name: 'brand-motion', modules: { tokens: { code: 'x' } }, fromProject: { projectId: 'p1', modules: ['a'], revision: 4 } }), LIBRARY)
+  assert.equal(`${created.calls[0]?.init?.method} ${created.calls[0]?.url}`, 'POST https://example.test/api/v1/style-libraries')
+  assert.deepEqual(JSON.parse(created.calls[0]?.init?.body as string), { name: 'brand-motion', modules: { tokens: { code: 'x' } }, fromProject: { projectId: 'p1', modules: ['a'], revision: 4 } })
+
+  const updated = stubFetch([{ status: 200, body: { styleLibrary: LIBRARY } }])
+  const c2 = new ContentHero({ apiKey: 'ch_live_test', fetch: updated.fetch, baseUrl: 'https://example.test' })
+  await c2.updateStyleLibrary('brand-motion', { description: null, baseVersion: 2, notes: 'n', modules: { tokens: { edits: [{ find: 'a', replace: 'b' }] }, old: null } })
+  assert.equal(`${updated.calls[0]?.init?.method} ${updated.calls[0]?.url}`, 'PATCH https://example.test/api/v1/style-libraries/brand-motion')
+  assert.deepEqual(JSON.parse(updated.calls[0]?.init?.body as string), {
+    description: null, baseVersion: 2, notes: 'n', modules: { tokens: { edits: [{ find: 'a', replace: 'b' }] }, old: null },
+  })
+})
+
+test('a style library is archived through archive with its own asset type, and has no delete', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { archived: true } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.archive({ assetType: 'style_library', id: 'l1' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/archive')
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { assetType: 'style_library', id: 'l1' })
+  assert.equal('deleteStyleLibrary' in client, false)
+})
+
+test('the style library tool texts are the approved words, free of dashes', async () => {
+  const texts = await import('./tool-text.js')
+  for (const text of [texts.LIST_STYLE_LIBRARIES_TEXT, texts.GET_STYLE_LIBRARY_TEXT, texts.CREATE_STYLE_LIBRARY_TEXT, texts.UPDATE_STYLE_LIBRARY_TEXT, ...Object.values(texts.STYLE_LIBRARY_PARAMETER_TEXT)]) {
+    assert.doesNotMatch(text, /[\u2013\u2014]/)
+  }
 })
