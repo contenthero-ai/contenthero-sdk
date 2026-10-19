@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
 import {
   LIST_SORTS,
-  describeDocumentFindings,
+  describeDocumentFindings, describeStyleLibraryPins,
   describePartsAsked,
   PASS_REVISION_LINE,
   describeEditorOps,
@@ -170,6 +170,7 @@ export function registerProject(program: Command): void {
           : '') +
         settingsText(p) +
         // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Wording approved 2026-10-13 (W13, W14).
+        describeStyleLibraryPins(p.styleLibraries).map((l) => `\n${l}`).join('') +
         describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `\n${l}`).join('') +
         (p.groups?.length
           ? `\nGroups: ${p.groups

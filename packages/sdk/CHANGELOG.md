@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.35
+
+- Style libraries: `listStyleLibraries`, `getStyleLibrary` (a page of versions, or one version with its code),
+  `createStyleLibrary` and `updateStyleLibrary`, with their types, the `styleLibraries` sort in `LIST_SORTS`, and
+  `'style_library'` as an `archive` asset type. There is no delete.
+- `getProject` reports the style libraries a project pins (`ProjectStyleLibrary`), and `describeStyleLibraryPins`
+  prints them for every surface.
+- The approved tool texts are exported once: `LIST_STYLE_LIBRARIES_TEXT`, `GET_STYLE_LIBRARY_TEXT`,
+  `CREATE_STYLE_LIBRARY_TEXT`, `UPDATE_STYLE_LIBRARY_TEXT` and `STYLE_LIBRARY_PARAMETER_TEXT`.
+
 ## 0.4.34
 
 - `view` takes `detector` (`pointer` or `face`) and `track` (a candidate's id, or a time and a box), declared by

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.42
+
+- New tools `list_style_libraries`, `get_style_library` (optional `version`), `create_style_library` and
+  `update_style_library`, in the approved words. `archive` takes `style_library`. `get_project` prints the style
+  libraries a project pins. Uses sdk 0.4.35.
+
 ## 0.4.41
 
 - `view` takes `detector` and `track`, and its `where` and `picture` inputs read the approved W60 and W63 wording.

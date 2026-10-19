@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS } from '@contenthero/sdk'
+import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -5286,6 +5286,7 @@ test('every paged listing forwards limit and cursor, refuses offset, and ends wi
     list_brand_knowledge: { method: 'listBrandKnowledge', args: { brandKitId: 'k1' }, page: await base.listBrandKnowledge() },
     list_templates: { method: 'listTemplates', args: {}, page: { templates: [template] } },
     list_projects: { method: 'listProjects', args: {}, page: { projects: (await base.listProjects()).projects } },
+    list_style_libraries: { method: 'listStyleLibraries', args: {}, page: { styleLibraries: [{ id: 's1', name: 'kit', description: null, latestVersion: 1, archivedAt: null, createdAt: 'c', updatedAt: 'u' }] } },
   }
   for (const [tool, { method, args, page }] of Object.entries(pages)) {
     for (const nextCursor of ['next-9', null]) {
@@ -5303,6 +5304,76 @@ test('every paged listing forwards limit and cursor, refuses offset, and ends wi
       assert.ok(refused.isError, `${tool} refuses offset`)
     }
   }
+})
+
+/**
+ * STYLE LIBRARIES: four tools filed with the editor, on the style library SDK methods, in the approved words. A library
+ * is archived with the archive tool and never deleted, and a project's pins print under get_project.
+ */
+test('the style library tools are filed with the editor, use the approved texts, and reach the SDK methods', async () => {
+  const lib = { id: 's1', name: 'motion', description: 'Shared motion', latestVersion: 2, archivedAt: null, createdAt: 'c', updatedAt: '2026-10-19T00:00:00Z' }
+  const detail = {
+    ...lib,
+    versions: [{ version: 2, notes: 'faster', contentHash: 'h', modules: [{ name: 'ease', bytes: 12 }], createdAt: 'c2', createdBy: null, sourceProjectId: null, sourceRevision: null }],
+    versionsNextCursor: 'v-2',
+    pinnedBy: [{ projectId: 'p1', title: 'Edit', version: 1 }],
+  }
+  const calls = []
+  const mcp = await connect(
+    fakeClient({
+      listStyleLibraries: async (o) => (calls.push(`list ${JSON.stringify(o)}`), { styleLibraries: [lib], nextCursor: null }),
+      getStyleLibrary: async (n, o) => (calls.push(`get ${n} ${JSON.stringify(o)}`), o?.version ? { ...lib, version: { ...detail.versions[0], code: { ease: 'export const ease = 1' } } } : detail),
+      createStyleLibrary: async (r) => (calls.push(`create ${JSON.stringify(r)}`), lib),
+      updateStyleLibrary: async (n, r) => (calls.push(`update ${n} ${JSON.stringify(r)}`), lib),
+    }),
+  )
+  const editor = TOOL_GROUPS.find((g) => g.slug === 'editor')
+  const names = ['list_style_libraries', 'get_style_library', 'create_style_library', 'update_style_library']
+  assert.deepEqual(names.filter((n) => !editor.tools.includes(n)), [])
+  const { tools } = await mcp.listTools()
+  const text = { list_style_libraries: LIST_STYLE_LIBRARIES_TEXT, get_style_library: GET_STYLE_LIBRARY_TEXT, create_style_library: CREATE_STYLE_LIBRARY_TEXT, update_style_library: UPDATE_STYLE_LIBRARY_TEXT }
+  for (const n of names) assert.equal(tools.find((t) => t.name === n).description, text[n])
+  assert.ok(!tools.some((t) => t.name === 'delete_style_library'))
+  const archiveTool = tools.find((t) => t.name === 'archive')
+  assert.ok(archiveTool.inputSchema.properties.assetType.enum.includes('style_library'))
+  assert.match(archiveTool.description, /template, style_library\)/)
+
+  const listed = await mcp.callTool({ name: 'list_style_libraries', arguments: { archived: true, search: 'mo', sort: 'name', order: 'asc' } })
+  assert.match(listed.content[0].text, /^1 style library\(ies\):\n- motion \(id s1, version 2, updated 2026-10-19T00:00:00Z\): Shared motion/)
+  assert.ok((await mcp.callTool({ name: 'list_style_libraries', arguments: { sort: 'createdAt' } })).isError)
+  const got = await mcp.callTool({ name: 'get_style_library', arguments: { name: 'motion', limit: 3 } })
+  assert.match(got.content[0].text, /version 2 \(c2\): faster \| modules: ease \(12 bytes\)\nMore: pass cursor "v-2"\./)
+  assert.match(got.content[0].text, /Pinned by: Edit \(id p1, version 1\)/)
+  const one = await mcp.callTool({ name: 'get_style_library', arguments: { name: 'motion', version: 2 } })
+  assert.match(one.content[0].text, /module ease:\n```tsx\nexport const ease = 1\n```/)
+  const made = await mcp.callTool({ name: 'create_style_library', arguments: { name: 'motion', modules: { ease: { code: 'x' } }, notes: 'first' } })
+  assert.equal(made.content[0].text, 'Created style library "motion" (id s1), latest version 2.')
+  await mcp.callTool({ name: 'update_style_library', arguments: { name: 'motion', description: null, baseVersion: 2, modules: { ease: null }, fromProject: { projectId: 'p1', modules: ['a'], revision: 4 } } })
+
+  assert.deepEqual(calls, [
+    `list ${JSON.stringify({ archived: true, search: 'mo', sort: 'name', order: 'asc' })}`,
+    `get motion ${JSON.stringify({ limit: 3 })}`,
+    `get motion ${JSON.stringify({ version: 2 })}`,
+    `create ${JSON.stringify({ name: 'motion', notes: 'first', modules: { ease: { code: 'x' } } })}`,
+    `update motion ${JSON.stringify({ description: null, baseVersion: 2, modules: { ease: null }, fromProject: { projectId: 'p1', modules: ['a'], revision: 4 } })}`,
+  ])
+
+  const archived = []
+  const mcp2 = await connect(fakeClient({ archive: async (i) => archived.push(i) }))
+  const res = await mcp2.callTool({ name: 'archive', arguments: { assetType: 'style_library', id: 'motion' } })
+  assert.deepEqual(archived, [{ assetType: 'style_library', id: 'motion', archived: true }])
+  assert.match(res.content[0].text, /Archived style_library motion/)
+})
+
+test('get_project prints the style libraries a project pins, with the notes of newer versions', async () => {
+  const base = fakeClient()
+  const project = await base.getProject('p1')
+  const pins = [{ id: 's1', name: 'motion', version: 1, latestVersion: 3, newerVersions: [{ version: 2, notes: 'faster' }, { version: 3, notes: null }] }]
+  const mcp = await connect(fakeClient({ getProject: async () => ({ ...project, styleLibraries: pins }) }))
+  const body = (await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })).content[0].text
+  assert.match(body, /Style libraries pinned:\n  - motion, version 1, newest 3\n      version 2: faster\n      version 3\n/)
+  const none = await connect(fakeClient({ getProject: async () => ({ ...project, styleLibraries: [] }) }))
+  assert.doesNotMatch((await none.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })).content[0].text, /Style libraries pinned/)
 })
 
 test('a paged listing caps limit at 100, templates at 500', async () => {

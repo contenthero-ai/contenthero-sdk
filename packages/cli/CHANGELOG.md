@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.32
+
+- New group `contenthero style-library list|get|create|update`, and `contenthero archive style-library <id>`.
+  `project get` prints the style libraries a project pins. Uses sdk 0.4.35.
+
 ## 0.3.31
 
 - `view` takes `--detector` and `--track` (a candidate's id, or a seed as JSON), and its `--where` and `--picture` help reads the approved W60 and W63 wording.

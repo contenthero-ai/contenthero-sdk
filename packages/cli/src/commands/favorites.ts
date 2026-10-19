@@ -22,7 +22,10 @@ import { CliError, EXIT } from '../errors.js'
 /** The 'media' positional means "a media item, named by its media id". */
 const MEDIA = 'media'
 const FAVORITE_TYPES = ['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'] as const
-const ARCHIVE_TYPES = ['card', 'brand_kit', 'brand_kit_section', 'project', 'space'] as const
+const ARCHIVE_TYPES = ['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'style-library'] as const
+
+/** The CLI's hyphenated spelling of an asset type, to the API's. */
+const API_ASSET_TYPE: Record<string, string> = { 'style-library': 'style_library' }
 
 type Target = { mediaId: string } | { assetType: string; id: string }
 
@@ -35,7 +38,7 @@ function resolveTarget(assetType: string, id: string, allowed: readonly string[]
       EXIT.USAGE,
     )
   }
-  return { assetType, id }
+  return { assetType: API_ASSET_TYPE[assetType] ?? assetType, id }
 }
 
 /** Human one-liner: "Favorited brand_kit bk1" / "Archived media a1B2c3D4-2". */

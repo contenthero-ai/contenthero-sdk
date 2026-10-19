@@ -91,7 +91,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
   {
     slug: 'editor',
     title: 'Editor and canvas',
-    blurb: 'Projects, their timelines and canvases, the templates you place on them, and exports.',
+    blurb: 'Projects, their timelines and canvases, the templates you place on them, the style libraries they pin, and exports.',
     tools: [
       'list_projects', 'get_project', 'create_project', 'update_project', 'duplicate_project', 'delete_project',
       'export', 'get_export', 'list_exports',
@@ -99,6 +99,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
       'delete_project_version', 'undo_project_edit', 'redo_project_edit',
       'update_timeline', 'update_canvas', 'get_transcript',
       'list_templates', 'get_template', 'create_template', 'update_template', 'delete_template',
+      'list_style_libraries', 'get_style_library', 'create_style_library', 'update_style_library',
     ],
   },
   {

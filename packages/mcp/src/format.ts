@@ -69,6 +69,10 @@ import type {
   Template,
   TemplateSummary,
   TemplateListResult,
+  StyleLibrary,
+  StyleLibraryDetail,
+  StyleLibraryListResult,
+  StyleLibraryWithVersion,
   Generation,
   JobKind,
   JobStatus,
@@ -132,7 +136,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1940,6 +1944,58 @@ export function templateDeletedResult(id: string): CallToolResult {
   return text(`Deleted template ${id}. Clips placed from it keep everything.`)
 }
 
+// -- style libraries ------------------------------------------------------------
+
+/** One style library in a line: its name, id, latest version, when it was last updated, and whether it is archived. */
+function styleLibraryLine(l: StyleLibrary): string {
+  const bits = [
+    `id ${l.id}`,
+    l.latestVersion === null ? 'no version yet' : `version ${l.latestVersion}`,
+    `updated ${l.updatedAt}`,
+    ...(l.archivedAt ? ['ARCHIVED'] : []),
+  ]
+  return `- ${l.name} (${bits.join(', ')})${l.description ? `: ${l.description}` : ''}`
+}
+
+/** A page of style libraries, and how to get the next. */
+export function styleLibraryListResult({ styleLibraries, nextCursor }: StyleLibraryListResult): CallToolResult {
+  if (!styleLibraries.length) return text('No style libraries found.')
+  return text(lines([`${styleLibraries.length} style library(ies):`, ...styleLibraries.map(styleLibraryLine), moreLine(nextCursor)]))
+}
+
+/** One style library with its versions (newest first) and the projects that pin it, or one version with its code. */
+export function styleLibraryResult(l: StyleLibraryDetail | StyleLibraryWithVersion): CallToolResult {
+  if ('versions' in l) {
+    return text(
+      lines([
+        styleLibraryLine(l),
+        ...(l.versions.length
+          ? [
+              'Versions, newest first:',
+              ...l.versions.map(
+                (v) => `  - version ${v.version} (${v.createdAt}): ${v.notes ?? 'no notes'} | modules: ${v.modules.map((m) => `${m.name} (${m.bytes} bytes)`).join(', ') || 'none'}`,
+              ),
+            ]
+          : ['No version published.']),
+        moreLine(l.versionsNextCursor),
+        l.pinnedBy.length ? `Pinned by: ${l.pinnedBy.map((p) => `${p.title ?? p.projectId} (id ${p.projectId}, version ${p.version})`).join('; ')}` : 'Pinned by no project.',
+      ]),
+    )
+  }
+  const v = l.version
+  return text(
+    lines([
+      `${l.name} (id ${l.id}), version ${v.version}${v.notes ? `: ${v.notes}` : ''}`,
+      ...Object.entries(v.code).map(([name, code]) => `module ${name}:\n\`\`\`tsx\n${code}\n\`\`\``),
+    ]),
+  )
+}
+
+/** A write's confirmation: the style library and the version it now stands at. */
+export function styleLibraryWrittenResult(verb: string, l: StyleLibrary): CallToolResult {
+  return text(`${verb} style library "${l.name}" (id ${l.id}), ${l.latestVersion === null ? 'no version published' : `latest version ${l.latestVersion}`}.`)
+}
+
 // -- models (discovery catalog) -----------------------------------------------
 
 /** Read a possibly-absent capability field from the loosely-typed bag. */
@@ -2893,6 +2949,7 @@ const PROJECT_DETAIL_EXPOSURE = {
   exportedUrl: 'omitted: publishing workflow, owned by the post tools',
   shareUrl: 'rendered',
   shareId: 'omitted: shareUrl carries it',
+  styleLibraries: 'rendered',
 } satisfies Record<keyof ProjectDetail, string>
 void PROJECT_DETAIL_EXPOSURE
 
@@ -2947,6 +3004,7 @@ export function projectDetailResult(p: ProjectDetail | ProjectParts): CallToolRe
           `  Rename with update_group; bulk-edit a whole group with update_clips { groupId }.\n`
         : '') +
       // What the project's code and modules hold that is wrong or unused (gap closure, Group B). Wording approved 2026-10-13 (W13, W14).
+      describeStyleLibraryPins(p.styleLibraries).map((l) => `${l}\n`).join('') +
       describeDocumentFindings(p.findings, 'Problems in the project:').map((l) => `${l}\n`).join('') +
       `\n` +
       JSON.stringify(p.state, null, 2),

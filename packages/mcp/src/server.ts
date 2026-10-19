@@ -79,6 +79,11 @@ import {
   getProjectDescription,
   updateTimelineDescription,
   updateCanvasDescription,
+  LIST_STYLE_LIBRARIES_TEXT,
+  GET_STYLE_LIBRARY_TEXT,
+  CREATE_STYLE_LIBRARY_TEXT,
+  UPDATE_STYLE_LIBRARY_TEXT,
+  STYLE_LIBRARY_PARAMETER_TEXT,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
 import { observeClient, runToolCall } from './answer-capture.js'
@@ -150,6 +155,9 @@ import {
   platformResult,
   klingElementListResult,
   templateListResult,
+  styleLibraryListResult,
+  styleLibraryResult,
+  styleLibraryWrittenResult,
   templateResult,
   templateDeletedResult,
   klingElementResult,
@@ -4563,11 +4571,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Archive',
       annotations: WRITE,
       description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For one output of a generation, pass its mediaId (a1B2c3D4-2 for one output of several). For anything else, pass assetType + id (card, brand_kit, brand_kit_section, project, space, template). Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
+        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For one output of a generation, pass its mediaId (a1B2c3D4-2 for one output of several). For anything else, pass assetType + id (card, brand_kit, brand_kit_section, project, space, template, style_library). Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
       inputSchema: {
         mediaId: z.string().optional().describe('A generated output\'s media id. A bare id for a generation with several outputs is refused with their media ids listed.'),
         assetType: z
-          .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'template'])
+          .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'template', 'style_library'])
           .optional()
           .describe('The kind of asset, for anything that is not media. Pass with id.'),
         id: z.string().optional().describe("The asset's id, with assetType."),
@@ -5432,6 +5440,120 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       }
     },
   )
+
+  // ===========================================================================
+  // Style libraries (shared code that projects pin and import)
+  // ===========================================================================
+
+  // -- list_style_libraries ---------------------------------------------------
+  server.registerTool(
+    'list_style_libraries',
+    {
+      title: 'List Style Libraries',
+      annotations: READ,
+      description: LIST_STYLE_LIBRARIES_TEXT,
+      inputSchema: {
+        archived: z.boolean().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.archived),
+        search: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.search),
+        ...sortInput('styleLibraries'),
+        ...pageInput(),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return styleLibraryListResult(await client.listStyleLibraries(args))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- get_style_library ------------------------------------------------------
+  server.registerTool(
+    'get_style_library',
+    {
+      title: 'Get Style Library',
+      annotations: READ,
+      description: GET_STYLE_LIBRARY_TEXT,
+      inputSchema: {
+        name: z.string().describe(STYLE_LIBRARY_PARAMETER_TEXT.name),
+        version: z.number().int().min(1).optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.version),
+        ...pageInput(),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { name, version, ...page } = args
+        return styleLibraryResult(version === undefined ? await client.getStyleLibrary(name, page) : await client.getStyleLibrary(name, { version }))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- create_style_library ---------------------------------------------------
+  server.registerTool(
+    'create_style_library',
+    {
+      title: 'Create Style Library',
+      annotations: WRITE,
+      description: CREATE_STYLE_LIBRARY_TEXT,
+      inputSchema: {
+        name: z.string().describe(STYLE_LIBRARY_PARAMETER_TEXT.name),
+        description: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.description),
+        notes: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.notes),
+        modules: styleLibraryModulesInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.modules),
+        fromProject: styleLibraryFromProjectInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.fromProject),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return styleLibraryWrittenResult('Created', await client.createStyleLibrary(args))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- update_style_library ---------------------------------------------------
+  server.registerTool(
+    'update_style_library',
+    {
+      title: 'Update Style Library',
+      annotations: WRITE,
+      description: UPDATE_STYLE_LIBRARY_TEXT,
+      inputSchema: {
+        name: z.string().describe(STYLE_LIBRARY_PARAMETER_TEXT.name),
+        description: z.string().nullable().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.description),
+        baseVersion: z.number().int().min(1).optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.baseVersion),
+        notes: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.notes),
+        modules: styleLibraryModulesInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.modules),
+        fromProject: styleLibraryFromProjectInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.fromProject),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { name, ...changes } = args
+        return styleLibraryWrittenResult('Updated', await client.updateStyleLibrary(name, changes))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+}
+
+/** The inline modules of a style library publish: each name to its whole code, edits against the base version, or null. */
+function styleLibraryModulesInput() {
+  return z.record(z.string(), z.union([z.object({ code: z.string() }), z.object({ edits: z.unknown() }), z.null()]))
+}
+
+/** Modules of one project to publish from, as the API takes them. */
+function styleLibraryFromProjectInput() {
+  return z.object({ projectId: z.string(), modules: z.array(z.string()), revision: z.number().int().optional() })
 }
 
 /**

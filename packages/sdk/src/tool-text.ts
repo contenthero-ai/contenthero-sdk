@@ -92,7 +92,7 @@ export function updateCanvasDescription(audience: ToolTextAudience): string {
  * `lib/ai/style-library-tool-text.ts`. The MCP registers them from here and the CLI's help reads them from here.
  */
 export const LIST_STYLE_LIBRARIES_TEXT =
-  'List the style libraries on this account. A style library is shared code that projects pin and import: components, design tokens, motion and sound cues, never a CSS style. Each entry gives its name, description, latest version and when that version was published. Archived libraries are left out unless archived is true. Returns a page at a time; pass the answer\'s cursor for the next.'
+  'List the style libraries on this account. A style library is shared code that projects pin and import: components, design tokens, motion and sound cues, never a CSS style. Each entry gives its name, description, latest version and when it was last updated. Archived libraries are left out unless archived is true. Returns a page at a time; pass the answer\'s cursor for the next.'
 
 export const GET_STYLE_LIBRARY_TEXT =
   'Read one style library by name: its description and every published version with its notes, newest first. With a version, read that version\'s modules instead, each by name with its code. A published version never changes. A project uses a library only after set_style_library pins a version in it.'
