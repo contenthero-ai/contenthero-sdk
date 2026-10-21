@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -513,4 +513,22 @@ test('describeStyleLibraryPins says each pin, the newest version, and what the n
       '  - three, version 1, no longer readable',
     ],
   )
+})
+
+/**
+ * An audio item's recorded facts, in the one line the MCP and the CLI share. The bitrate is always labelled derived.
+ * Break-verified: dropping the "derived" label turns the first red.
+ */
+test('audio facts say what is recorded and label the bitrate as derived', () => {
+  assert.equal(
+    describeAudioFacts({ sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 }),
+    'audio/mpeg, 468.8 KB, 30.00s, 128 kbps mean (derived from size and duration)',
+  )
+})
+
+test('audio facts with only some known say only those, and none says nothing', () => {
+  assert.equal(describeAudioFacts({ sizeBytes: 1000, mimeType: 'audio/wav' }), 'audio/wav, 1000 B')
+  assert.equal(describeAudioFacts({ durationSeconds: 2.5 }), '2.50s')
+  assert.equal(describeAudioFacts({}), null)
+  assert.equal(describeAudioFacts(undefined), null)
 })

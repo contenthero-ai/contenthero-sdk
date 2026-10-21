@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -484,6 +484,21 @@ export function describeFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+/**
+ * The recorded facts of an audio file as one line: its size, container type and duration, and the mean bitrate labelled
+ * as derived from size and duration. Only what is known is said; null when nothing is. The one wording the MCP and the
+ * CLI share.
+ */
+export function describeAudioFacts(audio: AudioFacts | undefined | null): string | null {
+  if (!audio) return null
+  const parts: string[] = []
+  if (audio.mimeType) parts.push(audio.mimeType)
+  if (audio.sizeBytes != null) parts.push(describeFileSize(audio.sizeBytes))
+  if (audio.durationSeconds != null) parts.push(`${audio.durationSeconds.toFixed(2)}s`)
+  if (audio.derivedBitrateKbps != null) parts.push(`${audio.derivedBitrateKbps} kbps mean (derived from size and duration)`)
+  return parts.length ? parts.join(', ') : null
 }
 
 /**

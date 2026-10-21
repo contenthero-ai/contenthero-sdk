@@ -1730,6 +1730,23 @@ export interface MediaVariation {
     height: number
     content?: { x: number; y: number; width: number; height: number }
   }
+  /**
+   * The recorded facts of an audio file, on an audio item's variations only. Each field is present only when known.
+   * Codec, sample rate and channels are not recorded, so none appears. Read it with `describeAudioFacts`.
+   */
+  audio?: AudioFacts
+}
+
+/**
+ * What the library recorded about one audio file. `mimeType` is the container (for example `audio/mpeg`), not the
+ * codec. `derivedBitrateKbps` is DERIVED: size x 8 / duration / 1000, the file's mean rate including container
+ * overhead, not the encoder's setting. It is present only when both the size and a positive duration are known.
+ */
+export interface AudioFacts {
+  sizeBytes?: number
+  mimeType?: string
+  durationSeconds?: number
+  derivedBitrateKbps?: number
 }
 
 /**

@@ -1742,3 +1742,48 @@ test('the style library tool texts are the approved words, free of dashes', asyn
     assert.doesNotMatch(text, /[\u2013\u2014]/)
   }
 })
+
+test('getMedia returns an audio variation with its recorded facts, and one without any as it came', async () => {
+  const { fetch } = stubFetch([
+    {
+      status: 200,
+      body: {
+        mediaId: 'Abc12345',
+        type: 'audio',
+        variations: [
+          { mediaId: 'Abc12345-1', url: 'u1', status: 'completed', isFavorited: false, isArchived: false, audio: { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 } },
+          { mediaId: 'Abc12345-2', url: 'u2', status: 'completed', isFavorited: false, isArchived: false, audio: { mimeType: 'audio/wav' } },
+          { mediaId: 'Abc12345-3', url: 'u3', status: 'completed', isFavorited: false, isArchived: false },
+        ],
+      },
+    },
+  ])
+  const client = new ContentHero({ apiKey: 'k', baseUrl: 'https://x.test', fetch })
+  const item = await client.getMedia('Abc12345')
+  assert.deepEqual(item.variations[0]!.audio, { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 })
+  assert.deepEqual(item.variations[1]!.audio, { mimeType: 'audio/wav' })
+  assert.equal(item.variations[2]!.audio, undefined)
+})
+
+test('getMedia returns an audio variation with its recorded facts, and one without any as it came', async () => {
+  const v = { status: 'completed', isFavorited: false, isArchived: false }
+  const { fetch } = stubFetch([
+    {
+      status: 200,
+      body: {
+        mediaId: 'Abc12345',
+        type: 'audio',
+        variations: [
+          { mediaId: 'Abc12345-1', url: 'u1', ...v, audio: { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 } },
+          { mediaId: 'Abc12345-2', url: 'u2', ...v, audio: { mimeType: 'audio/wav' } },
+          { mediaId: 'Abc12345-3', url: 'u3', ...v },
+        ],
+      },
+    },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test/' })
+  const item = await client.getMedia('Abc12345')
+  assert.deepEqual(item.variations[0]!.audio, { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 })
+  assert.deepEqual(item.variations[1]!.audio, { mimeType: 'audio/wav' })
+  assert.equal(item.variations[2]!.audio, undefined)
+})
