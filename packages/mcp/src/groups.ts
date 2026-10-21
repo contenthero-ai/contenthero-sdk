@@ -44,7 +44,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     blurb: 'The library: browse, search, import, upload and download the media an account owns, and favorite, archive or share any item. import also brings a deck in as a new canvas project.',
     tools: [
       'list_media', 'get_media', 'show_media', 'search_media', 'import', 'download',
-      'create_media_upload', 'complete_media_upload',
+      'create_upload', 'sign_upload_parts', 'complete_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
       'favorite', 'archive', 'share',
     ],

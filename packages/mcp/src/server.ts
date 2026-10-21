@@ -80,6 +80,10 @@ import {
   updateTimelineDescription,
   updateCanvasDescription,
   LIST_STYLE_LIBRARIES_TEXT,
+  CREATE_UPLOAD_TEXT,
+  SIGN_UPLOAD_PARTS_TEXT,
+  COMPLETE_UPLOAD_TEXT,
+  UPLOAD_PARAMETER_TEXT,
   GET_STYLE_LIBRARY_TEXT,
   CREATE_STYLE_LIBRARY_TEXT,
   UPDATE_STYLE_LIBRARY_TEXT,
@@ -136,6 +140,7 @@ import {
   mediaBatchResult,
   mediaDisplayResult,
   mediaUploadsResult,
+  signedUploadPartsResult,
   type MediaUploadOutcome,
   importedMediaResult,
   importPendingResult,
@@ -1139,7 +1144,7 @@ function buildReferences(parts: References): References | undefined {
 }
 
 /**
- * How many files one `create_media_upload` or `complete_media_upload` takes. Each file is its own request to the
+ * How many files one `create_upload` or `complete_upload` takes. Each file is its own request to the
  * server, run concurrently, so this bounds one call's fan-out; a larger set is several calls.
  */
 const MEDIA_UPLOAD_BATCH_MAX = 25
@@ -1378,7 +1383,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       .string()
       .optional()
       .describe(
-        'ADD media in ContentHero by its output id: a generation, a file uploaded from a device (create_media_upload then complete_media_upload), or a file imported from a url (import). "<id>-2" is variation 2 of a batch.',
+        'ADD media in ContentHero by its output id: a generation, a file uploaded from a device (create_upload then complete_upload), or a file imported from a url (import). "<id>-2" is variation 2 of a batch.',
       ),
     assetUrl: z
       .string()
@@ -3039,26 +3044,25 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- create_media_upload --------------------------------------------------
+  // -- create_upload --------------------------------------------------------
   server.registerTool(
-    'create_media_upload',
+    'create_upload',
     {
-      title: 'Create Media Upload',
+      title: 'Create Upload',
       annotations: WRITE,
-      description:
-        'Upload local files as first-class media (phase 1 of 2). Accepts 1-25 files in one call. Returns, for each file, a signed uploadUrl and the exact headers to send; PUT each file\'s bytes to its URL with those headers unchanged, then call complete_media_upload once with every returned outputId. The finished media is referenceable by outputId in generate_* and as an asset on a card via update_card. For a file already on a public URL, use import instead. Requires the library:write scope.',
+      description: CREATE_UPLOAD_TEXT,
       inputSchema: {
         files: z
           .array(
             z.object({
-              fileName: z.string().describe('The file name (used for its extension), e.g. "cover.png".'),
-              contentType: z.string().describe('The file MIME type, e.g. "image/png" or "video/mp4".'),
-              sizeBytes: z.number().optional().describe('Optional file size in bytes.'),
+              fileName: z.string().describe(UPLOAD_PARAMETER_TEXT.fileName),
+              contentType: z.string().describe(UPLOAD_PARAMETER_TEXT.contentType),
+              sizeBytes: z.number().int().positive().describe(UPLOAD_PARAMETER_TEXT.sizeBytes),
             }),
           )
           .min(1)
           .max(MEDIA_UPLOAD_BATCH_MAX)
-          .describe('1-25 files to upload.'),
+          .describe(UPLOAD_PARAMETER_TEXT.files),
       },
     },
     async (args, extra) => {
@@ -3068,7 +3072,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         const outcomes = await Promise.all(
           args.files.map(async (f): Promise<MediaUploadOutcome> => {
             try {
-              return { fileName: f.fileName, upload: await client.createMediaUpload(f) }
+              return { fileName: f.fileName, upload: await client.createUpload(f) }
             } catch (err) {
               return { fileName: f.fileName, error: err instanceof Error ? err.message : String(err) }
             }
@@ -3081,30 +3085,64 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- complete_media_upload ------------------------------------------------
+  // -- sign_upload_parts ----------------------------------------------------
   server.registerTool(
-    'complete_media_upload',
+    'sign_upload_parts',
     {
-      title: 'Complete Media Upload',
+      title: 'Sign Upload Parts',
+      annotations: WRITE,
+      description: SIGN_UPLOAD_PARTS_TEXT,
+      inputSchema: {
+        outputId: z.string().describe(UPLOAD_PARAMETER_TEXT.outputId),
+        partNumbers: z.array(z.number().int().min(1)).min(1).describe(UPLOAD_PARAMETER_TEXT.partNumbers),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        return signedUploadPartsResult(args.outputId, await client.signUploadParts(args.outputId, args.partNumbers))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
+  // -- complete_upload ------------------------------------------------------
+  server.registerTool(
+    'complete_upload',
+    {
+      title: 'Complete Upload',
       ...renders('Completing the upload'),
       annotations: WRITE,
-      description:
-        'Finalize uploads (phase 2 of 2) after each file\'s bytes were PUT to its signed uploadUrl from create_media_upload. Accepts 1-25 outputIds in one call: finalize a batch together, so the person sees it as one card. Publishes each file and returns its outputId and URL. Requires the library:write scope.',
+      description: COMPLETE_UPLOAD_TEXT,
       inputSchema: {
-        outputIds: z
-          .array(z.string())
+        uploads: z
+          .array(
+            z.object({
+              outputId: z.string().describe(UPLOAD_PARAMETER_TEXT.outputId),
+              parts: z
+                .array(
+                  z.object({
+                    partNumber: z.number().int().min(1).describe(UPLOAD_PARAMETER_TEXT.partNumber),
+                    etag: z.string().describe(UPLOAD_PARAMETER_TEXT.etag),
+                  }),
+                )
+                .optional()
+                .describe(UPLOAD_PARAMETER_TEXT.parts),
+            }),
+          )
           .min(1)
           .max(MEDIA_UPLOAD_BATCH_MAX)
-          .describe('1-25 outputIds returned by create_media_upload.'),
+          .describe(UPLOAD_PARAMETER_TEXT.uploads),
       },
     },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
         const outcomes = await Promise.all(
-          args.outputIds.map(async (outputId): Promise<UploadedMediaOutcome> => {
+          args.uploads.map(async ({ outputId, parts }): Promise<UploadedMediaOutcome> => {
             try {
-              return { outputId, media: await client.completeMediaUpload(outputId) }
+              return { outputId, media: await client.completeUpload(outputId, parts) }
             } catch (err) {
               return { outputId, error: err instanceof Error ? err.message : String(err) }
             }
@@ -3153,7 +3191,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (args.getCost) return importCostResult(await client.estimateImportCost(source.url), 'url')
         // The server fetches the url in a background job; wait for it within this call, then answer pending.
         return importedMediaResult(
-          await client.importMedia(
+          await client.import(
             { url: source.url, contentType: args.contentType, fileName: args.fileName },
             { timeoutMs: jobWait.waitMs, pollIntervalMs: jobWait.pollMs },
           ),

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
+import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, UPLOAD_PARAMETER_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -443,7 +443,7 @@ function fakeClient(overrides = {}) {
     deleteTag: async (id) => ({ id }),
     createMediaUpload: async (input) => ({ outputId: 'up1', uploadUrl: 'https://storage/sign/up1?token=abc', storagePath: `u/upload-up1.${input.fileName.split('.').pop()}`, expiresAt: '2026-07-01T00:00:00Z' }),
     completeMediaUpload: async (outputId) => ({ outputId, url: `https://cloud/${outputId}.png` }),
-    importMedia: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
+    import: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
     favorite: async () => {},
     archive: async () => {},
     applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.opId ?? 'mock-op-id', ok: true })) }),
@@ -1049,7 +1049,7 @@ test('get_status blocks by default and returns the final URLs', async () => {
 
 test('import of a url waits within the call, and hands back the outputId as pending when the job is still running', async () => {
   let options
-  const mcp = await connect(fakeClient({ importMedia: async (_input, opts) => { options = opts; throw new GenerationTimeoutError('im9') } }))
+  const mcp = await connect(fakeClient({ import: async (_input, opts) => { options = opts; throw new GenerationTimeoutError('im9') } }))
   const res = await mcp.callTool({ name: 'import', arguments: { url: 'https://example.com/a.mp4' } })
   assert.deepEqual(options, { timeoutMs: 300, pollIntervalMs: 50 })
   assert.ok(!res.isError)
@@ -3994,7 +3994,7 @@ test('create_project names a new editor project\'s main track, so the first clip
 
 test('import of a page address reports what its download cost', async () => {
   const mcp = await connect(fakeClient({
-    importMedia: async () => ({ outputId: 'im1', shortId: 'Imp00001', appUrl: 'https://app/m/Imp00001', url: 'https://cdn/v.mp4', alreadyExisted: false, contentType: 'video', charge: CHARGE }),
+    import: async () => ({ outputId: 'im1', shortId: 'Imp00001', appUrl: 'https://app/m/Imp00001', url: 'https://cdn/v.mp4', alreadyExisted: false, contentType: 'video', charge: CHARGE }),
   }))
   const res = await mcp.callTool({ name: 'import', arguments: { url: 'https://www.youtube.com/watch?v=x' } })
   assert.ok(!res.isError)
@@ -4975,7 +4975,7 @@ test('every tool that spends reports its cost the same way', async () => {
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
       analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
       addBrandKnowledge: async () => ({ item: { id: 'kn1', title: 'a note', sourceType: 'text' }, charge: CHARGE }),
-      importMedia: async () => ({ outputId: 'im1', shortId: 'Imp00001', appUrl: 'https://app/m/Imp00001', url: 'https://cdn/v.mp4', alreadyExisted: false, contentType: 'video', charge: CHARGE }),
+      import: async () => ({ outputId: 'im1', shortId: 'Imp00001', appUrl: 'https://app/m/Imp00001', url: 'https://cdn/v.mp4', alreadyExisted: false, contentType: 'video', charge: CHARGE }),
     }),
   )
   const { tools } = await mcp.listTools()
@@ -5163,18 +5163,18 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
     fileName: id === 'one' ? 'Cover shot.png' : null,
     appUrl: `https://app.contenthero.ai/media/s-${id}`,
   })
+  const completions: Array<[string, unknown]> = []
   const mcp = await connect(
     fakeClient({
-      createMediaUpload: async (f: { fileName: string }) => {
+      createUpload: async (f: { fileName: string }) => {
         if (f.fileName === 'broken.png') throw new Error('Unsupported file type.')
         return {
           outputId: `o-${f.fileName}`,
-          uploadUrl: `https://upload.example/${f.fileName}`,
-          uploadHeaders: { 'content-type': 'image/png' },
-          expiresAt: '2026-10-05T17:00:00Z',
+          upload: { mode: 'single', url: `https://upload.example/${f.fileName}`, headers: { 'content-type': 'image/png' }, expiresAt: '2026-10-05T17:00:00Z' },
         }
       },
-      completeMediaUpload: async (id: string) => {
+      completeUpload: async (id: string, parts?: unknown) => {
+        completions.push([id, parts])
         if (id === 'gone') throw new Error('Upload not found.')
         return media(id)
       },
@@ -5182,25 +5182,96 @@ test('uploads go in a batch: one call each way, one card, and a failed file name
   )
 
   const created = await mcp.callTool({
-    name: 'create_media_upload',
-    arguments: { files: [{ fileName: 'a.png', contentType: 'image/png' }, { fileName: 'broken.png', contentType: 'image/png' }] },
+    name: 'create_upload',
+    arguments: { files: [{ fileName: 'a.png', contentType: 'image/png', sizeBytes: 10 }, { fileName: 'broken.png', contentType: 'image/png', sizeBytes: 10 }] },
   })
   const createdText = (created.content as Array<{ text: string }>)[0].text
   assert.match(createdText, /Created 1 of 2 upload\(s\)/)
   assert.match(createdText, /https:\/\/upload\.example\/a\.png/)
+  assert.match(createdText, /content-type: image\/png/)
   assert.match(createdText, /broken\.png: could not create its upload: Unsupported file type\./)
-  assert.match(createdText, /complete_media_upload once with outputIds \["o-a\.png"\]/)
+  assert.match(createdText, /complete_upload once with uploads \[\{"outputId":"o-a\.png"\}\]/)
+  assert.doesNotMatch(createdText, /sign_upload_parts/, 'a batch of single targets has no parts to sign')
 
-  const done = await mcp.callTool({ name: 'complete_media_upload', arguments: { outputIds: ['one', 'two', 'gone'] } })
+  const done = await mcp.callTool({ name: 'complete_upload', arguments: { uploads: [{ outputId: 'one' }, { outputId: 'two' }, { outputId: 'gone' }] } })
   const doneText = (done.content as Array<{ text: string }>)[0].text
   assert.match(doneText, /Media ready \(2 of 3\)/)
   assert.match(doneText, /gone: could not finalize: Upload not found\./)
   assert.ok(done._meta, 'the batch mounts a card')
   const items = (done.structuredContent as { items: Array<{ reference: string }> }).items
   assert.deepEqual(items.map((i) => i.reference), ['one', 'two'], 'one card, one tile per finalized file')
+  assert.deepEqual(completions.map(([, parts]) => parts), [undefined, undefined, undefined], 'single uploads complete without parts')
   // A file is shown by the name it was uploaded with, falling back to its id when it has none (gap found 2026-10-12).
   assert.match(doneText, /\[1\] Cover shot\.png, /)
   assert.deepEqual((done.structuredContent as { items: Array<{ name: string }> }).items.map((i) => i.name), ['Cover shot.png', 'two'])
+})
+
+/**
+ * The upload tools for a file the store takes in parts: create_upload answers the plan from the server (part size and
+ * count are printed as received, never written in the tool), sign_upload_parts signs the numbers asked for, and
+ * complete_upload passes each part's ETag through untouched.
+ */
+test('upload tools: a multipart plan, signing the parts asked for, and completing with their ETags', async () => {
+  const signed: Array<[string, number[]]> = []
+  const completed: Array<[string, unknown]> = []
+  const mcp = await connect(
+    fakeClient({
+      createUpload: async () => ({ outputId: 'big', upload: { mode: 'multipart', partSize: 777, partCount: 5, expiresAt: '2026-10-22T00:00:00Z' } }),
+      signUploadParts: async (id: string, numbers: number[]) => {
+        signed.push([id, numbers])
+        return numbers.map((n) => ({ partNumber: n, url: `https://store.example/part/${n}`, headers: n === 2 ? { 'x-extra': 'yes' } : {} }))
+      },
+      completeUpload: async (id: string, parts: unknown) => {
+        completed.push([id, parts])
+        return { outputId: id, shortId: 's-big', url: 'https://media.contenthero.ai/big.mp4', contentType: 'video', fileName: 'big.mp4', appUrl: 'https://app.contenthero.ai/media/s-big' }
+      },
+    }),
+  )
+  const plan = (await mcp.callTool({ name: 'create_upload', arguments: { files: [{ fileName: 'big.mp4', contentType: 'video/mp4', sizeBytes: 3000 }] } })).content[0].text
+  assert.match(plan, /\[1\] big\.mp4 \(id big\), multipart: 5 parts of 777 bytes each/)
+  assert.match(plan, /sign_upload_parts/)
+  assert.match(plan, /uploads \[\{"outputId":"big","parts":"\[\{ partNumber, etag \}, \.\.\.\]"\}\]/)
+
+  const parts = (await mcp.callTool({ name: 'sign_upload_parts', arguments: { outputId: 'big', partNumbers: [2, 4] } })).content[0].text
+  assert.deepEqual(signed, [['big', [2, 4]]])
+  assert.match(parts, /Signed 2 part\(s\) of upload big/)
+  assert.match(parts, /part 2:\n {3}https:\/\/store\.example\/part\/2\n {5}x-extra: yes/)
+  assert.match(parts, /part 4:\n {3}https:\/\/store\.example\/part\/4\n {5}\(no headers to add\)/)
+
+  const etags = [{ partNumber: 1, etag: '"a"' }, { partNumber: 2, etag: '"b"' }]
+  const done = await mcp.callTool({ name: 'complete_upload', arguments: { uploads: [{ outputId: 'big', parts: etags }] } })
+  assert.deepEqual(completed, [['big', etags]], 'the ETags go through exactly as given')
+  assert.match(done.content[0].text, /Media ready \(1\)/)
+
+  // A refusal from the server reaches the agent as an error with its own words.
+  const refused = await connect(fakeClient({ signUploadParts: async () => { throw new Error('Part 9 is beyond the 5 parts of this upload. Parts are numbered 1 to 5.') } }))
+  const bad = await refused.callTool({ name: 'sign_upload_parts', arguments: { outputId: 'big', partNumbers: [9] } })
+  assert.ok(bad.isError)
+  assert.match(bad.content[0].text, /beyond the 5 parts/)
+})
+
+test('upload tools: schemas and approved wording, with the old names gone', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const byName = (n: string) => tools.find((t) => t.name === n)
+  for (const old of ['create_media_upload', 'complete_media_upload']) assert.equal(byName(old), undefined, `${old} is removed`)
+  assert.equal(byName('create_upload').description, CREATE_UPLOAD_TEXT)
+  assert.equal(byName('sign_upload_parts').description, SIGN_UPLOAD_PARTS_TEXT)
+  assert.equal(byName('complete_upload').description, COMPLETE_UPLOAD_TEXT)
+  // Principle-based: no number another system owns appears in any of the three texts or their parameter texts.
+  const prose = [CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, ...Object.values(UPLOAD_PARAMETER_TEXT)].join(' ')
+  assert.doesNotMatch(prose, /\d{2,}|MiB|MB\b|GB\b/)
+  assert.doesNotMatch(prose, /[–—]/)
+
+  const files = byName('create_upload').inputSchema.properties.files
+  assert.deepEqual(files.items.required.sort(), ['contentType', 'fileName', 'sizeBytes'], 'the size is required')
+  assert.equal(files.items.properties.sizeBytes.description, UPLOAD_PARAMETER_TEXT.sizeBytes)
+  assert.deepEqual(byName('sign_upload_parts').inputSchema.required.sort(), ['outputId', 'partNumbers'])
+  const upload = byName('complete_upload').inputSchema.properties.uploads.items
+  assert.deepEqual(upload.required, ['outputId'], 'parts are optional: a single upload completes without them')
+  assert.deepEqual(upload.properties.parts.items.required.sort(), ['etag', 'partNumber'])
+  const media = TOOL_GROUPS.find((g) => g.slug === 'media')
+  assert.deepEqual(['create_upload', 'sign_upload_parts', 'complete_upload'].filter((n) => !media.tools.includes(n)), [])
 })
 
 /**

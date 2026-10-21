@@ -86,7 +86,8 @@ import type {
   ProjectListResult,
   MediaBatchResult,
   ResolvedMediaBatchItem,
-  CreateMediaUploadResult,
+  CreateUploadResult,
+  SignedUploadPart,
   ImportedMedia,
   UploadedMedia,
   ModelInfo,
@@ -1652,44 +1653,68 @@ export function mediaDisplayResult(result: MediaBatchResult): CallToolResult {
   }
 }
 
-/** One file's phase 1 outcome: its signed upload, or why none was created. */
-export type MediaUploadOutcome = { fileName: string } & ({ upload: CreateMediaUploadResult } | { error: string })
+/** One file's outcome of beginning an upload: its target, or why none was created. */
+export type MediaUploadOutcome = { fileName: string } & ({ upload: CreateUploadResult } | { error: string })
 
 /**
- * Phase 1 of an upload, for a batch: each file's signed URL and the headers its PUT must carry, then one
- * completion for all of them.
+ * Beginning an upload, for a batch: each file's upload target, then one completion for all of them.
  *
  * ⭐ ONE CALL FOR THE BATCH, because each completion used to be its own tool call and each one mounted its own
  * card: twelve logos uploaded on 2026-10-05 put twelve cards in a row in the person's chat. Completing a batch
  * together is what lets the person see it as one card (`uploadedMediaBatchResult`).
+ *
+ * A target is single (one PUT) or multipart (parts the agent signs itself). Everything the agent needs to act comes
+ * from the server's answer: the headers, the part size and the part count are printed as received, never written
+ * here, so a change of store or of part size needs no change in this prose.
  */
 export function mediaUploadsResult(outcomes: MediaUploadOutcome[]): CallToolResult {
   const created = outcomes.flatMap((o) => ('upload' in o ? [o.upload] : []))
   const blocks = outcomes.flatMap((o, i) => {
     const label = `[${i + 1}] ${o.fileName}`
     if ('error' in o) return [`${label}: could not create its upload: ${o.error}`]
-    const r = o.upload
-    // The headers are listed EXPLICITLY rather than described, because this instruction is executed by an
-    // agent and "with the file's Content-Type" was about to become wrong. On R2 the presigned URL signs the
-    // owner in as `x-amz-meta-user_id`, and a PUT missing it is refused with SignatureDoesNotMatch (verified:
-    // 403 with Content-Type alone, 200 with both). Listing them from the server's own answer means a change of
-    // storage needs no change here.
-    const headers = r.uploadHeaders ?? { 'Content-Type': 'the file MIME type' }
+    const { outputId, upload } = o.upload
+    if (upload.mode === 'single') {
+      // The headers are listed EXPLICITLY rather than described, because this instruction is executed by an
+      // agent. The presigned URL signs the owner in as `x-amz-meta-user_id`, and a PUT missing it is refused with
+      // SignatureDoesNotMatch. Listing them from the server's own answer means a change of storage needs no
+      // change here.
+      return [
+        `${label} (id ${outputId}), single: PUT the whole file to this URL before it expires at ${upload.expiresAt}:`,
+        `   ${upload.url}`,
+        ...Object.entries(upload.headers).map(([k, v]) => `     ${k}: ${v}`),
+      ]
+    }
     return [
-      `${label} (id ${r.outputId}), URL expires ${r.expiresAt}:`,
-      `   ${r.uploadUrl}`,
-      ...Object.entries(headers).map(([k, v]) => `     ${k}: ${v}`),
+      `${label} (id ${outputId}), multipart: ${upload.partCount} parts of ${upload.partSize} bytes each, the last one ending where the file ends. Parts can be signed until ${upload.expiresAt}.`,
     ]
   })
   if (created.length === 0) return text(lines(['No upload was created.', ...blocks]), true)
-  const ids = created.map((r) => r.outputId)
+  const anyMultipart = created.some((c) => c.upload.mode === 'multipart')
+  const skeleton = created.map((c) => (c.upload.mode === 'multipart' ? { outputId: c.outputId, parts: '[{ partNumber, etag }, ...]' } : { outputId: c.outputId }))
   return text(
     lines([
-      `Created ${created.length === outcomes.length ? created.length : `${created.length} of ${outcomes.length}`} upload(s). Two steps remain:`,
-      "1. PUT each file's bytes to its URL, sending EXACTLY the headers listed under it, unchanged:",
+      `Created ${created.length === outcomes.length ? created.length : `${created.length} of ${outcomes.length}`} upload(s). Steps that remain:`,
+      "1. Send each file's bytes. A single file: PUT it to its URL, sending EXACTLY the headers listed under it, unchanged.",
+      anyMultipart
+        ? "   A multipart file: call sign_upload_parts with its id and the part numbers to send, PUT each part's bytes to the URL it answers with the headers it lists, and keep the ETag header of each answer exactly as received."
+        : null,
       ...blocks,
-      `2. Call complete_media_upload once with outputIds ${JSON.stringify(ids)} to finalize them together.`,
+      `2. Call complete_upload once with uploads ${JSON.stringify(skeleton)} to finish them together${anyMultipart ? ', each multipart file with the number and ETag of every one of its parts' : ''}.`,
       'Once complete, reference the media by its outputId in generations or post assets.',
+    ]),
+  )
+}
+
+/** The parts of a multipart upload that were signed: where each part's bytes go. */
+export function signedUploadPartsResult(outputId: string, parts: SignedUploadPart[]): CallToolResult {
+  return text(
+    lines([
+      `Signed ${parts.length} part(s) of upload ${outputId}. PUT each part's bytes to its URL, sending EXACTLY the headers listed under it, and keep the ETag header of the answer exactly as received:`,
+      ...parts.flatMap((p) => [
+        `part ${p.partNumber}:`,
+        `   ${p.url}`,
+        ...(Object.keys(p.headers).length > 0 ? Object.entries(p.headers).map(([k, v]) => `     ${k}: ${v}`) : ['     (no headers to add)']),
+      ]),
     ]),
   )
 }
