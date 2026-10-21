@@ -3100,7 +3100,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        return signedUploadPartsResult(args.outputId, await client.signUploadParts(args.outputId, args.partNumbers))
+        // The store's own record of the parts it holds lets an agent that lost its state finish. Read inside this tool
+        // because it already has the output id; a listing that cannot be had (a single upload, an ended one) leaves
+        // the signing as it was, since the signing itself says what is wrong.
+        const [parts, stored] = await Promise.all([
+          client.signUploadParts(args.outputId, args.partNumbers),
+          (async () => (await client.listUploadParts(args.outputId)).uploaded)().catch(() => []),
+        ])
+        return signedUploadPartsResult(args.outputId, parts, stored)
       } catch (err) {
         return errorResult(err)
       }

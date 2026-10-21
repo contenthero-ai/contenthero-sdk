@@ -60,3 +60,9 @@ Reason: the sentence named the removed tools.
 - create_upload result: multipart line "[n] name (id X), multipart: N parts of S bytes each, the last one ending where the file ends. Parts can be signed until T." Reason: states the plan as received, so no number is written in the prose.
 - create_upload result steps: "1. Send each file's bytes. A single file: PUT it to its URL, sending EXACTLY the headers listed under it, unchanged.", "   A multipart file: call sign_upload_parts with its id and the part numbers to send, PUT each part's bytes to the URL it answers with the headers it lists, and keep the ETag header of each answer exactly as received." (only when a multipart file exists), "2. Call complete_upload once with uploads [skeleton] to finish them together, each multipart file with the number and ETag of every one of its parts." Reason: the next step is named at the moment it is needed.
 - sign_upload_parts result: "Signed N part(s) of upload X. PUT each part's bytes to its URL, sending EXACTLY the headers listed under it, and keep the ETag header of the answer exactly as received:" then "part n:", the URL and the headers or "(no headers to add)". Reason: same executed-by-an-agent rule as above.
+
+## Added 2026-10-22: resume
+
+Reason: an agent that lost its state mid-upload can finish, because sign_upload_parts now also lists the parts the store already holds (the tool reads the server's record; no new tool, no change to any approved tool description). The line is added to the sign_upload_parts result, first, only when the store holds at least one part:
+
+- sign_upload_parts result: "The store already holds N part(s) of this upload, which need no sending again and go into complete_upload exactly as listed: part 1 ETag X; part 3 ETag Y." (N, the part numbers and the ETags are the server's, printed as received.)

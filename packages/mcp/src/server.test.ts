@@ -5248,6 +5248,33 @@ test('upload tools: a multipart plan, signing the parts asked for, and completin
   assert.match(bad.content[0].text, /beyond the 5 parts/)
 })
 
+test('sign_upload_parts also lists the parts the store already holds, and stays as it was when it cannot', async () => {
+  const sign = async (id: string, numbers: number[]) => numbers.map((n) => ({ partNumber: n, url: `https://store.example/part/${n}`, headers: {} }))
+  const listed: string[] = []
+  const holding = await connect(
+    fakeClient({
+      signUploadParts: sign,
+      listUploadParts: async (id: string) => {
+        listed.push(id)
+        return { partCount: 4, partSize: 10, uploaded: [{ partNumber: 1, etag: '"aa"', sizeBytes: 10 }, { partNumber: 3, etag: '"cc"', sizeBytes: 10 }] }
+      },
+    }),
+  )
+  const withHeld = (await holding.callTool({ name: 'sign_upload_parts', arguments: { outputId: 'big', partNumbers: [2] } })).content[0].text
+  assert.deepEqual(listed, ['big'])
+  assert.match(withHeld, /^The store already holds 2 part\(s\) of this upload, which need no sending again and go into complete_upload exactly as listed: part 1 ETag "aa"; part 3 ETag "cc"\.$/m)
+  assert.match(withHeld, /Signed 1 part\(s\) of upload big/)
+
+  const none = await connect(fakeClient({ signUploadParts: sign, listUploadParts: async () => ({ partCount: 4, partSize: 10, uploaded: [] }) }))
+  assert.doesNotMatch((await none.callTool({ name: 'sign_upload_parts', arguments: { outputId: 'big', partNumbers: [1] } })).content[0].text, /already holds/)
+
+  const cannot = await connect(fakeClient({ signUploadParts: sign, listUploadParts: async () => { throw new Error('a single upload has no parts') } }))
+  const plain = await cannot.callTool({ name: 'sign_upload_parts', arguments: { outputId: 'big', partNumbers: [1] } })
+  assert.ok(!plain.isError)
+  assert.doesNotMatch(plain.content[0].text, /already holds/)
+  assert.match(plain.content[0].text, /Signed 1 part\(s\)/)
+})
+
 test('upload tools: schemas and approved wording, with the old names gone', async () => {
   const mcp = await connect(fakeClient())
   const { tools } = await mcp.listTools()

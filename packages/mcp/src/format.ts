@@ -88,6 +88,7 @@ import type {
   ResolvedMediaBatchItem,
   CreateUploadResult,
   SignedUploadPart,
+  ListedUploadPart,
   ImportedMedia,
   UploadedMedia,
   ModelInfo,
@@ -1706,9 +1707,12 @@ export function mediaUploadsResult(outcomes: MediaUploadOutcome[]): CallToolResu
 }
 
 /** The parts of a multipart upload that were signed: where each part's bytes go. */
-export function signedUploadPartsResult(outputId: string, parts: SignedUploadPart[]): CallToolResult {
+export function signedUploadPartsResult(outputId: string, parts: SignedUploadPart[], stored: ListedUploadPart[] = []): CallToolResult {
   return text(
     lines([
+      stored.length > 0
+        ? `The store already holds ${stored.length} part(s) of this upload, which need no sending again and go into complete_upload exactly as listed: ${stored.map((p) => `part ${p.partNumber} ETag ${p.etag}`).join('; ')}.`
+        : null,
       `Signed ${parts.length} part(s) of upload ${outputId}. PUT each part's bytes to its URL, sending EXACTLY the headers listed under it, and keep the ETag header of the answer exactly as received:`,
       ...parts.flatMap((p) => [
         `part ${p.partNumber}:`,
