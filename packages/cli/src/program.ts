@@ -22,6 +22,7 @@ import { registerUpscale } from './commands/upscale.js'
 import { registerAudio } from './commands/audio.js'
 import { registerTranscribe } from './commands/transcribe.js'
 import { registerDownload } from './commands/download.js'
+import { registerUpload } from './commands/upload.js'
 import { registerStatus } from './commands/status.js'
 import { registerMedia } from './commands/media.js'
 import { registerImport } from './commands/import.js'
@@ -68,6 +69,7 @@ export function buildProgram(): Command {
   registerAudio(program)
   registerTranscribe(program)
   registerDownload(program)
+  registerUpload(program)
   registerStatus(program)
   registerMedia(program)
   registerImport(program)

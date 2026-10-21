@@ -9,8 +9,7 @@
  * id, plus "-N" for output N of a generation with several, exactly as these commands print it.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { writeFile, mkdir } from 'node:fs/promises'
 import type { Command } from 'commander'
 import {
   LIST_SORTS,
@@ -28,13 +27,12 @@ import {
   type MediaListResult,
   type SearchMediaPage,
   type SortOrder,
-  type UploadedMedia,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, withMore, clip } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
 import { toList, withPageFlags, withSortFlags } from '../args.js'
-import { mimeForFile, saveFiles } from '../save-files.js'
+import { saveFiles } from '../save-files.js'
 
 /** Split a `data:<mime>;base64,<data>` URL into a Buffer. Returns null on any non-data-URL. */
 function bufferFromDataUrl(dataUrl: string): Buffer | null {
@@ -48,16 +46,6 @@ type Kind = (typeof KINDS)[number]
 // `list` reads the library's files, all or one partition (`MEDIA_LIST_SOURCES`); a single-item `get` names its library.
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
 const SEARCH_KINDS: MediaKind[] = ['image', 'video', 'audio']
-
-export function uploadedHuman(m: UploadedMedia): string {
-  return keyValues([
-    ['Output id', displayId({ id: m.outputId, shortId: m.shortId })],
-    // The name it was uploaded with, as the library lists it, so a batch reads back which file is which.
-    ...(m.fileName ? [['Name', m.fileName] as [string, string]] : []),
-    ...linkRow(m),
-    ['URL', m.url],
-  ])
-}
 
 export function registerMedia(program: Command): void {
   const media = program.command('media').description("Browse the account's studio outputs")
@@ -268,25 +256,5 @@ export function registerMedia(program: Command): void {
           ...(saved ? [['Saved', saved] as [string, string]] : []),
         ])
       })
-    })
-
-  media
-    .command('upload')
-    .description('Upload a local file as first-class media (requires library:write)')
-    .argument('<file>', 'path to the local file')
-    .option('--content-type <mime>', 'MIME type override (else inferred from the extension)')
-    .option('--name <name>', 'file name override (else the basename)')
-    .action(async (file: string, opts: Record<string, unknown>, command: Command) => {
-      let bytes: Buffer
-      try {
-        bytes = await readFile(file)
-      } catch {
-        throw new CliError(`Cannot read file: ${file}`, EXIT.USAGE)
-      }
-      const fileName = (opts.name as string | undefined) ?? basename(file)
-      const contentType = (opts.contentType as string | undefined) ?? mimeForFile(file)
-      const { client, ctx } = makeClient(command)
-      const m = await client.uploadMedia(bytes, { fileName, contentType })
-      emit(m, ctx, uploadedHuman)
     })
 }

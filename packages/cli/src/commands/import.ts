@@ -159,7 +159,7 @@ export function registerImport(program: Command): void {
         return
       }
       try {
-        emit(await client.importMedia(input, { timeoutMs }), ctx, importedHuman)
+        emit(await client.import(input, { timeoutMs }), ctx, importedHuman)
       } catch (err) {
         // Accepted and still running (or the poll dropped): the import is not lost, so hand back its id and exit
         // TIMEOUT, never an error that invites running it again. A refused url is terminal and still throws.
