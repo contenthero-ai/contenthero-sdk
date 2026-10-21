@@ -180,7 +180,13 @@ export async function runUpload(deps: UploadDeps, data: UploadData, opts: Upload
   const { outputId, upload } = session
   let uploadedBytes = 0
   const report = (part?: CompletedUploadPart) => {
-    const progress: UploadProgress = { outputId, uploadedBytes, totalBytes, ...(part ? { part } : {}) }
+    const progress: UploadProgress = {
+      outputId,
+      uploadedBytes,
+      totalBytes,
+      ...(upload.mode === 'multipart' ? { storedParts: done.size, partCount: upload.partCount } : {}),
+      ...(part ? { part } : {}),
+    }
     try {
       opts.onProgress?.(progress)
     } catch {
@@ -268,8 +274,9 @@ export async function runUpload(deps: UploadDeps, data: UploadData, opts: Upload
     return await withRetry(() => deps.completeUpload(outputId, parts), (err) => retryable(err, false))
   } catch (err) {
     deps.failed()
-    const kept = opts.abortOnFailure === false
+    // A single upload has no parts to resume from, so there is nothing to keep.
+    const kept = opts.abortOnFailure === false && upload.mode === 'multipart'
     if (!kept) await deps.abortUpload(outputId).catch(() => undefined)
-    throw new UploadFailedError(err, { outputId, resumable: kept && upload.mode === 'multipart' })
+    throw new UploadFailedError(err, { outputId, resumable: kept })
   }
 }

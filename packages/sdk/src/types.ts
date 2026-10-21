@@ -2199,7 +2199,10 @@ export interface UploadProgress {
   outputId: string
   uploadedBytes: number
   totalBytes: number
-  /** The part that just finished, with its ETag, Absent for a single upload. */
+  /** Multipart only: how many parts the store holds so far (those it held when a resumed upload began, plus those sent), of `partCount`. */
+  storedParts?: number
+  partCount?: number
+  /** The part that just finished, with its ETag. Absent for a single upload. */
   part?: CompletedUploadPart
 }
 

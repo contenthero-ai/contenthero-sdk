@@ -448,3 +448,13 @@ test('listUploadParts reads the parts the store holds from the route of the cont
   assert.deepEqual(seen, [['https://app.contenthero.ai/api/v1/media/uploads/out%201/parts', 'GET']])
   assert.deepEqual(listing, { partCount: 3, partSize: 4, uploaded: [{ partNumber: 1, etag: '"a"', sizeBytes: 4 }] })
 })
+
+test('upload: progress of a resumed upload names how many parts the store already holds', async () => {
+  const server = fakeServer({ partSize: 4, failPut: [{ part: 3, times: 99, how: 400 }] })
+  await new ContentHero({ apiKey: 'k', fetch: server.fetch }).upload(bytesOf(10), { ...opts, concurrency: 1, abortOnFailure: false }).catch(() => undefined)
+  server.failures.length = 0
+  const seen: UploadProgress[] = []
+  await new ContentHero({ apiKey: 'k', fetch: server.fetch }).upload(bytesOf(10), { ...opts, resume: 'out_1', onProgress: (p) => seen.push(p) })
+  assert.deepEqual([seen[0]!.storedParts, seen[0]!.partCount, seen[0]!.uploadedBytes], [2, 3, 8])
+  assert.deepEqual([seen.at(-1)!.storedParts, seen.at(-1)!.uploadedBytes], [3, 10])
+})
