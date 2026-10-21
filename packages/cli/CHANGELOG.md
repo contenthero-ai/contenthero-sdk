@@ -5,6 +5,8 @@
 - Breaking (hard cutover, no alias): the top-level `contenthero upload <file...>` replaces `media upload`. It takes
   several files, shows a progress line for each, sends large files in parts, and names any file that failed while
   the others still upload. `--name` and `--content-type` go with one file.
+  `--resume <outputId>` finishes an upload that stopped midway, sending only the parts the store does not hold; a
+  failed upload prints the line that resumes it.
 
 ## 0.3.32
 

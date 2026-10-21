@@ -90,7 +90,7 @@ contenthero media              list | search | get | zoom | share
 contenthero import             <url> | --pptx <url> | --canva <id>: bring a file, video page or deck in
 contenthero export             <projectId> | get | list: render a project into a file
 contenthero download           <id> [path]: write any file of yours, or an export, to disk (free)
-contenthero upload             <file...>: put local files in your library, large ones in parts, a progress line each
+contenthero upload             <file...>: put local files in your library, large ones in parts, a progress line each, `--resume <outputId>` finishes one that stopped
 contenthero transcribe         [audioUrl] | --content-id <id> [--slide <n>]: speech to text
 contenthero status             <ids...> [--kind <kind>]: where any background job is
 contenthero card               list | get | create | update

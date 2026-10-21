@@ -10,7 +10,7 @@
 import { openAsBlob, statSync } from 'node:fs'
 import { basename } from 'node:path'
 import type { Command } from 'commander'
-import { describeFileSize, type ContentHero, type UploadProgress, type UploadedMedia } from '@contenthero/sdk'
+import { describeFileSize, UploadFailedError, type ContentHero, type UploadProgress, type UploadedMedia } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { CliError, EXIT } from '../errors.js'
 import { emit, keyValues, linkRow, displayId } from '../output.js'
@@ -36,12 +36,18 @@ function uploadResultsHuman(r: { files: UploadFileResult[] }): string {
 }
 
 /** The progress line writer: updates in place on a terminal, and says only where it started and ended otherwise. */
-function progressFor(name: string, total: number, write: (s: string) => void) {
+function progressFor(name: string, total: number, write: (s: string) => void, resuming: boolean) {
   const tty = process.stderr.isTTY === true
   const size = describeFileSize(total)
-  write(`Uploading ${name} (${size})${tty ? '' : '\n'}`)
+  let told = !resuming
+  if (!resuming) write(`Uploading ${name} (${size})${tty ? '' : '\n'}`)
   return {
     update(p: UploadProgress) {
+      // The first report of a resumed upload is the server's own record of what the store already holds.
+      if (!told && p.storedParts !== undefined && p.partCount !== undefined) {
+        told = true
+        write(`Resuming ${name} (${size}): ${p.storedParts} of ${p.partCount} parts already stored\n`)
+      }
       if (tty && total > 0) write(`\rUploading ${name} (${size}) ${Math.floor((p.uploadedBytes / total) * 100)}%`)
     },
     done(ok: boolean) {
@@ -54,7 +60,7 @@ function progressFor(name: string, total: number, write: (s: string) => void) {
 export async function uploadFile(
   client: ContentHero,
   file: string,
-  names: { name?: string; contentType?: string },
+  names: { name?: string; contentType?: string; resume?: string },
   write: (s: string) => void = (s) => void process.stderr.write(s),
 ): Promise<UploadedMedia> {
   let blob: Blob
@@ -65,17 +71,23 @@ export async function uploadFile(
     throw new CliError(`Cannot read file: ${file}`, EXIT.USAGE)
   }
   const fileName = names.name ?? basename(file)
-  const progress = progressFor(fileName, blob.size, write)
+  const progress = progressFor(fileName, blob.size, write, names.resume !== undefined)
   try {
     const media = await client.upload(blob, {
       fileName,
       contentType: names.contentType ?? mimeForFile(file),
+      // Kept at the server when it fails midway, so the printed `--resume` line below can finish it.
+      abortOnFailure: false,
+      ...(names.resume !== undefined ? { resume: names.resume } : {}),
       onProgress: (p) => progress.update(p),
     })
     progress.done(true)
     return media
   } catch (err) {
     progress.done(false)
+    if (err instanceof UploadFailedError && err.resumable) {
+      write(`The upload was kept. Finish it with: contenthero upload ${file} --resume ${err.outputId}\n`)
+    }
     throw err
   }
 }
@@ -86,8 +98,12 @@ export function registerUpload(program: Command): void {
     .description('Upload local files into your library as media (requires library:write)')
     .argument('<files...>', 'paths of the local files')
     .option('--content-type <mime>', 'MIME type override, for one file (else inferred from the extension)')
+    .option('--resume <outputId>', 'finish an upload that stopped midway, for one file: the same file, sending only the parts the store does not hold')
     .option('--name <name>', 'file name override, for one file (else the basename)')
     .action(async (files: string[], opts: Record<string, unknown>, command: Command) => {
+      if (files.length > 1 && opts.resume !== undefined) {
+        throw new CliError('--resume goes with one file: the file the upload was begun with.', EXIT.USAGE)
+      }
       if (files.length > 1 && (opts.contentType !== undefined || opts.name !== undefined)) {
         throw new CliError('--content-type and --name go with one file. Upload the files one at a time to set them.', EXIT.USAGE)
       }
@@ -95,7 +111,7 @@ export function registerUpload(program: Command): void {
       const results: UploadFileResult[] = []
       for (const file of files) {
         try {
-          const media = await uploadFile(client, file, { name: opts.name as string | undefined, contentType: opts.contentType as string | undefined })
+          const media = await uploadFile(client, file, { name: opts.name as string | undefined, contentType: opts.contentType as string | undefined, resume: opts.resume as string | undefined })
           results.push({ file, media })
         } catch (err) {
           // One file alone fails the command with its own error, so its exit code says why.

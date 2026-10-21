@@ -6,7 +6,12 @@
   upload session. `createUpload` (the size is required) answers a target that is either one URL or a part plan,
   `signUploadParts` signs parts on demand, `completeUpload(outputId, parts?)` finishes, `abortUpload` cancels, and
   `upload(data, options)` does all of it in one call: parts a few at a time, each retried on its own and signed just
-  before it is sent, a resume from a session and its finished parts, and an abort when it fails.
+  before it is sent, and an abort when it fails.
+- `listUploadParts(outputId)` answers the plan and the parts the store holds. `upload` option `resume` is the output id of
+  an upload begun earlier: the server's record decides which parts are missing, the file is checked against the size the
+  upload was begun with, and only the missing parts are sent. A failure after the upload began is an `UploadFailedError`
+  carrying `outputId` and `resumable` (keep the session with `abortOnFailure: false`). Progress states `storedParts`
+  of `partCount`.
 - Breaking: `importMedia` is `import`, `startImport` takes `ImportInput` (was `ImportMediaInput`).
 - Exports the tool texts `CREATE_UPLOAD_TEXT`, `SIGN_UPLOAD_PARTS_TEXT`, `COMPLETE_UPLOAD_TEXT` and
   `UPLOAD_PARAMETER_TEXT`, and the upload bounds `UPLOAD_PART_CONCURRENCY`, `UPLOAD_ATTEMPTS` and

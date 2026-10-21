@@ -24,6 +24,9 @@ let server: Server
 let baseUrl = ''
 const seen: Seen[] = []
 const PART_SIZE = 4
+/** Parts the fake store already holds for a resumed upload, and a part whose PUT it refuses. */
+let held: Array<{ partNumber: number; etag: string; sizeBytes: number }> = []
+let refusePart: number | null = null
 
 before(async () => {
   server = createServer((req, res) => {
@@ -35,7 +38,10 @@ before(async () => {
       const isStore = path.startsWith('/store/')
       seen.push({ method: req.method ?? '', path, body: !isStore && buf.length ? JSON.parse(buf.toString()) : null, bytes: isStore ? buf.length : 0, headers: req.headers })
       res.setHeader('content-type', 'application/json')
-      if (isStore) {
+      if (isStore && refusePart !== null && path === `/store/part-${refusePart}`) {
+        res.statusCode = 400
+        res.end('refused')
+      } else if (isStore) {
         res.setHeader('etag', `"etag-${path.split('/').pop()}"`)
         res.end('')
       } else if (path === '/api/v1/media/uploads') {
@@ -47,6 +53,8 @@ before(async () => {
               : { outputId: 'o-single', upload: { mode: 'single', url: `${baseUrl}/store/single`, headers: { 'Content-Type': 'text/plain' }, expiresAt: 'e' } },
           ),
         )
+      } else if (path.endsWith('/parts') && req.method === 'GET') {
+        res.end(JSON.stringify({ partCount: 3, partSize: PART_SIZE, uploaded: held }))
       } else if (path.endsWith('/parts')) {
         const nums = (JSON.parse(buf.toString()) as { partNumbers: number[] }).partNumbers
         res.end(JSON.stringify({ parts: nums.map((n) => ({ partNumber: n, url: `${baseUrl}/store/part-${n}`, headers: {} })) }))
@@ -124,4 +132,62 @@ test('media upload is gone and upload is registered', () => {
   assert.ok(names.includes('upload'))
   const media = buildProgram().commands.find((c) => c.name() === 'media')!
   assert.ok(!media.commands.some((c) => c.name() === 'upload'))
+})
+
+/** What the command writes to stderr while `fn` runs. */
+async function stderrOf(fn: () => Promise<void>): Promise<{ text: string; error: unknown }> {
+  const real = process.stderr.write.bind(process.stderr)
+  let text = ''
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    text += String(chunk)
+    return true
+  }) as typeof process.stderr.write
+  let error: unknown
+  try {
+    await fn()
+  } catch (e) {
+    error = e
+  } finally {
+    process.stderr.write = real
+  }
+  return { text, error }
+}
+
+test('upload --resume asks which parts are stored, sends only the missing ones and says how many were stored', async () => {
+  held = [1, 2].map((n) => ({ partNumber: n, etag: `"held-${n}"`, sizeBytes: 4 }))
+  const { text, error } = await stderrOf(() => run('upload', fileWith('big.txt', '0123456789'), '--resume', 'o-multi'))
+  assert.equal(error, undefined)
+  assert.deepEqual(api(), ['GET /api/v1/media/uploads/o-multi/parts', 'POST /api/v1/media/uploads/o-multi/parts', 'POST /api/v1/media/uploads/o-multi/complete'])
+  assert.deepEqual(seen.filter((s) => s.path.startsWith('/store/')).map((s) => s.path), ['/store/part-3'])
+  assert.deepEqual(seen.at(-1)!.body, { parts: [{ partNumber: 1, etag: '"held-1"' }, { partNumber: 2, etag: '"held-2"' }, { partNumber: 3, etag: '"etag-part-3"' }] })
+  assert.match(text, /Resuming big\.txt \(.*\): 2 of 3 parts already stored/)
+})
+
+test('upload --resume refuses a file of another size and sends nothing', async () => {
+  held = []
+  const { error } = await stderrOf(() => run('upload', fileWith('small.txt', 'abc'), '--resume', 'o-multi'))
+  assert.match(String((error as Error).message), /This file is 3 bytes, but upload o-multi was begun for a file of 9 to 12 bytes/)
+  assert.deepEqual(api(), ['GET /api/v1/media/uploads/o-multi/parts'])
+})
+
+test('upload --resume goes with one file', async () => {
+  seen.length = 0
+  await assert.rejects(
+    buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'upload', fileWith('a.txt', 'a'), fileWith('b.txt', 'b'), '--resume', 'o'], { from: 'user' }),
+    /--resume goes with one file/,
+  )
+  assert.equal(seen.length, 0)
+})
+
+test('a fresh upload that stops midway keeps its session and prints the line that finishes it', async () => {
+  refusePart = 3
+  try {
+    const file = fileWith('big.txt', '0123456789')
+    const { text, error } = await stderrOf(() => run('upload', file, '--content-type', 'text/plain'))
+    assert.ok(error)
+    assert.ok(!api().some((r) => r.startsWith('DELETE')), 'the session was not ended')
+    assert.ok(text.includes(`contenthero upload ${file} --resume o-multi`), text)
+  } finally {
+    refusePart = null
+  }
 })

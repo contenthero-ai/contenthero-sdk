@@ -5,6 +5,7 @@
 - Breaking (hard cutover, no alias): `create_upload` and `complete_upload` replace `create_media_upload` and
   `complete_media_upload`, and the new `sign_upload_parts` signs the parts of a multipart upload. `create_upload`
   takes the size of each file; `complete_upload` takes the ETags for a multipart one. Words await approval.
+- `sign_upload_parts` also lists the parts the store already holds, so an agent that lost its state can finish.
 
 ## 0.4.42
 
