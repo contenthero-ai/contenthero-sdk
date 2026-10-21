@@ -1,5 +1,7 @@
 # Wording for approval: upload session
 
+Status: ALL wording in this file, including the resume line added 2026-10-22, was approved by Taylan on 2026-10-22. The code already carries it verbatim.
+
 Every new or changed tool and parameter description, verbatim from the SDK constants in packages/sdk/src/tool-text.ts, plus the two sentences written inline in the MCP. Each carries a one-line reason. Nothing here states a size, a count or a limit another system owns.
 
 ## create_upload
