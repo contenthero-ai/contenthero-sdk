@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `template list --kind logo` is accepted, as the app does.
 - Breaking (hard cutover, no alias): the top-level `contenthero upload <file...>` replaces `media upload`. It takes
   several files, shows a progress line for each, sends large files in parts, and names any file that failed while
   the others still upload. `--name` and `--content-type` go with one file.

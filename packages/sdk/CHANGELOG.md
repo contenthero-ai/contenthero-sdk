@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `TemplateKind` includes `logo`, as the app's kind list does: `listTemplates({ kind: 'logo' })` types.
 - Breaking (hard cutover, no alias): `createMediaUpload`, `completeMediaUpload` and `uploadMedia` are replaced by the
   upload session. `createUpload` (the size is required) answers a target that is either one URL or a part plan,
   `signUploadParts` signs parts on demand, `completeUpload(outputId, parts?)` finishes, `abortUpload` cancels, and

@@ -5363,7 +5363,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         "List the templates you can place: ContentHero's and the user's own (the editor's Elements panel), without their code, a page at a time. Each is code, a shape or an animated emoji, with its category, version and default size. Place one with an insert_template op in update_timeline or update_canvas, branded with the project's brand kit; read one whole with get_template. Requires the editor:read scope.",
       inputSchema: {
         scope: z.enum(['system', 'user', 'all']).optional().describe("system is ContentHero's, user is the user's own; all (the default) is both."),
-        kind: z.enum(['code', 'shape', 'emoji']).optional().describe('Only templates that draw this.'),
+        kind: z.enum(['code', 'shape', 'emoji', 'logo']).optional().describe('Only templates that draw this.'),
         category: z.array(z.string()).optional().describe('Only templates in these categories.'),
         search: z.string().optional().describe('Every word, in any order, in the name or the tags.'),
         archived: z.boolean().optional().describe('true lists only archived templates, to restore one with archive.'),

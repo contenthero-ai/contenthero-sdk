@@ -206,8 +206,8 @@ export interface SortOptions<F extends string> {
 // Templates (the editor's Elements: reusable code, shapes and animated emoji)
 // ---------------------------------------------------------------------------
 
-/** What a template draws: code (which may play a Lottie file), a shape, or an animated emoji. */
-export type TemplateKind = 'code' | 'shape' | 'emoji'
+/** What a template draws: code (which may play a Lottie file), a shape, an animated emoji, or a brand logo. */
+export type TemplateKind = 'code' | 'shape' | 'emoji' | 'logo'
 
 /** Whose templates: ContentHero's, the caller's own, or both. */
 export type TemplateScope = 'system' | 'user' | 'all'

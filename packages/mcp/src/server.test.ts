@@ -5116,6 +5116,10 @@ test('the template tools are filed with the editor, and reach the template SDK m
   const listed = await mcp.callTool({ name: 'list_templates', arguments: { scope: 'user', kind: 'code', category: ['lower-thirds'], archived: true } })
   assert.match(listed.content[0].text, /^1 template\(s\):\n- Lower third \(id 2{8}-.*\) \| code \| lower-thirds \| yours \| version 3 \| 25% x 13% of the canvas/)
   assert.match(listed.content[0].text, /More: pass cursor "c2"\./)
+  // A logo is a kind the app lists, as it is a category: kind logo reaches the SDK instead of being refused.
+  const logos = await mcp.callTool({ name: 'list_templates', arguments: { kind: 'logo' } })
+  assert.notEqual(logos.isError, true)
+  assert.ok(calls.some((c) => c.startsWith('list ') && JSON.parse(c.slice(5)).kind === 'logo'))
   const got = await mcp.callTool({ name: 'get_template', arguments: { templateId: row.id } })
   assert.match(got.content[0].text, /```tsx\nexport default \(\) => null\n```/)
   // Its stored preview, for looking at it before placing it.
@@ -5129,6 +5133,7 @@ test('the template tools are filed with the editor, and reach the template SDK m
 
   assert.deepEqual(calls, [
     `list ${JSON.stringify({ scope: 'user', kind: 'code', category: ['lower-thirds'], archived: 'only' })}`,
+    `list ${JSON.stringify({ kind: 'logo' })}`,
     `get ${row.id}`,
     `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { projectId: 'p1', itemId: 'g1' } })}`,
     `create ${JSON.stringify({ name: 'Mine', fromTemplateId: row.id })}`,

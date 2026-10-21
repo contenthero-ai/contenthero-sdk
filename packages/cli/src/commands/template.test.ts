@@ -49,6 +49,7 @@ test('template list sends its filters as the API reads them', async () => {
     { scope: 'user', kind: 'shape', category: ['shapes', 'arrows'], search: 'star', archived: 'only', limit: '20' },
   )
   assert.equal((await run('template', 'list', '--kind', 'code')).query.get('kind'), 'code')
+  assert.equal((await run('template', 'list', '--kind', 'logo')).query.get('kind'), 'logo')
   // The retired kind is refused before any request.
   seen.length = 0
   await assert.rejects(buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'template', 'list', '--kind', 'graphic'], { from: 'user' }))

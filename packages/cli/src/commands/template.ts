@@ -18,7 +18,7 @@ import { CliError, EXIT } from '../errors.js'
 import type { Template, TemplateFields, TemplateListResult, TemplateSummary, TemplateWriteResult } from '@contenthero/sdk'
 
 const SCOPES = ['system', 'user', 'all'] as const
-const KINDS = ['code', 'shape', 'emoji'] as const
+const KINDS = ['code', 'shape', 'emoji', 'logo'] as const
 
 /** A template's own size: a share of the canvas on each axis, or the whole frame. */
 function box(t: TemplateSummary): string {
@@ -113,7 +113,7 @@ export function registerTemplate(program: Command): void {
       .command('list')
       .description("List ContentHero's templates and your own, without their code")
       .option('--scope <scope>', 'system | user | all (default all)')
-      .option('--kind <kind>', 'code | shape | emoji')
+      .option('--kind <kind>', 'code | shape | emoji | logo')
       .option('--category <category>', 'only this category; repeatable', collect)
       .option('--search <text>', 'every word, in any order, in the name or the tags')
       .option('--archived', 'only archived templates, to restore one'),
