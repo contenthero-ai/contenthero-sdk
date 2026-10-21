@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `MediaVariation.audio` carries an audio item's recorded facts as the app reads them (`sizeBytes`, `mimeType`, `durationSeconds`, `derivedBitrateKbps`, each only when known), and `describeAudioFacts` words them. The bitrate is derived from size and duration; codec, sample rate and channels are not recorded.
+- `ProjectSummaryTrack` and `ProjectSummaryClip` type a timeline summary, with `muted` and `hidden` on a track and `disabled` on a clip, each present only when set. The get_project description names them.
 - `TemplateKind` includes `logo`, as the app's kind list does: `listTemplates({ kind: 'logo' })` types.
 - Breaking (hard cutover, no alias): `createMediaUpload`, `completeMediaUpload` and `uploadMedia` are replaced by the
   upload session. `createUpload` (the size is required) answers a target that is either one URL or a part plan,

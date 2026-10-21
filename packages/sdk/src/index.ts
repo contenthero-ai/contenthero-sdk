@@ -185,6 +185,8 @@ export type {
   MediaKind,
   MediaVariation,
   AudioFacts,
+  ProjectSummaryClip,
+  ProjectSummaryTrack,
   MediaSummary,
   MediaItem,
   GenerationReference,

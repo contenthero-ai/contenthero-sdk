@@ -3980,6 +3980,39 @@ export interface GroupSummary {
   memberClipIds: string[]
 }
 
+/**
+ * A clip as a timeline summary read lists it (`ProjectDetail.state.tracks[].items[]` at the default detail). `disabled`
+ * is present only when the clip is switched off, and then it does not play.
+ */
+export interface ProjectSummaryClip {
+  id: string
+  type: string
+  from: number
+  durationInFrames: number
+  trackId: string
+  startFromSeconds?: number
+  speed?: number
+  disabled?: true
+  groupId?: string
+  groupOrdinal?: number
+  [key: string]: unknown
+}
+
+/**
+ * A track as a timeline summary read lists it. `isPrimary`, `muted` and `hidden` are each present only when set: a
+ * muted track keeps its picture and loses its sound, a hidden track contributes neither picture nor sound.
+ */
+export interface ProjectSummaryTrack {
+  id: string
+  name: string
+  trackType?: string
+  isPrimary?: true
+  muted?: true
+  hidden?: true
+  items: ProjectSummaryClip[]
+  transitions?: unknown
+}
+
 export interface ProjectDetail extends ProjectSummary, ProjectSettings {
   revision: number
   /** The full composition state (`{ slides }` for canvas, `{ tracks }` for the editor timeline). */
