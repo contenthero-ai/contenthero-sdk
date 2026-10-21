@@ -516,7 +516,7 @@ test('describeStyleLibraryPins says each pin, the newest version, and what the n
 })
 
 /**
- * An audio item's recorded facts, in the one line the MCP and the CLI share. The bitrate is always labelled derived.
+ * An audio item's recorded facts, in the one line the MCP and the CLI share. The bitrate is always labeled derived.
  * Break-verified: dropping the "derived" label turns the first red.
  */
 test('audio facts say what is recorded and label the bitrate as derived', () => {

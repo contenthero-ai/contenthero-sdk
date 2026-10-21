@@ -487,7 +487,7 @@ export function describeFileSize(bytes: number): string {
 }
 
 /**
- * The recorded facts of an audio file as one line: its size, container type and duration, and the mean bitrate labelled
+ * The recorded facts of an audio file as one line: its size, container type and duration, and the mean bitrate labeled
  * as derived from size and duration. Only what is known is said; null when nothing is. The one wording the MCP and the
  * CLI share.
  */

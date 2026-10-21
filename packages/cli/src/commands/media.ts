@@ -216,7 +216,7 @@ export function registerMedia(program: Command): void {
             v.url ?? '',
           ]),
         )
-        // An audio item's recorded facts, in the SDK's one wording (the bitrate is labelled as derived).
+        // An audio item's recorded facts, in the SDK's one wording (the bitrate is labeled as derived).
         const audioRows = m.variations.flatMap((v) => {
           const facts = describeAudioFacts(v.audio)
           return facts ? [`  ${v.mediaId}: ${facts}`] : []

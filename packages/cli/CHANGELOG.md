@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.33
 
-- `media get` prints an audio item's recorded facts per variation (type, size, duration, and the mean bitrate labelled as derived from size and duration).
+- `template list`: `--kind logo` lists logos, and `--search` also matches a logo's other names.
+- `media get` prints an audio item's recorded facts per variation (type, size, duration, and the mean bitrate labeled as derived from size and duration).
 - `project get` carries `muted`, `hidden` and `disabled` from the summary, each only when set (JSON output; the tests pin it).
 - `template list --kind logo` is accepted, as the app does.
 - Breaking (hard cutover, no alias): the top-level `contenthero upload <file...>` replaces `media upload`. It takes

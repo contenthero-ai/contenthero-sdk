@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 /**
- * `media get` prints an audio item's recorded facts per variation, in the SDK's one wording, with the bitrate labelled
+ * `media get` prints an audio item's recorded facts per variation, in the SDK's one wording, with the bitrate labeled
  * as derived. A variation with no facts prints no line; one with only some prints only those.
  * Break-verified: dropping the audio block from `media get` turns the first red.
  */
@@ -39,7 +39,7 @@ async function mediaGet(): Promise<string> {
   return stdout
 }
 
-test('an audio variation prints its facts, the bitrate labelled as derived', async () => {
+test('an audio variation prints its facts, the bitrate labeled as derived', async () => {
   body = item([{ mediaId: 'Abc12345-1', url: 'u1', ...v, audio: { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 } }])
   const out = await mediaGet()
   assert.match(out, /Audio:\n {2}Abc12345-1: audio\/mpeg, 468\.8 KB, 30\.00s, 128 kbps mean \(derived from size and duration\)/)

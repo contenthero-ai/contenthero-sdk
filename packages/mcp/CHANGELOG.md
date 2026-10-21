@@ -1,13 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.4.43
 
+- `list_templates` wording: logos are listed only with kind logo, search finds a logo by name or alias, a logo's id is its slug.
 - `get_media` prints an audio item's recorded facts (size, container, duration and a derived mean bitrate) from the batch read, in the wording the CLI shares (`describeAudioFacts`); only the facts known are said.
 - `get_project` description: the summary also lists whether a track is muted or hidden and whether a clip is disabled, as the app's summary now shows (a mechanical accuracy edit).
 - `list_templates` accepts `kind: "logo"`, as the app does (it was refused before reaching the server).
 - Breaking (hard cutover, no alias): `create_upload` and `complete_upload` replace `create_media_upload` and
   `complete_media_upload`, and the new `sign_upload_parts` signs the parts of a multipart upload. `create_upload`
-  takes the size of each file; `complete_upload` takes the ETags for a multipart one. Words await approval.
+  takes the size of each file; `complete_upload` takes the ETags for a multipart one..
 - `sign_upload_parts` also lists the parts the store already holds, so an agent that lost its state can finish.
 
 ## 0.4.42
