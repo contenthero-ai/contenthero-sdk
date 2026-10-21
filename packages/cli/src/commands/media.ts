@@ -15,6 +15,7 @@ import {
   LIST_SORTS,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
+  describeAudioFacts,
   describeFileSize,
   describeReferences,
   type MediaBatchItem,
@@ -215,13 +216,19 @@ export function registerMedia(program: Command): void {
             v.url ?? '',
           ]),
         )
+        // An audio item's recorded facts, in the SDK's one wording (the bitrate is labelled as derived).
+        const audioRows = m.variations.flatMap((v) => {
+          const facts = describeAudioFacts(v.audio)
+          return facts ? [`  ${v.mediaId}: ${facts}`] : []
+        })
+        const audioBlock = audioRows.length ? `\n\nAudio:\n${audioRows.join('\n')}` : ''
         const savedBlock = saved.length
           ? `\n\nSaved ${saved.length} file(s):\n${saved.map((s) => `  ${s}`).join('\n')}`
           : ''
         // What it was made FROM, in the words the MCP and Studio use.
         const refs = describeReferences(m.references)
         const madeFrom = refs.length ? `\n\nMade from:\n${refs.map((r) => `  ${r}`).join('\n')}` : ''
-        return `${head}\n\n${variations}${madeFrom}${savedBlock}`
+        return `${head}\n\n${variations}${audioBlock}${madeFrom}${savedBlock}`
       })
     })
 
