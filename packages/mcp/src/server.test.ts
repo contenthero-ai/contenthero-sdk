@@ -3943,7 +3943,37 @@ test('update_timeline and update_canvas say a batch is atomic; get_project names
   for (const name of ['update_timeline', 'update_canvas']) {
     assert.match(description(name), /A batch is ordered and atomic: when any operation is refused, nothing is stored/)
   }
-  assert.match(description('get_project'), /whether it is the main track/)
+  assert.match(description('get_project'), /whether it is the main track and whether it is muted or hidden/)
+  assert.match(description('get_project'), /speed, whether it is disabled and source/)
+})
+
+/**
+ * The summary names what changes what plays, each only when set; the text carries them as the server sent them and adds
+ * none. Break-verified: dropping `muted` from the fixture's music track turns the first assertion red.
+ */
+test('get_project shows a muted track, a hidden track and a disabled clip, and only when set', async () => {
+  const base = await fakeClient().getProject('p1', {})
+  const clip = (id: string, extra: Record<string, unknown> = {}) => ({ id, type: 'video', from: 0, durationInFrames: 30, trackId: 't', ...extra })
+  const state = {
+    tracks: [
+      { id: 'main', name: 'Main', trackType: 'media', isPrimary: true, items: [clip('a'), clip('b', { disabled: true })] },
+      { id: 'music', name: 'Music', trackType: 'audio', muted: true, items: [] },
+      { id: 'over', name: 'Overlay', trackType: 'media', hidden: true, items: [] },
+      { id: 'plain', name: 'Plain', trackType: 'media', items: [clip('p')] },
+    ],
+  }
+  const mcp = await connect(fakeClient({ getProject: async () => ({ ...base, type: 'editor', state }) }))
+  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1' } })
+  const text = res.content[0].text as string
+  const json = JSON.parse(text.slice(text.indexOf('{')))
+  const byId = Object.fromEntries(json.tracks.map((t: Record<string, unknown>) => [t.id, t]))
+  assert.equal(byId.music.muted, true)
+  assert.equal(byId.over.hidden, true)
+  assert.equal(byId.main.muted, undefined)
+  assert.equal('muted' in byId.plain || 'hidden' in byId.plain, false)
+  assert.equal(byId.main.items[1].disabled, true)
+  assert.equal('disabled' in byId.main.items[0], false)
+  assert.equal('disabled' in byId.plain.items[0], false)
 })
 
 // F23: `solid` was retired 2026-09-13; the tool description offered it to agents for weeks after.
