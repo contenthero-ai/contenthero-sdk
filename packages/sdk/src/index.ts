@@ -216,7 +216,8 @@ export type {
   SingleUploadTarget,
   UploadOptions,
   UploadProgress,
-  UploadResume,
+  UploadPartsListing,
+  ListedUploadPart,
   UploadTarget,
   ImportInput,
   ImportedMedia,
@@ -395,6 +396,7 @@ export type {
 } from './types.js'
 export {
   ContentHeroError,
+  UploadFailedError,
   AuthenticationError,
   PermissionError,
   ValidationError,

@@ -15,13 +15,15 @@
  * parts still missing are ever signed.
  */
 
-import { ContentHeroError } from './errors.js'
+import { ContentHeroError, UploadFailedError } from './errors.js'
 import type {
   AbortUploadResult,
   CompletedUploadPart,
   CreateUploadInput,
   CreateUploadResult,
+  MultipartUploadTarget,
   SignedUploadPart,
+  UploadPartsListing,
   UploadOptions,
   UploadProgress,
   UploadedMedia,
@@ -41,6 +43,7 @@ export const UPLOAD_RETRY_DELAY_MS = 500
 export interface UploadDeps {
   createUpload(input: CreateUploadInput): Promise<CreateUploadResult>
   signUploadParts(outputId: string, partNumbers: number[]): Promise<SignedUploadPart[]>
+  listUploadParts(outputId: string): Promise<UploadPartsListing>
   completeUpload(outputId: string, parts?: CompletedUploadPart[]): Promise<UploadedMedia>
   abortUpload(outputId: string): Promise<AbortUploadResult>
   /** PUT to the store. Resolves on success; rejects with a `ContentHeroError` carrying the status when the store refused. */
@@ -94,6 +97,11 @@ export function readCreateUpload(raw: unknown, contentType: string): CreateUploa
   throw new ContentHeroError('The server answered a new upload without a target for its bytes. Try again, and if it keeps failing contact support.')
 }
 
+/** Whether a plan of `partCount` parts of `partSize` bytes can be exactly a file of `totalBytes` bytes. */
+function planFits(partSize: number, partCount: number, totalBytes: number): boolean {
+  return partSize > 0 && partCount > 0 && partSize * partCount >= totalBytes && partSize * (partCount - 1) < totalBytes
+}
+
 function isAbort(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError'
 }
@@ -140,9 +148,36 @@ export async function runUpload(deps: UploadDeps, data: UploadData, opts: Upload
     }
   }
 
-  const session = opts.resume ?? (await deps.createUpload({ fileName: opts.fileName, contentType: opts.contentType, sizeBytes: totalBytes }))
+  let session: CreateUploadResult
+  const done = new Map<number, string>()
+  if (opts.resume !== undefined) {
+    // The server's own record of the stored parts is the truth; this client holds nothing between runs. A refusal here
+    // (not yours, ended, a single upload) or a file that cannot be the one begun leaves the session untouched.
+    const listing = await deps.listUploadParts(opts.resume)
+    const { partSize, partCount } = listing
+    if (!planFits(partSize, partCount, totalBytes)) {
+      const least = partSize * (partCount - 1) + 1
+      const most = partSize * partCount
+      throw new ContentHeroError(
+        `This file is ${totalBytes} bytes, but upload ${opts.resume} was begun for a file of ${least} to ${most} bytes (${partCount} parts of ${partSize} bytes). Resume it with the same file, or begin a new upload.`,
+      )
+    }
+    for (const stored of listing.uploaded) {
+      if (stored.partNumber < 1 || stored.partNumber > partCount) continue
+      const expected = Math.min(partSize, totalBytes - (stored.partNumber - 1) * partSize)
+      if (stored.sizeBytes !== expected) {
+        throw new ContentHeroError(
+          `Part ${stored.partNumber} of upload ${opts.resume} holds ${stored.sizeBytes} bytes, but this file would make it ${expected} bytes, so this is not the file the upload was begun with. Resume it with the same file, or begin a new upload.`,
+        )
+      }
+      done.set(stored.partNumber, stored.etag)
+    }
+    const upload: MultipartUploadTarget = { mode: 'multipart', partSize, partCount, expiresAt: '' }
+    session = { outputId: opts.resume, upload }
+  } else {
+    session = await deps.createUpload({ fileName: opts.fileName, contentType: opts.contentType, sizeBytes: totalBytes })
+  }
   const { outputId, upload } = session
-  const done = new Map<number, string>((opts.resume?.parts ?? []).map((p) => [p.partNumber, p.etag]))
   let uploadedBytes = 0
   const report = (part?: CompletedUploadPart) => {
     const progress: UploadProgress = { outputId, uploadedBytes, totalBytes, ...(part ? { part } : {}) }
@@ -165,7 +200,7 @@ export async function runUpload(deps: UploadDeps, data: UploadData, opts: Upload
       report()
     } else {
       const { partSize, partCount } = upload
-      if (!(partSize > 0) || !(partCount > 0) || partSize * partCount < totalBytes || partSize * (partCount - 1) >= totalBytes) {
+      if (!planFits(partSize, partCount, totalBytes)) {
         throw new ContentHeroError(
           `The server planned ${partCount} parts of ${partSize} bytes for a file of ${totalBytes} bytes, which do not fit each other. Create the upload again, and if it keeps failing contact support.`,
         )
@@ -233,7 +268,8 @@ export async function runUpload(deps: UploadDeps, data: UploadData, opts: Upload
     return await withRetry(() => deps.completeUpload(outputId, parts), (err) => retryable(err, false))
   } catch (err) {
     deps.failed()
-    if (opts.abortOnFailure !== false) await deps.abortUpload(outputId).catch(() => undefined)
-    throw err
+    const kept = opts.abortOnFailure === false
+    if (!kept) await deps.abortUpload(outputId).catch(() => undefined)
+    throw new UploadFailedError(err, { outputId, resumable: kept && upload.mode === 'multipart' })
   }
 }

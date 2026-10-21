@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { ContentHero } from './client.js'
 import { ContentHeroError } from './errors.js'
 import type { FetchLike } from './client.js'
+import { UploadFailedError } from './errors.js'
 import type { CompletedUploadPart, UploadProgress } from './types.js'
 
 /**
@@ -25,6 +26,10 @@ interface FakeOptions {
   noEtag?: boolean
   /** Fail the completion with this status this many times. */
   failComplete?: { status: number; times: number }
+  /** Answer the parts listing with this status. */
+  listStatus?: number
+  /** The plan the listing states when this server never began the upload itself (a resume from a fresh process). */
+  knownPlan?: { partSize: number; partCount: number }
 }
 
 function fakeServer(options: FakeOptions = {}) {
@@ -35,6 +40,7 @@ function fakeServer(options: FakeOptions = {}) {
     puts: [] as Array<{ url: string; headers: Record<string, string>; bytes: Uint8Array }>,
     completed: [] as Array<{ outputId: string; body: unknown }>,
     aborted: [] as string[],
+    listed: [] as string[],
     inFlight: 0,
     maxInFlight: 0,
     putOrder: [] as number[],
@@ -46,6 +52,8 @@ function fakeServer(options: FakeOptions = {}) {
   const json = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
   const stored = new Map<number, string>()
+  const storedSizes = new Map<number, number>()
+  let plan: { partSize: number; partCount: number } | undefined
 
   const fetch: FetchLike = async (url, init) => {
     const method = init?.method ?? 'GET'
@@ -63,6 +71,7 @@ function fakeServer(options: FakeOptions = {}) {
         })
       }
       if (options.partSize && input.sizeBytes > options.partSize) {
+        plan = { partSize: options.partSize, partCount: Math.ceil(input.sizeBytes / options.partSize) }
         return json(201, {
           outputId: 'out_1',
           upload: { mode: 'multipart', partSize: options.partSize, partCount: Math.ceil(input.sizeBytes / options.partSize), expiresAt: 'later' },
@@ -75,6 +84,15 @@ function fakeServer(options: FakeOptions = {}) {
         uploadHeaders: { 'Content-Type': input.contentType, 'x-amz-meta-user_id': 'u1' },
         storagePath: 'a/b',
         expiresAt: 'later',
+      })
+    }
+    if (url.endsWith('/parts') && method === 'GET') {
+      log.listed.push(decodeURIComponent(/uploads\/([^/]+)\/parts/.exec(url)![1]!))
+      if (options.listStatus) return json(options.listStatus, { error: 'Refused.' })
+      const p = plan ?? options.knownPlan!
+      return json(200, {
+        ...p,
+        uploaded: [...stored.entries()].sort((a, b) => a[0] - b[0]).map(([partNumber, etag]) => ({ partNumber, etag, sizeBytes: storedSizes.get(partNumber)! })),
       })
     }
     if (url.endsWith('/parts') && method === 'POST') {
@@ -103,6 +121,7 @@ function fakeServer(options: FakeOptions = {}) {
         log.putOrder.push(part)
         const etag = etagOf(part, bytes)
         stored.set(part, etag)
+        storedSizes.set(part, bytes.length)
         return new Response(null, { status: 200, headers: options.noEtag ? {} : { ETag: etag } })
       } finally {
         log.inFlight--
@@ -128,7 +147,7 @@ function fakeServer(options: FakeOptions = {}) {
     }
     throw new Error(`unexpected request ${method} ${url}`)
   }
-  return { fetch, log, stored }
+  return { fetch, log, stored, failures }
 }
 
 /** A file whose bytes tell their position, so a wrongly cut part is caught. */
@@ -259,38 +278,93 @@ test('upload: a part answered without an ETag fails with what to do', async () =
   assert.deepEqual(server.log.aborted, ['out_1'])
 })
 
-test('upload: resume carries on a dropped upload, asking only for the parts still missing', async () => {
+test('upload: resume asks the server which parts are stored and sends only the missing ones, completing in part order', async () => {
   const file = bytesOf(10)
-  // First run: part 3 never gets through, so the upload stops with parts 1 and 2 done; the session is kept.
-  const first = fakeServer({ partSize: 4, failPut: [{ part: 3, times: 99, how: 400 }] })
-  const ch1 = new ContentHero({ apiKey: 'k', fetch: first.fetch })
-  const done: CompletedUploadPart[] = []
-  let session: { outputId: string } | undefined
-  await assert.rejects(() =>
-    ch1.upload(file, {
-      ...opts,
-      concurrency: 1,
-      abortOnFailure: false,
-      onProgress: (p) => {
-        session = { outputId: p.outputId }
-        if (p.part) done.push(p.part)
-      },
-    }),
-  )
-  assert.deepEqual(done.map((p) => p.partNumber), [1, 2])
+  // First run: part 3 never gets through, so the upload stops with parts 1 and 2 stored; the session is kept.
+  const server = fakeServer({ partSize: 4, failPut: [{ part: 3, times: 99, how: 400 }] })
+  let failure: unknown
+  await new ContentHero({ apiKey: 'k', fetch: server.fetch })
+    .upload(file, { ...opts, concurrency: 1, abortOnFailure: false })
+    .catch((e) => (failure = e))
+  assert.ok(failure instanceof UploadFailedError)
+  assert.equal(failure.outputId, 'out_1')
+  assert.equal(failure.resumable, true)
+  assert.match(failure.message, /resume set to that id/)
+  assert.deepEqual([...server.stored.keys()].sort(), [1, 2])
 
-  // Second run, a fresh process: the same session, the parts it kept. Nothing is created and only part 3 is signed.
-  const second = fakeServer({ partSize: 4 })
-  const ch2 = new ContentHero({ apiKey: 'k', fetch: second.fetch })
-  await ch2.upload(file, {
-    ...opts,
-    resume: { outputId: session!.outputId, upload: { mode: 'multipart', partSize: 4, partCount: 3, expiresAt: 'later' }, parts: done },
-  })
-  assert.equal(second.log.created.length, 0, 'no new upload was begun')
-  assert.deepEqual(second.log.signed, [[3]], 'only the missing part was asked for')
-  assert.deepEqual(second.log.puts.map((p) => p.bytes.length), [2])
-  const body = second.log.completed[0]!.body as { parts: CompletedUploadPart[] }
-  assert.deepEqual(body.parts, [...done, { partNumber: 3, etag: second.stored.get(3)! }])
+  // Second run, a fresh client holding nothing: only the output id. Nothing is begun, only part 3 is signed and sent.
+  server.failures.length = 0
+  server.log.signed.length = 0
+  server.log.puts.length = 0
+  const media = await new ContentHero({ apiKey: 'k', fetch: server.fetch }).upload(file, { ...opts, resume: 'out_1' })
+  assert.equal(server.log.created.length, 1, 'no new upload was begun')
+  assert.deepEqual(server.log.listed, ['out_1'])
+  assert.deepEqual(server.log.signed, [[3]], 'only the missing part was asked for')
+  assert.deepEqual(server.log.puts.map((p) => p.bytes.length), [2])
+  assert.equal(media.outputId, 'out_1')
+  const body = server.log.completed[0]!.body as { parts: CompletedUploadPart[] }
+  assert.deepEqual(body.parts, [1, 2, 3].map((n) => ({ partNumber: n, etag: server.stored.get(n)! })))
+})
+
+test('upload: resume refuses a file that cannot be the one the upload was begun with, and touches nothing', async () => {
+  const server = fakeServer({ knownPlan: { partSize: 4, partCount: 3 } })
+  const ch = new ContentHero({ apiKey: 'k', fetch: server.fetch })
+  for (const size of [8, 13]) {
+    await assert.rejects(
+      () => ch.upload(bytesOf(size), { ...opts, resume: 'out_1' }),
+      (err: unknown) =>
+        err instanceof ContentHeroError &&
+        !(err instanceof UploadFailedError) &&
+        err.message.includes(`This file is ${size} bytes`) &&
+        err.message.includes('9 to 12 bytes') &&
+        /same file/.test(err.message),
+    )
+  }
+  assert.deepEqual(server.log.aborted, [], 'the session was not ended')
+  assert.deepEqual(server.log.signed, [])
+  assert.equal(server.log.puts.length, 0)
+})
+
+test('upload: resume refuses a stored part whose size does not fit the file', async () => {
+  // 10 bytes in parts of 4 are stored as 4, 4, 2; the completion then fails, so the session stays.
+  const server = fakeServer({ partSize: 4, failComplete: { status: 400, times: 99 } })
+  await new ContentHero({ apiKey: 'k', fetch: server.fetch }).upload(bytesOf(10), { ...opts, abortOnFailure: false }).catch(() => undefined)
+  // A 12 byte file has the same plan (3 parts of 4) but its last part would hold 4 bytes, not the stored 2.
+  server.log.puts.length = 0
+  await assert.rejects(
+    () => new ContentHero({ apiKey: 'k', fetch: server.fetch }).upload(bytesOf(12), { ...opts, resume: 'out_1' }),
+    (err: unknown) => err instanceof ContentHeroError && /Part 3 of upload out_1 holds 2 bytes/.test(err.message),
+  )
+  assert.equal(server.log.puts.length, 0)
+})
+
+test('upload: a refusal of the listing is told as it is, and the session is left alone', async () => {
+  for (const status of [404, 410, 400]) {
+    const server = fakeServer({ listStatus: status })
+    await assert.rejects(
+      () => new ContentHero({ apiKey: 'k', fetch: server.fetch }).upload(bytesOf(10), { ...opts, resume: 'out_1' }),
+      (err: unknown) => err instanceof ContentHeroError && err.status === status && !(err instanceof UploadFailedError),
+    )
+    assert.deepEqual(server.log.aborted, [])
+  }
+})
+
+test('upload: a fresh upload that fails midway reports its output id, and says whether it can be resumed', async () => {
+  const kept = fakeServer({ partSize: 4, failPut: [{ part: 2, times: 99, how: 400 }] })
+  const keptErr = await new ContentHero({ apiKey: 'k', fetch: kept.fetch }).upload(bytesOf(10), { ...opts, abortOnFailure: false }).catch((e) => e)
+  assert.ok(keptErr instanceof UploadFailedError)
+  assert.equal(keptErr.outputId, 'out_1')
+  assert.equal(keptErr.resumable, true)
+  assert.equal(keptErr.status, 400)
+  assert.deepEqual(kept.log.aborted, [])
+
+  const ended = fakeServer({ partSize: 4, failPut: [{ part: 2, times: 99, how: 400 }] })
+  const endedErr = await new ContentHero({ apiKey: 'k', fetch: ended.fetch }).upload(bytesOf(10), opts).catch((e) => e)
+  assert.ok(endedErr instanceof UploadFailedError)
+  assert.equal(endedErr.outputId, 'out_1')
+  assert.equal(endedErr.resumable, false)
+  assert.match(endedErr.message, /ended at the server/)
+  assert.deepEqual(ended.log.aborted, ['out_1'])
 })
 
 test('upload: the signal cuts the upload and it is aborted', async () => {
@@ -362,4 +436,15 @@ test('signUploadParts, completeUpload and abortUpload speak the routes of the co
     { url: 'https://x.test/api/v1/media/uploads/o%2F1/complete', method: 'POST', body: undefined },
     { url: 'https://x.test/api/v1/media/uploads/o%2F1', method: 'DELETE', body: undefined },
   ])
+})
+
+test('listUploadParts reads the parts the store holds from the route of the contract', async () => {
+  const seen: Array<[string, string | undefined]> = []
+  const fetch: FetchLike = async (url, init) => {
+    seen.push([url, init?.method])
+    return new Response(JSON.stringify({ partCount: 3, partSize: 4, uploaded: [{ partNumber: 1, etag: '"a"', sizeBytes: 4 }] }), { status: 200 })
+  }
+  const listing = await new ContentHero({ apiKey: 'k', fetch }).listUploadParts('out 1')
+  assert.deepEqual(seen, [['https://app.contenthero.ai/api/v1/media/uploads/out%201/parts', 'GET']])
+  assert.deepEqual(listing, { partCount: 3, partSize: 4, uploaded: [{ partNumber: 1, etag: '"a"', sizeBytes: 4 }] })
 })

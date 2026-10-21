@@ -38,6 +38,29 @@ export class ContentHeroError extends Error {
   }
 }
 
+/**
+ * An upload that began and then failed. It carries the output id of the upload, so a caller can resume it: when
+ * `resumable` is true the session was kept at the server, and `upload` with `resume` set to `outputId` sends only the
+ * parts the store does not hold. `cause` is the failure itself; `status`, `body` and `requestId` are its own.
+ */
+export class UploadFailedError extends ContentHeroError {
+  readonly outputId: string
+  readonly resumable: boolean
+
+  constructor(cause: unknown, info: { outputId: string; resumable: boolean }) {
+    const base = cause instanceof Error ? cause.message : String(cause)
+    const inner = cause instanceof ContentHeroError ? cause : undefined
+    const next = info.resumable
+      ? `The upload (id ${info.outputId}) was kept at the server: upload the same file again with resume set to that id, and only the parts the store does not hold are sent.`
+      : `The upload (id ${info.outputId}) was ended at the server.`
+    super(`${base} ${next}`, { status: inner?.status, body: inner?.body, requestId: inner?.requestId })
+    this.name = 'UploadFailedError'
+    this.outputId = info.outputId
+    this.resumable = info.resumable
+    ;(this as { cause?: unknown }).cause = cause
+  }
+}
+
 /** 401: the API key is missing, malformed, revoked, or expired. */
 export class AuthenticationError extends ContentHeroError {
   constructor(message = 'Authentication failed', options?: ContentHeroErrorOptions) {

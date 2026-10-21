@@ -121,6 +121,7 @@ import type {
   CreateUploadResult,
   SignedUploadPart,
   UploadOptions,
+  UploadPartsListing,
   ImportInput,
   ImportedMedia,
   ImportStarted,
@@ -1086,6 +1087,15 @@ export class ContentHero {
   }
 
   /**
+   * Ask the server which parts of a multipart upload the store already holds, from the store's own record. Answers
+   * the plan (`partCount`, `partSize`) and the stored parts sorted by number, each with its ETag and size. Changes
+   * nothing. Refused when the upload is not yours (404), has ended (410) or is a single upload with no parts (400).
+   */
+  async listUploadParts(outputId: string): Promise<UploadPartsListing> {
+    return this.request<UploadPartsListing>('GET', `/api/v1/media/uploads/${encodeURIComponent(outputId)}/parts`)
+  }
+
+  /**
    * Finish an upload once its bytes were sent. A multipart upload needs `parts`: the number and ETag of every part.
    * Idempotent: completing twice answers the same media.
    */
@@ -1107,13 +1117,16 @@ export class ContentHero {
    * sent a few at a time, each retried on its own, each signed just before it is sent. Returns the new media
    * (referenceable by outputId in generations and post assets). `data` is the raw bytes (Blob, Buffer, Uint8Array,
    * or ArrayBuffer). A failure that cannot be recovered aborts the upload at the server (unless `abortOnFailure` is
-   * false, which keeps it for `resume`). For a remote URL you already have, use `import` instead.
+   * false, which keeps a multipart upload for `resume`: set `resume` to the output id the failure carries, with the same
+   * file, and only the parts the store does not hold are sent). A failure after the upload began is an
+   * `UploadFailedError` carrying that output id. For a remote URL you already have, use `import` instead.
    */
   async upload(data: Blob | ArrayBuffer | ArrayBufferView, opts: UploadOptions): Promise<UploadedMedia> {
     return runUpload(
       {
         createUpload: (input) => this.createUpload(input),
         signUploadParts: (outputId, partNumbers) => this.signUploadParts(outputId, partNumbers),
+        listUploadParts: (outputId) => this.listUploadParts(outputId),
         completeUpload: (outputId, parts) => this.completeUpload(outputId, parts),
         abortUpload: (outputId) => this.abortUpload(outputId),
         put: (url, headers, body, signal) => this.putToStore(url, headers, body, signal),

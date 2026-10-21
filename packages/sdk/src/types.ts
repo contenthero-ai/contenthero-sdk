@@ -2199,13 +2199,22 @@ export interface UploadProgress {
   outputId: string
   uploadedBytes: number
   totalBytes: number
-  /** The part that just finished, with its ETag, so a caller can keep what a later `resume` needs. Absent for a single upload. */
+  /** The part that just finished, with its ETag, Absent for a single upload. */
   part?: CompletedUploadPart
 }
 
-/** A begun multipart upload to carry on, with the parts already uploaded. */
-export interface UploadResume extends CreateUploadResult {
-  parts: CompletedUploadPart[]
+/** A part the store already holds for a multipart upload, as the server records it. */
+export interface ListedUploadPart {
+  partNumber: number
+  etag: string
+  sizeBytes: number
+}
+
+/** What `listUploadParts` answers: the plan of a multipart upload and the parts stored so far, by part number. */
+export interface UploadPartsListing {
+  partCount: number
+  partSize: number
+  uploaded: ListedUploadPart[]
 }
 
 /** Options of the one-call `upload`. */
@@ -2217,10 +2226,11 @@ export interface UploadOptions {
   /** Cut the upload; it is then aborted at the server like any other failure. */
   signal?: AbortSignal
   /**
-   * Carry on an upload this client began earlier: the answer of `createUpload` and the parts already uploaded. Only
-   * the parts still missing are signed and sent. Pair it with `abortOnFailure: false` on the first run.
+   * The output id of a multipart upload begun earlier: carry it on. The server is asked which parts the store holds,
+   * the file is checked against the size the upload was begun with, and only the missing parts are signed and sent.
+   * Give the same file. The upload must have been kept: set `abortOnFailure: false` on the first run.
    */
-  resume?: UploadResume
+  resume?: string
   /** Abort the session at the server when the upload fails for good (default true). False keeps it, so `resume` can carry on. */
   abortOnFailure?: boolean
   /** Parts sent at once (default: the client's own bound). */
