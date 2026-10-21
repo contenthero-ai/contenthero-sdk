@@ -106,7 +106,7 @@ function withFieldFlags(command: Command): Command {
 }
 
 export function registerTemplate(program: Command): void {
-  const group = program.command('template').description("Templates: the editor's Elements (code, shapes, animated emoji)")
+  const group = program.command('template').description("Templates: the editor's Elements (code, shapes, animated emoji, brand logos)")
 
   withPageFlags(
     group
