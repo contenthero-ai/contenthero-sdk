@@ -441,8 +441,6 @@ function fakeClient(overrides = {}) {
     createTag: async (name) => ({ id: 't-new', name: name.toLowerCase(), isDefault: false, isSystem: false }),
     updateTag: async (id, name) => ({ id, name: name.toLowerCase(), isDefault: false, isSystem: false }),
     deleteTag: async (id) => ({ id }),
-    createMediaUpload: async (input) => ({ outputId: 'up1', uploadUrl: 'https://storage/sign/up1?token=abc', storagePath: `u/upload-up1.${input.fileName.split('.').pop()}`, expiresAt: '2026-07-01T00:00:00Z' }),
-    completeMediaUpload: async (outputId) => ({ outputId, url: `https://cloud/${outputId}.png` }),
     import: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
     favorite: async () => {},
     archive: async () => {},

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Breaking (hard cutover, no alias): `create_upload` and `complete_upload` replace `create_media_upload` and
+  `complete_media_upload`, and the new `sign_upload_parts` signs the parts of a multipart upload. `create_upload`
+  takes the size of each file; `complete_upload` takes the ETags for a multipart one. Words await approval.
+
 ## 0.4.42
 
 - New tools `list_style_libraries`, `get_style_library` (optional `version`), `create_style_library` and

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Breaking (hard cutover, no alias): the top-level `contenthero upload <file...>` replaces `media upload`. It takes
+  several files, shows a progress line for each, sends large files in parts, and names any file that failed while
+  the others still upload. `--name` and `--content-type` go with one file.
+
 ## 0.3.32
 
 - New group `contenthero style-library list|get|create|update`, and `contenthero archive style-library <id>`.

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Breaking (hard cutover, no alias): `createMediaUpload`, `completeMediaUpload` and `uploadMedia` are replaced by the
+  upload session. `createUpload` (the size is required) answers a target that is either one URL or a part plan,
+  `signUploadParts` signs parts on demand, `completeUpload(outputId, parts?)` finishes, `abortUpload` cancels, and
+  `upload(data, options)` does all of it in one call: parts a few at a time, each retried on its own and signed just
+  before it is sent, a resume from a session and its finished parts, and an abort when it fails.
+- Breaking: `importMedia` is `import`, `startImport` takes `ImportInput` (was `ImportMediaInput`).
+- Exports the tool texts `CREATE_UPLOAD_TEXT`, `SIGN_UPLOAD_PARTS_TEXT`, `COMPLETE_UPLOAD_TEXT` and
+  `UPLOAD_PARAMETER_TEXT`, and the upload bounds `UPLOAD_PART_CONCURRENCY`, `UPLOAD_ATTEMPTS` and
+  `UPLOAD_RETRY_DELAY_MS`. A server that still answers the older single-URL shape is read as a single target.
+
 ## 0.4.35
 
 - Style libraries: `listStyleLibraries`, `getStyleLibrary` (a page of versions, or one version with its code),
