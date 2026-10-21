@@ -19,6 +19,14 @@ test("a post's one video prints its transcript and where it is read word-timed; 
   assert.doesNotMatch(silent, /content get/)
 })
 
+test('a post price names the post by its short id and page, never the UUID', async () => {
+  const { describeTranscribeCost } = await import('@contenthero/sdk')
+  const uuid = '8281e078-d8c4-41a3-b46b-443095c3fd38'
+  const out = describeTranscribeCost({ getCost: true, creditsEstimate: 8, contentId: uuid, shortId: 'Con12345', appUrl: 'https://app.contenthero.ai/content/Con12345' })
+  assert.match(out, /Transcribing post Con12345 \(appUrl https:\/\/app\.contenthero\.ai\/content\/Con12345\) costs 8 credits/)
+  assert.doesNotMatch(out, /8281e078/)
+})
+
 test('transcribe takes exactly one source, and --slide only for a post', async () => {
   for (const args of [
     [],
