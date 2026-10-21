@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `media get` prints an audio item's recorded facts per variation (type, size, duration, and the mean bitrate labelled as derived from size and duration).
+- `project get` carries `muted`, `hidden` and `disabled` from the summary, each only when set (JSON output; the tests pin it).
 - `template list --kind logo` is accepted, as the app does.
 - Breaking (hard cutover, no alias): the top-level `contenthero upload <file...>` replaces `media upload`. It takes
   several files, shows a progress line for each, sends large files in parts, and names any file that failed while
