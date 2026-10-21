@@ -5259,7 +5259,7 @@ test('upload tools: schemas and approved wording, with the old names gone', asyn
   // Principle-based: no number another system owns appears in any of the three texts or their parameter texts.
   const prose = [CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, ...Object.values(UPLOAD_PARAMETER_TEXT)].join(' ')
   assert.doesNotMatch(prose, /\d{2,}|MiB|MB\b|GB\b/)
-  assert.doesNotMatch(prose, /[–—]/)
+  assert.doesNotMatch(prose, /[\u2013\u2014]/)
 
   const files = byName('create_upload').inputSchema.properties.files
   assert.deepEqual(files.items.required.sort(), ['contentType', 'fileName', 'sizeBytes'], 'the size is required')
