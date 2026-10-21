@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `get_media` prints an audio item's recorded facts (size, container, duration and a derived mean bitrate) from the batch read, in the wording the CLI shares (`describeAudioFacts`); only the facts known are said.
 - `get_project` description: the summary also lists whether a track is muted or hidden and whether a clip is disabled, as the app's summary now shows (a mechanical accuracy edit).
 - `list_templates` accepts `kind: "logo"`, as the app does (it was refused before reaching the server).
 - Breaking (hard cutover, no alias): `create_upload` and `complete_upload` replace `create_media_upload` and

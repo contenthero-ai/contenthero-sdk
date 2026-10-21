@@ -1650,6 +1650,34 @@ test('get_media resolves a batch and reports each item with its variation + url'
 })
 
 /**
+ * get_media reports an audio file's recorded facts (the app's batch read carries `audio`, 2026-10-22), in the one
+ * wording the CLI and the single read share. Facts are said only when known, and an item without any has no audio line.
+ */
+test('get_media prints an audio item\'s recorded facts, only the ones known, and nothing when none are', async () => {
+  const mcp = await connect(
+    fakeClient({
+      getMediaBatch: async (items) => ({
+        items: [
+          { ok: true, input: items[0], url: 'https://cdn/a.mp3', type: 'audio', mediaId: 'Aud00001', otherMediaIds: [], durationSeconds: 30,
+            audio: { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30, derivedBitrateKbps: 128 } },
+          { ok: true, input: items[1], url: 'https://cdn/b.wav', type: 'audio', mediaId: 'Aud00002', otherMediaIds: [],
+            audio: { sizeBytes: 1000, mimeType: 'audio/wav' } },
+          { ok: true, input: items[2], url: 'https://cdn/c.mp3', type: 'audio', mediaId: 'Aud00003', otherMediaIds: [] },
+        ],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'Aud00001' }, { mediaId: 'Aud00002' }, { mediaId: 'Aud00003' }] } })
+  assert.ok(!res.isError)
+  const text = res.content.map((c) => c.text ?? '').join('\n')
+  const blocks = text.split(/\n(?=\[\d+\] )/)
+  assert.match(blocks[1], /\n    audio: audio\/mpeg, .*30\.00s, 128 kbps mean \(derived from size and duration\)/)
+  assert.match(blocks[2], /\n    audio: audio\/wav, /)
+  assert.doesNotMatch(blocks[2], /kbps/)
+  assert.doesNotMatch(blocks[3], /\n    audio: /)
+})
+
+/**
  * get_media reads no clip frames: its items take no window, a video's keyframes are not shown even if a server sent
  * them, and its description points a clip to view. Break-verified: restoring the `frames` and `fromSec` fields on the
  * mediaId item schema turns the first assertion red (zod strips an unknown key, so the server never sees them);

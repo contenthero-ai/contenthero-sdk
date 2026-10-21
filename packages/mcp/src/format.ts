@@ -138,7 +138,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1379,13 +1379,16 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   // dimensions, so it carried no measured facts at all, and `edit_audio` requires a durationSeconds to price
   // the job. The only way to call it correctly was to download the file and probe it.
   const dur = it.durationSeconds != null ? `\n    duration: ${it.durationSeconds.toFixed(2)}s` : ''
+  // The recorded facts of an audio file, in the one wording the CLI and the single read share (`describeAudioFacts`).
+  const audioFacts = describeAudioFacts(it.audio)
+  const audio = audioFacts ? `\n    audio: ${audioFacts}` : ''
   // THE ZOOM (7.50): what was cut, and how its pixels map back to the file, in the one wording a view clip shares.
   const cut = describeCrop(it.crop, it.cropError)
   const zoom = cut ? `\n    ${cut}` : ''
   // What it was made FROM, labeled as Studio labels it, so "make another like this" can pass the same inputs back.
   const refs = describeReferences(it.references)
   const madeFrom = refs.length > 0 ? `\n    made from:${refs.map((r) => `\n      ${r}`).join('')}` : ''
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${zoom}${prompt}${madeFrom}${note}`
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${audio}${zoom}${prompt}${madeFrom}${note}`
 }
 
 /**

@@ -1949,6 +1949,11 @@ export interface ResolvedMediaBatchItem {
    */
   durationSeconds?: number
   /**
+   * The recorded facts of an audio file, the same object `MediaVariation.audio` carries (size, container, duration and a
+   * derived mean bitrate), each present only when known. Absent for anything but audio. Read it with `describeAudioFacts`.
+   */
+  audio?: AudioFacts
+  /**
    * The asked-for `region`, cut from the original image: `dataUrl` is the crop (`data:image/webp;base64`).
    * `pixelsPerSourcePixel` is 1 at full detail, less when the region was too large to return whole: a source point x
    * lies at (x - region.x) * it.
