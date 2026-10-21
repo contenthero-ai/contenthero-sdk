@@ -405,51 +405,51 @@ test('generateAndWait throws GenerationTimeoutError past the deadline', async ()
   )
 })
 
-test('importMedia waits for the import job and returns the new item', async () => {
+test('import waits for the import job and returns the new item', async () => {
   const { fetch, calls } = stubFetch([
     { status: 202, body: { outputId: 'imp1', status: 'processing', shortId: 'Imp00001', appUrl: 'https://app/media/Imp00001', url: null, alreadyExisted: false } },
     { status: 200, body: asStatus({ outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'processing', contentType: 'image', modelId: 'import', outputs: [], error: null, createdAt: 't', completedAt: null }) },
     { status: 200, body: asStatus({ outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'completed', contentType: 'video', modelId: 'import', outputs: [{ mediaId: 'Imp00001', status: 'succeeded', url: 'https://cdn/a.mp4', appUrl: 'https://app/media/Imp00001' }], error: null, createdAt: 't', completedAt: 't2' }) },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
-  const m = await client.importMedia({ url: 'https://example.com/a.mp4' }, { pollIntervalMs: 1 })
+  const m = await client.import({ url: 'https://example.com/a.mp4' }, { pollIntervalMs: 1 })
   assert.deepEqual(m, { outputId: 'imp1', url: 'https://cdn/a.mp4', appUrl: 'https://app/media/Imp00001', shortId: 'Imp00001', alreadyExisted: false, contentType: 'video' })
   assert.ok(calls[0].url.endsWith('/api/v1/media/imports'))
   assert.ok(calls[1].url.endsWith('/api/v1/status/imp1?kind=output'))
 })
 
-test('importMedia: an import whose bytes were already there settles abandoned and names the item holding them', async () => {
+test('import: an import whose bytes were already there settles abandoned and names the item holding them', async () => {
   const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'imp2', status: 'processing', shortId: 'Imp00002', appUrl: 'https://app/media/Imp00002', url: null, alreadyExisted: false } },
     { status: 200, body: asStatus({ outputId: 'imp2', appUrl: 'https://app/media/Imp00002', status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputs: [], error: null, alreadyExisted: dup, createdAt: 't', completedAt: null }) },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
-  const m = await client.importMedia({ url: 'https://example.com/old.png' }, { pollIntervalMs: 1 })
+  const m = await client.import({ url: 'https://example.com/old.png' }, { pollIntervalMs: 1 })
   assert.deepEqual(m, {
     outputId: 'old1', url: 'https://cdn/old.png', appUrl: 'https://app/media/Old00001', shortId: 'Old00001', alreadyExisted: true,
     existing: { objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' },
   })
 })
 
-test('importMedia: a refused url fails, and an unfinished one times out carrying its outputId', async () => {
+test('import: a refused url fails, and an unfinished one times out carrying its outputId', async () => {
   const started = { status: 202, body: { outputId: 'imp3', status: 'processing', shortId: 'Imp00003', appUrl: 'a', url: null, alreadyExisted: false } }
   const failed = stubFetch([started, { status: 200, body: asStatus({ outputId: 'imp3', status: 'failed', contentType: 'image', modelId: 'import', outputs: [], error: 'Import failed: not a public address', createdAt: 't', completedAt: 't2' }) }])
   await assert.rejects(
-    () => new ContentHero({ apiKey: 'ch_live_test', fetch: failed.fetch }).importMedia({ url: 'https://x' }, { pollIntervalMs: 1 }),
+    () => new ContentHero({ apiKey: 'ch_live_test', fetch: failed.fetch }).import({ url: 'https://x' }, { pollIntervalMs: 1 }),
     (err: unknown) => err instanceof GenerationFailedError && /public address/.test(err.message),
   )
   const slow = stubFetch([started, { status: 200, body: asStatus({ outputId: 'imp3', status: 'processing', contentType: 'image', modelId: 'import', outputs: [], error: null, createdAt: 't', completedAt: null }) }])
   await assert.rejects(
-    () => new ContentHero({ apiKey: 'ch_live_test', fetch: slow.fetch }).importMedia({ url: 'https://x' }, { pollIntervalMs: 1, timeoutMs: 0 }),
+    () => new ContentHero({ apiKey: 'ch_live_test', fetch: slow.fetch }).import({ url: 'https://x' }, { pollIntervalMs: 1, timeoutMs: 0 }),
     (err: unknown) => err instanceof GenerationTimeoutError && err.outputId === 'imp3',
   )
 })
 
-test('importMedia returns an older server\'s finished answer as is', async () => {
+test('import returns an older server\'s finished answer as is', async () => {
   const finished = { outputId: 'imp4', url: 'https://cdn/b.png', appUrl: 'a', shortId: 'Imp00004', alreadyExisted: false, contentType: 'image' }
   const { fetch, calls } = stubFetch([{ status: 200, body: finished }])
-  assert.deepEqual(await new ContentHero({ apiKey: 'ch_live_test', fetch }).importMedia({ url: 'https://x' }), finished)
+  assert.deepEqual(await new ContentHero({ apiKey: 'ch_live_test', fetch }).import({ url: 'https://x' }), finished)
   assert.equal(calls.length, 1)
 })
 
@@ -1079,62 +1079,6 @@ test('pendingOutputId marks resumable errors and only those', () => {
   // Terminal: the generation failed, so resuming is wrong and retrying is the caller's call.
   assert.equal(pendingOutputId(new GenerationFailedError('c', 'nope')), undefined)
   assert.equal(pendingOutputId(new Error('unrelated')), undefined)
-})
-
-// ── uploadMedia sends the headers the SERVER dictates ─────────────────────────────────────────────────
-//
-// The PUT goes straight to object storage. While that was Supabase, `Content-Type` alone sufficed. R2 signs
-// the owner into the presigned URL as `x-amz-meta-user_id`, and a PUT missing it is refused with
-// SignatureDoesNotMatch (verified against real R2: 403 with Content-Type alone, 200 with both). So the client
-// must send what it is told rather than what it assumes, or every CLI and MCP upload breaks at the cutover.
-
-test('uploadMedia sends the uploadHeaders the API returned', async () => {
-  const { fetch, calls } = stubFetch([
-    {
-      status: 201,
-      body: {
-        outputId: 'out_1',
-        uploadUrl: 'https://store.example/put',
-        uploadHeaders: { 'Content-Type': 'image/png', 'x-amz-meta-user_id': 'user_9' },
-        storagePath: 'asset_1/original.png',
-        expiresAt: '2026-01-01T00:00:00Z',
-      },
-    },
-    { status: 200, body: {} },
-    { status: 200, body: { outputId: 'out_1', url: 'https://media.example/asset_1/original.png' } },
-  ])
-  const ch = new ContentHero({ apiKey: 'k', fetch })
-  await ch.uploadMedia(new Blob([new Uint8Array([1, 2, 3])]), {
-    fileName: 'a.png',
-    contentType: 'image/png',
-  })
-
-  const put = calls.find((c) => c.url === 'https://store.example/put')
-  assert.ok(put, 'the PUT went to the URL the server gave')
-  assert.deepEqual(put?.init?.headers, { 'Content-Type': 'image/png', 'x-amz-meta-user_id': 'user_9' })
-})
-
-test('uploadMedia falls back to Content-Type when the API omits uploadHeaders', async () => {
-  // An older API deployment returns no uploadHeaders. The two must be deployable in either order, so the
-  // client keeps working rather than sending `undefined` headers and failing on a store that needs none.
-  const { fetch, calls } = stubFetch([
-    {
-      status: 201,
-      body: {
-        outputId: 'out_2',
-        uploadUrl: 'https://store.example/put2',
-        storagePath: 'legacy/path.png',
-        expiresAt: '2026-01-01T00:00:00Z',
-      },
-    },
-    { status: 200, body: {} },
-    { status: 200, body: { outputId: 'out_2', url: 'https://media.example/legacy/path.png' } },
-  ])
-  const ch = new ContentHero({ apiKey: 'k', fetch })
-  await ch.uploadMedia(new Blob([new Uint8Array([1])]), { fileName: 'b.png', contentType: 'image/png' })
-
-  const put = calls.find((c) => c.url === 'https://store.example/put2')
-  assert.deepEqual(put?.init?.headers, { 'Content-Type': 'image/png' })
 })
 
 /**

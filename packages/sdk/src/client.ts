@@ -15,6 +15,7 @@ import {
   GenerationTimeoutError,
   type SubmittedJob,
 } from './errors.js'
+import { readCreateUpload, runUpload } from './upload.js'
 import type {
   Folder,
   FolderContents,
@@ -114,9 +115,13 @@ import type {
   SearchMediaOptions,
   MediaBatchItem,
   MediaBatchResult,
-  CreateMediaUploadInput,
-  CreateMediaUploadResult,
-  ImportMediaInput,
+  AbortUploadResult,
+  CompletedUploadPart,
+  CreateUploadInput,
+  CreateUploadResult,
+  SignedUploadPart,
+  UploadOptions,
+  ImportInput,
   ImportedMedia,
   ImportStarted,
   UploadedMedia,
@@ -1056,77 +1061,83 @@ export class ContentHero {
   // -------------------------------------------------------------------------
 
   /**
-   * Start a presigned upload (phase 1): pre-creates the media row and returns a
-   * signed uploadUrl. PUT the bytes to uploadUrl (with the file's Content-Type),
-   * then call completeMediaUpload(outputId). Prefer uploadMedia() which does all
-   * three steps.
+   * Begin an upload: pre-creates the media row and answers where the bytes go, as `upload`, a target with a `mode`.
+   * `single`: PUT the whole file to its `url` with exactly its `headers`. `multipart`: the file goes in parts of the
+   * stated `partSize` (`partCount` of them), each signed with `signUploadParts`. Then `completeUpload`. Prefer
+   * `upload()`, which does all of it. `sizeBytes` is required: the store chooses the mode from it.
    */
-  async createMediaUpload(input: CreateMediaUploadInput): Promise<CreateMediaUploadResult> {
-    return this.request<CreateMediaUploadResult>('POST', '/api/v1/media/uploads', input)
+  async createUpload(input: CreateUploadInput): Promise<CreateUploadResult> {
+    return readCreateUpload(await this.request<unknown>('POST', '/api/v1/media/uploads', input), input.contentType)
   }
 
-  /** Finalize a presigned upload (phase 2) after the bytes were PUT to uploadUrl. */
-  async completeMediaUpload(outputId: string): Promise<UploadedMedia> {
+  /**
+   * Sign the named parts of a multipart upload (numbered from 1, as many as the server allows in one request).
+   * Idempotent: asking again for a part signs it again, so a slow or paused upload finds no dead URLs and an upload
+   * resumes by asking for the parts it still needs. PUT each part's bytes to its `url` with its `headers`, and keep
+   * the `ETag` header of the store's answer for `completeUpload`.
+   */
+  async signUploadParts(outputId: string, partNumbers: number[]): Promise<SignedUploadPart[]> {
+    const data = await this.request<{ parts: SignedUploadPart[] }>(
+      'POST',
+      `/api/v1/media/uploads/${encodeURIComponent(outputId)}/parts`,
+      { partNumbers },
+    )
+    return data.parts
+  }
+
+  /**
+   * Finish an upload once its bytes were sent. A multipart upload needs `parts`: the number and ETag of every part.
+   * Idempotent: completing twice answers the same media.
+   */
+  async completeUpload(outputId: string, parts?: CompletedUploadPart[]): Promise<UploadedMedia> {
     return this.request<UploadedMedia>(
       'POST',
       `/api/v1/media/uploads/${encodeURIComponent(outputId)}/complete`,
+      parts ? { parts } : undefined,
+    )
+  }
+
+  /** Abandon an upload that has not completed: the server aborts its session and removes the pending media. */
+  async abortUpload(outputId: string): Promise<AbortUploadResult> {
+    return this.request<AbortUploadResult>('DELETE', `/api/v1/media/uploads/${encodeURIComponent(outputId)}`)
+  }
+
+  /**
+   * Upload a file as first-class media in one call, in whichever mode the server chooses: a single PUT, or parts
+   * sent a few at a time, each retried on its own, each signed just before it is sent. Returns the new media
+   * (referenceable by outputId in generations and post assets). `data` is the raw bytes (Blob, Buffer, Uint8Array,
+   * or ArrayBuffer). A failure that cannot be recovered aborts the upload at the server (unless `abortOnFailure` is
+   * false, which keeps it for `resume`). For a remote URL you already have, use `import` instead.
+   */
+  async upload(data: Blob | ArrayBuffer | ArrayBufferView, opts: UploadOptions): Promise<UploadedMedia> {
+    return runUpload(
+      {
+        createUpload: (input) => this.createUpload(input),
+        signUploadParts: (outputId, partNumbers) => this.signUploadParts(outputId, partNumbers),
+        completeUpload: (outputId, parts) => this.completeUpload(outputId, parts),
+        abortUpload: (outputId) => this.abortUpload(outputId),
+        put: (url, headers, body, signal) => this.putToStore(url, headers, body, signal),
+        failed: () => this.notifyResponse({ type: 'failed' }),
+      },
+      data,
+      opts,
     )
   }
 
   /**
-   * Upload a file as first-class media in one call: create -> PUT the bytes to the
-   * signed URL -> complete. Returns the new media (referenceable by outputId in
-   * generations and post assets). `data` is the raw bytes (Blob, Buffer, Uint8Array,
-   * or ArrayBuffer). For a remote URL you already have, use importMedia instead.
+   * PUT bytes to the store with exactly the headers the server gave. The PUT goes straight to object storage, not
+   * our API, so it is a bare fetch with none of our auth headers. The server dictates the headers rather than this
+   * client assuming them: the presigned URL signs the owner in, and a PUT missing a header it signed is refused with
+   * SignatureDoesNotMatch. Its failure is reported through `upload`, never mistaken for this client misreading an
+   * answer.
    */
-  async uploadMedia(
-    data: Blob | ArrayBuffer | ArrayBufferView,
-    opts: { fileName: string; contentType: string },
-  ): Promise<UploadedMedia> {
-    const sizeBytes =
-      data instanceof Blob
-        ? data.size
-        : data instanceof ArrayBuffer
-          ? data.byteLength
-          : data.byteLength
-    const created = await this.createMediaUpload({
-      fileName: opts.fileName,
-      contentType: opts.contentType,
-      sizeBytes,
-    })
-    // The PUT goes straight to object storage (not our API), so it uses a bare
-    // fetch with none of our auth headers.
-    //
-    // The headers come from the SERVER rather than being assumed here. Storage
-    // used to be Supabase, where Content-Type alone is enough; it is moving to
-    // R2, where the presigned URL signs the owner in as `x-amz-meta-user_id` and
-    // a PUT missing it is rejected with SignatureDoesNotMatch (verified: 403
-    // with Content-Type alone, 200 with both). Letting the server say what to
-    // send means this client never has to know which store it is talking to,
-    // and the migration needs no coordinated release of it.
-    //
-    // Falls back to Content-Type so an older API that does not return
-    // uploadHeaders keeps working, which is what makes the two deployable in
-    // either order.
-    // The PUT goes to storage, not through `request`, so its failure is reported to response listeners here: a failed
-    // upload is never mistaken for this client misreading an answer.
-    let put: Response
-    try {
-      put = await this.fetchImpl(created.uploadUrl, {
-        method: 'PUT',
-        headers: created.uploadHeaders ?? { 'Content-Type': opts.contentType },
-        body: data as BodyInit,
-      })
-    } catch (err) {
-      this.notifyResponse({ type: 'failed' })
-      throw err
-    }
+  private async putToStore(url: string, headers: Record<string, string>, body: BodyInit, signal?: AbortSignal): Promise<Response> {
+    const put = await this.fetchImpl(url, { method: 'PUT', headers, body, ...(signal ? { signal } : {}) })
     if (!put.ok) {
-      this.notifyResponse({ type: 'failed' })
       const detail = await put.text().catch(() => '')
       throw new ContentHeroError(`Upload PUT failed (HTTP ${put.status})${detail ? `: ${detail}` : ''}`, { status: put.status })
     }
-    return this.completeMediaUpload(created.outputId)
+    return put
   }
 
   /**
@@ -1145,7 +1156,7 @@ export class ContentHero {
    * `GenerationFailedError` when the url cannot be imported (not https, not a public address, not readable media),
    * or `GenerationTimeoutError` carrying the outputId when it has not finished yet: resume with `waitForGeneration`.
    */
-  async importMedia(input: ImportMediaInput, options: WaitOptions = {}): Promise<ImportedMedia> {
+  async import(input: ImportInput, options: WaitOptions = {}): Promise<ImportedMedia> {
     const started = await this.startImport(input)
     // A server from before imports ran as a job answers with the finished result.
     if ((started as { status?: string }).status !== 'processing') return started as unknown as ImportedMedia
@@ -1153,8 +1164,8 @@ export class ContentHero {
     return importedMediaFrom(gen, started.shortId)
   }
 
-  /** Start an import and return at once; follow it with `waitForGeneration` or `getStatus`. See `importMedia`. */
-  async startImport(input: ImportMediaInput): Promise<ImportStarted> {
+  /** Start an import and return at once; follow it with `waitForGeneration` or `getStatus`. See `import`. */
+  async startImport(input: ImportInput): Promise<ImportStarted> {
     return this.request<ImportStarted>('POST', '/api/v1/media/imports', input)
   }
 
@@ -1858,7 +1869,7 @@ export class ContentHero {
   }
 
   /**
-   * The most importing this url may cost, running nothing, as `importMedia` takes it: 0 for a file address. It is
+   * The most importing this url may cost, running nothing, as `import` takes it: 0 for a file address. It is
    * charged for what arrives, never more. A project import (`importProject`) never spends.
    */
   async estimateImportCost(url: string): Promise<CostEstimate> {
@@ -2595,7 +2606,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 /**
  * The finished import a settled generation describes: the new item when it completed, or the one that already held
  * these bytes when it ended `abandoned`. `shortId` is the import's own, from `startImport`, since a generation
- * carries only its link. The one mapping, so `importMedia` and anything reading an import's status agree.
+ * carries only its link. The one mapping, so `import` and anything reading an import's status agree.
  */
 export function importedMediaFrom(gen: Generation, shortId: string | null): ImportedMedia {
   const dup = gen.alreadyExisted

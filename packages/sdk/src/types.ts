@@ -2139,29 +2139,96 @@ export interface FolderItemMove {
   position?: PlacementEnd
 }
 
-/** Fields to start a presigned media upload (phase 1 of uploadMedia). */
-export interface CreateMediaUploadInput {
+/** Fields to begin an upload. The size is required: the store chooses how the file is uploaded from it. */
+export interface CreateUploadInput {
   fileName: string
   contentType: string
-  sizeBytes?: number
+  sizeBytes: number
 }
 
-/** A pending upload: PUT the bytes to uploadUrl, then completeMediaUpload(outputId). */
-export interface CreateMediaUploadResult {
-  outputId: string
-  uploadUrl: string
-  /**
-   * Headers to send with the PUT, exactly as given.
-   *
-   * Optional because an older API deployment does not return it; when absent, send
-   * `Content-Type` alone. Once storage is R2 the presigned URL signs the owner in as
-   * `x-amz-meta-user_id` and a PUT without it is refused, so a client that hardcodes
-   * `Content-Type` breaks. Taking the headers from the server keeps this client
-   * store-agnostic and lets the API and the SDK deploy in either order.
-   */
-  uploadHeaders?: Record<string, string>
-  storagePath: string
+/** One PUT of the whole file to `url`, with exactly these headers. */
+export interface SingleUploadTarget {
+  mode: 'single'
+  url: string
+  headers: Record<string, string>
   expiresAt: string
+}
+
+/**
+ * The file in parts, each signed on request with `signUploadParts`. The part size and the part count come from the
+ * server, never from documentation: part `n` is bytes `(n - 1) * partSize` up to `n * partSize` of the file, the
+ * last part ending at its end.
+ */
+export interface MultipartUploadTarget {
+  mode: 'multipart'
+  partSize: number
+  partCount: number
+  /** When this session stops accepting parts and is cleaned up. */
+  expiresAt: string
+}
+
+/** Where the bytes of an upload go: a temporary write permission, not a media address. */
+export type UploadTarget = SingleUploadTarget | MultipartUploadTarget
+
+/** A begun upload: the output id the finished media will have, and the target its bytes go to. */
+export interface CreateUploadResult {
+  outputId: string
+  upload: UploadTarget
+}
+
+/** One part's upload target: PUT the part's bytes to `url` with exactly these headers, and keep the ETag of the answer. */
+export interface SignedUploadPart {
+  partNumber: number
+  url: string
+  headers: Record<string, string>
+}
+
+/** A part that was uploaded: its number and the ETag header the store answered its PUT with, exactly as received. */
+export interface CompletedUploadPart {
+  partNumber: number
+  etag: string
+}
+
+/** What `abortUpload` answers. */
+export interface AbortUploadResult {
+  aborted: true
+}
+
+/** How far an upload has come, as `upload` reports it. */
+export interface UploadProgress {
+  outputId: string
+  uploadedBytes: number
+  totalBytes: number
+  /** The part that just finished, with its ETag, so a caller can keep what a later `resume` needs. Absent for a single upload. */
+  part?: CompletedUploadPart
+}
+
+/** A begun multipart upload to carry on, with the parts already uploaded. */
+export interface UploadResume extends CreateUploadResult {
+  parts: CompletedUploadPart[]
+}
+
+/** Options of the one-call `upload`. */
+export interface UploadOptions {
+  fileName: string
+  contentType: string
+  /** Heard as the upload begins (0 bytes) and after each part. */
+  onProgress?: (progress: UploadProgress) => void
+  /** Cut the upload; it is then aborted at the server like any other failure. */
+  signal?: AbortSignal
+  /**
+   * Carry on an upload this client began earlier: the answer of `createUpload` and the parts already uploaded. Only
+   * the parts still missing are signed and sent. Pair it with `abortOnFailure: false` on the first run.
+   */
+  resume?: UploadResume
+  /** Abort the session at the server when the upload fails for good (default true). False keeps it, so `resume` can carry on. */
+  abortOnFailure?: boolean
+  /** Parts sent at once (default: the client's own bound). */
+  concurrency?: number
+  /** Tries per part before the upload fails (default: the client's own bound). */
+  attempts?: number
+  /** Wait before a part's first retry, doubled for each one after (default: the client's own bound). */
+  retryDelayMs?: number
 }
 
 /**
@@ -2169,7 +2236,7 @@ export interface CreateMediaUploadResult {
  * imports free, or a supported page address (a YouTube video, an Instagram post), whose video is downloaded into the
  * library: the most it may cost is held and what arrived is charged. Price it first with `estimateImportCost`.
  */
-export interface ImportMediaInput {
+export interface ImportInput {
   url: string
   contentType?: string
   fileName?: string
@@ -2177,7 +2244,7 @@ export interface ImportMediaInput {
 
 /**
  * An import that has been accepted and is running. The server fetches the url in a background job, so the answer
- * arrives through the generation status: `importMedia` waits for it, `startImport` hands this back at once.
+ * arrives through the generation status: `import` waits for it, `startImport` hands this back at once.
  */
 export interface ImportStarted {
   outputId: string
@@ -2221,7 +2288,7 @@ export interface UploadedMedia {
 /**
  * The result of importing a remote URL.
  *
- * ⚠️ Separate from `UploadedMedia` because `outputId` can be NULL here and cannot there. A two-phase upload
+ * ⚠️ Separate from `UploadedMedia` because `outputId` can be NULL here and cannot there. An upload
  * always creates a row; an import may create nothing, because the server dedups on content hash and the same
  * bytes twice give one library item rather than two. Widening `UploadedMedia` instead would force every
  * upload caller to handle a null that its path can never produce.
@@ -2701,8 +2768,8 @@ export interface CardAssetInput {
   /** Keep an existing asset, at this position in the order. */
   id?: string
   /**
-   * Add media in ContentHero by its output id: a generation, a file uploaded from a device (`uploadMedia`), or
-   * one imported from a url (`importMedia`). "<id>-2" is variation 2 of a batch.
+   * Add media in ContentHero by its output id: a generation, a file uploaded from a device (`upload`), or
+   * one imported from a url (`import`). "<id>-2" is variation 2 of a batch.
    */
   outputId?: string
   /** Add a link by its url. Nothing is copied; to keep a copy of a file on the web, import it and add its `outputId`. */

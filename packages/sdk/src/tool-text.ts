@@ -115,3 +115,32 @@ export const STYLE_LIBRARY_PARAMETER_TEXT = {
   modules: 'Modules by name: { code }, { edits } against baseVersion, or null to drop one.',
   fromProject: 'Modules of one project: { projectId, modules, revision }. The revision guards against a project that changed.',
 } as const
+
+/**
+ * The words of the three upload tools, in one place. The MCP registers them from here, and the CLI and any other
+ * surface read them from here too, so the tools cannot describe one operation two ways. Drafted for Taylan's approval
+ * (WORDING-FOR-APPROVAL.md); nothing here states a size or a limit, because the part size and part count come from
+ * the server's answer.
+ */
+export const CREATE_UPLOAD_TEXT =
+  "Begin uploading local files as library media. Takes each file's name, type and size in bytes, and answers for each an upload target, which is a temporary write permission and not a media address. A single target: PUT the whole file to its url with exactly its headers. A multipart target: the file goes in parts of the size it states, each signed with sign_upload_parts; PUT each part to its url and keep the ETag header of the store's answer. Then call complete_upload once for the batch. The finished media is referenced by its outputId in generate_* and on a card via update_card. For a file already at a public address, use import. Requires the library:write scope."
+
+export const SIGN_UPLOAD_PARTS_TEXT =
+  "Sign parts of a multipart upload. Takes the outputId create_upload answered and the numbers of the parts to send, counted from 1. Answers a url and headers for each: PUT that part's bytes to its url with exactly those headers and keep the ETag header of the store's answer. Part n starts at (n - 1) times the part size create_upload stated and is that long, the last part ending where the file ends. Signed when asked and safe to ask again, so a slow or interrupted upload asks only for the parts it still needs. Requires the library:write scope."
+
+export const COMPLETE_UPLOAD_TEXT =
+  "Finish uploads once their bytes were sent. Takes each file's outputId and, for a multipart file, the number and ETag of every part, exactly as the store answered. Finish a batch together, so the person sees it as one card. Publishes each file and answers its outputId and URL. Finishing twice answers the same media. Requires the library:write scope."
+
+/** The upload parameter descriptions, by parameter name. */
+export const UPLOAD_PARAMETER_TEXT = {
+  files: 'The files to upload.',
+  fileName: 'The file name, used for its extension.',
+  contentType: 'The MIME type of the file.',
+  sizeBytes: 'The size of the file in bytes. The store chooses how the file is uploaded from it.',
+  outputId: 'The outputId create_upload answered for the file.',
+  partNumbers: 'The numbers of the parts to sign, counted from 1.',
+  uploads: 'The files to finish.',
+  parts: 'Multipart files only: the number and ETag of every part, exactly as the store answered its PUT.',
+  partNumber: 'The part number, counted from 1.',
+  etag: "The ETag header of the store's answer to the part's PUT, exactly as received.",
+} as const
