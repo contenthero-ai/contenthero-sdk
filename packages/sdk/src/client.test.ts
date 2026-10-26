@@ -20,7 +20,7 @@ import {
 } from './errors.js'
 import type { FetchLike } from './client.js'
 import type { ListProjectsInput } from './types.js'
-import { LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS } from './types.js'
+import { LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS } from './types.js'
 
 /** Build a fetch stub that replays a queue of [status, body] responses and records calls. */
 function stubFetch(
@@ -969,6 +969,19 @@ test('listMedia sends a stock read: its collection and query, and omits them oth
   assert.equal(bare.has('query'), false)
   assert.deepEqual([...MEDIA_STOCK_COLLECTIONS], ['photos', 'videos', 'gifs', 'stickers', 'sounds'])
   assert.ok((MEDIA_LIST_SOURCES as readonly string[]).includes('stock'))
+})
+
+test('listMedia sends orientation for a stock read and omits it otherwise', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { media: [] } },
+    { status: 200, body: { media: [] } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.listMedia({ source: 'stock', collection: 'videos', orientation: 'portrait' })
+  assert.equal(new URL(calls[0]!.url).searchParams.get('orientation'), 'portrait')
+  await client.listMedia({ source: 'stock', collection: 'videos' })
+  assert.equal(new URL(calls[1]!.url).searchParams.has('orientation'), false)
+  assert.deepEqual([...MEDIA_STOCK_ORIENTATIONS], ['landscape', 'portrait', 'square'])
 })
 
 test('getMedia forwards source=stock to the query (P2e)', async () => {

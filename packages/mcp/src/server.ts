@@ -70,6 +70,7 @@ import {
   SORT_ORDERS,
   MEDIA_LIST_SOURCES,
   MEDIA_STOCK_COLLECTIONS,
+  MEDIA_STOCK_ORIENTATIONS,
   MEDIA_LIST_TYPES,
   PLACEMENT_ENDS,
   JOB_KINDS,
@@ -2667,6 +2668,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     "Link each image's small copy instead of the file itself, where the library keeps one: for drawing images small, as code that shows many at once does. Never for downloading or delivering a file, or showing it large.",
   )
 
+  // The one wording for list_media's `orientation` input (a proposal pending the owner's approval).
+  const orientationInput = z
+    .enum(MEDIA_STOCK_ORIENTATIONS)
+    .optional()
+    .describe("Stock photos and videos only. Narrow the results to one shape: 'landscape', 'portrait' or 'square'. Omit it to read every shape.")
+
   // -- list_media -----------------------------------------------------------
   server.registerTool(
     'list_media',
@@ -2688,6 +2695,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .optional()
           .describe("Stock only. Describe what to find. Omit it to read the collection's featured items."),
+        orientation: orientationInput,
         contentType: z
           .array(z.enum(MEDIA_LIST_TYPES))
           .optional()
@@ -2711,6 +2719,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             source: args.source,
             collection: args.collection,
             query: args.query,
+            orientation: args.orientation,
             contentType: args.contentType,
             kind: args.kind,
             favorited: args.favorited,

@@ -6,7 +6,7 @@
  */
 
 export { ContentHero, importedMediaFrom } from './client.js'
-export { LIST_SORTS, TRACKABLE_PLATFORMS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS, KINDS_NAMED_BY_KIND, statusTarget, statusTargetOf, isProjectParts } from './types.js'
+export { LIST_SORTS, TRACKABLE_PLATFORMS, SORT_ORDERS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS, MEDIA_LIST_TYPES, PLACEMENT_ENDS, JOB_KINDS, KINDS_NAMED_BY_KIND, statusTarget, statusTargetOf, isProjectParts } from './types.js'
 export type {
   SortableList,
   SortFieldOf,
@@ -20,6 +20,7 @@ export type {
   MediaSort,
   MediaListSource,
   MediaStockCollection,
+  MediaStockOrientation,
   MediaStockLicense,
   MediaListType,
 } from './types.js'

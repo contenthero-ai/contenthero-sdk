@@ -101,6 +101,15 @@ test('media list --collection and --query carry the approved help text (W3 and W
   assert.equal(help('--query'), "Stock only. Describe what to find. Omit it to read the collection's featured items.")
 })
 
+test('media list --orientation reaches the wire, an unknown value is a usage error, and the help text is the proposed wording', async () => {
+  const r = await run('media', 'list', '--source', 'stock', '--collection', 'photos', '--orientation', 'landscape')
+  assert.equal(r.query.get('orientation'), 'landscape')
+  assert.equal((await run('media', 'list')).query.get('orientation'), null)
+  await assert.rejects(() => run('media', 'list', '--source', 'stock', '--collection', 'photos', '--orientation', 'wide'), /Invalid --orientation "wide"\. Expected one of: landscape, portrait, square\./)
+  const cmd = buildProgram().commands.find((c) => c.name() === 'media')!.commands.find((c) => c.name() === 'list')!
+  assert.equal(cmd.options.find((o) => o.long === '--orientation')?.description, "Stock photos and videos only. Narrow the results to one shape: 'landscape', 'portrait' or 'square'. Omit it to read every shape.")
+})
+
 test('folder update --text re-queries a smart folder', async () => {
   const r = await run('folder', 'update', 'f1', '--text', 'sunsets')
   assert.deepEqual(r.body?.query, { text: 'sunsets' })

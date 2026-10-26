@@ -941,6 +941,7 @@ export class ContentHero {
     if (options.source) q.set('source', options.source)
     if (options.collection) q.set('collection', options.collection)
     if (options.query) q.set('query', options.query)
+    if (options.orientation) q.set('orientation', options.orientation)
     if (options.contentType) {
       const types = Array.isArray(options.contentType) ? options.contentType : [options.contentType]
       q.set('contentType', types.join(','))

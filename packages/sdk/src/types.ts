@@ -1709,6 +1709,10 @@ export type MediaListSource = (typeof MEDIA_LIST_SOURCES)[number]
 export const MEDIA_STOCK_COLLECTIONS = ['photos', 'videos', 'gifs', 'stickers', 'sounds'] as const
 export type MediaStockCollection = (typeof MEDIA_STOCK_COLLECTIONS)[number]
 
+/** The shapes a stock photo or video read can be narrowed to, in its `orientation`. */
+export const MEDIA_STOCK_ORIENTATIONS = ['landscape', 'portrait', 'square'] as const
+export type MediaStockOrientation = (typeof MEDIA_STOCK_ORIENTATIONS)[number]
+
 /** The license a stock item is used under; `attribution` is the credit to show where credit is required. */
 export interface MediaStockLicense {
   clearedForEndUsers: boolean
@@ -2011,6 +2015,8 @@ export interface ListMediaOptions extends PageOptions, SortOptions<MediaSort> {
   collection?: MediaStockCollection
   /** Stock only. Describe what to find. Omit it to read the collection's featured items. */
   query?: string
+  /** Stock photos and videos only. Narrow the results to one shape. Omit it to read every shape. */
+  orientation?: MediaStockOrientation
   /** One type, or several (sent comma-separated). */
   contentType?: MediaListType | MediaListType[]
   /** A listed file exists once its generation completed, so this takes only `completed`. */

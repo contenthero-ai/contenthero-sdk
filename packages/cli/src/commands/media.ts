@@ -1,6 +1,6 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
- *   media list [--source --collection --query --type --kind --status --limit --cursor --small-copies]   media you can place; stock with --source stock
+ *   media list [--source --collection --query --orientation --type --kind --status --limit --cursor --small-copies]   media you can place; stock with --source stock
  *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
  *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
@@ -16,6 +16,7 @@ import {
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
   MEDIA_STOCK_COLLECTIONS,
+  MEDIA_STOCK_ORIENTATIONS,
   describeAudioFacts,
   describeFileSize,
   describeReferences,
@@ -25,6 +26,7 @@ import {
   type MediaListSource,
   type MediaListType,
   type MediaStockCollection,
+  type MediaStockOrientation,
   type MediaSort,
   type MediaSource,
   type MediaListResult,
@@ -60,6 +62,7 @@ export function registerMedia(program: Command): void {
       .option('--source <source>', `which media to read: ${MEDIA_LIST_SOURCES.join(', ')} (default all; stock is the stock catalog, not part of all)`)
       .option('--collection <collection>', "Stock only, and required with it. Which part of the stock catalog to read: 'photos', 'videos', 'gifs', 'stickers' or 'sounds'.")
       .option('--query <query>', "Stock only. Describe what to find. Omit it to read the collection's featured items.")
+      .option('--orientation <orientation>', "Stock photos and videos only. Narrow the results to one shape: 'landscape', 'portrait' or 'square'. Omit it to read every shape.")
       .option('--type <types>', `filter by media type (comma-separated): ${MEDIA_LIST_TYPES.join(', ')}`, toList)
       .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
       .option('--favorite', 'only favorited files')
@@ -79,6 +82,12 @@ export function registerMedia(program: Command): void {
           EXIT.USAGE,
         )
       }
+      if (opts.orientation && !(MEDIA_STOCK_ORIENTATIONS as readonly string[]).includes(opts.orientation as string)) {
+        throw new CliError(
+          `Invalid --orientation "${opts.orientation}". Expected one of: ${MEDIA_STOCK_ORIENTATIONS.join(', ')}.`,
+          EXIT.USAGE,
+        )
+      }
       for (const t of (opts.type as string[] | undefined) ?? []) {
         if (!(MEDIA_LIST_TYPES as readonly string[]).includes(t)) {
           throw new CliError(`Invalid --type "${t}". Expected: ${MEDIA_LIST_TYPES.join(', ')}.`, EXIT.USAGE)
@@ -95,6 +104,7 @@ export function registerMedia(program: Command): void {
         source: opts.source as MediaListSource | undefined,
         collection: opts.collection as MediaStockCollection | undefined,
         query: opts.query as string | undefined,
+        orientation: opts.orientation as MediaStockOrientation | undefined,
         contentType: opts.type as MediaListType[] | undefined,
         kind: opts.kind as Kind | undefined,
         sort: opts.sort as MediaSort | undefined,

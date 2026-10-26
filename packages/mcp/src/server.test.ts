@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, UPLOAD_PARAMETER_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
+import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, UPLOAD_PARAMETER_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -5793,6 +5793,19 @@ test('list_media reads stock: collection and query are inputs, the wording is th
   const search = tools.find((t) => t.name === 'search_media')
   assert.match(search?.description ?? '', /uploads, stock they have used, and brand assets/)
   assert.match(search?.description ?? '', /To browse stock they have not used, call list_media with source stock\./)
+})
+
+test('list_media takes a stock orientation: the enum, the proposed wording, and it is forwarded', async () => {
+  let seen
+  const mcp = await connect(fakeClient({ listMedia: async (o) => ((seen = o), { media: [], nextCursor: null }) }))
+  const { tools } = await mcp.listTools()
+  const tool = tools.find((t) => t.name === 'list_media')
+  const props = (tool?.inputSchema as { properties: Record<string, { enum?: string[]; description?: string }> }).properties
+  assert.deepEqual(props.orientation?.enum, [...MEDIA_STOCK_ORIENTATIONS])
+  assert.equal(props.orientation?.description, "Stock photos and videos only. Narrow the results to one shape: 'landscape', 'portrait' or 'square'. Omit it to read every shape.")
+  await mcp.callTool({ name: 'list_media', arguments: { source: 'stock', collection: 'photos', orientation: 'square' } })
+  assert.deepEqual(JSON.parse(JSON.stringify(seen)), { source: 'stock', collection: 'photos', orientation: 'square' })
+  assert.ok((await mcp.callTool({ name: 'list_media', arguments: { orientation: 'wide' } })).isError, 'an unknown shape is refused')
 })
 
 test('list_media names a library file by its display name when it has one', async () => {
