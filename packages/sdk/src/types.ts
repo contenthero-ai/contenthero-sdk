@@ -1697,12 +1697,24 @@ export const MEDIA_LIST_TYPES = ['image', 'video', 'audio', 'doc', 'other'] as c
 export type MediaListType = (typeof MEDIA_LIST_TYPES)[number]
 
 /**
- * The parts a media listing reads the library's files in: every file (`all`, the default), or one partition of them:
- * `creations` (studio generations), `uploads` (files the user uploaded), `exports` (renders of their projects). Each
- * listed item names the partition it is in, in its `source`.
+ * The parts a media listing reads: every library file (`all`, the default), or one partition of them: `creations`
+ * (studio generations), `uploads` (files the user uploaded), `exports` (renders of their projects); or `stock`, the
+ * stock catalog, which is not the account's files and is never part of `all`. Each listed item names where it is, in
+ * its `source`.
  */
-export const MEDIA_LIST_SOURCES = ['all', 'creations', 'uploads', 'exports'] as const
+export const MEDIA_LIST_SOURCES = ['all', 'creations', 'uploads', 'exports', 'stock'] as const
 export type MediaListSource = (typeof MEDIA_LIST_SOURCES)[number]
+
+/** The parts of the stock catalog a stock read names, in its `collection`. */
+export const MEDIA_STOCK_COLLECTIONS = ['photos', 'videos', 'gifs', 'stickers', 'sounds'] as const
+export type MediaStockCollection = (typeof MEDIA_STOCK_COLLECTIONS)[number]
+
+/** The license a stock item is used under; `attribution` is the credit to show where credit is required. */
+export interface MediaStockLicense {
+  clearedForEndUsers: boolean
+  requiresCredit: boolean
+  attribution?: string
+}
 
 /**
  * Where a media item lives: a listing's partitions, and for a single read `stock` (stock media the user has used)
@@ -1758,12 +1770,13 @@ export interface MediaSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Built from the id alone: the API path on the app host. */
-  appUrl: string
+  /** This item in the app: open it in the browser. Null for a stock item, which has no page of its own. */
+  appUrl: string | null
   type: MediaType
   model: string | null
   prompt: string | null
-  status: string
+  /** A library file's status; null for a stock item, which no generation made. */
+  status: string | null
   createdAt: string | null
   /**
    * THE reference to this item, and the one to pass back anywhere: the short id, plus `-<n>` for output n of a
@@ -1772,16 +1785,21 @@ export interface MediaSummary {
   mediaId: string
   /** This variation's resolved URL (null only in a detail view whose slots have no media yet). */
   url: string | null
-  /** Total variations in the parent generation this variation belongs to (1 for uploads/stock). */
-  generationSize: number
-  /** Whether THIS variation is favorited (studio per-slot; uploads/stock are go-forward, false). */
-  isFavorited: boolean
+  /** Total variations in the parent generation this variation belongs to (1 for uploads); null for a stock item. */
+  generationSize: number | null
+  /** Whether THIS variation is favorited (studio per-slot; uploads are go-forward, false); null for a stock item in a list. */
+  isFavorited: boolean | null
   /** Asset class: 'creation' (default), 'board' (a reference board), or 'look'. */
   kind: string | null
   /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
   boardType: string | null
   /** Which part of the library this item is in; self-describing. */
   source: MediaSource
+  /**
+   * What the item is called, on every item: a library file's display name (null when it has none), a stock item's
+   * description, then its credit line, then its provider label. Never a storage address.
+   */
+  name: string | null
   /** The file's name, which a download saves under: one a person gave, or one made for a creation. */
   fileName: string | null
   /** The file's size in bytes, as the library shows it and the storage meter counts it; listings only. */
@@ -1800,6 +1818,22 @@ export interface MediaSummary {
    * wanted: to download, deliver or show it large.
    */
   smallUrl?: string | null
+  /** Stock only: the part of the stock catalog the item came from. */
+  collection?: MediaStockCollection
+  /** Stock only: `pexels`, `unsplash`, `giphy`, `native` or `remotion`, and the label a person reads. */
+  provider?: string
+  providerLabel?: string
+  /** Stock only: the credited person or account, their page, and the item's page at the provider. */
+  creator?: string | null
+  creatorUrl?: string | null
+  sourcePageUrl?: string | null
+  /** Stock only: the license it is used under; null for an item cached before licenses were kept. */
+  license?: MediaStockLicense | null
+  /** Stock only: a small rendition for showing many at once. */
+  previewUrl?: string | null
+  /** Stock only: pixel size as the provider reports it. */
+  width?: number | null
+  height?: number | null
 }
 
 /**
@@ -1971,8 +2005,12 @@ export interface MediaBatchResult {
 
 /** Options for `listMedia`. */
 export interface ListMediaOptions extends PageOptions, SortOptions<MediaSort> {
-  /** Which part of the library to read; every file when omitted. */
+  /** Which media to read; every library file when omitted. `stock` reads the stock catalog and needs a `collection`. */
   source?: MediaListSource
+  /** Stock only, and required with it. Which part of the stock catalog to read. */
+  collection?: MediaStockCollection
+  /** Stock only. Describe what to find. Omit it to read the collection's featured items. */
+  query?: string
   /** One type, or several (sent comma-separated). */
   contentType?: MediaListType | MediaListType[]
   /** A listed file exists once its generation completed, so this takes only `completed`. */

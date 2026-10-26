@@ -69,6 +69,7 @@ import {
   TRACKABLE_PLATFORMS,
   SORT_ORDERS,
   MEDIA_LIST_SOURCES,
+  MEDIA_STOCK_COLLECTIONS,
   MEDIA_LIST_TYPES,
   PLACEMENT_ENDS,
   JOB_KINDS,
@@ -2673,12 +2674,20 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Media',
       annotations: READ,
       description:
-        "List the library's files: every file the account keeps, or one part of the library with `source`, each item naming the part it is in. Filter by contentType, kind, favorited or archived; order with sort and order; page with limit and cursor. Each item shows its media id, its file name and size, its asset id (the id get_project reports in a clip's source) and its resolved URL inline, so you can reference it directly. Call get_media to SEE an item (image blocks), or view to see a clip's frames.",
+        "List media you can place. With no `source`, or a library source, it reads the account's own files: every file, or one part of the library, each item naming the part it is in. With `source` stock it reads the stock catalog instead: licensed photos, videos, GIFs, stickers and built-in sounds that are not the account's files until used. A stock read names one `collection` and may take a `query`; it comes back in the catalog's own order and does not take the library's filters or sort. Every item shows its media id, its name and its resolved URL. Place an item by its media id. Call get_media to SEE an item (image blocks), or view to see a clip's frames. A stock page can hold fewer items than asked, and repeating a read can return different items; only an absent `nextCursor` means there are no more.",
       inputSchema: {
         source: z
           .enum(MEDIA_LIST_SOURCES)
           .optional()
-          .describe("Which part of the library to read: 'all' (the default, every file), 'creations' (studio generations), 'uploads' (files the user uploaded), or 'exports' (renders of their projects)."),
+          .describe("Which media to read: 'all' (the default, every file the account keeps), 'creations' (studio generations), 'uploads' (files the user uploaded), 'exports' (renders of their projects), or 'stock' (the stock catalog, which is not part of 'all')."),
+        collection: z
+          .enum(MEDIA_STOCK_COLLECTIONS)
+          .optional()
+          .describe("Stock only, and required with it. Which part of the stock catalog to read: 'photos', 'videos', 'gifs', 'stickers' or 'sounds'."),
+        query: z
+          .string()
+          .optional()
+          .describe("Stock only. Describe what to find. Omit it to read the collection's featured items."),
         contentType: z
           .array(z.enum(MEDIA_LIST_TYPES))
           .optional()
@@ -2700,6 +2709,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         return mediaListResult(
           await client.listMedia({
             source: args.source,
+            collection: args.collection,
+            query: args.query,
             contentType: args.contentType,
             kind: args.kind,
             favorited: args.favorited,
@@ -2724,7 +2735,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Search Media',
       annotations: READ,
       description:
-        "Semantically search the account's editable media library (their generated creations, uploads, licensed stock, and brand assets) by describing the content in natural language. Returns matching assets ranked by relevance, each with its media kind, a description, tags, and, for videos, the timestamps of the specific scenes that matched, so a precise moment can be located. Use this to find existing material to place, reference, or build with, rather than generating new media, whenever the user refers to footage, images, audio, or clips they already have. Optionally restrict results to specific media kinds. This searches only the account's own usable library, never inspiration, published posts, or knowledge. Call get_media to SEE a match (image blocks), or view to see a clip's frames.",
+        "Semantically search the account's editable media library (their generated creations, uploads, stock they have used, and brand assets) by describing the content in natural language. Returns matching assets ranked by relevance, each with its media kind, a description, tags, and, for videos, the timestamps of the specific scenes that matched, so a precise moment can be located. Use this to find existing material to place, reference, or build with, rather than generating new media, whenever the user refers to footage, images, audio, or clips they already have. Optionally restrict results to specific media kinds. This searches only the account's own usable library, never inspiration, published posts, or knowledge. To browse stock they have not used, call list_media with source stock. Call get_media to SEE a match (image blocks), or view to see a clip's frames.",
       inputSchema: {
         query: z
           .string()

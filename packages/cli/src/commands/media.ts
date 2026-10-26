@@ -1,6 +1,6 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
- *   media list [--type --kind --status --limit --cursor --small-copies]   recent outputs, newest first
+ *   media list [--source --collection --query --type --kind --status --limit --cursor --small-copies]   media you can place; stock with --source stock
  *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
  *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
@@ -15,6 +15,7 @@ import {
   LIST_SORTS,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
+  MEDIA_STOCK_COLLECTIONS,
   describeAudioFacts,
   describeFileSize,
   describeReferences,
@@ -23,6 +24,7 @@ import {
   type MediaKind,
   type MediaListSource,
   type MediaListType,
+  type MediaStockCollection,
   type MediaSort,
   type MediaSource,
   type MediaListResult,
@@ -54,8 +56,10 @@ export function registerMedia(program: Command): void {
   withSortFlags(withPageFlags(
     media
       .command('list')
-      .description("List the library's files: every file, or one part of the library with --source")
-      .option('--source <source>', `which part of the library: ${MEDIA_LIST_SOURCES.join(', ')} (default all)`)
+      .description("List media you can place: the account's files (every file, or one part of the library), or with --source stock the stock catalog, which comes back in its own order and does not take the library's filters or sort")
+      .option('--source <source>', `which media to read: ${MEDIA_LIST_SOURCES.join(', ')} (default all; stock is the stock catalog, not part of all)`)
+      .option('--collection <collection>', "Stock only, and required with it. Which part of the stock catalog to read: 'photos', 'videos', 'gifs', 'stickers' or 'sounds'.")
+      .option('--query <query>', "Stock only. Describe what to find. Omit it to read the collection's featured items.")
       .option('--type <types>', `filter by media type (comma-separated): ${MEDIA_LIST_TYPES.join(', ')}`, toList)
       .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
       .option('--favorite', 'only favorited files')
@@ -66,6 +70,12 @@ export function registerMedia(program: Command): void {
       if (opts.source && !(MEDIA_LIST_SOURCES as readonly string[]).includes(opts.source as string)) {
         throw new CliError(
           `Invalid --source "${opts.source}". Expected one of: ${MEDIA_LIST_SOURCES.join(', ')}.`,
+          EXIT.USAGE,
+        )
+      }
+      if (opts.collection && !(MEDIA_STOCK_COLLECTIONS as readonly string[]).includes(opts.collection as string)) {
+        throw new CliError(
+          `Invalid --collection "${opts.collection}". Expected one of: ${MEDIA_STOCK_COLLECTIONS.join(', ')}.`,
           EXIT.USAGE,
         )
       }
@@ -83,6 +93,8 @@ export function registerMedia(program: Command): void {
       const { client, ctx } = makeClient(command)
       const page = await client.listMedia({
         source: opts.source as MediaListSource | undefined,
+        collection: opts.collection as MediaStockCollection | undefined,
+        query: opts.query as string | undefined,
         contentType: opts.type as MediaListType[] | undefined,
         kind: opts.kind as Kind | undefined,
         sort: opts.sort as MediaSort | undefined,
@@ -94,8 +106,24 @@ export function registerMedia(program: Command): void {
         smallCopies: opts.smallCopies ? true : undefined,
       })
       // One row per file, each named by its own media id.
-      emit(page, ctx, (p: MediaListResult) =>
-        withMore(
+      emit(page, ctx, (p: MediaListResult) => {
+        // A stock page shows what the item is and who it is credited to; the library's columns do not apply to it.
+        if (p.media.length && p.media.every((m) => m.source === 'stock')) {
+          return withMore(
+            table(
+              ['ID', 'TYPE', 'COLLECTION', 'NAME', 'CREDIT'],
+              p.media.map((m) => [
+                m.mediaId,
+                m.type,
+                m.collection ?? '',
+                clip(m.name, 48),
+                clip(m.license?.attribution ?? (m.creator ? `by ${m.creator}` : m.providerLabel ?? ''), 48),
+              ]),
+            ),
+            p.nextCursor,
+          )
+        }
+        return withMore(
           table(
             ['ID', 'FAV', 'TYPE', 'SOURCE', 'KIND', 'NAME/MODEL', 'SIZE', 'PROMPT'],
             p.media.map((m) => [
@@ -104,14 +132,14 @@ export function registerMedia(program: Command): void {
               m.type,
               m.source,
               m.kind ?? '',
-              clip(m.fileName ?? m.model, 48),
+              clip(m.name ?? m.fileName ?? m.model, 48),
               m.sizeBytes != null ? describeFileSize(m.sizeBytes) : '',
               clip(m.prompt, 48),
             ]),
           ),
           p.nextCursor,
-        ),
-      )
+        )
+      })
     })
 
   withPageFlags(
@@ -193,7 +221,7 @@ export function registerMedia(program: Command): void {
           ['Type', m.type],
           ['Kind', m.kind ?? 'creation'],
           ['Model', m.model ?? ''],
-          ['Status', m.status],
+          ['Status', m.status ?? ''],
           ...(m.prompt ? [['Prompt', clip(m.prompt, 80)] as [string, string]] : []),
           ...costRows(m.charge),
         ])

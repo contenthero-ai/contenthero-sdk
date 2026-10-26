@@ -83,6 +83,24 @@ test('media list, media search and folder get send --small-copies (8.5)', async 
   assert.equal((await run('media', 'list')).query.get('smallCopies'), null)
 })
 
+test('media list --source stock sends its collection and query, and refuses an unknown collection', async () => {
+  const r = await run('media', 'list', '--source', 'stock', '--collection', 'videos', '--query', 'sunrise')
+  assert.equal(r.query.get('source'), 'stock')
+  assert.equal(r.query.get('collection'), 'videos')
+  assert.equal(r.query.get('query'), 'sunrise')
+  const plain = await run('media', 'list')
+  assert.equal(plain.query.get('collection'), null)
+  assert.equal(plain.query.get('query'), null)
+  await assert.rejects(() => run('media', 'list', '--source', 'stock', '--collection', 'nope'), /Invalid --collection/)
+})
+
+test('media list --collection and --query carry the approved help text (W3 and W4)', () => {
+  const cmd = buildProgram().commands.find((c) => c.name() === 'media')!.commands.find((c) => c.name() === 'list')!
+  const help = (flag: string) => cmd.options.find((o) => o.long === flag)?.description
+  assert.equal(help('--collection'), "Stock only, and required with it. Which part of the stock catalog to read: 'photos', 'videos', 'gifs', 'stickers' or 'sounds'.")
+  assert.equal(help('--query'), "Stock only. Describe what to find. Omit it to read the collection's featured items.")
+})
+
 test('folder update --text re-queries a smart folder', async () => {
   const r = await run('folder', 'update', 'f1', '--text', 'sunsets')
   assert.deepEqual(r.body?.query, { text: 'sunsets' })
@@ -345,7 +363,7 @@ test('media list sends the library contract: a source partition, several types, 
 })
 
 test('media list refuses the sources and types the API refuses', async () => {
-  for (const bad of [['--source', 'stock'], ['--source', 'files'], ['--type', 'transcript'], ['--kind', 'upload']]) {
+  for (const bad of [['--source', 'files'], ['--type', 'transcript'], ['--kind', 'upload']]) {
     seen.length = 0
     const failure = await buildProgram()
       .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'media', 'list', ...bad], { from: 'user' })

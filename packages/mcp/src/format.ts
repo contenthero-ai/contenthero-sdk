@@ -1265,13 +1265,30 @@ function listingLink(item: { url: string | null; smallUrl?: string | null }): st
   return item.url ? ` | ${item.url}` : ''
 }
 
-/** A page of the library's files, one row per file, in the order asked for. */
+/**
+ * One stock catalog item: its name, the credit it is used under, and the media id to place it by. A stock item is not
+ * one of the account's files, so it has no generation, favorite state or app page; it prints what a catalog gives.
+ */
+function stockRow(m: MediaListResult['media'][number]): string {
+  const credit = m.license?.attribution ?? (m.creator ? `by ${m.creator}` : m.providerLabel ?? '')
+  const parts = [
+    `- [${m.type}] ${m.name ? clipped(m.name, LISTING_TEXT_MAX) : m.mediaId} (media id ${m.mediaId})`,
+    credit ? `credit: ${clipped(credit, LISTING_TEXT_MAX)}` : '',
+    m.collection ?? '',
+    m.providerLabel ?? '',
+    m.durationSeconds != null ? `${Math.round(m.durationSeconds)}s` : '',
+  ].filter(Boolean)
+  return `${parts.join(' | ')}${listingLink(m)}`
+}
+
+/** A page of media files (the library's, or the stock catalog's), one row per item, in the order asked for. */
 export function mediaListResult(page: MediaListResult): CallToolResult {
   const items = page.media
   if (!items.length) return text('No media found.')
   const rows = items.map((m) => {
+    if (m.source === 'stock') return stockRow(m)
     // A studio generation lists as one row per output, each named by its own media id; say when it has siblings.
-    const varTag = m.generationSize > 1 ? ` | one of ${m.generationSize} outputs` : ''
+    const varTag = m.generationSize != null && m.generationSize > 1 ? ` | one of ${m.generationSize} outputs` : ''
     const favTag = m.isFavorited ? ' [favorite]' : ''
     const promptStr = m.prompt ? ` | ${clipped(m.prompt, LISTING_TEXT_MAX)}` : ''
     const kindTag =
@@ -1280,7 +1297,9 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
         : m.kind && m.kind !== 'creation'
           ? ` | ${m.kind}`
           : ''
-    const nameStr = m.fileName ? ` | ${clipped(m.fileName, LISTING_TEXT_MAX)}` : ''
+    // The display name first when the item has one; the file's own name after it, when it is a different thing.
+    const displayStr = m.name ? ` | ${clipped(m.name, LISTING_TEXT_MAX)}` : ''
+    const nameStr = m.fileName && m.fileName !== m.name ? ` | ${clipped(m.fileName, LISTING_TEXT_MAX)}` : ''
     const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
     const sizeStr = m.sizeBytes != null ? ` | ${describeFileSize(m.sizeBytes)}` : ''
     // The asset id is what get_project reports as a clip's sourceId: printed so an agent can match a clip to the
@@ -1289,7 +1308,7 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = listingLink(m)
-    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${nameStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
+    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${displayStr}${nameStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
   })
   return text(lines([`${items.length} item(s):`, ...rows, moreLine(page.nextCursor)]))
 }

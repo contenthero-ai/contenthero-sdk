@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, UPLOAD_PARAMETER_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
+import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, UPLOAD_PARAMETER_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -5763,8 +5763,42 @@ test('list_media follows the library-file contract: its sources, its types, no s
   const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'exports', contentType: ['video', 'doc'], sort: 'sizeBytes', order: 'desc' } })
   assert.deepEqual(JSON.parse(JSON.stringify(seen)), { source: 'exports', contentType: ['video', 'doc'], sort: 'sizeBytes', order: 'desc' })
   assert.match(res.content[0].text, /cut\.mp4 \| 12s \| 5\.0 MB \| asset as1 \| exports/)
-  assert.ok((await mcp.callTool({ name: 'list_media', arguments: { source: 'stock' } })).isError, 'stock is refused')
   assert.ok((await mcp.callTool({ name: 'list_media', arguments: { contentType: ['transcript'] } })).isError, 'transcript is refused')
+})
+
+test('list_media reads stock: collection and query are inputs, the wording is the approved text, the rows name the item, its credit and the id', async () => {
+  let seen
+  const stockItem = {
+    id: 'stock:pexels:image:123', mediaId: 'stock:pexels:image:123', shortId: '', appUrl: null, type: 'image', model: null, prompt: null,
+    status: null, createdAt: null, url: 'https://images.example.test/a.jpg', generationSize: null, isFavorited: null, kind: null,
+    boardType: null, source: 'stock', name: 'A red car on a street', fileName: null, durationSeconds: null,
+    collection: 'photos', provider: 'pexels', providerLabel: 'Pexels', creator: 'Jo Doe', previewUrl: 'https://images.example.test/s.jpg',
+    license: { clearedForEndUsers: true, requiresCredit: false },
+  }
+  const mcp = await connect(fakeClient({ listMedia: async (o) => ((seen = o), { media: [stockItem], nextCursor: 'n1' }) }))
+  const { tools } = await mcp.listTools()
+  const tool = tools.find((t) => t.name === 'list_media')
+  const props = (tool?.inputSchema as { properties: Record<string, { enum?: string[]; description?: string }> }).properties
+  assert.deepEqual(props.collection?.enum, [...MEDIA_STOCK_COLLECTIONS])
+  assert.equal(props.collection?.description, "Stock only, and required with it. Which part of the stock catalog to read: 'photos', 'videos', 'gifs', 'stickers' or 'sounds'.")
+  assert.equal(props.query?.description, "Stock only. Describe what to find. Omit it to read the collection's featured items.")
+  assert.equal(props.source?.description, "Which media to read: 'all' (the default, every file the account keeps), 'creations' (studio generations), 'uploads' (files the user uploaded), 'exports' (renders of their projects), or 'stock' (the stock catalog, which is not part of 'all').")
+  assert.match(tool?.description ?? '', /^List media you can place\. With no `source`, or a library source, it reads the account's own files/)
+  assert.match(tool?.description ?? '', /only an absent `nextCursor` means there are no more\.$/)
+  const res = await mcp.callTool({ name: 'list_media', arguments: { source: 'stock', collection: 'photos', query: 'red car' } })
+  assert.deepEqual(JSON.parse(JSON.stringify(seen)), { source: 'stock', collection: 'photos', query: 'red car' })
+  const body = res.content[0].text
+  assert.match(body, /A red car on a street \(media id stock:pexels:image:123\) \| credit: by Jo Doe \| photos \| Pexels \| https:\/\/images\.example\.test\/a\.jpg/)
+  assert.ok(!/one of null|\[favorite\]/.test(body))
+  const search = tools.find((t) => t.name === 'search_media')
+  assert.match(search?.description ?? '', /uploads, stock they have used, and brand assets/)
+  assert.match(search?.description ?? '', /To browse stock they have not used, call list_media with source stock\./)
+})
+
+test('list_media names a library file by its display name when it has one', async () => {
+  const mcp = await connect(fakeClient({ listMedia: async () => ({ media: [{ mediaId: 'Up000001', type: 'image', model: null, prompt: null, status: 'completed', source: 'uploads', name: 'Beach day', fileName: 'IMG_1.jpg', isFavorited: false, kind: null, generationSize: 1, url: 'https://media.contenthero.ai/x.jpg', durationSeconds: null }], nextCursor: null }) }))
+  const body = (await mcp.callTool({ name: 'list_media', arguments: {} })).content[0].text
+  assert.match(body, /Beach day \| IMG_1\.jpg/)
 })
 
 test('update_stage answers with the stage and no position, since the API carries none', async () => {

@@ -933,11 +933,14 @@ export class ContentHero {
 
   /**
    * List the library's files (the list half of the list+get pair), sorted by `sort` and `order`, a page at a time.
-   * Every file by default; `source` reads one part of the library.
+   * Every file by default; `source` reads one part of the library, or `stock` the stock catalog (with a `collection`
+   * and optionally a `query`).
    */
   async listMedia(options: ListMediaOptions = {}): Promise<MediaListResult> {
     const q = new URLSearchParams()
     if (options.source) q.set('source', options.source)
+    if (options.collection) q.set('collection', options.collection)
+    if (options.query) q.set('query', options.query)
     if (options.contentType) {
       const types = Array.isArray(options.contentType) ? options.contentType : [options.contentType]
       q.set('contentType', types.join(','))
