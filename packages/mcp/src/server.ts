@@ -31,7 +31,8 @@
  * fields, and per-tool modelId enums prevent cross-type model misuse.
  */
 
-import type { Implementation } from '@modelcontextprotocol/sdk/types.js'
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, Implementation, Tool, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 /**
  * ⚠️⚠️ **THE CONSTANTS ONLY, NOT THE `./server` HELPERS, AND THAT IS DELIBERATE.**
@@ -46,7 +47,6 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
  * spec has a single source. Migrating to the split SDK is its own piece of work, not a prerequisite for this.
  */
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
-import { z } from 'zod'
 import {
   ContentHero,
   GenerationTimeoutError,
@@ -65,36 +65,14 @@ import {
   type MediaShare,
   type Generation,
   type GenerateResult,
-  LIST_SORTS,
-  TRACKABLE_PLATFORMS,
-  SORT_ORDERS,
-  MEDIA_LIST_SOURCES,
-  MEDIA_STOCK_COLLECTIONS,
-  MEDIA_STOCK_ORIENTATIONS,
-  MEDIA_LIST_TYPES,
-  PLACEMENT_ENDS,
-  JOB_KINDS,
-  type SortableList,
   contentVideosPending,
-  viewDescription,
-  VIEW_PICTURE_INPUT_TEXT,
-  getProjectDescription,
-  updateTimelineDescription,
-  updateCanvasDescription,
-  EXPECTED_REVISION_CONTRACT,
-  EXPECTED_REVISION_FIELD,
-  EXPECTED_REVISION_PROJECT_NOTE,
-  LIST_STYLE_LIBRARIES_TEXT,
-  CREATE_UPLOAD_TEXT,
-  SIGN_UPLOAD_PARTS_TEXT,
-  COMPLETE_UPLOAD_TEXT,
-  UPLOAD_PARAMETER_TEXT,
-  GET_STYLE_LIBRARY_TEXT,
-  CREATE_STYLE_LIBRARY_TEXT,
-  UPDATE_STYLE_LIBRARY_TEXT,
-  STYLE_LIBRARY_PARAMETER_TEXT,
+  toolDescription,
+  toolInputSchema,
+  type ContractToolName,
+  type ToolInput,
 } from '@contenthero/sdk'
 import { getClient as defaultGetClient } from './client.js'
+import { contractInput } from './contract-input.js'
 import { observeClient, runToolCall } from './answer-capture.js'
 
 
@@ -110,7 +88,6 @@ import { GENERATION_WIDGET_HTML, PACKAGE_VERSION } from './widget/generation.js'
 export { GENERATION_WIDGET_URI, MEDIA_HOST } from './widget-resource.js'
 import { GENERATION_WIDGET_URI, MEDIA_HOST, WIDGET_RESOURCE_META } from './widget-resource.js'
 import {
-  assetResult,
   audioResult,
   avatarListResult,
   avatarResult,
@@ -130,7 +107,6 @@ import {
   connectedAccountListResult,
   connectedAccountResult,
   costResult,
-  postResult,
   trackedAccountDetailResult,
   trackedAccountsAddedResult,
   trackedAccountRemovedResult,
@@ -153,9 +129,6 @@ import {
   contentVideoResult,
   uploadedMediaBatchResult,
   type UploadedMediaOutcome,
-  assetOrderResult,
-  assetRemovedResult,
-  postRemovedResult,
   tagListResult,
   tagResult,
   tagDeletedResult,
@@ -228,18 +201,6 @@ import {
   voiceResult,
 } from './format.js'
 
-/** Platforms a card or one of its posts may target. */
-const POST_PLATFORMS = [
-  'youtube',
-  'instagram',
-  'tiktok',
-  'facebook',
-  'linkedin',
-  'x',
-  'threads',
-  'general',
-] as const
-
 /**
  * How long get_status waits before handing back what
  * it has, and the deadline its whole call keeps, inline bytes included.
@@ -253,16 +214,6 @@ const POST_PLATFORMS = [
  */
 const WAIT_MS = 40_000
 const CALL_DEADLINE_MS = 45_000
-
-/** get_media's zoom: a rectangle in the file's own pixels (7.50). */
-const REGION_SCHEMA = z
-  .object({
-    x: z.number(),
-    y: z.number(),
-    width: z.number().positive(),
-    height: z.number().positive(),
-  })
-  .describe("Zoom: the part of an image to cut out, in its own pixels (an item's geometry gives its size). Cut from the original and returned at its own detail, never enlarged; clamped to the file.")
 
 /**
  * The one item a favorite or archive names: a media item by its `mediaId`, anything else by `assetType` + `id`. The
@@ -337,57 +288,6 @@ function pendingShapeFrom(
   }
 }
 
-/**
- * Tool annotations drive how MCP clients group the surface. readOnlyHint=true
- * tools list under "Read-only"; the rest list under "Interactive". publish is
- * also flagged destructive (it pushes content to public social accounts).
- */
-/**
- * The paging inputs every paged listing takes (9.7b), in one wording: how many, and the cursor a page's last line
- * hands back (`moreLine`). The server owns the default; `max` refuses here what the server would refuse.
- */
-function pageInput(max = 100) {
-  return {
-    limit: z.number().int().min(1).max(max).optional().describe('How many to return.'),
-    cursor: z.string().optional().describe("The previous page's cursor."),
-  }
-}
-
-/**
- * The sort inputs every sortable listing takes (9.9), in one wording: a field of that list, as the API declares it
- * (`LIST_SORTS`), and a direction. The server owns the default and refuses a field the list does not have.
- */
-function sortInput<L extends SortableList>(list: L) {
-  return {
-    sort: z.enum(LIST_SORTS[list] as (typeof LIST_SORTS)[L]).optional().describe('The field to sort by.'),
-    order: z.enum(SORT_ORDERS).optional().describe('The sort direction.'),
-  }
-}
-
-/**
- * The placement inputs every hand-arranged list takes (9.9, the ordering contract), in one wording: the item it lands
- * after or before, or an end. Never a number: the server places it from the neighbors as they are, and refuses
- * neighbors and an end together.
- */
-function placementInput() {
-  return {
-    afterId: z.string().optional().describe('Place it immediately after this item of the same list.'),
-    beforeId: z.string().optional().describe('Place it immediately before this item of the same list.'),
-    position: z.enum(PLACEMENT_ENDS).optional().describe('Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.'),
-  }
-}
-
-/**
- * A delivery loudness, in one wording for the project's setting and an export's own: a target integrated loudness in
- * LUFS, or 'off'. The server owns the range it accepts and states it when it refuses a number, so none is restated here.
- */
-function loudnessInput() {
-  return z.union([
-    z.number().describe('A target integrated loudness, in LUFS. The server refuses one outside the range it accepts, and its refusal states that range.'),
-    z.literal('off').describe('Off: the mix plays and exports as it was mixed.'),
-  ])
-}
-
 const READ = { readOnlyHint: true } as const
 const WRITE = { readOnlyHint: false } as const
 
@@ -434,60 +334,6 @@ export function importSourceOf(args: {
   if (named[0] === 'pptxUrl') return { kind: 'project', source: { type: 'pptx', fileUrl: (args.pptxUrl as string).trim() } }
   return { kind: 'project', source: { type: 'canva', designId: (args.canvaDesignId as string).trim() } }
 }
-
-/**
- * Placement intent for the generative tools' optional one-call timeline placement. Mirrors the SDK
- * `PlacementIntent` union. All positional fields are in SECONDS (resolved to frames server-side via the
- * project fps). Shared across the generative tools as they gain `projectId` placement.
- */
-const TRACK_SELECTOR_DESC =
-  "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track."
-const TIMELINE_PLACEMENT_SCHEMA = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('append') }).describe('Land after the last clip on the best track of the clip\'s kind, or a new track.'),
-  z.object({ mode: z.literal('at'), startSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC), durationSeconds: z.number().optional().describe('For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio, whose length is the asset\'s own.') }).describe('Land at an explicit time; optionally choose the track.'),
-  z.object({ mode: z.literal('atPlayhead'), durationSeconds: z.number().optional().describe('For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio.') }).describe('Land at the current playhead.'),
-  z.object({ mode: z.literal('replace'), itemId: z.string(), duration: z.enum(['natural', 'match']).optional() }).describe('Swap in place for an existing clip; the new clip inherits its track + start.'),
-  z.object({ mode: z.literal('range'), startSeconds: z.number().optional(), endSeconds: z.number().optional(), track: z.string().optional().describe(TRACK_SELECTOR_DESC), fit: z.enum(['cover', 'trim', 'overwrite']).optional() }).describe('Fill or cover a time span; optionally choose the track.'),
-])
-
-/**
- * CANVAS placement (6A A8): places the generated asset as a LAYER on a slide. Flat (no mode); the server reads it
- * only for a canvas-design project. All fields optional. Positions/sizes are design pixels; the response returns
- * the created layerId + resolvedSlideId so you can chain further ops (animate / reposition / reorder).
- */
-const CANVAS_PLACEMENT_SCHEMA = z.object({
-  slideId: z.string().optional().describe('The target slide. Omitted, the asset is placed on the slide the user is currently focused on (the one centered in their viewport, the same focused slide view reports), falling back to the first slide when no view is active.'),
-  slideIndex: z.number().int().min(1).optional().describe('1-based slide number, an alternative to slideId.'),
-  fit: z.enum(['contain', 'cover', 'none']).optional().describe("How the asset is sized to the slide: 'contain' (default) scales to fit inside it, 'cover' fills it edge to edge, 'none' uses a default box. Overridden by explicit width/height."),
-  anchor: z.enum(['center', 'top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']).optional().describe('A nine-point anchor positioning the layer relative to the slide (default center).'),
-  x: z.number().optional().describe('Fine position offset in design pixels from the anchor (from slide center when no anchor is given).'),
-  y: z.number().optional().describe('Fine position offset in design pixels from the anchor.'),
-  width: z.number().optional().describe('Explicit layer width in design pixels; the precise escape hatch that overrides fit.'),
-  height: z.number().optional().describe('Explicit layer height in design pixels; overrides fit.'),
-  asBackground: z.boolean().optional().describe("Make the generated asset the slide's BACKGROUND rather than a free layer: placed full-bleed and promoted into the background slot once it lands. Ignores anchor / x / y / width / height (a background fills the slide)."),
-}).describe('Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).')
-
-const PLACEMENT_SCHEMA = z.union([TIMELINE_PLACEMENT_SCHEMA, CANVAS_PLACEMENT_SCHEMA])
-
-/** The optional one-call placement input fields, shared across the generative tools that gain projectId. */
-const PLACEMENT_INPUT_FIELDS = {
-  projectId: z.string().optional().describe('The project to place the result on. Omit for a standalone library output. The server interprets placement against the project\'s type (video timeline or canvas design).'),
-  placement: PLACEMENT_SCHEMA.optional().describe('Where the asset lands, interpreted against the project\'s type. VIDEO TIMELINE: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range (omitted places it at the playhead when known, else appends). CANVAS DESIGN: a layer on a slide (slideId / slideIndex, default the focused slide; fit contain|cover|none; a nine-point anchor; and design-pixel x/y/width/height).'),
-  playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative timeline placement.'),
-} as const
-
-/**
- * One Kling element in generate_video, shared by `klingElements` and its deprecated alias `elements`. Both names, and
- * `elementId` inside an item, ride to the server unchanged: its one reader resolves them (the new name wins), so the
- * precedence rule is not restated here.
- */
-const KLING_ELEMENT_INPUT = z.object({
-  klingElementId: z.string().optional().describe('Reference a saved Kling element by id (from list_kling_elements / create_kling_element). Resolves to its name + images.'),
-  elementId: z.string().optional().describe('Deprecated alias for `klingElementId`, accepted for one release window.'),
-  name: z.string().optional().describe('Inline Kling element: reference it in the prompt as @name.'),
-  description: z.string().optional().describe('Inline Kling element: what it represents.'),
-  images: z.array(z.string()).optional().describe('Inline Kling element: image URLs or previous output ids.'),
-})
 
 /**
  * Fetch a view snapshot signed URL and base64-encode it, so view can return an IMAGE content
@@ -1150,12 +996,6 @@ function buildReferences(parts: References): References | undefined {
 }
 
 /**
- * How many files one `create_upload` or `complete_upload` takes. Each file is its own request to the
- * server, run concurrently, so this bounds one call's fan-out; a larger set is several calls.
- */
-const MEDIA_UPLOAD_BATCH_MAX = 25
-
-/**
  * Register the full ContentHero tool surface on `server`. Synchronous and model-free: the registry names the models,
  * read through list_models and get_model, and the backend client is resolved per call.
  */
@@ -1279,176 +1119,49 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  const rawRegisterTool = server.registerTool.bind(server)
-  server.registerTool = ((name: string, config: Record<string, unknown>, cb: unknown) => {
-    const shape = config.inputSchema
-    // A tool with no inputs, or one that already passed a built schema, is left exactly as it was.
-    const strict =
-      shape && typeof shape === 'object' && !(shape instanceof z.ZodType)
-        ? z.object(shape as z.ZodRawShape).strict()
-        : shape
-    // THE MCP-WIDE NET FOR A CONNECTOR OLDER THAN THE SERVER. Each call runs in its own answer slot (`answer-capture`),
-    // and a fault no tool caught goes through `errorResult` like the ones they do, so a formatting fault after the
-    // server answered hands that answer over on every tool, including the ones written after this line.
-    const inCall =
-      typeof cb === 'function'
-        ? (...args: unknown[]) =>
-            runToolCall(async () => {
-              try {
-                return await (cb as (...a: unknown[]) => unknown)(...args)
-              } catch (err) {
-                return errorResult(err)
-              }
-            })
-        : cb
-    return rawRegisterTool(name, { ...config, inputSchema: strict } as never, inCall as never)
-  }) as typeof server.registerTool
-
   /**
-   * ⚠️ THESE SHAPES ARE DECLARED, NOT LEFT AS `z.unknown()`. An array of unknown serializes to
-   * `{"type":"array","items":{}}`, which tells a client NOTHING about what may go inside it. The server
-   * accepted every shape when called directly, and Claude Desktop rejected all of them before they left,
-   * because a validator cannot check a value against an empty schema and a model cannot pattern an argument
-   * on one either. Measured 2026-08-23: 12 fields across 4 tools were advertised that way.
+   * THE ONE WAY A TOOL IS REGISTERED. A tool's name, its description and its input come from the agent contract the app
+   * declares (`@contenthero/sdk`'s `AGENT_CONTRACT`), so this file holds only what the contract does not: a tool's title,
+   * its annotations, its widget metadata and its handler. A name the contract does not declare does not typecheck, and
+   * the handler's `args` are typed by the contract's input for that name.
    *
-   * Every entry below stays permissive at the EDGES (optional fields, free-form payload objects) because the
-   * server does the real validation. The point is to describe the shape, not to duplicate the rules.
+   * Every input is strict: a parameter the contract does not declare is a 400, never a silent drop (zod strips unknown
+   * keys by default, which once let `update_card` report success for an `ops` it never wrote). The contract declares each
+   * input as a strict object; a nested object that takes a varied payload says so in the contract, not here.
+   *
+   * Each call runs in its own answer slot (`answer-capture`), and a fault no tool caught goes through `errorResult` like
+   * the ones they do, so a formatting fault after the server answered hands that answer over on every tool.
    */
-  const logoEntrySchema = z.object({
-    url: z.string().optional().describe('A url the kit already has.'),
-    outputId: z.string().optional().describe('A generation to copy in: "<id>", or "<id>-2" for variation 2.'),
-    name: z.string().optional(),
-    isPrimary: z.boolean().optional().describe("Make this the kit's cover. Exactly one logo ends up primary."),
-    isDisplay: z.boolean().optional().describe("Make this the logo shown in the kit's compact places. At most one logo per kit."),
-    layout: z.enum(['horizontal', 'stacked', 'icon', 'wordmark']).optional(),
-    colorMode: z.enum(['full_color', 'light', 'dark', 'grayscale']).optional(),
-  })
-
-  const assetEntrySchema = z.object({
-    url: z.string().optional().describe('A url the kit already has.'),
-    outputId: z.string().optional().describe('A generation to copy in.'),
-    name: z.string().optional(),
-  })
-
-  /** One palette color. The app holds the rules (`lib/brand-kits/visual-identity.ts`) and tests this shape against them. */
-  const brandColorEntrySchema = z.object({
-    hex: z.string().describe('Six-digit hex, like #1A2B3C.'),
-    name: z.string().optional(),
-    role: z
-      .enum(['primary', 'secondary', 'tertiary', 'accent'])
-      .optional()
-      .describe('At most one color holds each role. Omit for an extra color.'),
-  })
-
-  /** The kit's fonts by family name. */
-  const typographySchema = z.object({
-    titleFont: z.string().nullable().optional().describe("The font family for titles. null or '' clears it."),
-    bodyFont: z.string().nullable().optional().describe("The font family for body text. null or '' clears it."),
-  })
-
-  /**
-   * One section write: with a key it edits that section, without one it adds a section of your own. Which of body
-   * and revertTo, and the tab rule for a new section, are enforced by the server with an error naming the section;
-   * zod's flat object cannot express them.
-   */
-  const sectionEntrySchema = z.object({
-    key: z.string().optional().describe('The section to edit, as get_brand_kit lists it. Omit to add a new section.'),
-    body: z.string().optional().describe("The section's complete new content, in Markdown. Replaces the whole section."),
-    revertTo: z.number().int().min(1).optional().describe("A version from the section's history to restore, as a new version. Not combined with body."),
-    sectionName: z.string().optional().describe('Rename the section, or name a new one.'),
-    tab: z.enum(['overview', 'voice', 'visual']).optional().describe('Required for a new section; a section never moves tabs.'),
-    width: z.enum(['full', 'half']).optional().describe("How wide the section's card is on the brand page."),
-    expectedVersion: z.number().int().min(1).optional().describe('The version you read. Pass it whenever you edit a section.'),
-    ...placementInput(),
-  })
-
-  /** A tracked account by any reference, OR a profile to add by handle/url. */
-  const accountEntrySchema = z.union([
-    z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
-    z.object({
-      platform: z
-        .enum(['youtube', 'instagram', 'facebook', 'tiktok', 'x', 'threads', 'linkedin'])
-        .optional()
-        .describe('Only needed for a bare handle; a full profile url carries its own platform.'),
-      handleOrUrl: z.string().describe('A profile url, or a handle when platform is given.'),
-    }),
-  ])
-
-  const cardPostSchema = z.object({
-    platform: z.enum(POST_PLATFORMS).describe('The platform. This is the KEY: one post per platform.'),
-    format: z.string().optional(),
-    connectedAccountId: z.string().nullable().optional(),
-    scheduledAt: z.string().nullable().optional().describe("Per-post override of the card's schedule."),
-    platformSpecificData: z.record(z.string(), z.unknown()).optional().describe('The publish payload for this platform.'),
-    status: z.string().optional(),
-  })
-
-  const postAssetSchema = z.object({
-    id: z.string().optional().describe('Keep an existing asset, at this position in the order.'),
-    outputId: z
-      .string()
-      .optional()
-      .describe(
-        'ADD media in ContentHero by its output id: a generation, a file uploaded from a device (create_upload then complete_upload), or a file imported from a url (import). "<id>-2" is variation 2 of a batch.',
-      ),
-    assetUrl: z
-      .string()
-      .optional()
-      .describe('ADD a link by its url. Nothing is copied; to keep a copy of a file on the web, import it and add the outputId.'),
-    contentId: z
-      .string()
-      .optional()
-      .describe(
-        "ADD an inspiration post, by its id or short id, its link, or the platform's own id for it. It lands on the card's Inspiration tab.",
-      ),
-    projectId: z.string().optional().describe('ADD a link to an editor or canvas project: its project id.'),
-    assetType: z
-      .string()
-      .optional()
-      .describe("Accepted and not needed: the kind is read from what the entry points at. Never 'inspiration' or a project type: use contentId or projectId."),
-    displayName: z.string().optional(),
-    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
-  })
+  const rawRegisterTool = server.registerTool.bind(server)
+  // What a host lists: the contract's schema verbatim (its `x-dynamic` markers included), never a form re-derived from
+  // the zod that validates a call, so the listing equals the contract field by field.
+  const listed: Tool[] = []
+  type ToolConfig = { title: string; annotations: ToolAnnotations; _meta?: Record<string, unknown> }
+  type ToolExtra = unknown
+  const tool = <N extends ContractToolName>(
+    name: N,
+    config: ToolConfig,
+    cb: (args: ToolInput<N>, extra: ToolExtra) => CallToolResult | Promise<CallToolResult>,
+  ): void => {
+    const inCall = (...args: unknown[]) =>
+      runToolCall(async () => {
+        try {
+          return await (cb as (...a: unknown[]) => unknown)(...args)
+        } catch (err) {
+          return errorResult(err)
+        }
+      })
+    rawRegisterTool(name, { ...config, description: toolDescription(name, 'mcp'), inputSchema: contractInput(name) } as never, inCall as never)
+    listed.push({ name, title: config.title, description: toolDescription(name, 'mcp'), inputSchema: toolInputSchema(name) as unknown as Tool['inputSchema'], annotations: config.annotations, _meta: config._meta })
+  }
 
   // -- generate_image -------------------------------------------------------
-  server.registerTool(
+  tool(
     'generate_image',
     {
       ...renders('Generating images'),
       title: 'Generate Image',
       annotations: WRITE,
-      description:
-        'Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.',
-      inputSchema: {
-        modelId: z
-          .string()
-          .describe('The model id. list_models (contentType image) names every image model and what each is for; get_model gives one model\'s options and prompt guide.'),
-        prompt: z
-          .string()
-          .optional()
-          .describe('Describe the image to generate. Required for most models; optional for a few that can run from references alone.'),
-        aspectRatio: z.string().optional().describe('e.g. 16:9, 1:1, 9:16. Validated per model.'),
-        resolution: z.string().optional().describe('e.g. 1K, 2K, 4K. get_model lists the resolutions a model takes; validated per model.'),
-        // ⛔ NO `mode`. It named a paid TIER the model id did not: flux-2-pro took "pro" or "flex",
-        // flux-1-kontext took "pro" or "max", and the price moved with it, so the id the agent
-        // named was not the thing it was billed for. Each tier is now its own model in the
-        // registry (`flux-2-pro` / `flux-2-flex`, `flux-1-kontext-pro` / `flux-1-kontext-max`,
-        // `wan-2.7-image` / `wan-2.7-image-pro`), and `modelId` above is discovery-derived, so the
-        // tiers appear in its enum automatically. Passing `mode` now selects nothing.
-        numImages: z.number().int().min(1).max(4).optional().describe('Number of variations (1-4).'),
-        referenceImages: z
-          .array(z.string())
-          .optional()
-          .describe('References for image-to-image / editing. Each may be a URL or a previous output id (e.g. "<id>" or "<id>-2") to chain from an earlier generation.'),
-        avatarId: z
-          .string()
-          .optional()
-          .describe(
-            'Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model.',
-          ),
-        ...PLACEMENT_INPUT_FIELDS,
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -1509,44 +1222,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- generate_board -------------------------------------------------------
-  server.registerTool(
+  tool(
     'generate_board',
     {
       ...renders('Generating a board'),
       title: 'Generate Reference Board',
       annotations: WRITE,
-      description:
-        'Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~40s; boards render slowly (minutes), so it usually returns an outputId to poll with get_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.',
-      inputSchema: {
-        boardType: z.string().describe("One of the board types listed by get_model('reference-boards')."),
-        prompt: z
-          .string()
-          .optional()
-          .describe(
-            'Describe the subject or how you will use the board. Required when no referenceImages are given (text-only boards); otherwise optional context (the source image leads).',
-          ),
-        referenceImages: z
-          .array(z.string())
-          .optional()
-          .describe(
-            'Source images the board is built from: each a URL or a previous output id (e.g. "<id>" or "<id>-2") to chain from an earlier generation.',
-          ),
-        numImages: z
-          .number()
-          .int()
-          .min(1)
-          .max(4)
-          .optional()
-          .describe('Number of board variations (1-4). Defaults to 1.'),
-        boardName: z.string().optional().describe('Optional name for the board.'),
-        avatarId: z
-          .string()
-          .optional()
-          .describe(
-            'Optional avatar id from list_avatars. Associate the board with that avatar, so a character sheet built for an avatar stays filed against it.',
-          ),
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -1576,69 +1257,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- generate_video -------------------------------------------------------
-  server.registerTool(
+  tool(
     'generate_video',
     {
       ...renders('Generating video'),
       title: 'Generate Video',
       annotations: WRITE,
-      description:
-        'Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Returns at once with an outputId; get_status waits for the render. Some models choose an input mode by which references you pass (a startFrame with an optional endFrame, or references alone); get_model describes each model\'s modes. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.',
-      inputSchema: {
-        modelId: z
-          .string()
-          .describe('The model id. list_models (contentType video) names every video model and what each is for; get_model gives one model\'s options, input modes and prompt guide.'),
-        prompt: z
-          .string()
-          .optional()
-          .describe('Describe the video to generate. Required for most models; optional for some (e.g. motion-control), where it is an auxiliary motion hint.'),
-        aspectRatio: z.string().optional().describe('e.g. 16:9, 9:16. Validated per model.'),
-        resolution: z.string().optional().describe('e.g. 720p, 1080p, 4K. Model-dependent.'),
-        duration: z
-          .number()
-          .optional()
-          .describe('Clip length in seconds. Model-dependent; some models lock it.'),
-        keepInputLength: z
-          .boolean()
-          .optional()
-          .describe("Video edit only, on models that offer it: keep the input video's full length instead of a set duration. Charged for that length."),
-        audioEnabled: z
-          .boolean()
-          .optional()
-          .describe('Generate audio (only for models that support it).'),
-        numGenerations: z.number().int().min(1).max(4).optional().describe('Number of variations (1-4).'),
-        negativePrompt: z.string().optional().describe('What to avoid (models that support it).'),
-        startFrame: z.string().optional().describe('First frame: an image URL or a previous output id (e.g. "<id>-2") to chain (e.g. animate an image you just generated).'),
-        endFrame: z.string().optional().describe('Last frame: an image URL or a previous output id.'),
-        referenceImages: z.array(z.string()).optional().describe('Reference images: each a URL or a previous output id to chain.'),
-        referenceVideos: z.array(z.string()).optional().describe('Reference videos: each a URL or a previous output id to chain.'),
-        referenceAudio: z
-          .array(z.string())
-          .optional()
-          .describe('Reference audio (audio-driven video): each a URL or a previous output id. Only used by models that accept audio references; get_model says which do.'),
-        klingElements: z
-          .array(KLING_ELEMENT_INPUT)
-          .optional()
-          .describe('Kling elements: each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Only for models that take them (get_model promptReferences, named_tag scheme). Requires a startFrame.'),
-        elements: z
-          .array(KLING_ELEMENT_INPUT)
-          .optional()
-          .describe('Deprecated alias for `klingElements`, accepted for one release window.'),
-        multiShot: z
-          .boolean()
-          .optional()
-          .describe('Multi-shot with the cuts planned by the model, on a model whose shots include auto (get_model). To write each shot yourself, pass shots instead.'),
-        inputMode: z
-          .string()
-          .optional()
-          .describe('The input mode, by id from get_model. Omit to let the attached inputs decide.'),
-        shots: z
-          .array(z.object({ prompt: z.string(), duration: z.number() }))
-          .optional()
-          .describe('Multi-shot mode with per-shot prompts, on a model that takes them (get_model gives its shot limits): an ordered list of shots, each with its own prompt and duration in seconds. When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only.'),
-        ...PLACEMENT_INPUT_FIELDS,
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -1669,7 +1293,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             videos: args.referenceVideos,
             audio: args.referenceAudio,
             klingElements: args.klingElements,
-            elements: args.elements,
           }),
           projectId: args.projectId,
           placement: args.placement as GenerateRequest['placement'],
@@ -1717,32 +1340,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- generate_audio (synchronous) -----------------------------------------
-  server.registerTool(
+  tool(
     'generate_audio',
     {
       title: 'Generate Audio',
       ...renders('Generating audio'),
       annotations: WRITE,
-      description:
-        'Generate audio: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project\'s timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing.',
-      inputSchema: {
-        modelId: z
-          .string()
-          .describe('The model id. list_models (contentType audio) names every audio model and what each is for; get_model gives one model\'s inputs.'),
-        prompt: z.string().optional().describe('For music / sfx: what to generate.'),
-        text: z.string().optional().describe('For a speech model: the words to speak. Read the model\'s promptGuide with get_model before writing directions into it.'),
-        voiceId: z.string().optional().describe('For a speech model: the voice id (list_voices names them).'),
-        voiceName: z.string().optional().describe('For TTS: human-readable voice name (display only).'),
-        durationSeconds: z.number().optional().describe('For music / sfx: length in seconds.'),
-        promptInfluence: z
-          .number()
-          .min(0)
-          .max(1)
-          .optional()
-          .describe('For sfx: how literally to follow the prompt (0 to 1).'),
-        ...PLACEMENT_INPUT_FIELDS,
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -1771,44 +1374,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- edit_audio (existing audio -> audio) ---------------------------------
-  server.registerTool(
+  tool(
     'edit_audio',
     {
       title: 'Edit Audio',
       ...renders('Editing audio'),
       annotations: WRITE,
-      description:
-        'Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_status. Splitting gives a recording\'s four stems (vocals, drums, bass, and other: everything else, sound effects included) as four files of your own: at once when the file has been analyzed before, otherwise once its analysis lands; it returns an outputId and its status to poll with get_status. Optionally pass projectId to place the result onto that editor project\'s timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or inPlace for the whole timeline) to enhance or split the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST of jobs, one per SOURCE, because the vendor estimates a noise profile per production: one recording\'s clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every job\'s outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. A split mutes each clip and places its four stems under it, each on its own track. Silenced clips are skipped. In-place mode needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.',
-      inputSchema: {
-        operation: z
-          .enum(['isolate', 'enhance', 'split'])
-          .optional()
-          .describe('isolate: voice isolation. enhance: loudness leveling and noise cleanup. split: vocals, drums, bass and other as four files, or four tracks in in-place mode. The server picks the model that performs it. Omitted: enhance in in-place mode, else isolate.'),
-        modelId: z
-          .string()
-          .optional()
-          .describe('Instead of operation: an audio model that takes one audio file and returns audio (it resolves to the operation it performs). list_models (contentType audio) names them; get_model gives one model\'s inputs and whether it finishes at once or is polled with get_status.'),
-        sourceUrl: z
-          .string()
-          .optional()
-          .describe('FILE mode: the audio file to process, as a URL or a previous output id. Omit in in-place mode, where the sources come from the clips.'),
-        durationSeconds: z
-          .number()
-          .optional()
-          .describe('Source audio length in seconds. Required for getCost, and for enhancement pricing when the source is not a stored ContentHero asset.'),
-        projectId: z.string().optional().describe('The editor project: where to PLACE the result in file mode, or which timeline to edit in in-place mode. Omit for a standalone library output.'),
-        clipIds: z
-          .array(z.string())
-          .optional()
-          .describe('IN-PLACE mode: enhance or split the audio of these clips on projectId. Omit with inPlace:true to edit every audible clip on the timeline.'),
-        inPlace: z
-          .boolean()
-          .optional()
-          .describe('IN-PLACE mode for the whole timeline, without naming clips. Implied when clipIds is given.'),
-        placement: PLACEMENT_SCHEMA.optional().describe('Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends.'),
-        playheadFrame: z.number().optional().describe('The current playhead frame, for playhead-relative placement.'),
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of running (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -1839,26 +1410,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- upscale --------------------------------------------------------------
-  server.registerTool(
+  tool(
     'upscale',
     {
       ...renders('Upscaling'),
       title: 'Upscale',
       annotations: WRITE,
-      description:
-        'Upscale an existing image or video to a higher resolution. Provide the source media URL and a model-supported factor. Waits for the result; if the job is still running it returns an outputId to poll with get_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.',
-      inputSchema: {
-        modelId: z
-          .string()
-          .describe('The model id: an upscaler. list_models names them, each one\'s contentType saying whether it takes an image or a video; get_model gives its factors.'),
-        sourceUrl: z.string().describe('The source image (image upscalers) or video (video upscalers): a URL or a previous output id (e.g. "<id>-1") to upscale an earlier generation.'),
-        factor: z.string().describe('Upscale factor, e.g. 2x, 4x. Model-dependent; validated per model.'),
-        durationSeconds: z
-          .number()
-          .optional()
-          .describe('Required for video upscalers: the source video length in seconds (used for pricing).'),
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of upscaling (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -1916,40 +1473,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- generate_lip_sync ----------------------------------------------------
-  server.registerTool(
+  tool(
     'generate_lip_sync',
     {
       ...renders('Generating lip sync'),
       title: 'Generate Lip Sync',
       annotations: WRITE,
-      description:
-        'Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.',
-      inputSchema: {
-        modelId: z
-          .string()
-          .describe('The model id: a lip-sync model. list_models (contentType video) names them; get_model gives one model\'s resolutions and inputs.'),
-        imageUrl: z.string().describe('The portrait to animate (the speaking subject): an image URL or a previous output id (e.g. "<id>-1") to chain.'),
-        audioUrl: z
-          .string()
-          .optional()
-          .describe('An existing speech clip: an audio URL or a previous output id. Use this OR script + voiceId.'),
-        script: z
-          .string()
-          .optional()
-          .describe('Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl. Before writing directions into the script, read the speech model\'s promptGuide with get_model.'),
-        voiceId: z.string().optional().describe('The voice to speak the script (list_voices names them; required with script).'),
-        voiceName: z.string().optional().describe('Human-readable voice name (display only).'),
-        motionPrompt: z
-          .string()
-          .optional()
-          .describe('Optional motion / expression hint for the animation.'),
-        resolution: z.string().optional().describe('e.g. 480p, 720p, 1080p. Model-dependent.'),
-        audioDurationSeconds: z
-          .number()
-          .optional()
-          .describe('Length of audioUrl in seconds (audio mode only; improves cost accuracy).'),
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of generating (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2011,7 +1540,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- transcribe -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'transcribe',
     {
       title: 'Transcribe',
@@ -2022,36 +1551,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         describing an enforcement nobody built reads exactly like one that was built.
       */
       annotations: WRITE,
-      // NOT read-only, despite only returning text. readOnlyHint is a host's signal that a
-      // tool is safe to call without asking the user, and this one is metered by the length
-      // heard: annotated READ, an agent could transcribe a two-hour file repeatedly,
-      // unattended, spending real credits.
-      //
-      // getCost prices either source: a post from its downloaded copy's length, an audio file from
-      // its own (the route reads the file's length, which costs nothing). A file whose length cannot
-      // be read answers a null price that says it is known only once transcribed.
-      description:
-        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), a public video page by its link (videoUrl: YouTube, Instagram, TikTok, X), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A video link is priced by where its words come from: nothing when the words are already held, a flat price when the platform has them written, a higher flat price when they must be generated from the audio; it answers with the words, the video's title, channel, view count and length where the platform gives them, and the charge. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='words'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
-      inputSchema: {
-        audioUrl: z.string().optional().describe('Public URL of the audio file to transcribe. Pass one of audioUrl, videoUrl or contentId.'),
-        videoUrl: z.string().optional().describe('Link to a public video page (YouTube, Instagram, TikTok, X) whose spoken words to transcribe. Pass one of audioUrl, videoUrl or contentId.'),
-        contentId: z
-          .string()
-          .optional()
-          .describe("The tracked post whose video to transcribe: its id or short id, its link, or the platform's own id for it. Its video must be downloaded first with analyze_content kind video. Pass one of audioUrl, videoUrl or contentId."),
-        slide: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe("Which video of a carousel post, by the 0-based slide analyze_content kind video reports it with. Only with contentId."),
-        getCost: z
-          .boolean()
-          .optional()
-          .describe('Return the credit cost estimate instead of transcribing (nothing runs, nothing is charged).'),
-        languageCode: z.string().optional().describe('ISO language hint for an audio file. Auto-detected when omitted; a post\'s language is always detected.'),
-        diarize: z.boolean().optional().describe('Label each speaker (diarization), for an audio file.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2086,14 +1585,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_avatars ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_avatars',
     {
       title: 'List Avatars',
       annotations: READ,
-      description:
-        "List the account's avatars. Each avatar has an imageUrl (its base look) and a defaultVoiceId, which feed generate_lip_sync. Call get_avatar for full detail and the avatar's looks.",
-      inputSchema: { ...pageInput() },
     },
     async (args, extra) => {
       try {
@@ -2106,16 +1602,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_avatar -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_avatar',
     {
       title: 'Get Avatar',
       annotations: READ,
-      description:
-        'Get one avatar by id: its base image (use as generate_lip_sync imageUrl), default voice, traits, and its looks (outfit variations).',
-      inputSchema: {
-        avatarId: z.string().describe('The avatar id from list_avatars.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2128,33 +1619,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_avatar --------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_avatar',
     {
       title: 'Create Avatar',
       annotations: WRITE,
-      description:
-        "Create a reusable character and start generating its first look. SPENDS CREDITS (pass getCost to preview the price without creating anything). Returns as soon as the record exists: the avatar is NOT usable yet, it sits at status 'processing' with no image until its first look finishes, so poll get_avatar until status is 'completed'. Supply referenceImageUrls to make the avatar a likeness of a real person from their photos; omit them to invent a character from the description and traits.",
-      inputSchema: {
-        name: z.string().describe('Avatar name, at least 3 characters.'),
-        age: z.string().describe("Apparent age, e.g. '20s', '35', 'middle-aged'. Required: the prompt writer describes the character from these traits."),
-        gender: z.string().describe('Gender presentation. Required, same reason as age.'),
-        ethnicity: z.string().optional().describe('Optional ethnicity, for a more specific likeness.'),
-        niche: z.array(z.string()).optional().describe('Content niches this character is for, e.g. ["fitness","nutrition"].'),
-        style: z.string().optional().describe('Visual style hint for the portrait, e.g. "editorial", "cinematic". Not stored on the avatar.'),
-        description: z
-          .string()
-          .optional()
-          .describe('Free-text description of the character. The strongest single input when no reference photos are given.'),
-        defaultVoiceId: z.string().optional().describe("A voiceId from list_voices, used as this avatar's default voice."),
-        referenceImageUrls: z
-          .array(z.string())
-          .optional()
-          .describe(
-            'Photos of a REAL PERSON to anchor identity to: each a URL or a previous output id. Only use photos of someone who has agreed to being cloned.',
-          ),
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of creating (nothing runs, nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2186,48 +1655,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_avatar --------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_avatar',
     {
       title: 'Update Avatar',
       annotations: WRITE,
-      description:
-        "Update an avatar and/or change its looks. Fields: name, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId. Looks are changed through ops, the same shape update_timeline and update_canvas use: add_look files images the account ALREADY OWNS onto the avatar, remove_look trashes one (recoverable for 30 days). Ops run before the fields, so one call can add a look and make it the default. To GENERATE a new look instead of filing an existing image, call generate_image with avatarId.",
-      inputSchema: {
-        avatarId: z.string().describe('The avatar id from list_avatars.'),
-        name: z.string().optional().describe('New name, at least 3 characters.'),
-        defaultLookId: z
-          .string()
-          .optional()
-          .describe("A look id from get_avatar. Becomes the avatar's default look AND its profile photo."),
-        defaultVoiceId: z.string().nullable().optional().describe('A voiceId from list_voices, or null to clear it.'),
-        ...placementInput(),
-        ops: z
-          .array(
-            z.union([
-              z.object({
-                op: z.literal('add_look'),
-                imageUrls: z
-                  .array(z.string())
-                  .describe(
-                    'Images the account already owns, as URLs: an upload, a creation, an editor export, or another avatar look. Anything not owned by this account is skipped rather than failing the call.',
-                  ),
-                name: z
-                  .string()
-                  .optional()
-                  .describe(
-                    "What to call the look. Applied to every image in this op. Omit and it stays unnamed, displaying by its source label ('from_media'), which is rarely what you want for a look you will pick from a list later.",
-                  ),
-              }),
-              z.object({
-                op: z.literal('remove_look'),
-                lookId: z.string().describe('A look id from get_avatar.'),
-              }),
-            ]),
-          )
-          .optional()
-          .describe('Look changes, applied in order before the field updates. NOT a transaction: a failure part-way leaves earlier ops applied.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2242,16 +1674,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- delete_avatar --------------------------------------------------------
-  server.registerTool(
+  tool(
     'delete_avatar',
     {
       title: 'Delete Avatar',
       annotations: WRITE,
-      description:
-        "Delete an avatar. Soft: the avatar stops appearing, but ITS LOOKS SURVIVE as library images and can be filed onto another avatar with update_avatar's add_look. Use this to retire a duplicate or an abandoned character, after moving any looks worth keeping.",
-      inputSchema: {
-        avatarId: z.string().describe('The avatar id from list_avatars.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2267,17 +1694,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_voices ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_voices',
     {
       title: 'List Voices',
       annotations: READ,
-      description:
-        "List the account's saved voices (favorites first). Set favorited=true to show only favorites. Each has a voiceId for generate_lip_sync / generate_audio (TTS). Call get_voice for full detail.",
-      inputSchema: {
-        favorited: z.boolean().optional().describe('Only favorited voices.'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -2290,15 +1711,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_voice ------------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_voice',
     {
       title: 'Get Voice',
       annotations: READ,
-      description: 'Get one voice by its voiceId: provider, traits (accent/language/gender/age), description, and a preview URL.',
-      inputSchema: {
-        voiceId: z.string().describe('The voice id from list_voices.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2311,18 +1728,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_brand_kits ------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_brand_kits',
     {
       title: 'List Brand Kits',
       annotations: READ,
-      description:
-        "List the account's brand kits (default first). Excludes archived kits unless archived=true; set favorited=true for only favorites. Call get_brand_kit for one kit's full brand context (voice, visual identity, audience, sections, accounts, knowledge) to write on-brand content.",
-      inputSchema: {
-        favorited: z.boolean().optional().describe('Only favorited brand kits.'),
-        archived: z.boolean().optional().describe('Only archived brand kits (default excludes archived).'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -2337,24 +1747,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_brand_kit --------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_brand_kit',
     {
       title: 'Get Brand Kit',
       annotations: READ,
-      description:
-        "Get one brand kit. A brand kit is a set of named sections, each one Markdown document, plus its visual identity. THREE WAYS TO READ, chosen by what you pass: (1) detail:'summary' lists every section with its key, role, version, length and outline (its own headings) but NO body, the cheap first read, so start there and decide what the task needs; (2) any of keys, roles or tabs returns just those sections with their bodies (the filters combine with AND), and history:true adds each one's earlier versions; (3) neither returns the whole kit: every section, visual identity (logos, colors, typography), linked brand and inspiration accounts, and a knowledge-base summary. A section's key is stable and is how you address it; its role says what a starter section means and is the same in every kit, whatever the user named it. Every section carries a version: pass it back as expectedVersion when you change it with update_brand_kit.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id from list_brand_kits.'),
-        detail: z
-          .enum(['summary', 'full'])
-          .optional()
-          .describe("'summary' lists every section without its body; 'full', the default, returns the whole kit. Cannot be combined with a filter."),
-        keys: z.array(z.string()).optional().describe('Section keys, as the summary lists them.'),
-        roles: z.array(z.string()).optional().describe('Section roles, as the summary lists them.'),
-        tabs: z.array(z.enum(['overview', 'voice', 'visual'])).optional().describe("'overview', 'voice' or 'visual'."),
-        history: z.boolean().optional().describe("With a filter, also return each section's earlier versions, newest first."),
-      },
     },
     async (args, extra) => {
       try {
@@ -2378,41 +1775,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_brand_kit -----------------------------------------------------
-  server.registerTool(
+  tool(
     'create_brand_kit',
     {
       title: 'Create Brand Kit',
       annotations: WRITE,
-      description:
-        "Create a brand kit. THREE SOURCES, chosen by what you pass: (1) EMPTY, just a name, then fill it in with update_brand_kit; or FROM A SOCIAL PROFILE, pass its url in brandAccounts (your own) or inspirationAccounts (a creator you watch) with no name at all, and the kit is named after the handle and starts ingesting that account's posts if it is YouTube or Instagram; (2) IMPORTED, pass websiteUrls (primary first) and/or the brand's own YouTube or Instagram in brandAccounts, with extract:true, and ContentHero takes the colors, typography, logos and assets from the first website and analyzes every website and those accounts' posts to write the kit's empty sections, which is by far the fastest way to get a real kit; (3) A COPY, pass duplicateFrom with an existing kit id, which copies its sections and brand media (assets re-link rather than duplicate, so a copy costs no storage). Every new kit starts with its starter sections, empty. A brand with NO WEBSITE (so nothing to extract) is built by passing its content directly: sections, written by key into those starter sections, and logos, whose entries may name outputId to bring in a generation you just made rather than a url. With extract it RETURNS IMMEDIATELY, before the kit has any content: that empty kit is the handle, and the sections fill in over the next few minutes (longer while a newly linked account's posts arrive), so poll analysisStatus and extractionStatus with get_brand_kit rather than assuming it failed. name is OPTIONAL when websiteUrls or a social profile url is given: it defaults to the first site's hostname or the @handle, a placeholder extraction or you overwrite later. Brand kits are capped by plan, so this fails with a limit error near the cap, and a duplicate counts against it like any other kit. Requires the brand:write scope.",
-      inputSchema: {
-        name: z.string().optional().describe("The kit's name. Optional when websiteUrls or a social profile is given."),
-        websiteUrls: z
-          .array(z.string())
-          .optional()
-          .describe("The brand's websites, primary first. The first gives the logos, colors and fonts; every one feeds the analysis."),
-        extract: z
-          .boolean()
-          .optional()
-          .describe("Import the kit from websiteUrls and its own accounts in brandAccounts. Returns at once; poll analysisStatus and extractionStatus."),
-        duplicateFrom: z.string().optional().describe('Copy an existing brand kit id instead of starting empty.'),
-        brandColors: z.array(brandColorEntrySchema).optional().describe("The kit's palette, each { hex, name?, role? }."),
-        typography: typographySchema.optional().describe("The kit's fonts, { titleFont?, bodyFont? }."),
-        logos: z.array(logoEntrySchema).optional().describe("The kit's logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?, colorMode? }. Use outputId to bring in a generation."),
-        assets: z.array(assetEntrySchema).optional().describe("The kit's brand assets, each { url | outputId, name? }."),
-        sections: z
-          .array(sectionEntrySchema)
-          .optional()
-          .describe("Section content, each { key, body } to fill a starter section, or { sectionName, tab, body? } to add your own."),
-        brandAccounts: z
-          .array(accountEntrySchema)
-          .optional()
-          .describe("The brand's own profiles, linked to this kit as its brand side. Each entry is one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, or { platform?, handleOrUrl } to ADD one and start ingesting it."),
-        inspirationAccounts: z
-          .array(accountEntrySchema)
-          .optional()
-          .describe('Competitor/creator profiles they watch. Same entry shape as brandAccounts.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2446,49 +1813,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_brand_kit -----------------------------------------------------
-  server.registerTool(
+  tool(
     'update_brand_kit',
     {
       title: 'Update Brand Kit',
       annotations: WRITE,
-      description:
-        "Update a brand kit: its section content, colors and fonts, brand media, which kit is the DEFAULT, and which tracked accounts it is LINKED to. Only what you pass changes. Get the current kit first with get_brand_kit. SECTION CONTENT is written with sections, naming only the sections you change, all or nothing. An entry with a key edits that section: body (Markdown) replaces the whole section, revertTo restores an earlier version as a new one, sectionName renames it, width sets its card to full or half. An entry without a key adds a section of your own, with sectionName and tab. Pass each edited section's version as expectedVersion: if any of them changed since you read it, NOTHING is written and the error lists each stale section's current version and body, so re-read, reapply your change, and retry. To remove a section, archive it with archive (assetType brand_kit_section). A section entry's afterId, beforeId or position moves that section within its tab; its neighbors are section ids. Requires the brand:write scope. afterId, beforeId or position moves the kit itself among the caller's kits. extract:true RE-RUNS the import: the visuals from its first website and the analysis of its websites and own accounts, which writes only into sections still empty and returns immediately (poll analysisStatus and extractionStatus via get_brand_kit). logos/assets/brandAccounts/inspirationAccounts are DECLARATIVE: a patch REPLACES the whole list, so pass the full set and use [] to clear. THIS IS ALSO HOW YOU ADD NEW MEDIA TO A KIT: a logo or asset entry names either a url it already has, or outputId to bring in a generation that is not in the kit yet ('<id>', or '<id>-2' for variation 2 of a batch), whose bytes get COPIED into the kit so trashing that generation later cannot empty it. To add a logo, read the kit, append one entry, and send the whole list back; sending an outputId twice adds it twice. brandAccounts are the brand's own profiles (its performance), linked to the kit as its brand side, which never marks them as the user's own; inspirationAccounts are competitors and creators they watch; they are separate lists because they mean opposite things. AN ENTRY IS EITHER one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, OR { platform?, handleOrUrl } to ADD a profile that is not tracked yet, which is what STARTS ingesting its posts (a full profile url carries its own platform, so platform is only needed for a bare handle). isDefault only accepts true (passing false would leave the account with no default at all, so to move the default, name the kit that should hold it).",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        ...placementInput(),
-        extract: z
-          .boolean()
-          .optional()
-          .describe("Re-run this kit's import from its websites and own accounts. Returns immediately; poll analysisStatus and extractionStatus."),
-        logos: z.array(logoEntrySchema).optional().describe('The kit\'s logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit\'s cover); name none and the first wins.'),
-        assets: z.array(assetEntrySchema).optional().describe('The kit\'s brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.'),
-        sections: z
-          .array(sectionEntrySchema)
-          .optional()
-          .describe('Section writes: only the sections you change, all or nothing. { key, body, expectedVersion } edits one; { sectionName, tab, body? } adds one.'),
-        brandColors: z
-          .array(brandColorEntrySchema)
-          .optional()
-          .describe("The kit's palette, each { hex, name?, role? }. REPLACES the list; [] clears it."),
-        typography: typographySchema
-          .nullable()
-          .optional()
-          .describe("The kit's fonts, { titleFont?, bodyFont? }. MERGES: a font left out keeps its value; null clears both."),
-        isDefault: z.literal(true).optional().describe('Make this the default kit, un-defaulting every other.'),
-        brandAccounts: z
-          .array(accountEntrySchema)
-          .optional()
-          .describe("The brand's own profiles, linked to this kit as its brand side. Each entry is one of your tracked accounts, by its id or short id, its profile link, its handle, or the platform's own id for it, or { platform?, handleOrUrl } to ADD one and start ingesting it. REPLACES the list; [] clears it."),
-        inspirationAccounts: z
-          .array(accountEntrySchema)
-          .optional()
-          .describe('Competitor/creator profiles they watch. Same entry shape as brandAccounts. REPLACES the list; [] clears it.'),
-        name: z.string().optional().describe('Rename the kit. This is the label in the UI, not the business name.'),
-        websiteUrls: z
-          .array(z.string())
-          .optional()
-          .describe("The brand's websites, primary first. REPLACES the list; [] clears it. Stored only: pass extract to import from them."),
-      },
     },
     async (args, extra) => {
       try {
@@ -2529,19 +1858,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- search_brand_knowledge -----------------------------------------------
-  server.registerTool(
+  tool(
     'search_brand_knowledge',
     {
       title: 'Search Brand Knowledge',
       annotations: READ,
-      description:
-        "Semantic search over a brand kit's knowledge base (everything the owner has uploaded: notes, docs, articles, video transcripts). Returns the most relevant passages, ranked. This is the deep-grounding read: use it to pull what the brand has said about a topic before drafting or deciding. Requires the brand:read scope.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id (from list_brand_kits / get_brand_kit).'),
-        query: z.string().describe('What to search for, in natural language.'),
-        limit: z.number().int().min(1).max(50).optional().describe('Max matches (default 8).'),
-        threshold: z.number().min(0).max(1).optional().describe('Minimum similarity 0-1 (default 0.45).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2559,17 +1880,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_brand_knowledge -------------------------------------------------
-  server.registerTool(
+  tool(
     'list_brand_knowledge',
     {
       title: 'List Brand Knowledge',
       annotations: READ,
-      description:
-        "The complete, paginated index of a brand kit's knowledge items (titles and metadata, no bodies). Use it to browse what exists, or to find an item's id before get_brand_knowledge or remove_brand_knowledge. For relevance retrieval, use search_brand_knowledge instead. Requires the brand:read scope.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -2584,17 +1899,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_brand_knowledge --------------------------------------------------
-  server.registerTool(
+  tool(
     'get_brand_knowledge',
     {
       title: 'Get Brand Knowledge',
       annotations: READ,
-      description:
-        "Get one knowledge item's stored body by id (the capped anchor text; the full document is embedded for search, not stored verbatim). Use search_brand_knowledge for the deep content. Requires the brand:read scope.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        knowledgeId: z.string().describe('The knowledge item id (from list_brand_knowledge or search_brand_knowledge).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2607,24 +1916,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- add_brand_knowledge --------------------------------------------------
-  server.registerTool(
+  tool(
     'add_brand_knowledge',
     {
       title: 'Add Brand Knowledge',
       annotations: WRITE,
-      description:
-        "Add an item to a brand kit's knowledge base so it can be searched later. This is how the brand's knowledge grows over time: capture a lesson learned, a brand decision, an asset description, an article, or a video. Source can be text (a note), url (a page to scrape), youtube (a video transcript), or file. For a file, pass either fileData (base64, best for small documents and images) or fileUrl (a hosted URL the server fetches, needed for large files and video/audio). Requires the brand:write scope. SPENDS CREDITS for images, video and audio (text, links, YouTube and documents are free): pass getCost to preview the price first, which runs nothing and charges nothing.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        sourceType: z.enum(['text', 'url', 'youtube', 'file']).describe('How the content is provided.'),
-        text: z.string().optional().describe('For sourceType "text": the note body.'),
-        url: z.string().optional().describe('For sourceType "url" or "youtube": the link.'),
-        fileData: z.string().optional().describe('For sourceType "file": base64-encoded file bytes (small documents and images).'),
-        fileUrl: z.string().optional().describe('For sourceType "file": a hosted URL the server fetches (large files, video, audio).'),
-        fileExt: z.string().optional().describe('For sourceType "file": the extension without a dot, e.g. "pdf". Inferred from fileUrl when omitted.'),
-        title: z.string().optional().describe('Optional title (otherwise derived from the content).'),
-        getCost: z.boolean().optional().describe('Return the credit cost estimate instead of adding (video and audio are measured, not processed; nothing is charged).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2650,17 +1946,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- remove_brand_knowledge -----------------------------------------------
-  server.registerTool(
+  tool(
     'remove_brand_knowledge',
     {
       title: 'Remove Brand Knowledge',
       annotations: WRITE,
-      description:
-        "Remove a knowledge item and its embedding chunks from a brand kit's knowledge base. Requires the brand:write scope.",
-      inputSchema: {
-        brandKitId: z.string().describe('The brand kit id.'),
-        knowledgeId: z.string().describe('The knowledge item id to remove.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2673,53 +1963,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // One wording for the option every media listing takes (8.5): what a small copy is for, never its size.
-  const smallCopiesInput = z.boolean().optional().describe(
-    "Link each image's small copy instead of the file itself, where the library keeps one: for drawing images small, as code that shows many at once does. Never for downloading or delivering a file, or showing it large.",
-  )
-
-  // The one wording for list_media's `orientation` input (a proposal pending the owner's approval).
-  const orientationInput = z
-    .enum(MEDIA_STOCK_ORIENTATIONS)
-    .optional()
-    .describe("Stock photos and videos only. Narrow the results to one shape: 'landscape', 'portrait' or 'square'. Omit it to read every shape.")
-
   // -- list_media -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_media',
     {
       title: 'List Media',
       annotations: READ,
-      description:
-        "List media you can place. With no `source`, or a library source, it reads the account's own files: every file, or one part of the library, each item naming the part it is in. With `source` stock it reads the stock catalog instead: licensed photos, videos, GIFs, stickers and built-in sounds that are not the account's files until used. A stock read names one `collection` and may take a `query`; it comes back in the catalog's own order and does not take the library's filters or sort. Every item shows its media id, its name and its resolved URL. Place an item by its media id. Call get_media to SEE an item (image blocks), or view to see a clip's frames. A stock page can hold fewer items than asked, and repeating a read can return different items; only an absent `nextCursor` means there are no more.",
-      inputSchema: {
-        source: z
-          .enum(MEDIA_LIST_SOURCES)
-          .optional()
-          .describe("Which media to read: 'all' (the default, every file the account keeps), 'creations' (studio generations), 'uploads' (files the user uploaded), 'exports' (renders of their projects), or 'stock' (the stock catalog, which is not part of 'all')."),
-        collection: z
-          .enum(MEDIA_STOCK_COLLECTIONS)
-          .optional()
-          .describe("Stock only, and required with it. Which part of the stock catalog to read: 'photos', 'videos', 'gifs', 'stickers' or 'sounds'."),
-        query: z
-          .string()
-          .optional()
-          .describe("Stock only. Describe what to find. Omit it to read the collection's featured items."),
-        orientation: orientationInput,
-        contentType: z
-          .array(z.enum(MEDIA_LIST_TYPES))
-          .optional()
-          .describe('Only these media types.'),
-        kind: z
-          .enum(['creation', 'board', 'look'])
-          .optional()
-          .describe("Creations only. Filter by asset class: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all."),
-        favorited: z.boolean().optional().describe('Only favorited files.'),
-        archived: z.boolean().optional().describe('Only archived files.'),
-        ...sortInput('media'),
-        ...pageInput(),
-        smallCopies: smallCopiesInput,
-      },
     },
     async (args, extra) => {
       try {
@@ -2748,24 +1997,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- search_media ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'search_media',
     {
       title: 'Search Media',
       annotations: READ,
-      description:
-        "Semantically search the account's editable media library (their generated creations, uploads, stock they have used, and brand assets) by describing the content in natural language. Returns matching assets ranked by relevance, each with its media kind, a description, tags, and, for videos, the timestamps of the specific scenes that matched, so a precise moment can be located. Use this to find existing material to place, reference, or build with, rather than generating new media, whenever the user refers to footage, images, audio, or clips they already have. Optionally restrict results to specific media kinds. This searches only the account's own usable library, never inspiration, published posts, or knowledge. To browse stock they have not used, call list_media with source stock. Call get_media to SEE a match (image blocks), or view to see a clip's frames.",
-      inputSchema: {
-        query: z
-          .string()
-          .describe('A natural-language description of the media to find, describing its visible or audible content.'),
-        kinds: z
-          .array(z.enum(['image', 'video', 'audio']))
-          .optional()
-          .describe('Restrict results to these media kinds. Omit to search all kinds.'),
-        ...pageInput(),
-        smallCopies: smallCopiesInput,
-      },
     },
     async (args, extra) => {
       try {
@@ -2779,27 +2015,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- library folder tools (Phase D) ---------------------------------------
-  const smartQuerySchema = z
-    .object({
-      text: z.string().optional().describe('Natural-language description to match semantically.'),
-      kinds: z.array(z.enum(['image', 'video', 'audio'])).optional(),
-      sources: z.array(z.enum(['creations', 'uploads', 'stock'])).optional(),
-      tags: z.array(z.string()).optional().describe('Require all of these tags.'),
-      favoritedOnly: z.boolean().optional(),
-      sort: z.enum(['relevance', 'recent', 'name']).optional(),
-    })
-    .optional()
-    .describe('For a smart folder: the live query that defines its membership (the same filters as the library search bar).')
-
-  server.registerTool(
+  tool(
     'list_folders',
     {
       title: 'List Folders',
       annotations: READ,
-      description:
-        "List the account's library folders (their own manual and smart folders, as a flat list with parent links for nesting) together with the built-in derived folders (recents, favorites, edits, canvas, cards). Use this to see how the library is organized before browsing or filing items.",
-      inputSchema: { ...pageInput() },
     },
     async (args, extra) => {
       try {
@@ -2810,18 +2030,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'get_folder',
     {
       title: 'Get Folder',
       annotations: READ,
-      description:
-        "Return the contents of one folder. The folder id is either one of the account's own folder ids or a built-in derived-folder key. A manual folder returns exactly the items filed in it; a smart folder computes its members live from its saved query; a derived folder returns its built-in set. Items are media (with kind and a description) and, in manual folders, entities such as projects or posts.",
-      inputSchema: {
-        folderId: z.string().describe('A folder id, or a derived-folder key (recents, favorites, edits, canvas, cards).'),
-        ...pageInput(),
-        smallCopies: smallCopiesInput,
-      },
     },
     async (args, extra) => {
       try {
@@ -2835,19 +2048,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'create_folder',
     {
       title: 'Create Folder',
       annotations: WRITE,
-      description:
-        'Create a new library folder. A manual folder is an initially-empty collection you then file items into. A smart folder saves a query and stays live, always showing whatever currently matches. Optionally nest it under a parent folder. Create a folder only when the user wants to organize or save a view, not to hold a single transient result.',
-      inputSchema: {
-        name: z.string().describe('The folder name.'),
-        type: z.enum(['manual', 'smart']).optional().describe("'manual' (a collection you file items into) or 'smart' (a saved live query). Defaults to manual."),
-        query: smartQuerySchema,
-        parentId: z.string().optional().describe('Nest the new folder under this parent folder id.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -2857,50 +2062,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  /**
-   * One item's universal identity. NO folderId: the folder is named by the tool's own folderId /
-   * folderIds now, which is what lets one call file many items into many folders.
-   */
-  const itemRefBodySchema = z.union([
-    z.object({ mediaId: z.string().describe('A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).') }),
-    z.object({ projectId: z.string().describe("A project's id.") }),
-    z.object({ cardId: z.string().describe("A card's id.") }),
-  ])
-
-  server.registerTool(
+  tool(
     'update_folder',
     {
       title: 'Update Folder',
       annotations: WRITE,
-      description:
-        "Update the account's own folders: rename one, MOVE folders under a different parent (or to the top level with a null parent), change a smart folder's saved query, and FILE or UNFILE items. addItems/removeItems are DELTAS of { mediaId } (media, as list_media, search_media and get_folder print it), { projectId } or { cardId }, not a list to replace, because an item can sit in several folders at once and a replace would silently unfile it from the others. Filing never moves or copies anything: it adds a pointer, and only manual folders accept items (a smart folder computes its own membership). Pass folderIds to patch several folders at once, which crossed with addItems files the same items into all of them; renaming and re-querying still need exactly one folder. NOTE the asymmetry: nesting a FOLDER via parentId is a MOVE (a folder has one parent), while filing an ITEM is a pointer that leaves its other folders alone.",
-      inputSchema: {
-        folderId: z.string().describe('The folder id to update.'),
-        folderIds: z
-          .array(z.string())
-          .optional()
-          .describe('Patch several folders at once. Attribute fields (name, query) still need exactly one.'),
-        name: z.string().optional().describe('A new name.'),
-        parentId: z.string().nullable().optional().describe('A new parent folder id, or null to move to the top level. MOVES the folder.'),
-        query: smartQuerySchema,
-        addItems: z
-          .array(itemRefBodySchema)
-          .optional()
-          .describe('File these items into the folder(s). A delta: their other folders are untouched.'),
-        removeItems: z
-          .array(itemRefBodySchema)
-          .optional()
-          .describe('Unfile these items. Only the pointer goes; the asset is never deleted.'),
-        moveItem: z
-          .object({
-            item: itemRefBodySchema,
-            after: itemRefBodySchema.optional(),
-            before: itemRefBodySchema.optional(),
-            position: z.enum(PLACEMENT_ENDS).optional(),
-          })
-          .optional()
-          .describe("Move one item within this manual folder: after or before another of its items, or to an end (position). Each item is named as addItems names one. Name neighbors or a position, not both."),
-      },
     },
     async (args, extra) => {
       try {
@@ -2930,14 +2096,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'delete_folder',
     {
       title: 'Delete Folder',
       annotations: WRITE,
-      description:
-        "Delete one of the account's own folders and everything nested under it. This removes the folder structure only; the media and entities inside are pointers, so the underlying assets are never deleted. Confirm intent before deleting a folder that contains items.",
-      inputSchema: { folderId: z.string().describe('The folder id to delete.') },
     },
     async (args, extra) => {
       try { await (await getClient(extra)).deleteFolder(args.folderId); return text(`Deleted folder ${args.folderId}.`) } catch (err) { return errorResult(err) }
@@ -2946,7 +2109,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
 
   // -- get_media ------------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_media',
     {
       title: 'Get Media',
@@ -2966,29 +2129,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        * the same thing costs nothing. Reach for `show_media` when the person is the audience.
        */
       annotations: READ,
-      description:
-        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from view, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or a { mediaId } (the media id list_media, search_media and get_folder print: a1B2c3D4, or a1B2c3D4-2 for one output of a generation with several). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. To see a clip\'s frames, use view; audio still returns metadata + the url, and the metadata of an audio item names its size, duration and container with the stream facts the file states (its codec, sample rate and channels), each only when known. A bare id for a generation returns ONLY its primary output, named by its full media id, and lists the others\' media ids; pass one of those to see it. To ZOOM into an image, set region { x, y, width, height } on an item, in the image\'s own pixels: that part is cut from the original and returned at its own detail, never enlarged, so you can check small text or an edge. Use this to inspect the actual pixels, not just URLs.',
-      inputSchema: {
-        items: z
-          .array(
-            z.union([
-              z.object({
-                url: z.string().describe('A media URL on our storage (from view / get_project / get_card).'),
-                region: REGION_SCHEMA.optional(),
-              }),
-              z.object({
-                mediaId: z.string().describe('A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).'),
-                region: REGION_SCHEMA.optional(),
-              }),
-            ]),
-          )
-          .min(1)
-          .max(5)
-          .describe(
-            'The media to LOOK at, up to 5 per call. Five is where the inline byte budget runs out, not a ' +
-              'round number. Use show_media for a larger set you only need to display.',
-          ),
-      },
     },
     async (args, extra) => {
       try {
@@ -3020,18 +2160,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_media ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_media',
     {
       title: 'Update Media',
       annotations: WRITE,
-      description:
-        "Rename a stored file or give it a description, after upload. Pass name, description or both; passing neither is refused. Only files in the library can be changed this way: a generated output or a stock item cannot. An empty description clears it. Returns the file as get_media reads it, with its new name and description. Requires the library:write scope.",
-      inputSchema: {
-        mediaId: z.string().describe('The file\'s media id, as list_media, search_media and get_folder print it.'),
-        name: z.string().optional().describe('The new name for the file.'),
-        description: z.string().optional().describe('A description of the file, in your own words.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3046,7 +2179,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- show_media -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'show_media',
     {
       title: 'Show Media',
@@ -3063,29 +2196,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        */
       ...renders('Showing media'),
       annotations: READ,
-      description:
-        'SHOW media to the person, up to 100 items in one card. Use this to present a set you do not need to look at yourself: search results, a folder, a shortlist, everything a list_media call returned. It renders a grid the person can browse, expand and act on, and it costs you almost no context because it returns urls rather than pixels. Each item is a { url } or a { mediaId }, the same shapes get_media takes. Pair it with list_media: list to FIND, show to PRESENT. Do not re-show media another tool already displayed: anything that creates or imports media renders its own card, and showing it again only duplicates it. If you need to SEE the pixels yourself (judge a face, check legibility, compare variations) use get_media instead, which attaches image blocks for up to 5 items.',
-      inputSchema: {
-        items: z
-          .array(
-            z.union([
-              z.object({
-                url: z.string().url().describe('A media URL on one of our storage hosts.'),
-              }),
-              z.object({
-                mediaId: z.string().min(1).describe('A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).'),
-              }),
-            ]),
-          )
-          .min(1)
-          .max(100)
-          /**
-           * ⚠️ NO KEYFRAME FIELDS HERE, and their absence is the point. Keyframes exist so the AGENT can
-           * watch footage, they are extracted per call, and they are bytes. A display tool that accepted
-           * them would be the cost-unpredictability this split removed, reintroduced through a parameter.
-           */
-          .describe('The media to show, up to 100 items per call.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3101,25 +2211,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_upload --------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_upload',
     {
       title: 'Create Upload',
       annotations: WRITE,
-      description: CREATE_UPLOAD_TEXT,
-      inputSchema: {
-        files: z
-          .array(
-            z.object({
-              fileName: z.string().describe(UPLOAD_PARAMETER_TEXT.fileName),
-              contentType: z.string().describe(UPLOAD_PARAMETER_TEXT.contentType),
-              sizeBytes: z.number().int().positive().describe(UPLOAD_PARAMETER_TEXT.sizeBytes),
-            }),
-          )
-          .min(1)
-          .max(MEDIA_UPLOAD_BATCH_MAX)
-          .describe(UPLOAD_PARAMETER_TEXT.files),
-      },
     },
     async (args, extra) => {
       try {
@@ -3142,16 +2238,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- sign_upload_parts ----------------------------------------------------
-  server.registerTool(
+  tool(
     'sign_upload_parts',
     {
       title: 'Sign Upload Parts',
       annotations: WRITE,
-      description: SIGN_UPLOAD_PARTS_TEXT,
-      inputSchema: {
-        outputId: z.string().describe(UPLOAD_PARAMETER_TEXT.outputId),
-        partNumbers: z.array(z.number().int().min(1)).min(1).describe(UPLOAD_PARAMETER_TEXT.partNumbers),
-      },
     },
     async (args, extra) => {
       try {
@@ -3171,33 +2262,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- complete_upload ------------------------------------------------------
-  server.registerTool(
+  tool(
     'complete_upload',
     {
       title: 'Complete Upload',
       ...renders('Completing the upload'),
       annotations: WRITE,
-      description: COMPLETE_UPLOAD_TEXT,
-      inputSchema: {
-        uploads: z
-          .array(
-            z.object({
-              outputId: z.string().describe(UPLOAD_PARAMETER_TEXT.outputId),
-              parts: z
-                .array(
-                  z.object({
-                    partNumber: z.number().int().min(1).describe(UPLOAD_PARAMETER_TEXT.partNumber),
-                    etag: z.string().describe(UPLOAD_PARAMETER_TEXT.etag),
-                  }),
-                )
-                .optional()
-                .describe(UPLOAD_PARAMETER_TEXT.parts),
-            }),
-          )
-          .min(1)
-          .max(MEDIA_UPLOAD_BATCH_MAX)
-          .describe(UPLOAD_PARAMETER_TEXT.uploads),
-      },
     },
     async (args, extra) => {
       try {
@@ -3221,24 +2291,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- import -------------------------------------------------------------------
   // One verb for everything brought into the account's own library or a new project (Taylan, 2026-10-11; plan
   // source-media-v1). What comes back follows what came in. A tracked post's video is analysis work: analyze_content.
-  server.registerTool(
+  tool(
     'import',
     {
       title: 'Import',
       ...renders('Importing'),
       annotations: WRITE,
-      description:
-        "Bring something into your own library or a new project. Pass exactly one source, and what comes back follows it. url: a file address (an image, video or audio file) becomes library media, free; a video page address on a supported site becomes library media too, and spends credits: the most its download may cost is held and it is charged for what arrived. pptxUrl (a PowerPoint or Google Slides file) or canvaDesignId (a Canva design, through the account's Canva connection) becomes a new canvas project with editable layers, free; cardId links it to its card in the same call. Pass getCost to see what an import would spend first: nothing runs and nothing is charged. Imported media is referenced by its outputId in generate_* and on a card via update_card. A media import still running at the end of the call returns pending: wait for it with get_status. A tracked post's video is not imported: analyze_content with kind video downloads it for analysis. Scopes: library:write for a url, editor:write for a project (and planner:write with cardId).",
-      inputSchema: {
-        url: z.string().optional().describe('A public https address: a file, imported free into the library, or a video page on a supported site, whose video is downloaded into the library and spends.'),
-        pptxUrl: z.string().optional().describe('A PowerPoint or Google Slides file address: imported into a new canvas project.'),
-        canvaDesignId: z.string().optional().describe("A Canva design id: imported into a new canvas project through the account's Canva connection (fails with canva_not_connected when it is not linked)."),
-        contentType: z.string().optional().describe('With url: a MIME override (else taken from the response).'),
-        fileName: z.string().optional().describe('With url: a file name (used for its extension).'),
-        title: z.string().optional().describe("With pptxUrl or canvaDesignId: the new project's title."),
-        cardId: z.string().optional().describe('With pptxUrl or canvaDesignId: the card this project is for. The new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
-        getCost: z.boolean().optional().describe('Return what this import would spend instead of importing (nothing runs, nothing is charged). 0 for a file address or a project.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3267,19 +2325,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- download -------------------------------------------------------------
-  server.registerTool(
+  tool(
     'download',
     {
       title: 'Download',
       // Read-only: it hands back links to what is already stored, and runs and charges nothing.
       annotations: READ,
-      description:
-        "Download any file of the account's out of ContentHero to keep: a generation (every output, or one output by its -<n> media id), an upload, an import, a library file, or a project's export, named by its media id or export id. Answers each file's name and a save link that names the file, needs no sign-in and does not expire: fetch the link for the file itself. Free: it reads what is already stored. A file not made yet is refused with the step that follows it.",
-      inputSchema: {
-        id: z
-          .string()
-          .describe('A media id (a generation, -<n> for one of its outputs, an upload, an import, a library file) or an export id.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3292,19 +2343,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_models ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_models',
     {
       title: 'List Models',
       annotations: READ,
-      description:
-        "List the generation models available to this account (the discovery catalog): which models exist, their content type and operation, and a compact capability summary. Use this to pick a model, then call get_model for its full request shape before generating. Source of truth for valid model ids; do not hardcode them.",
-      inputSchema: {
-        contentType: z
-          .enum(['image', 'video', 'audio'])
-          .optional()
-          .describe('Filter to one content type.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3317,16 +2360,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_model ------------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_model',
     {
       title: 'Get Model',
       annotations: READ,
-      description:
-        "Get one model's full request shape by id: the exact parameters it accepts (input types, prompt mode and char cap, duration range, resolutions, aspect ratios, max references, generation count, audio, features). Ground a generation against this instead of guessing the parameters, then preview cost with the matching generate tool's getCost option before running it.",
-      inputSchema: {
-        modelId: z.string().describe('The model id, as list_models names it.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3344,36 +2382,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     list_platforms, get_layer_types, get_timeline_types and get_export_formats: one operation, one tool. Each kind
     reads its own endpoint, so the scope a kind needs is enforced there, and a kind's inputs are checked here.
   */
-  server.registerTool(
+  tool(
     'get_schema',
     {
       title: 'Get Schema',
       annotations: READ,
-      description:
-        "Get a vocabulary another call accepts, by kind. 'platform': with no platform, the platforms this account can publish to, each with its formats and whether a connected account exists; with a platform (and optionally a format), the fields, options (enums) and character limits a post requires per format. Ground a post's platformSettings against it instead of guessing the fields. 'timeline': the EDITOR timeline schema, in two steps. Without a name, its index: every update_timeline op with its shape, every clip and track type, and the rules every op follows. With a name, that one entry in full: an op with its rules, or a clip type with its fields (each with who writes it, its range and its allowed values), the shared field groups it has and a copy-pasteable `example` clip; the name 'animations' reads the presets add_animation, add_transition and apply_combo take. detail 'full' reads the whole schema at once. Read the index, then the entries you need, before building any clip with update_timeline. 'layer': the CANVAS schema, in the same two steps. Without a name, its index: every update_canvas op with its shape, every layer type, and the rules every op follows. With a name, that one entry in full: an op with its rules, or a layer type with its fields and the shared field groups it has. detail 'full' reads the whole schema at once. Read the index, then the entries you need, before building any layer with update_canvas. 'export': the export formats and their options per project type, so you know what export accepts. 'link': the grammar of app addresses and every noun and section it takes (what each opens, its tabs, what a tab's item names) plus the app's origin, so you can build a link to any item from its noun and id. 'code': the authoring guide for a code clip or code layer (a video, audio or image whose content is code): what the sandbox can import and what it cannot use, the box the code draws in, the sound it can synthesize, the brand prop names, the size limit, the workflow and examples; read it before writing or changing a clip's code. 'effect': every effect code or a video or image clip can use, by group, with what it does, where code imports it, and whether a clip can carry it; with a name, that effect's parameters with their ranges and defaults, and which of them keyframe on a clip. Read it before giving anything effects. 'timeline', 'layer', 'export', 'code' and 'effect' require the editor:read scope.",
-      inputSchema: {
-        kind: z.enum(['platform', 'timeline', 'layer', 'export', 'link', 'code', 'effect']).describe('Which vocabulary to read.'),
-        platform: z
-          .enum(POST_PLATFORMS)
-          .optional()
-          .describe("kind 'platform' only: the platform to read (such as \"instagram\"). Omit to list every platform."),
-        format: z
-          .string()
-          .optional()
-          .describe("kind 'platform' with a platform only: a format to narrow to (e.g. \"reel\", \"short\", \"story\", \"thread\")."),
-        jsonSchema: z
-          .boolean()
-          .optional()
-          .describe("kinds 'timeline' and 'layer' only, with a type's name or detail 'full': also return each type's full JSON Schema. It is large; ask for it only to validate a whole item before sending it."),
-        name: z
-          .string()
-          .optional()
-          .describe("kind 'effect': the effect to read in full (such as \"glow\"); omit to list the effects. kind 'timeline': one op or clip type to read in full, or 'animations' for the presets; omit for the index. kind 'layer': one op or layer type to read in full; omit for the index."),
-        detail: z
-          .enum(['full'])
-          .optional()
-          .describe("kinds 'timeline' and 'layer' only: 'full' reads the whole schema at once. It is large; read the index and the entries you need instead unless you need everything."),
-      },
     },
     async (args, extra) => {
       try {
@@ -3435,14 +2448,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
    * keep their old spelling for one window.
    */
   // -- list_kling_elements --------------------------------------------------
-  server.registerTool(
+  tool(
     'list_kling_elements',
     {
       title: 'List Kling Elements',
       annotations: READ,
-      description:
-        "List the account's saved Kling elements. A Kling element is Kling 3.0's saved reference for one character, location or prop: 2-4 images (or one video) of it under a name, so the subject stays consistent across Kling video generations. Use one in generate_video's klingElements by klingElementId, and as @name in the prompt.",
-      inputSchema: { ...pageInput() },
     },
     async (args, extra) => {
       try {
@@ -3455,13 +2465,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_kling_element ----------------------------------------------------
-  server.registerTool(
+  tool(
     'get_kling_element',
     {
       title: 'Get Kling Element',
       annotations: READ,
-      description: "Get one saved Kling element by id: its name, category, description, and images.",
-      inputSchema: { klingElementId: z.string().describe('The Kling element id.') },
     },
     async (args, extra) => {
       try {
@@ -3474,20 +2482,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_kling_element -------------------------------------------------
-  server.registerTool(
+  tool(
     'create_kling_element',
     {
       title: 'Create Kling Element',
       annotations: WRITE,
-      description:
-        "Create a Kling element: a saved reference for one character, location or prop that keeps it consistent across Kling 3.0 video generations. Give it 2-4 images (or one video) of that one subject; images may be URLs or output-id tokens, so you can generate the angle shots first and assemble the Kling element from them. Use it later in generate_video's klingElements [{ klingElementId }] and as @name in the prompt.",
-      inputSchema: {
-        name: z.string().describe('Referenced in the prompt as @name.'),
-        description: z.string().describe('What the Kling element represents (required).'),
-        category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("Kind of entity (default 'auto')."),
-        images: z.array(z.string()).optional().describe('2-4 image URLs or output-id tokens.'),
-        video: z.string().optional().describe('A single video URL or output-id token (alternative to images).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3509,18 +2508,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_kling_element -------------------------------------------------
-  server.registerTool(
+  tool(
     'update_kling_element',
     {
       title: 'Update Kling Element',
       annotations: WRITE,
-      description: "Update a saved Kling element's name, description, or category.",
-      inputSchema: {
-        klingElementId: z.string().describe('The Kling element id.'),
-        name: z.string().optional().describe('Rename the Kling element.'),
-        description: z.string().optional().describe('What this Kling element is, in words. This is what makes it findable later.'),
-        category: z.enum(['auto', 'character', 'location', 'prop']).optional().describe("What kind of Kling element this is. 'auto' lets the server classify it from the image."),
-      },
     },
     async (args, extra) => {
       try {
@@ -3536,13 +2528,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- delete_kling_element -------------------------------------------------
-  server.registerTool(
+  tool(
     'delete_kling_element',
     {
       title: 'Delete Kling Element',
       annotations: WRITE,
-      description: 'Permanently delete a saved Kling element. Videos already generated with it are unaffected.',
-      inputSchema: { klingElementId: z.string().describe('The Kling element id.') },
     },
     async (args, extra) => {
       try {
@@ -3556,7 +2546,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_status -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_status',
     {
       /**
@@ -3576,23 +2566,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        */
       title: 'Get Status',
       annotations: READ,
-      description:
-        "Check any background job: generations and edits, exports, brand kit reads, avatars, a post's analysis or scenes, and transcripts. Pass the ids the calls that started them returned; an id alone names its job. Each id answers on its own line, so one that names no job of yours says why and the others still answer. Pass kind only for a full UUID, for scenes or a transcript (the id is the post or media it belongs to), or when the answer says an id is ambiguous. BY DEFAULT THIS BLOCKS until the jobs finish, up to ~40s per call, because that is almost always what you want after starting one; a job still running comes back with where it is and a poll_after_seconds hint, so call again. Pass wait:false for an instant snapshot with no blocking. A finished generation answers with its final URLs. A job is over only when its status is settled or failed. Processing and applying mean it is still running; keep reading the same id.",
-      inputSchema: {
-        ids: z
-          .array(z.string())
-          .min(1)
-          .max(8)
-          .describe('The jobs to check, each by the id the call that started it returned.'),
-        kind: z
-          .enum(JOB_KINDS)
-          .optional()
-          .describe('Which kind of job the ids name. Only for a full UUID, scenes, a transcript, or an id the answer says is ambiguous.'),
-        wait: z
-          .boolean()
-          .optional()
-          .describe('Block until the jobs finish (up to ~40s), the default. false = an instant snapshot.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3623,32 +2596,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_cards -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_cards',
     {
       title: 'List Cards',
       annotations: READ,
-      description:
-        "List one SPACE's cards (newest-updated first). ⚠️ SCOPED, NOT COMPLETE: without spaceId this lists the account's DEFAULT space only, and cards on any other board are absent with nothing in the response saying so (search misses them too). Call list_spaces FIRST and pass spaceId unless you specifically mean the default board. Filter by status, platform, stage (id/slug/name), favorite, tag, or a title search. Call get_card for one card's full detail (posts + assets).",
-      inputSchema: {
-        spaceId: z
-          .string()
-          .optional()
-          .describe(
-            "Which space's board to list, from list_spaces, or 'all' for every space. Omit ONLY when you mean the account's default space; omitting it does not search every board.",
-          ),
-        archived: z
-          .boolean()
-          .optional()
-          .describe('Only ARCHIVED cards. Archived cards are excluded by default, matching the board.'),
-        platform: z.enum(POST_PLATFORMS).optional().describe('Filter by the post platform.'),
-        stage: z.string().optional().describe("Filter by a stage id, slug, or name. Resolved within the chosen space. Needed for sort position, which reads that stage's own order."),
-        isFavorite: z.boolean().optional().describe('Only favorited cards.'),
-        tag: z.string().optional().describe('Only cards carrying this tag.'),
-        search: z.string().optional().describe('Case-insensitive title search, scoped to the chosen space.'),
-        ...sortInput('cards'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -3675,16 +2627,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_card -------------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_card',
     {
       title: 'Get Card',
       annotations: READ,
-      description:
-        'Get one CARD in full: its fields (title, description, script, notes, status, stage, schedule), plus its posts (one per platform, which is how it publishes) and its attached assets in carousel order. An [inspiration] asset is a tracked post attached as a reference; its line already carries the headline metrics (creator, outlier score, views, likes, duration) plus transcript and breakdown availability, and a content id to pass to get_content for the transcript and the full Break It Down analysis. To attach one, add { contentId } to the assets list of update_card; a linked editor or canvas project is added the same way with { projectId }.',
-      inputSchema: {
-        cardId: z.string().describe('The card id from list_cards.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3697,23 +2644,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_spaces ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_spaces',
     {
       title: 'List Spaces',
       annotations: READ,
-      description:
-        "List the account's SPACES. A space is the planner's top-level container: Space > Stage > Card > Post. Each space has its own stages, so two spaces can both hold a stage called 'Published'. Call this FIRST to discover which board to work in, then pass a space id to list_stages, list_cards or create_card. Archived spaces are excluded unless archived is set, which lists only them.",
-      inputSchema: {
-        archived: z
-          .boolean()
-          .optional()
-          .describe('Only archived spaces. Archived spaces are excluded by default, matching the grid in the app.'),
-        favorited: z.boolean().optional().describe('Only favorited spaces.'),
-        search: z.string().optional().describe('Search space names.'),
-        ...sortInput('spaces'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -3726,14 +2661,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_space ------------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_space',
     {
       title: 'Get Space',
       annotations: READ,
-      description:
-        'Return one space with its live card count. Use list_spaces to discover ids. The count excludes archived cards, and is the same number list_spaces reports for that space.',
-      inputSchema: { spaceId: z.string().describe('The space id.') },
     },
     async (args, extra) => {
       try {
@@ -3746,21 +2678,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_space ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_space',
     {
       title: 'Create Space',
       annotations: WRITE,
-      description:
-        "Create a space: a new planner board with its own stages. duplicateFrom copies another space's STAGES, never its cards, so the new board arrives with the columns and none of the work. Requires the planner:write scope.",
-      inputSchema: {
-        name: z.string().describe('The space name.'),
-        coverUrl: z.string().optional().describe('A cover image URL for the space tile.'),
-        duplicateFrom: z
-          .string()
-          .optional()
-          .describe("Copy this space's stages into the new one. Cards are never copied."),
-      },
     },
     async (args, extra) => {
       try {
@@ -3779,21 +2701,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_space ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_space',
     {
       title: 'Update Space',
       annotations: WRITE,
-      description:
-        "Rename a space or change its cover. This is a PATCH: a field you omit is left alone, so renaming does not disturb the cover. Pass coverUrl as an empty string to REMOVE the cover. To favorite or archive a space, use the `favorite` and `archive` tools with assetType 'space' instead. Requires the planner:write scope.",
-      inputSchema: {
-        spaceId: z.string().describe('The space id to update.'),
-        name: z.string().optional().describe('A new name.'),
-        coverUrl: z
-          .string()
-          .optional()
-          .describe('A new cover image URL. Pass an empty string to remove the cover entirely.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3809,14 +2721,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- delete_space ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'delete_space',
     {
       title: 'Delete Space',
       annotations: WRITE,
-      description:
-        'Delete a space. The server REFUSES a space that still holds cards and names the count, because the delete cascades to every card in it along with their covers, captions, posts and schedules. Archive the space instead if you want it out of the way. Requires the planner:write scope.',
-      inputSchema: { spaceId: z.string().describe('The space id to delete.') },
     },
     async (args, extra) => {
       try {
@@ -3830,20 +2739,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_stages -------------------------------------------------
-  server.registerTool(
+  tool(
     'list_stages',
     {
       title: 'List Stages',
       annotations: READ,
-      description:
-        "List one SPACE's stages, in order. ⚠️ STAGES ARE PER-SPACE: without spaceId this is the account's DEFAULT space, and two spaces can each hold a stage named 'Published' with different ids, so a stage name resolved against the wrong space is a different column. Stages are user-customizable (renamed, reordered, added, removed), so call this to discover the real stages before placing a card; pass a stage's id (most stable), slug, or name to create_card / update_card.",
-      inputSchema: {
-        spaceId: z
-          .string()
-          .optional()
-          .describe("Which space's stages, from list_spaces. Omit only when you mean the account's default space."),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -3856,22 +2756,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_stage ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_stage',
     {
       title: 'Create Stage',
       annotations: WRITE,
-      description:
-        "Create a stage (a column on one board). ⚠️ STAGES ARE PER-SPACE: without spaceId this creates on the account's DEFAULT board, which is rarely what you want once more than one space exists, so call list_spaces first. The slug is DERIVED from the name and is not settable; a board cannot hold two columns whose names produce the same slug and the server refuses the second rather than renaming it for you. Place the column with afterId, beforeId or position (top is the first column), or name none to put it at the end. Requires the planner:write scope.",
-      inputSchema: {
-        name: z.string().describe('The column name, for example "In Review". Must contain a letter or number.'),
-        spaceId: z
-          .string()
-          .optional()
-          .describe("Which board, from list_spaces. Omit only when you mean the account's default space."),
-        color: z.string().optional().describe('A hex color such as "#3B82F6".'),
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -3893,20 +2782,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_stage ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_stage',
     {
       title: 'Update Stage',
       annotations: WRITE,
-      description:
-        "Rename, recolor or move one stage. This is a PATCH: a field you omit is left alone. ⚠️ spaceId is REQUIRED, because a stage id alone does not tell the server which board you mean and guessing the wrong one silently changes nothing. Renaming re-derives the slug, so renaming a column away from 'Published' also stops publishing auto-moving cards into it; a rename that collides with another column on the same board is refused. Moving names NEIGHBORS or an end, never a number: pass afterId, beforeId, or position (top is the first column). Requires the planner:write scope.",
-      inputSchema: {
-        stageId: z.string().describe('The stage id to update, from list_stages.'),
-        spaceId: z.string().describe('The board this stage is on, from list_stages or list_spaces.'),
-        name: z.string().optional().describe('A new name. The slug follows it automatically.'),
-        color: z.string().optional().describe('A new hex color such as "#3B82F6".'),
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -3928,21 +2808,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- delete_stage ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'delete_stage',
     {
       title: 'Delete Stage',
       annotations: WRITE,
-      description:
-        'Delete a stage and move its cards to another column. The server REFUSES a column that still holds cards when you name no targetStageId, and tells you how many there are: cards are never destroyed by deleting a column, and the delete and the reassignment happen in one transaction. Returns the board that is left. Requires the planner:write scope.',
-      inputSchema: {
-        stageId: z.string().describe('The stage id to delete, from list_stages.'),
-        spaceId: z.string().describe('The board this stage is on.'),
-        targetStageId: z
-          .string()
-          .optional()
-          .describe('Where this column\'s cards should go. Required unless the column is empty.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -3959,34 +2829,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_card ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_card',
     {
       title: 'Create Card',
       annotations: WRITE,
-      description:
-        "Create a card, the container in the content pipeline. A card holds the work (title, notes, cover) and the posts that publish it. Attach posts and media by passing `posts` and `assets` to update_card, then publish with publish_post. ⚠️ WITHOUT spaceId THIS LANDS ON THE ACCOUNT'S DEFAULT BOARD, which is rarely what you want once more than one space exists, so call list_spaces first. `stage` accepts a stage id/slug/name and DECIDES the space when it is an id; a spaceId that disagrees with it is rejected rather than guessed. Requires a key with the planner:write scope.",
-      inputSchema: {
-        title: z.string().describe('Post title (required).'),
-        platform: z.enum(POST_PLATFORMS).describe('Primary platform for the post.'),
-        spaceId: z
-          .string()
-          .optional()
-          .describe(
-            "Which board to create the card on, from list_spaces. Omit only when you mean the account's default space.",
-          ),
-        stage: z.string().optional().describe('Stage id, slug, or name. Defaults to the first stage.'),
-        coverUrl: z.string().optional().describe('Public URL for the post cover (the card thumbnail).'),
-        coverOutputId: z
-          .string()
-          .optional()
-          .describe('A media token (short id, output id or first 8 characters, optionally with "-N") for the cover, resolved to its URL. Use this or coverUrl.'),
-        tags: z
-          .array(z.string())
-          .optional()
-          .describe('Tag names to set on the post (must already exist; see list_tags / create_tag). Replaces the set.'),
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -3995,6 +2842,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           await client.createCard({
             title: args.title,
             platform: args.platform,
+            contentType: args.contentType,
             spaceId: args.spaceId,
             stage: args.stage,
             coverUrl: args.coverUrl,
@@ -4013,85 +2861,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_card ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_card',
     {
       title: 'Update Card',
       annotations: WRITE,
-      description:
-        "Update a card: its fields (title, notes, platform, cover, stage), its POSTS (one per platform, which is how it publishes), its ASSETS (its files, links, linked projects and inspiration posts, in order), and its SCHEDULE. posts and assets are DECLARATIVE: pass the WHOLE set, because anything you leave out is removed. Posts key on platform. Assets key on id, and THE ARRAY ORDER IS THE carousel ORDER, so reordering is just sending the same ids in a different order; keep an existing asset by id, and add a new one by EXACTLY ONE reference: outputId (media: a generation, an upload or an import), assetUrl (a link), contentId (an inspiration post, shown on the card's Inspiration tab) or projectId (an editor or canvas project); get_card reads each back under the same field name. Listing the same thing twice is refused. To attach one thing, read the card, append the entry to its assets, and send the whole list back. scheduledAt sets the time on the card AND every post (pass null to clear); give a post its own scheduledAt to override it for that platform. To publish NOW, use publish_post. Pass spaceId to MOVE the card to another space; without a stage it lands in the target space's stage whose slug matches its current one, or that space's first stage. Pass cardIds to update several cards at once, which crossed with spaceId is how a selection moves in one call; fields that describe ONE card (title, notes, cover) still need exactly one. WRITING notes REQUIRES expectedRevision: read the card first and pass the revision it reported, or the call is refused. Requires the planner:write scope.",
-      inputSchema: {
-        cardId: z.string().describe('The card id.'),
-        title: z.string().optional().describe('Rename the card. Keep it short: a long title wraps and makes the column unreadable.'),
-        platform: z.enum(POST_PLATFORMS).optional().describe("The card's primary platform. This is a label on the card; what actually publishes is its posts."),
-        stage: z.string().optional().describe('Move the card to this stage (id, slug, or name).'),
-        spaceId: z
-          .string()
-          .optional()
-          .describe(
-            "Move the card to a different space (id or slug). Without a stage, it lands in that space's stage whose slug matches its current one, or that space's first stage.",
-          ),
-        cardIds: z
-          .array(z.string())
-          .optional()
-          .describe(
-            'Update several cards at once. Fields that describe ONE card (title, notes, cover) still require exactly one.',
-          ),
-        expectedRevision: z
-          .number()
-          .int()
-          .optional()
-          .describe(
-            'REQUIRED when writing notes: the revision get_card reported for this card. A card\'s notes have four '
-            + 'independent writers, each reading the whole document and writing it back, so without this the last '
-            + 'writer silently erases the others and still gets a success. If the card changed since you read it, '
-            + 'the call fails with a conflict carrying the current notes and revision: merge onto those and retry '
-            + 'with the revision they came with. Never guess it or add one to it, because it only advances when '
-            + 'notes actually change.',
-          ),
-        notes: z.string().optional().describe('Working notes on the card. Plain text or markdown; tables render here. No emojis.'),
-        // ⚠️ ONE LOOSE OBJECT RATHER THAN A UNION, deliberately. Which keys may combine is the server's rule
-        // (`lib/text/apply-text-edits.ts` in the app), and it answers a bad combination by naming the edit and
-        // why. A zod union here would reject the same input first with a generic schema error, and would be a
-        // second copy of the rule to keep in step. `.strict()` still refuses a key that is not an edit field.
-        notesEdits: z
-          .array(
-            z
-              .object({
-                append: z.string().optional(),
-                find: z.string().optional(),
-                replace: z.string().optional(),
-              })
-              .strict(),
-          )
-          .optional()
-          .describe(
-            'Change the notes in place without resending them. Each edit is { append: text }, which adds to the end, or { find, replace }, where find must match exactly one place in the current notes. Edits apply in order, all or none, to the notes as they are when the call arrives, so no expectedRevision is needed. Prefer this to notes for any change smaller than a rewrite.',
-          ),
-        coverUrl: z.string().optional().describe('Public URL for the post cover.'),
-        coverOutputId: z
-          .string()
-          .optional()
-          .describe('A media token (short id, output id or first 8 characters, optionally with "-N") for the cover, resolved to its URL.'),
-        tags: z
-          .array(z.string())
-          .optional()
-          .describe('Tag names to set on the post (must already exist; replaces the set). Omit to leave tags unchanged.'),
-        scheduledAt: z
-          .string()
-          .nullable()
-          .optional()
-          .describe('ISO time to publish. Sets the card AND every post. null clears the schedule.'),
-        posts: z
-          .array(cardPostSchema)
-          .optional()
-          .describe("The card's posts, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all."),
-        assets: z
-          .array(postAssetSchema)
-          .optional()
-          .describe("The post's assets IN ORDER, each { id } to keep an existing one or ONE of { outputId } | { assetUrl, assetType? } | { contentId } | { projectId } to add. REPLACES the list; [] clears it."),
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -4121,14 +2895,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_tags ------------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_tags',
     {
       title: 'List Tags',
       annotations: READ,
-      description:
-        "List the account's tags (the organizational tag library). Set a post's tags with the `tags` field on create_card / update_card. A tag is just a lowercase name.",
-      inputSchema: { ...pageInput() },
     },
     async (args, extra) => {
       try {
@@ -4141,16 +2912,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_tag -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_tag',
     {
       title: 'Create Tag',
       annotations: WRITE,
-      description:
-        "Create a tag in the account's tag library (the name is lowercased). Tags organize posts; apply them with the `tags` field on create_card / update_card. Requires the planner:write scope.",
-      inputSchema: {
-        name: z.string().describe('The tag name (lowercased on save).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4163,17 +2929,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_tag -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_tag',
     {
       title: 'Update Tag',
       annotations: WRITE,
-      description:
-        'Rename a tag (preserves its assignments on all posts). To detach a tag from one post, set that post\'s `tags` without it via update_card. Requires the planner:write scope.',
-      inputSchema: {
-        tagId: z.string().describe('The tag id (from list_tags).'),
-        name: z.string().describe('The new tag name (lowercased on save).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4186,16 +2946,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- delete_tag -----------------------------------------------------------
-  server.registerTool(
+  tool(
     'delete_tag',
     {
       title: 'Delete Tag',
       annotations: WRITE,
-      description:
-        "Delete a tag from the account's library. This DESTROYS the tag and removes it from every post it was on. To just detach a tag from one post, set that post's `tags` without it via update_card instead. Requires the planner:write scope.",
-      inputSchema: {
-        tagId: z.string().describe('The tag id (from list_tags).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4208,17 +2963,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- publish_post ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'publish_post',
     {
       title: 'Publish Post',
       annotations: PUBLISH,
-      description:
-        "Publish a card's posts NOW: every post on the card, or only the named platform's post when `platform` is given. Each post must have a connected account. Requires a key with the publish:write scope; holding that scope is the account owner's consent to autonomous publishing. Returns one result per post.",
-      inputSchema: {
-        cardId: z.string().describe('The card id to publish.'),
-        platform: z.enum(POST_PLATFORMS).optional().describe('Publish only this platform. Omit to publish all posts.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4231,21 +2980,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_tracked_accounts --------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_tracked_accounts',
     {
       title: 'List Tracked Accounts',
       annotations: READ,
-      description:
-        "List the social accounts this ContentHero account tracks. TWO KINDS, in one list: accountType 'inspiration' is the creators and competitors they watch for research, 'brand' is their OWN profiles (distinct from list_brand_kits, which are the brand identity documents). Every row reports its own accountType, so omit the filter to see both. Call get_tracked_account for one account's performance, or list_content for the posts. Pass brandKitId to scope to the accounts linked to a specific brand kit.",
-      inputSchema: {
-        accountType: z
-          .enum(['inspiration', 'brand'])
-          .optional()
-          .describe("Narrow to one kind. Omitted, both come back."),
-        brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit (from get_brand_kit).'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -4258,16 +2997,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_tracked_account ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_tracked_account',
     {
       title: 'Get Tracked Account',
       annotations: READ,
-      description:
-        "Get one tracked account with how its content actually performs: post count, total and average views/likes/comments, average engagement and outlier score, plus its top posts by outlier score and its most recent ones. Works for either kind of account: use it on one of the owner's OWN accounts to ground decisions in their real numbers, or on a creator they watch to study what works for that creator.",
-      inputSchema: {
-        accountId: z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
-      },
     },
     async (args, extra) => {
       try {
@@ -4281,17 +3015,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_tracked_account -----------------------------------------------
-  server.registerTool(
+  tool(
     'update_tracked_account',
     {
       title: 'Update Tracked Account',
       annotations: WRITE,
-      description:
-        "Move a tracked account within its list (its kind's: the creators they watch, or their own profiles), after or before another of the same kind, or to an end. Returns the account with its performance, as get_tracked_account does. Requires the inspiration:write scope.",
-      inputSchema: {
-        accountId: z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -4306,32 +3034,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   // -- add_tracked_account --------------------------------------------------
   // A list, as the API takes it: several accounts resolve together and the answer says which the plan allowed.
-  server.registerTool(
+  tool(
     'add_tracked_account',
     {
       title: 'Add Tracked Account',
       annotations: WRITE,
-      description:
-        "Track social accounts by handle or profile URL. accountType 'inspiration' (the default) is the creators the user watches, 'brand' is their own profiles. Inspiration accounts count toward the plan's limit: accounts past it are not tracked and come back as not tracked, with the refusal. Each tracked account comes back with its outcome: added, restored or already tracked. Its posts arrive once it syncs. Requires the inspiration:write scope.",
-      inputSchema: {
-        accounts: z
-          .array(
-            z.object({
-              platform: z
-                .enum(TRACKABLE_PLATFORMS)
-                .optional()
-                .describe('The platform. Needed for a bare handle; a profile URL states its own.'),
-              handleOrUrl: z.string().describe('A handle or a profile URL.'),
-            }),
-          )
-          .min(1)
-          .describe('The accounts to track, in the order they are listed.'),
-        accountType: z
-          .enum(['inspiration', 'brand'])
-          .optional()
-          .describe('Which list they join: inspiration (the default) or brand.'),
-        brandKitId: z.string().optional().describe('Also link each account to this brand kit (from list_brand_kits).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4344,16 +3051,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- remove_tracked_account -----------------------------------------------
-  server.registerTool(
+  tool(
     'remove_tracked_account',
     {
       title: 'Remove Tracked Account',
       annotations: { ...WRITE, idempotentHint: true },
-      description:
-        'Stop tracking a social account. Its posts and analyses are kept, and adding it again restores it. Requires the inspiration:write scope.',
-      inputSchema: {
-        accountId: z.string().describe("One of your tracked accounts: its id or short id, its profile link, its handle, or the platform's own id for it."),
-      },
     },
     async (args, extra) => {
       try {
@@ -4366,47 +3068,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_content ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_content',
     {
       title: 'List Tracked Content',
       annotations: READ,
-      description:
-        "The core research read: social posts this account tracks, ranked by OUTLIER SCORE (how far a post overperformed its own creator's baseline, so a small account's hit still surfaces), or by relevance when you pass search. SPANS BOTH the creators they watch and their OWN posts by default; set scope to narrow. This is how you answer both \"what is working for the people I watch\" and \"how did my own posts do\" without picking a subsystem first. Filter by platform, content type, a published window (publicationDate like 'week' or 'month', or exact publishedAfter/publishedBefore), and ranges over score, views, duration and follower count. Call get_content for one post in full, including its transcript.",
-      inputSchema: {
-        scope: z
-          .enum(['all', 'inspiration', 'brand'])
-          .optional()
-          .describe("'inspiration' = creators they watch, 'brand' = their own accounts, 'all' = both (default)."),
-        platform: z.enum(['youtube', 'instagram']).optional().describe('Filter to one platform.'),
-        contentType: z.string().optional().describe("Filter by content type, e.g. 'video', 'short', 'reel'."),
-        outlierScoreMin: z.number().optional().describe('Only content at or above this outlier score.'),
-        outlierScoreMax: z.number().optional().describe('Only content at or below this outlier score.'),
-        viewsMin: z.number().optional().describe('Only content at or above this view count.'),
-        viewsMax: z.number().optional().describe('Only content at or below this view count.'),
-        durationMin: z.number().optional().describe('Minimum duration in seconds.'),
-        durationMax: z.number().optional().describe('Maximum duration in seconds.'),
-        subscribersMin: z.number().optional().describe("Minimum follower count of the post's account."),
-        subscribersMax: z.number().optional().describe("Maximum follower count of the post's account."),
-        publicationDate: z
-          .enum(['week', 'month', '3months', '6months', 'year', '2years'])
-          .optional()
-          .describe('Published within this window. Use publishedAfter for an exact date instead.'),
-        publishedAfter: z.string().optional().describe('ISO timestamp. Wins over publicationDate.'),
-        publishedBefore: z.string().optional().describe('ISO timestamp.'),
-        search: z
-          .string()
-          .optional()
-          .describe(
-            'Finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance, or the one post a pasted link names. Returns only the posts judged relevant, never the unranked candidates. An empty result carries emptyReason: nothing matched, the relevance judge was unavailable (try again), or the link names no post this list covers.',
-          ),
-        ...sortInput('content'),
-        accountIds: z.array(z.string()).optional().describe("Limit to these tracked accounts, each by its id or short id, its profile link, its handle, or the platform's own id for it."),
-        addedByYou: z.boolean().optional().describe('Only the one-off posts the owner saved by url.'),
-        brandKitId: z.string().optional().describe('Scope to the accounts linked to this brand kit.'),
-        favorited: z.boolean().optional().describe('Only content the account has favorited.'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -4419,40 +3085,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_content ----------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_content',
     {
       title: 'Get Tracked Content',
       annotations: READ,
-      description:
-        "Get one tracked post in full: engagement stats, outlier score, hashtags, keywords, mentions and audio info. Works for a creator's post and for the owner's own. THE TRANSCRIPT IS OPT-IN because a long video is a large document: pass transcript='text' for the whole thing, or transcript='segments' for timed slices, and then narrow with startMs/endMs or transcriptSearch to pull only the part that matters. The transcript reports a status: 'complete', 'not_applicable' (there is nothing to transcribe), 'failed' (it will be retried), 'processing', or 'absent' (never attempted), so an empty result is never ambiguous. THE BREAK IT DOWN ANALYSIS IS OPT-IN THE SAME WAY: availability (status + section names) is always reported; pass analysis='full' for every section, or analysisSections for only the ones the task needs. SCENES ARE OPT-IN THE SAME WAY: availability is always reported; pass scenes='map' for each scene's time range, what happens in it and what is said. Scenes are descriptions only: see a scene's frames with view, by contentId and atSec in its range. startMs/endMs narrow either. Scenes exist once analyze_content has run with kind scenes. Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes. Each video also reports its audio map summary (speech, sound candidates, music, loudness), free; audioMap adds the map for the window. transcriptSegments is excluded from 'full' because the transcript params above are the one transcript path.",
-      inputSchema: {
-        contentId: z.string().describe("The post: its id or short id, its link, or the platform's own id for it."),
-        transcript: z
-          .enum(['none', 'text', 'segments', 'words'])
-          .optional()
-          .describe("How much transcript to include. Default 'none'. 'words' adds each word's start and end to the segments, where the post has word timing."),
-        startMs: z.number().optional().describe('Window start, ms from the start of the media. Narrows transcript segments, scenes and cut lists.'),
-        endMs: z.number().optional().describe('Window end, ms from the start of the media. Narrows transcript segments, scenes and cut lists.'),
-        transcriptSearch: z
-          .string()
-          .optional()
-          .describe('Return only the segments containing this phrase. Implies segments.'),
-        analysis: z
-          .enum(['none', 'full'])
-          .optional()
-          .describe("How much of the post's Break It Down analysis to include. Default 'none' (availability + section names still report)."),
-        analysisSections: z
-          .array(z.string())
-          .optional()
-          .describe('Only these analysis sections. The names differ by format, so take them from the availability line.'),
-        scenes: z
-          .enum(['none', 'map'])
-          .optional()
-          .describe("How much of the post's scene map to include. Default 'none' (availability still reports). 'map' adds each scene's range, what happens and what is said; view shows its frames."),
-        cuts: z.boolean().optional().describe("Add each downloaded video's cut list: the seconds where its picture changes, measured once and free. startMs and endMs narrow the lists."),
-        audioMap: z.boolean().optional().describe("Add each video's audio map window: speech, sound candidates with their measured descriptors, music, loudness and each stem's level, measured once and free. Each video's summary reports either way. startMs and endMs narrow the window."),
-      },
     },
     async (args, extra) => {
       try {
@@ -4466,26 +3103,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- analyze_content ------------------------------------------------------
-  server.registerTool(
+  tool(
     'analyze_content',
     {
       title: 'Analyze Content',
       // It can spend credits, so it is never read-only (see transcribe).
       annotations: WRITE,
-      description:
-        "Work on a tracked post, for analysis, as one of three kinds. breakdown (default) runs Break It Down: why it works, from the hook and structure to visuals, audio, the call to action, and steps to recreate it. scenes maps the post's scenes: each one's range, what happens and what is said in it; see a scene's frames with view. video downloads every video the post holds, its one video or each video slide of a carousel, into shared analysis copies, which the reading tools use; nothing lands in your library or counts against your storage. Once stored, each video answers with its cut list, where it changes scene, free. A post with no video says so: its images are already stored and readable. Sound is not analyzed on download: view the video with sound, or split it, to analyze its sound (free). Viewing an existing result is free; creating one spends credits (video is charged for what its downloads moved, holding the most they may move first), so pass getCost to see the price first. A breakdown or scenes still running returns pending: wait for it with get_status by the post's id (kind content for a breakdown, kind scenes for scenes), then call this again to read it at no charge. A video still downloading returns pending: call this again with the same kind to follow it, which is free.",
-      inputSchema: {
-        contentId: z.string().describe("The post: its id or short id, its link, or the platform's own id for it."),
-        kind: z
-          .enum(['breakdown', 'scenes', 'video'])
-          .optional()
-          .describe("breakdown (default): the Break It Down analysis. scenes: the scene map, each scene's range, what happens and what is said, priced per minute of video. video: every video the post holds in shared analysis copies, each with its cut list once stored, charged for what the downloads moved."),
-        getCost: z.boolean().optional().describe('Return the credit cost instead of analyzing (nothing runs, nothing is charged). 0 when the result already exists, or for video when its copies are being made.'),
-        resolution: z
-          .enum(['720p', '1080p'])
-          .optional()
-          .describe('Only with kind video. The most detail the stored copy should have: the best the platform offers up to this is downloaded, charged for what arrives. A copy already at or above it costs nothing. Leave it out to keep the stored copy, or to get one at the standard detail.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4541,14 +3164,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- list_connected_accounts ----------------------------------------------
-  server.registerTool(
+  tool(
     'list_connected_accounts',
     {
       title: 'List Connected Accounts',
       annotations: READ,
-      description:
-        "List the social accounts the owner has connected (the publish targets), default first. Use an account's id as connectedAccountId on a post in update_card, then publish_post. Read-only: connecting an account is done in the ContentHero app.",
-      inputSchema: { ...pageInput() },
     },
     async (args, extra) => {
       try {
@@ -4561,16 +3181,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_connected_account ------------------------------------------------
-  server.registerTool(
+  tool(
     'get_connected_account',
     {
       title: 'Get Connected Account',
       annotations: READ,
-      description:
-        "Get one connected account's detail: platform, status, and capabilities. Use it to confirm a target can publish before attaching it to a post.",
-      inputSchema: {
-        accountId: z.string().describe('The connected account id from list_connected_accounts.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4585,13 +3200,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_account / update_account -----------------------------------------
   // Your own ContentHero account, one record per key, so no id. Not a tracked social account (get_tracked_account).
   // A setting joins the account as a field of update_account, never as a tool of its own.
-  server.registerTool(
+  tool(
     'get_account',
     {
       title: 'Get Account',
       annotations: READ,
-      description:
-        'Get your ContentHero account: the credit balance, what is available to spend, credits reserved for work in progress, what was spent this month, the monthly spend cap, the plan and auto top-up. For a tracked social account, use get_tracked_account.',
     },
     async (extra) => {
       try {
@@ -4603,22 +3216,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'update_account',
     {
       title: 'Update Account',
       annotations: { ...WRITE, idempotentHint: true },
-      description:
-        "Update your ContentHero account. Only the fields you pass change. spendCap sets the monthly spend cap in credits, or null removes it: every credit spent this month counts toward it, and anything that would cross it is refused until the cap resets on the 1st of the month (UTC). Changing it needs the billing:write scope and the account's owner. Returns the account as it now is.",
-      inputSchema: {
-        spendCap: z
-          .number()
-          .int()
-          .min(1)
-          .nullable()
-          .optional()
-          .describe('The monthly spend cap in credits, or null for no cap.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4635,22 +3237,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // ===========================================================================
 
   // -- favorite -------------------------------------------------------------
-  server.registerTool(
+  tool(
     'favorite',
     {
       title: 'Favorite',
       annotations: WRITE,
-      description:
-        "Favorite or UNfavorite an asset: pass favorited:false to clear it (default true). For media (one output of a generation, an upload, stock), pass its mediaId as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several). For anything else, pass assetType + id (card, voice, brand_kit, project, inspiration_content, gallery, transition, caption-template, template, space). Requires the favorites:write scope. Idempotent in both directions.",
-      inputSchema: {
-        mediaId: z.string().optional().describe('A media id, for media. A bare id for a generation with several outputs is refused with their media ids listed.'),
-        assetType: z
-          .enum(['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'caption-template', 'template', 'space'])
-          .optional()
-          .describe('The kind of asset, for anything that is not media. Pass with id.'),
-        id: z.string().optional().describe("The asset's id, with assetType."),
-        favorited: z.boolean().optional().describe('Default true. Pass false to UNfavorite.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4666,22 +3257,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   // -- unfavorite -----------------------------------------------------------
   // -- archive --------------------------------------------------------------
-  server.registerTool(
+  tool(
     'archive',
     {
       title: 'Archive',
       annotations: WRITE,
-      description:
-        "Archive or UNarchive an asset: pass archived:false to restore it (default true). ContentHero never hard-deletes, so this is always reversible. For one output of a generation, pass its mediaId (a1B2c3D4-2 for one output of several). For anything else, pass assetType + id (card, brand_kit, brand_kit_section, project, space, template, style_library). Archiving is a timestamp and nothing else is touched, so a scheduled card restores as scheduled. Requires the favorites:write scope. Idempotent in both directions.",
-      inputSchema: {
-        mediaId: z.string().optional().describe('A generated output\'s media id. A bare id for a generation with several outputs is refused with their media ids listed.'),
-        assetType: z
-          .enum(['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'template', 'style_library'])
-          .optional()
-          .describe('The kind of asset, for anything that is not media. Pass with id.'),
-        id: z.string().optional().describe("The asset's id, with assetType."),
-        archived: z.boolean().optional().describe('Default true. Pass false to RESTORE (unarchive).'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4698,21 +3278,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- share ----------------------------------------------------------------
   // One tool for every shareable kind, as favorite and archive are: the target names the kind, and each kind keeps the
   // scope of the surface that owns it. The route refuses a call naming two targets, so nothing here checks it again.
-  server.registerTool(
+  tool(
     'share',
     {
       title: 'Share',
       annotations: WRITE,
-      description:
-        "Make an item's public link, or stop sharing it with shared:false. Anyone with the link sees the item with no sign-in; a stopped link never opens again, and sharing again makes a new one. For media made in Studio, pass mediaIds: outputs of your finished generations, as list_media, search_media and get_folder print them. One output gives its generation's link, opened at that output; a generation keeps one link, so sharing it again returns the same page. Several give a new link to them as a set, leaving out any that cannot be shared. To stop a media link, name a generation by one media id or any media link as shareUrl. For anything else, pass assetType + id: a project's live link shows the project as it is now, a project has one link, and get_project reports it. An export's share page comes with get_export. Requires studio:write for media and editor:write for a project.",
-      inputSchema: {
-        mediaIds: z.array(z.string()).min(1).optional().describe('For media: one or more media ids of outputs of your finished generations. To stop sharing, one.'),
-        assetType: z.enum(['project']).optional().describe('The kind of item, for anything that is not media. Pass with id.'),
-        id: z.string().optional().describe("The item's id, with assetType."),
-        title: z.string().optional().describe('For media: a title for a set of two or more.'),
-        shared: z.boolean().optional().describe('Default true. Pass false to stop sharing.'),
-        shareUrl: z.string().optional().describe('For media, with shared:false: the media link to stop.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4735,22 +3305,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- unarchive ------------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_projects',
     {
       title: 'List Projects',
       annotations: READ,
-      description:
-        "List the account's editor (video timeline) and canvas (slides/layers) projects. Filter by state (archived / favorited), by type (editor / canvas), or by a title search. Returns lightweight summaries; call get_project for a single project's full composition. Requires the editor:read scope.",
-      inputSchema: {
-        filter: z.enum(['archived', 'favorited']).optional().describe('archived -> only archived; favorited -> favorited and not archived; omitted -> active (not archived).'),
-        type: z.enum(['editor', 'canvas']).optional().describe('Restrict to one project type; omitted returns both.'),
-        surface: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
-        kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
-        search: z.string().optional().describe('Case-insensitive title search.'),
-        ...sortInput('projects'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -4762,25 +3321,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'get_project',
     {
       title: 'Get Project',
       annotations: READ,
-      description: getProjectDescription('mcp'),
-      inputSchema: {
-        projectId: z.string().describe('The project id to read.'),
-        detail: z.enum(['summary', 'full']).optional().describe("'summary' (default) returns the lightweight per-clip/per-layer structure; 'full' returns the complete composition with every property."),
-        fromFrame: z.number().int().min(0).optional().describe('Timeline only: start of a frame window; returns clips overlapping [fromFrame, toFrame].'),
-        toFrame: z.number().int().min(0).optional().describe('Timeline only: end of the frame window (see fromFrame).'),
-        trackId: z.string().optional().describe('Timeline only: scope the read to a single track by id.'),
-        slideId: z.string().optional().describe('Canvas only: scope the read to a single slide by id. Applies to detail:\'full\' as well. An id matching no slide returns every slide rather than nothing.'),
-        clipIds: z.array(z.string()).min(1).optional().describe("Read only these clips: each one's summary line, or whole with its code and the modules it imports with detail 'full'; nothing else of the project."),
-        moduleNames: z.array(z.string()).min(1).optional().describe("Read these project modules' code."),
-        sourceAssetId: z.string().optional().describe("With atSec: the recording whose moments to place on the timeline, by the assetId a clip's source names."),
-        atSec: z.array(z.number().min(0)).min(1).optional().describe('With sourceAssetId: the seconds of that recording to place.'),
-        modulesIndex: z.boolean().optional().describe("Read the index of the project's modules: each one's name, how many clips draw it, whether none does, and its size, without code. Read alone, like the other parts."),
-      },
     },
     async (args, extra) => {
       try {
@@ -4803,71 +3348,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'view',
     {
       title: 'View',
       annotations: READ,
-      description: viewDescription('mcp'),
-      inputSchema: {
-        projectId: z.string().optional().describe("The project to view or render. Omit for the surface the user is on now. Needed to render when no one is viewing."),
-        capture: z.boolean().optional().describe("Also return a picture of the user's screen as shown now, including unsaved and transient state. Use it only when the task depends on what the screen shows; to see your work, render it instead."),
-        render: z.boolean().optional().describe("Render your work from the saved project: one composed frame or slide, the one in focus unless frame, slideId or slideIndex names another, or the frames that frames, count or perSecond name. Frames across a range show motion, timing and pacing, finer the closer together they are."),
-        frame: z.number().int().min(0).optional().describe("Editor: which single timeline frame to render. Omit to render the current playhead frame."),
-        slideId: z.string().optional().describe("Canvas: the id of the slide to render. Omit to render the focused slide."),
-        slideIndex: z.number().int().min(1).optional().describe("Canvas: the 1-based slide index to render (alternative to slideId)."),
-        frames: z.array(z.number().int().min(0)).min(1).optional().describe('Editor: exactly these timeline frames, in this order.'),
-        fromFrame: z.number().int().min(0).optional().describe("Start timeline frame of the range, for several frames, sound or video. Omit to start at the beginning."),
-        toFrame: z.number().int().min(0).optional().describe('End timeline frame of the range. Omit to run to the end.'),
-        count: z.number().int().min(1).optional().describe("How many frames to spread from the first frame of the range, or of a source's window, to its last, both included. Omit for one frame at the focus point, or about one a second of a range."),
-        perSecond: z.number().positive().optional().describe("How many frames to take per second of the range, or of a source's window, stepping from its first frame; never more than the footage has."),
-        layout: z.enum(['frames', 'sheets']).optional().describe("'frames' returns each frame as its own image; 'sheets' tiles them into contact sheets, an edit's frames numbered and a source's labeled with its second under each tile. Omit to choose by how many fit one result."),
-        video: z.boolean().optional().describe("Watch the range play with its sound, to judge motion, timing, transitions and pacing. Takes fromFrame and toFrame, or a source's window."),
-        sound: z.boolean().optional().describe("Hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by fromFrame and toFrame; or a source's window as it is, by fromSec and toSec, beside any frames asked for."),
-        renderId: z.string().optional().describe("Read a render already started, by its renderId, as a pending answer's readWith names it. Pass only page with it."),
-        page: z.number().int().min(1).optional().describe("Which page of the render, or of a source's frames, to read, starting at 1."),
-        /*
-          ⭐ 3840, THE WIDEST NATIVE FRAME (4K landscape). This was 1440, while the server rendered at 960 and
-          enlarged, so full resolution was unreachable. The server now renders at the width asked for and caps it
-          per project and per plan (native width, the plan's export ceiling), so the schema only bounds the absurd.
-        */
-        width: z.number().int().min(48).max(3840).optional().describe("The width in pixels of each image returned, the crop's when a region is named, to check legibility at the size it will be seen. Height follows the aspect ratio. Anything the server changed is listed in adjusted."),
-        region: z
-          .object({
-            x: z.number().min(0),
-            y: z.number().min(0),
-            width: z.number().positive(),
-            height: z.number().positive(),
-          })
-          .optional()
-          .describe("Render only this rectangle, { x, y, width, height } in composition units (get_project's compositionSpace), to inspect detail. Without width it comes back at native pixels. For a source, the rectangle is in its own pixels."),
-        assetId: z.string().optional().describe("A clip of the user's to see and hear, by its asset id: the id get_project reports in a clip's source. Or pass mediaUrl or contentId."),
-        mediaUrl: z.string().optional().describe("A clip of the user's to see and hear, by its media URL, rather than your edit. Or pass assetId or contentId."),
-        contentId: z.string().optional().describe("A tracked post's video to see and hear, by its id or short id, its link, or the platform's own id for it, once analyze_content kind video has downloaded it. Or pass assetId or mediaUrl."),
-        slide: z.number().int().min(0).optional().describe('Which video of a carousel post, by the slide analyze_content reports for it. Only with contentId.'),
-        fromSec: z.number().min(0).optional().describe("Start of a source's window, in its own seconds. Omit to start at its beginning."),
-        toSec: z.number().min(0).optional().describe("End of a source's window, in its own seconds. Omit to run to its end."),
-        atSec: z.array(z.number().min(0)).min(1).optional().describe('Frames at exactly these seconds of a source, instead of spread across a window.'),
-        live: z.boolean().optional().describe('Also return what the user is looking at beside a render.'),
-        trackIds: z.array(z.string()).min(1).optional().describe("Render only these tracks, every clip on them, picture and sound, on the timeline's own frame numbers. The project is untouched."),
-        clipIds: z.array(z.string()).min(1).optional().describe("Render only these clips, picture and sound, on the timeline's own frame numbers. The project is untouched."),
-        find: z.string().min(1).max(200).optional().describe(VIEW_PICTURE_INPUT_TEXT.find),
-        where: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.where),
-        picture: z.boolean().optional().describe(VIEW_PICTURE_INPUT_TEXT.picture),
-        detector: z.enum(['pointer', 'face']).optional().describe(VIEW_PICTURE_INPUT_TEXT.detector),
-        track: z
-          .union([
-            z.string().min(1),
-            z.object({
-              atSec: z.number().min(0),
-              box: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().positive().max(1), h: z.number().positive().max(1) }),
-            }),
-          ])
-          .optional()
-          .describe(VIEW_PICTURE_INPUT_TEXT.track),
-        limit: z.number().int().min(1).optional().describe(VIEW_PICTURE_INPUT_TEXT.limit),
-        cursor: z.string().optional().describe(VIEW_PICTURE_INPUT_TEXT.cursor),
-      },
     },
     async (args, extra) => {
       try {
@@ -4925,28 +3410,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
 
 
-  server.registerTool(
+  tool(
     'get_transcript',
     {
       title: 'Get Transcript',
       annotations: READ,
-      description:
-        "Addresses the words one of two ways. With projectId it reads the words as the timeline plays them, in timeline order. With mediaId it reads the words of that recording itself, within an optional window of the recording's own seconds, including spans no timeline plays. Pass exactly one. The window is start inclusive and end exclusive. A media read's times are in the recording's own clock, and its words come a page at a time with word granularity. The rest of this describes the project read. Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current state ([disabled] = cut/excluded from the render, [enabled] = kept) and its exact clipId. Use this to read what is said, see which parts are already disabled, then target the exact clipId(s) or source-time ranges with update_timeline (disable_ranges to non-destructively cut, set_disabled to toggle a whole clip). Pass `granularity: 'word'` to also get, per segment: word-level timing with ABSOLUTE timeline frames (so split / range ops are exact), per-word confidence + speaker, the derived silence gaps (for dead-air removal; already inset to the cuttable region so cutting them keeps breathing room), and the non-speech audio events; plus the distinct speaker set at the top level. In word mode each word, silence and audio event is a row of values in the order `fields` names. Segments come a page at a time in timeline order: pass the answer's nextCursor back as cursor for the next page, and limit sets how many a page holds. Scope it with `search` (a phrase to find) or `startMs`/`endMs` (a source-media window, which also clips the returned words) to read only the part that matters. Also returns the project's current `revision` so you can edit right away without a separate get_project: pass it as update_timeline's expectedRevision for a concurrency-safe edit, or omit expectedRevision to just apply to the current state. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
-      inputSchema: {
-        projectId: z.string().optional().describe('The project whose timeline words to read. Use instead of mediaId.'),
-        mediaId: z.string().optional().describe('The recording whose words to read. Use instead of projectId.'),
-        startSeconds: z.number().min(0).optional().describe("With mediaId: where in the recording the window begins, in the recording's seconds."),
-        endSeconds: z.number().min(0).optional().describe('With mediaId: where the window ends.'),
-        search: z.string().optional().describe('Case-insensitive substring; returns only clip segments whose text contains it.'),
-        startMs: z.number().int().min(0).optional().describe('Source-media start time in ms; with endMs, returns only segments overlapping this window (and, in word mode, clips the returned words to it).'),
-        endMs: z.number().int().min(0).optional().describe('Source-media end time in ms; companion to startMs.'),
-        granularity: z.enum(['clip', 'word']).optional().describe("'clip' (default) returns text per clip; 'word' adds word timing + absolute timeline frames + confidence + speaker, derived silences, and audio events."),
-        paceThresholdMs: z.number().int().min(0).optional().describe('Word mode: minimum pause (ms) to report as a silence / dead-air region ("Pace"). Defaults to the project\'s saved pace, else 500.'),
-        paddingStartMs: z.number().int().optional().describe('Word mode: breathing room (ms) kept after speech at a silence start edge (negative tightens). Defaults to the saved padding, else 200.'),
-        paddingEndMs: z.number().int().optional().describe('Word mode: breathing room (ms) kept before speech at a silence end edge (negative tightens). Defaults to the saved padding, else 200.'),
-        limit: z.number().int().min(1).optional().describe('How many clip segments a page holds. Omit for the default.'),
-        cursor: z.string().optional().describe("The answer's nextCursor, to read the next page of segments with the same other inputs."),
-      },
     },
     async (args, extra) => {
       try {
@@ -4958,26 +3426,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'create_project',
     {
       title: 'Create Project',
       annotations: WRITE,
-      description:
-        "Create a new project. `type` picks what it is: 'editor' (video timeline) or 'canvas' (slides/layers). All fields are optional; defaults match the in-app new-project flow (16:9 landscape, an editor project). A new canvas starts with one empty slide already, so add content to it with update_canvas create_layer (use create_slide only to add MORE slides); A new editor starts with one empty main track, named in the result: put the first clips on it with update_timeline create_clip, and add a track only for something that sits over the main story. When the project is for a planned piece, pass cardId to link it to that card in the same call. Returns the new project id + revision. Requires the editor:write scope (and planner:write with cardId).",
-      inputSchema: {
-        type: z.enum(['editor', 'canvas']).optional().describe("The project type. Defaults to 'editor'."),
-        surface: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
-        kind: z.enum(['editor', 'canvas']).optional().describe('Deprecated alias for `type`, accepted for one release window.'),
-        title: z.string().optional().describe("Project title. Defaults to 'Untitled'."),
-        orientation: z.string().optional().describe("Aspect ratio, e.g. '16:9', '9:16', '1:1'. Defaults to '16:9'."),
-        width: z.number().optional().describe('Pixel width. Defaults from the orientation.'),
-        height: z.number().optional().describe('Pixel height. Defaults from the orientation.'),
-        // Approved text 7 (7.39, 2026-10-05).
-        fps: z.union([z.literal(24), z.literal(25), z.literal(30), z.literal(50), z.literal(60)]).optional().describe("Frames per second for an editor project: 24, 25, 30, 50 or 60. Defaults to 30."),
-        brandKitId: z.string().optional().describe('Optional brand kit to associate.'),
-        cardId: z.string().optional().describe('The card this project is for: the new project is linked to it in the same call (it shows among the card\'s assets), so the card opens the edit from the moment it exists. Also needs the planner:write scope.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -4989,28 +3442,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'export',
     {
       title: 'Export',
       ...renders('Exporting the project'),
       annotations: WRITE,
-      description:
-        "Export (render) a project's saved composition to a downloadable file the user KEEPS: a permanent deliverable that counts against the user's storage. To preview or verify a frame or slide while editing, do NOT export; use view with render (ephemeral, stored nowhere). The formats, what each makes and the options each takes are listed by get_schema kind 'export'; read it before choosing one. format 'mp4' works for both editor and canvas (a video render; may take a while). 'png' / 'jpg' work for both project types too: a canvas project renders one image per slide (multiple slides come back as a zip), while an editor project renders a single composited frame of the timeline (pick which frame with `frame`; defaults to frame 0). Canvas projects additionally support 'pdf' and 'pptx'. An editor project also exports its sound (mp3, aac, wav), its subtitles (srt, vtt) and its transcript (txt, docx, rtf, md, html). Resolution and watermark apply to every picture format: a free account never exports above 720p and never removes the watermark. `quality` is mp4 only. Returns the download URL when the export finishes in time, otherwise an exportId: wait for it with get_status (kind export), then read its file with get_export. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project to export.'),
-        // A string the server validates against its catalog (7.67), so a new format needs no release of this tool.
-        format: z.string().min(1).optional().describe("Output format, one get_schema kind 'export' lists. Defaults to 'mp4'."),
-        resolution: z.enum(['480p', '720p', '1080p', '2k', '4k']).optional().describe("Output resolution, for EVERY format including stills. Defaults '720p' for an editor mp4 and the project's NATIVE size for a still or canvas mp4, in both cases clamped to your plan. 1080p and above are plan-gated: NAMING one above your plan is a 403, omitting one clamps instead."),
-        quality: z.enum(['low', 'recommended', 'high']).optional().describe('mp4 ONLY: video bitrate. Meaningless for a still, which has no duration to spread bits over. Defaults recommended.'),
-        watermark: z.boolean().optional().describe('Keep the watermark. Defaults true; removing it is plan-gated.'),
-        frame: z.number().int().min(0).optional().describe('Editor still (png/jpg) only: which timeline frame to render. Clamped to the composition length. Defaults 0. Use the playhead frame from view to render exactly the frame the user is viewing.'),
-        maxCharsPerLine: z.number().int().optional().describe('Subtitles (srt, vtt) only: the longest a line may be, 20 to 80 characters. Defaults 42.'),
-        maxLinesPerCard: z.number().int().optional().describe('Subtitles (srt, vtt) only: lines per subtitle card, 1 to 4. Defaults 2.'),
-        showSpeakers: z.boolean().optional().describe('Subtitles (srt, vtt) only: name who speaks, when the captions hold more than one speaker. Defaults false.'),
-        timecodes: z.boolean().optional().describe('Transcripts (txt, docx, rtf, md, html) only: start each paragraph with its timecode.'),
-        loudness: loudnessInput().optional().describe("Rendered exports (video and sound) only: this export's loudness, in place of the project's own (get_project reads it). Omitted, the project's."),
-      },
     },
     async (args, extra) => {
       try {
@@ -5029,17 +3466,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'list_exports',
     {
       title: 'List Exports',
       annotations: READ,
-      description:
-        "List a project's exports, newest first, as the editor's Exports tab shows them: each finished one with its download and public share page, and the ones still running with their status (wait for one with get_status, kind export). A failed export is not listed. Requires the editor:read scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -5054,16 +3485,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'get_export',
     {
       title: 'Get Export',
       annotations: READ,
-      description:
-        'Read one export started by export: its file, state and details, with the download URL and public share page once it finishes. To wait for one still running, use get_status with kind export. Requires the editor:read scope.',
-      inputSchema: {
-        exportId: z.string().describe('The export id returned by export.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5076,17 +3502,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
 
-  server.registerTool(
+  tool(
     'delete_project',
     {
       title: 'Delete Project',
       annotations: WRITE,
-      description:
-        "PERMANENTLY delete a project. This is irreversible: the project, its edit history, and its render exports are destroyed (uploaded media stays in the library). To reversibly hide a project instead, use archive. You must pass confirm: true to proceed. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id to permanently delete.'),
-        confirm: z.literal(true).describe('Must be true to confirm the irreversible permanent delete.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5099,51 +3519,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  // -- the project's own fields and settings, and its copies (9.9; settings 2026-10-10) ---------
-  const EXPECTED_REVISION = z
-    .number()
-    .int()
-    .optional()
-    .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.')
-
-  server.registerTool(
+  tool(
     'update_project',
     {
       title: 'Update Project',
       annotations: WRITE,
-      description:
-        `Change a project: its title, brand kit and cover, and its settings: canvas size, and for a video project its frame rate, delivery loudness, magnetic main track, linkage and the kinds of track linkage reaches. This is a PATCH: a field you omit is left alone. A setting belongs to the project and is shared by everyone who edits it; changing one is an edit, so undo_project_edit reverses it and every open editor shows it at once. To change what is in the composition, use update_timeline or update_canvas instead. get_project reads every setting. ${EXPECTED_REVISION_CONTRACT} Returns the project with its settings as they now stand. Requires the editor:write scope.`,
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        title: z.string().optional().describe('A new title.'),
-        orientation: z.string().optional().describe("An aspect from the editor's list, or custom. Alone, it sets the size the editor gives that aspect."),
-        width: z.number().int().positive().optional().describe('A pixel width, given with height.'),
-        height: z.number().int().positive().optional().describe('A pixel height, given with width.'),
-        fps: z.union([z.literal(24), z.literal(25), z.literal(30), z.literal(50), z.literal(60)]).optional().describe('Video projects only: the frame rate. Every frame number in the timeline converts with it, so clips keep their timing.'),
-        loudness: loudnessInput().optional().describe('Video projects only: the delivery loudness. Every export follows it.'),
-        magneticTrack: z.boolean().optional().describe('Video projects only: the magnetic main track. On, moving, trimming or deleting a clip on the main track closes the gap it leaves, and turning it on closes the gaps already there.'),
-        linkage: z.boolean().optional().describe("Video projects only: whether clips on other tracks follow the main track's ripple and are deleted with the main clip they sit on."),
-        linkedTracks: z
-          .object({ media: z.boolean().optional(), audio: z.boolean().optional(), text: z.boolean().optional() })
-          .optional()
-          .describe('Video projects only: which kinds of track linkage reaches; a kind you omit is left alone.'),
-
-        expectedRevision: z.number().int().optional().describe(EXPECTED_REVISION_FIELD + EXPECTED_REVISION_PROJECT_NOTE),
-        brandKitId: z.string().nullable().optional().describe('A brand kit id from list_brand_kits, or null to clear it.'),
-        cover: z
-          .union([
-            z.literal('auto'),
-            z.object({ frame: z.number().int().min(0) }),
-            z.object({ mediaId: z.string() }),
-          ])
-          .optional()
-          .describe("How the cover is chosen: 'auto' follows the composition, { frame } is a chosen moment (for a canvas, a slide's index among its visible slides), { mediaId } is an image from the library."),
-        coverPosition: z
-          .object({ x: z.number(), y: z.number() })
-          .nullable()
-          .optional()
-          .describe('Where the cover is framed, as percentages of its width and height, or null for the default framing.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5156,17 +3536,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'duplicate_project',
     {
       title: 'Duplicate Project',
       annotations: WRITE,
-      description:
-        "Copy a project: a new project with the same type, size, composition and brand kit, titled as the editor titles a copy. Pass versionId to make the copy from a saved version instead of the project as it is now; version history is a premium feature. Returns the new project. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id to copy.'),
-        versionId: z.string().optional().describe('A saved version to copy from, by its id from list_project_versions. Omit to copy the project as it is now.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5179,17 +3553,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- version history (premium, as in the editor) -----------------------------
-  server.registerTool(
+  tool(
     'list_project_versions',
     {
       title: 'List Project Versions',
       annotations: READ,
-      description:
-        "List a project's saved versions, newest first: each with its id, when and why it was saved, its name and who saved it. Bring one back with restore_project_version, or copy one into a new project with duplicate_project. Version history is a premium feature, as in the editor. Requires the editor:read scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -5204,17 +3572,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'create_project_version',
     {
       title: 'Create Project Version',
       annotations: WRITE,
-      description:
-        "Save the project's current state as a version, optionally named, so it can be brought back later. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        label: z.string().optional().describe('A name for the version.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5226,17 +3588,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'restore_project_version',
     {
       title: 'Restore Project Version',
       annotations: WRITE,
-      description:
-        "Put a saved version back into the project, saving the current state as a version first so the restore can itself be undone by restoring that. To make a new project from a version instead, use duplicate_project with versionId. Version history is a premium feature. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        versionId: z.string().describe('The version id, from list_project_versions.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5252,17 +3608,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'update_project_version',
     {
       title: 'Update Project Version',
       annotations: WRITE,
-      description: 'Name a saved version, or clear its name with an empty label. Requires the editor:write scope.',
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        versionId: z.string().describe('The version id, from list_project_versions.'),
-        label: z.string().describe('The new name; empty clears it.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5274,16 +3624,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'delete_project_version',
     {
       title: 'Delete Project Version',
       annotations: WRITE,
-      description: 'Permanently remove a saved version. The project itself is not changed. Requires the editor:write scope.',
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        versionId: z.string().describe('The version id, from list_project_versions.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5297,18 +3642,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- undo and redo (the editor's own) ----------------------------------------
-  server.registerTool(
+  tool(
     'undo_project_edit',
     {
       title: 'Undo Project Edit',
       annotations: WRITE,
-      description:
-        "Reverse the project's most recent edit, as the editor's Undo does, whoever made it. The undo is itself an edit with its own revision, and redo_project_edit re-applies what it reversed. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        expectedRevision: EXPECTED_REVISION,
-        revision: z.number().int().min(0).optional().describe('A specific revision to reverse. Omit for the most recent edit.'),
-      },
     },
     async (args, extra) => {
       try {
@@ -5320,17 +3658,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'redo_project_edit',
     {
       title: 'Redo Project Edit',
       annotations: WRITE,
-      description:
-        "Re-apply the edit most recently undone, as the editor's Redo does. Requires the editor:write scope.",
-      inputSchema: {
-        projectId: z.string().describe('The project id.'),
-        expectedRevision: EXPECTED_REVISION,
-      },
     },
     async (args, extra) => {
       try {
@@ -5342,22 +3674,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'update_timeline',
     {
       title: 'Update Timeline',
       annotations: WRITE,
-      description: updateTimelineDescription('mcp'),
-      inputSchema: {
-        projectId: z.string().describe('The editor project id.'),
-        ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The timeline ops to apply, in order.'),
-        userIntent: z.string().describe('A short description of what this edit does (for attribution).'),
-        expectedRevision: z
-          .number()
-          .int()
-          .optional()
-          .describe(EXPECTED_REVISION_FIELD),
-      },
     },
     async (args, extra) => {
       try {
@@ -5376,22 +3697,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.registerTool(
+  tool(
     'update_canvas',
     {
       title: 'Update Canvas',
       annotations: WRITE,
-      description: updateCanvasDescription('mcp'),
-      inputSchema: {
-        projectId: z.string().describe('The canvas project id.'),
-        ops: z.array(z.object({ op: z.string() }).passthrough()).describe('The canvas ops to apply, in order.'),
-        userIntent: z.string().describe('A short description of what this edit does (for attribution).'),
-        expectedRevision: z
-          .number()
-          .int()
-          .optional()
-          .describe(EXPECTED_REVISION_FIELD),
-      },
     },
     async (args, extra) => {
       try {
@@ -5415,21 +3725,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // ===========================================================================
 
   // -- list_templates -------------------------------------------------------
-  server.registerTool(
+  tool(
     'list_templates',
     {
       title: 'List Templates',
       annotations: READ,
-      description:
-        "List the templates you can place: ContentHero's and the user's own (the editor's Elements panel), without their code, a page at a time. Each is code, a shape, an animated emoji or a logo, with its category, version and default size. Logos are listed only with kind logo, and search finds one by name or alias across the whole logo library. Place one with an insert_template op in update_timeline or update_canvas, branded with the project's brand kit; a logo's id is its slug; the logo library is a curated set kept in the product, so a brand's own logos are added through update_brand_kit; read one whole with get_template. Requires the editor:read scope.",
-      inputSchema: {
-        scope: z.enum(['system', 'user', 'all']).optional().describe("system is ContentHero's, user is the user's own; all (the default) is both."),
-        kind: z.enum(['code', 'shape', 'emoji', 'logo']).optional().describe('Only templates that draw this.'),
-        category: z.array(z.string()).optional().describe('Only templates in these categories.'),
-        search: z.string().optional().describe("Every word, in any order, in the name or the tags. For logos, also in a logo's other names, best match first."),
-        archived: z.boolean().optional().describe('true lists only archived templates, to restore one with archive.'),
-        ...pageInput(500),
-      },
     },
     async (args, extra) => {
       try {
@@ -5452,14 +3752,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_template ---------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_template',
     {
       title: 'Get Template',
       annotations: READ,
-      description:
-        "Read one template whole: its code, props, controls (each prop's control, and the brand value it takes when placed), default size and lineage. Someone else's template is not found. Requires the editor:read scope.",
-      inputSchema: { templateId: z.string().describe('The template id, from list_templates.') },
     },
     async (args, extra) => {
       try {
@@ -5472,19 +3769,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_template ------------------------------------------------------
-  server.registerTool(
+  tool(
     'create_template',
     {
       title: 'Create Template',
       annotations: WRITE,
-      description:
-        "Save a template of the user's own, only when the user asks for one, from exactly one source: fromItem (a code clip, code layer or shape placed on a project: its code, props, controls and box, as fractions of that canvas), fromTemplateId (a copy of a template, keeping its lineage), or the fields alone (exactly one of code, lottie, emoji or shape says what it draws). Fields given beside a source override what it carries. Code is checked as it is written: code that does not compile is refused, with each finding's line and column. It is saved as made by you, and appears under My templates in the Elements panel. Requires the editor:write scope.",
-      inputSchema: {
-        fromItem: z.object({ projectId: z.string(), itemId: z.string() }).optional().describe('A placed code clip, code layer or shape to save: the project id and the clip or layer id.'),
-        fromTemplateId: z.string().optional().describe('A template to copy, from list_templates.'),
-        ...templateFieldsInput,
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -5500,19 +3789,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_template ------------------------------------------------------
-  server.registerTool(
+  tool(
     'update_template',
     {
       title: 'Update Template',
       annotations: WRITE,
-      description:
-        "Change one of the user's own templates: only the fields given. ContentHero's templates are read-only; copy one with create_template fromTemplateId. Pass the version you read as expectedVersion to refuse a write over a change made since. Clips already placed from it keep what they had. A template's props may hold media only as a MediaRef, an object of assetId and role, at any depth including inside arrays; a stored media URL is refused by design, because it is bound to one audience and one account, and a MediaRef is resolved for whoever reads it. Requires the editor:write scope.",
-      inputSchema: {
-        templateId: z.string().describe('The template id.'),
-        expectedVersion: z.number().int().optional().describe('The version you read; the write is refused if the template changed since.'),
-        ...templateFieldsInput,
-        ...placementInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -5527,14 +3808,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- delete_template ------------------------------------------------------
-  server.registerTool(
+  tool(
     'delete_template',
     {
       title: 'Delete Template',
       annotations: WRITE,
-      description:
-        "Delete one of the user's own templates. Clips placed from it keep everything. To hide one and keep it, archive it instead (archive, assetType template). Requires the editor:write scope.",
-      inputSchema: { templateId: z.string().describe('The template id.') },
     },
     async (args, extra) => {
       try {
@@ -5552,18 +3830,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // ===========================================================================
 
   // -- list_style_libraries ---------------------------------------------------
-  server.registerTool(
+  tool(
     'list_style_libraries',
     {
       title: 'List Style Libraries',
       annotations: READ,
-      description: LIST_STYLE_LIBRARIES_TEXT,
-      inputSchema: {
-        archived: z.boolean().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.archived),
-        search: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.search),
-        ...sortInput('styleLibraries'),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -5576,17 +3847,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- get_style_library ------------------------------------------------------
-  server.registerTool(
+  tool(
     'get_style_library',
     {
       title: 'Get Style Library',
       annotations: READ,
-      description: GET_STYLE_LIBRARY_TEXT,
-      inputSchema: {
-        name: z.string().describe(STYLE_LIBRARY_PARAMETER_TEXT.name),
-        version: z.number().int().min(1).optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.version),
-        ...pageInput(),
-      },
     },
     async (args, extra) => {
       try {
@@ -5600,19 +3865,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- create_style_library ---------------------------------------------------
-  server.registerTool(
+  tool(
     'create_style_library',
     {
       title: 'Create Style Library',
       annotations: WRITE,
-      description: CREATE_STYLE_LIBRARY_TEXT,
-      inputSchema: {
-        name: z.string().describe(STYLE_LIBRARY_PARAMETER_TEXT.name),
-        description: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.description),
-        notes: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.notes),
-        modules: styleLibraryModulesInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.modules),
-        fromProject: styleLibraryFromProjectInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.fromProject),
-      },
     },
     async (args, extra) => {
       try {
@@ -5625,20 +3882,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   )
 
   // -- update_style_library ---------------------------------------------------
-  server.registerTool(
+  tool(
     'update_style_library',
     {
       title: 'Update Style Library',
       annotations: WRITE,
-      description: UPDATE_STYLE_LIBRARY_TEXT,
-      inputSchema: {
-        name: z.string().describe(STYLE_LIBRARY_PARAMETER_TEXT.name),
-        description: z.string().nullable().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.description),
-        baseVersion: z.number().int().min(1).optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.baseVersion),
-        notes: z.string().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.notes),
-        modules: styleLibraryModulesInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.modules),
-        fromProject: styleLibraryFromProjectInput().optional().describe(STYLE_LIBRARY_PARAMETER_TEXT.fromProject),
-      },
     },
     async (args, extra) => {
       try {
@@ -5650,42 +3898,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       }
     },
   )
-}
 
-/** The inline modules of a style library publish: each name to its whole code, edits against the base version, or null. */
-function styleLibraryModulesInput() {
-  return z.record(z.string(), z.union([z.object({ code: z.string() }), z.object({ edits: z.unknown() }), z.null()]))
-}
-
-/** Modules of one project to publish from, as the API takes them. */
-function styleLibraryFromProjectInput() {
-  return z.object({ projectId: z.string(), modules: z.array(z.string()), revision: z.number().int().optional() })
-}
-
-/**
- * A template's fields, as create_template and update_template take them: the API's names and limits (the app's
- * `lib/api/templates.ts` refuses anything else, with the field at fault).
- */
-const templateFieldsInput = {
-  name: z.string().min(1).max(200).optional().describe('Its name in the Elements panel.'),
-  category: z.string().min(1).max(60).optional().describe('Its category: one list_templates shows, or a new one.'),
-  description: z.string().max(2000).nullable().optional().describe('What it is for.'),
-  tags: z.array(z.string().min(1).max(60)).max(30).optional().describe('Words it is found by.'),
-  code: z.string().optional().describe("The code: a React component, as get_schema (kind 'code') teaches."),
-  lottie: z
-    .object({ url: z.string(), recolor: z.array(z.object({ from: z.string(), role: z.string() })).optional() })
-    .optional()
-    .describe('A Lottie file of ours, and the colors in it that props recolor (each role names a prop).'),
-  emoji: z.string().optional().describe("An animated emoji's name, as the animated emoji list names it."),
-  shape: z.string().optional().describe("A shape's name, as the shape layer type lists them in get_schema kind 'layer'."),
-  props: z.record(z.string(), z.unknown()).optional().describe('Its props as placed. Media in them is a MediaRef ({ assetId, role }), never a stored URL.'),
-  propsSchema: z.record(z.string(), z.unknown()).nullable().optional().describe("Each prop's control, as get_template shows them; brand names the brand value a prop takes when placed."),
-  durationFrames: z.number().int().positive().optional().describe('How long it lasts when placed, in frames.'),
-  coverage: z.enum(['full', 'partial']).optional().describe('full: the whole frame; partial: a box of widthFraction by heightFraction.'),
-  widthFraction: z.number().gt(0).lte(1).nullable().optional().describe("Its default width, a fraction of the canvas's."),
-  heightFraction: z.number().gt(0).lte(1).nullable().optional().describe("Its default height, a fraction of the canvas's."),
-  resize: z.enum(['scale', 'reflow']).optional().describe('scale keeps its proportions in any box; reflow lays out again in the box it is given.'),
-  aspect: z.number().positive().nullable().optional().describe('Its own width over height, for resize scale.'),
+  server.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: listed }))
 }
 
 /**

@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { Command } from 'commander'
 import { buildServer } from './server.js'
+import { AGENT_CONTRACT, optionFromContract, toolDescription } from '@contenthero/sdk'
 import { buildProgram } from '../../cli/src/program.js'
 import { isRunnable } from '../../cli/src/commands/schema.js'
 
@@ -277,8 +278,6 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   create_upload: { files: '`upload` takes local paths and reads each name, type and size from the file itself' },
   sign_upload_parts: { outputId: '`upload` signs every part itself, just before it sends it', partNumbers: '`upload` signs every part itself, just before it sends it' },
   complete_upload: { uploads: '`upload` runs begin, send and complete in one command, so the ids and ETags never reach the caller' },
-  list_projects: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
-  create_project: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
 }
 
 /**
@@ -409,4 +408,40 @@ test('every input of a mapped MCP tool is expressible in the CLI, or is a record
   assert.deepEqual(uncovered, [], 'MCP inputs the CLI cannot express. Add the CLI flag (preferred), an ALIAS if it exists under another name, or a KNOWN_GAPS entry with the reason')
   assert.deepEqual(closedGaps, [], 'these KNOWN_GAPS are now closed: delete their entries')
   assert.deepEqual(stale, [], 'entries that name inputs or flags that no longer exist')
+})
+
+/**
+ * CHOICES AND WORDS COME FROM THE CONTRACT. A CLI option that mirrors a tool input of the same name takes that input's
+ * allowed values, and the options that carry the contract's words say them exactly. Both surfaces read one contract, so
+ * a closed set cannot differ between them.
+ */
+test('a CLI option that mirrors a tool input takes its choices from the contract', () => {
+  const byName = new Map(AGENT_CONTRACT.tools.map((t) => [t.name, t]))
+  const commandAt = (path: string): Command => path.split(' ').reduce((c: Command, n) => c.commands.find((x) => x.name() === n)!, buildProgram())
+  const checked: string[] = []
+  for (const [tool, paths] of Object.entries(TOOL_TO_CLI)) {
+    const props = (byName.get(tool)?.inputSchema as { properties?: Record<string, { enum?: string[] }> } | undefined)?.properties ?? {}
+    for (const path of paths) {
+      for (const option of commandAt(path).options) {
+        if (!option.argChoices || !option.long) continue
+        const input = Object.keys(props).find((k) => `--${kebab(k)}` === option.long)
+        const values = input ? props[input]!.enum : undefined
+        if (!values) continue
+        assert.deepEqual([...option.argChoices], [...values], `${path} ${option.long} against ${tool}.${input}`)
+        checked.push(`${path} ${option.long}`)
+      }
+    }
+  }
+  assert.ok(checked.length >= 6, `only ${checked.length} choice options were compared: ${checked.join(', ')}`)
+})
+
+test('CLI options that carry a tool input\'s words say the contract\'s words', () => {
+  const view = (flag: string) => buildProgram().commands.find((c) => c.name() === 'view')!.options.find((o) => o.long === flag)!.description
+  for (const [flag, input] of [['--find', 'find'], ['--where', 'where'], ['--picture', 'picture'], ['--limit', 'limit'], ['--cursor', 'cursor']] as const) {
+    assert.equal(view(flag), optionFromContract('view', input).description, flag)
+  }
+  const styles = buildProgram().commands.find((c) => c.name() === 'style-library')!
+  const list = styles.commands.find((c) => c.name() === 'list')!
+  assert.equal(list.description(), toolDescription('list_style_libraries'))
+  assert.equal(list.options.find((o) => o.long === '--search')!.description, optionFromContract('list_style_libraries', 'search').description)
 })

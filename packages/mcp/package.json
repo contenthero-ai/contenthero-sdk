@@ -16,7 +16,7 @@
     "build": "node widget/guard.mjs && tsc --noEmit -p widget/tsconfig.json && node widget/build.mjs && tsc --emitDeclarationOnly && node build-server.mjs",
     "clean": "rm -rf dist",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "prepublishOnly": "npm run clean && npm run build",
+    "prepublishOnly": "npm run contract:check --prefix ../.. && npm run clean && npm run build",
     "verify:inline": "node scripts/verify-inline-media.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"
   },

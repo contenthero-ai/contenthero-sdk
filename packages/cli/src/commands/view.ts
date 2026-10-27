@@ -28,7 +28,7 @@
  */
 import { writeFileSync } from 'node:fs'
 import type { Command } from 'commander'
-import { VIEW_PICTURE_INPUT_TEXT, describePicturePart, describeProjectPicture, type CompositionRegion, type PicturePart, type ProjectPicturePart, type ViewDetector, type ViewResult, type ViewTrackInput } from '@contenthero/sdk'
+import { optionFromContract, describePicturePart, describeProjectPicture, type CompositionRegion, type PicturePart, type ProjectPicturePart, type ViewDetector, type ViewResult, type ViewTrackInput } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, moreLine } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -239,13 +239,13 @@ export function registerView(program: Command): void {
     .option('--live', 'also return what the user is looking at beside a render')
     .option('--tracks <ids>', "render only these tracks, every clip on them, picture and sound, on the timeline's own frame numbers; the project is untouched (separated by commas)", parseIds)
     .option('--clips <ids>', "render only these clips, picture and sound, on the timeline's own frame numbers; the project is untouched (separated by commas)", parseIds)
-    .option('--find <text>', VIEW_PICTURE_INPUT_TEXT.find)
-    .option('--where', VIEW_PICTURE_INPUT_TEXT.where)
-    .option('--picture', VIEW_PICTURE_INPUT_TEXT.picture)
-    .option('--detector <class>', `${VIEW_PICTURE_INPUT_TEXT.detector} One of: pointer, face.`)
-    .option('--track <id-or-seed>', `${VIEW_PICTURE_INPUT_TEXT.track} Pass a candidate's id, or a seed as JSON: {"atSec":<seconds>,"box":{"x":..,"y":..,"w":..,"h":..}}.`, parseTrack)
-    .option('--limit <n>', VIEW_PICTURE_INPUT_TEXT.limit, (v) => parseInt(v, 10))
-    .option('--cursor <cursor>', VIEW_PICTURE_INPUT_TEXT.cursor)
+    .option('--find <text>', optionFromContract('view', 'find').description)
+    .option('--where', optionFromContract('view', 'where').description)
+    .option('--picture', optionFromContract('view', 'picture').description)
+    .option('--detector <class>', `${optionFromContract('view', 'detector').description} One of: pointer, face.`)
+    .option('--track <id-or-seed>', `${optionFromContract('view', 'track').description} Pass a candidate's id, or a seed as JSON: {"atSec":<seconds>,"box":{"x":..,"y":..,"w":..,"h":..}}.`, parseTrack)
+    .option('--limit <n>', optionFromContract('view', 'limit').description, (v) => parseInt(v, 10))
+    .option('--cursor <cursor>', optionFromContract('view', 'cursor').description)
     .option('--save <path>', "write the produced image(s), a render's (with a heard range's evidence sheet), or a source's keyframes, its evidence sheet and its sound's picture, to this file (several append -1, -2, ...)")
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)

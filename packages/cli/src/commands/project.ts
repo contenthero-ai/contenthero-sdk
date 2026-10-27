@@ -13,14 +13,9 @@
  *   project transcript get <projectId> | --media <mediaId> [--start-seconds] [--end-seconds] [--search] [--granularity] ...   its words (requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
- * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
- * both CREATES and EDITS: CREATE ops (create_clip, insert_track, insert_prebuilt_track, add_transition) add
- * new clips/tracks/transitions; EDIT ops (move_clip, trim_clip, update_clip, delete_clip, remove_background,
- * disable_ranges, update_transition, remove_transition, ...) act on existing clips + transitions. CAPTION ops (add_captions,
- * update_captions, remove_captions) generate / restyle / remove transcript-driven captions.
- * Run `schema get timeline` (or `schema get layer`) first: each clip type carries a copy-pasteable `example`
- * clip skeleton and the catalog carries a `creation` section with the exact op shapes, so you know both what
- * to create and the item shape to pass. Then read `project get` for the current state + revision, and pass
+ * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). Their names, shapes and
+ * rules are served by `schema get timeline` (the app's type catalog, `get_schema`), never restated here. Read
+ * `project get` for the current state + revision, and pass
  * that revision as --expected-revision for safe concurrent edits. All edits require the editor:write scope.
  */
 import { readFileSync } from 'node:fs'
@@ -49,8 +44,8 @@ import {
   type ProjectWithSettings,
   type UndoResult,
   type UpdateProjectInput,
-  EXPECTED_REVISION_FIELD,
-  EXPECTED_REVISION_PROJECT_NOTE,
+  optionFromContract,
+  toolDescription,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, moreLine, statusCommandFor, table, withMore } from '../output.js'
@@ -311,7 +306,7 @@ export function registerProject(program: Command): void {
     .option('--brand-kit <id>', 'the brand kit to associate, or none to clear it')
     .option('--cover <choice>', 'the cover: auto (follows the composition), frame:<n> (a chosen frame or slide index), or media:<id> (a library image)', toCoverChoice)
     .option('--cover-position <x,y>', 'where the cover is framed, as percentages of its width and height, or none for the default framing')
-    .option('--expected-revision <n>', EXPECTED_REVISION_FIELD + EXPECTED_REVISION_PROJECT_NOTE, toInt)
+    .option('--expected-revision <n>', optionFromContract('update_project', 'expectedRevision').description, toInt)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const input: UpdateProjectInput = {}
       if (opts.title !== undefined) input.title = opts.title as string
@@ -400,13 +395,13 @@ export function registerProject(program: Command): void {
   project
     .command('apply')
     .description(
-      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...) and KEYFRAME ops (add_keyframe, update_keyframe, remove_keyframe, apply_combo). One-shot cleanups: remove_silence, remove_filler_words, extract_audio. Templates: insert_template places one from `template list`, branded with the project\'s brand kit (see `schema get timeline` for shapes). Modules: copy_project_modules copies named modules from another of your projects. Build each item from its type\'s `example`, read with `schema get timeline --name <type>` or `schema get layer --name <type>`; run `project get` first for the current revision and pass it as --expected-revision: an edit built on an older revision still applies when nothing since touched what it touches, and otherwise nothing is written and the conflict names the current revision and what overlapped. Requires editor:write.',
+      toolDescription('update_timeline'),
     )
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')
     .option('--ops-file <path>', 'read the ops JSON array from a file')
     .option('--intent <text>', 'a short description of the edit (for attribution)')
-    .option('--expected-revision <n>', EXPECTED_REVISION_FIELD, toInt)
+    .option('--expected-revision <n>', optionFromContract('update_timeline', 'expectedRevision').description, toInt)
     // ⛔ No `--include-render-url` (retired 2026-10-04): an edit must not render and save a cover. See the result with
     // `context --project <id> --render`.
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {

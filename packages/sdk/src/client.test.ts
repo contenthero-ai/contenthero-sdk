@@ -1798,10 +1798,11 @@ test('a style library is archived through archive with its own asset type, and h
   assert.equal('deleteStyleLibrary' in client, false)
 })
 
-test('the style library tool texts are the approved words, free of dashes', async () => {
-  const texts = await import('./tool-text.js')
-  for (const text of [texts.LIST_STYLE_LIBRARIES_TEXT, texts.GET_STYLE_LIBRARY_TEXT, texts.CREATE_STYLE_LIBRARY_TEXT, texts.UPDATE_STYLE_LIBRARY_TEXT, ...Object.values(texts.STYLE_LIBRARY_PARAMETER_TEXT)]) {
-    assert.doesNotMatch(text, /[\u2013\u2014]/)
+test('the style library tool texts are free of dashes', async () => {
+  const { toolDescription, AGENT_CONTRACT } = await import('./contract.generated.js')
+  for (const name of ['list_style_libraries', 'get_style_library', 'create_style_library', 'update_style_library'] as const) {
+    assert.doesNotMatch(toolDescription(name), /[\u2013\u2014]/)
+    assert.doesNotMatch(JSON.stringify(AGENT_CONTRACT.tools.find((t) => t.name === name)!.inputSchema), /[\u2013\u2014]/)
   }
 })
 

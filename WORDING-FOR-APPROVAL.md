@@ -120,3 +120,29 @@ Migration 20261027102704_tool_transcribe_reads_video_links.sql in the app (not a
 Assignments (agent_tool_assignments, not prompt text): transcribe is enabled for every agent that had the old link tool (remixer, video_producer, strategist, researcher, video_editor); the new get_transcript (project or media words) is enabled for every agent that has get_project. Both only keep what each agent could already do.
 
 Code-only text edits, same kind: chat history verb for get_transcript "Fetched transcript" becomes "Read transcript" (the tool now reads stored words). ChatPanel's silent-tool list, lib/api/media.ts, lib/api/projects.ts, lib/editor/*, and the media-transcripts route already name the MCP's get_transcript and stay.
+
+## Tool text changes (sync)
+
+The SDK, MCP and CLI no longer keep tool text of their own: `packages/sdk/src/tool-text.ts` is deleted and every description and input text is read from the app's agent contract (vendored at `packages/sdk/contract/agent-contract.json`, version stamped as `AGENT_CONTRACT_VERSION`). The MCP listing is the contract's, verbatim. Compared tool by tool against the listing the previous build served (110 tools on both sides). Almost all text was already equal to the contract's; what differs is below.
+
+### MCP tools
+
+- update_avatar. Description, one word added to the field list. Before: "Fields: name, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId." After: "Fields: name, description, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId." Rest unchanged.
+- update_avatar, new input `description`: "What the avatar is, in words. An empty string clears it." (the contract declares it; the old MCP listing lacked it. SDK `UpdateAvatarRequest.description` and the CLI flag below added to match.)
+- create_card, new input `contentType`: "What kind of content the card holds, in a word." (same reason; forwarded to the API.)
+- update_card, new input `contentType`: "What kind of content the card holds, in a word. An empty string clears it."
+- create_project and list_projects: the `surface` and `kind` inputs, both worded "Deprecated alias for `type`, accepted for one release window.", are removed (hard cutover; `type` is the only name).
+- generate_video: the `elements` input ("Deprecated alias for `klingElements`, accepted for one release window.") and the `elementId` field inside a `klingElements` item ("Deprecated alias for `klingElementId`, accepted for one release window.") are removed. `References.elements` and `References.elementId` leave the SDK types the same way.
+- All other tools, descriptions and input texts: identical meaning and identical words. Form only (no wording): optional-or-null inputs are now declared as a type list instead of an any-of, and inputs whose allowed values depend on the chosen model carry an `x-dynamic` marker (create_brand_kit, update_brand_kit, update_avatar, update_card, update_folder, update_project, update_style_library; the marker on edit_audio, generate_audio, generate_image, generate_lip_sync, generate_video, get_model, upscale).
+
+### CLI
+
+- `generate --element <id>` (hidden alias of `--kling-element`) is removed; `--kling-element` is the only flag.
+- New `card create --content-type <word>` and `card update --content-type <word>`, text from the contract (above).
+- New `avatar update --description <text>`, text from the contract (above).
+- `project apply` description is now the contract's update_timeline text for the CLI audience (one source). Before: the CLI carried its own paragraph that named the individual ops (create_clip, insert_track, move_clip, add_keyframe, remove_silence and the rest), templates and modules. After: the same contract sentence the MCP serves, which points to `get_schema` (kind timeline) for ops and never names one. This is a meaning change for the CLI help: the op list is gone from help on purpose (op names live only in the app's type catalog).
+- `project apply --expected-revision` and `project update --expected-revision`, `view` flags (`--find`, `--where`, `--picture`, `--detector`, `--track`, `--limit`, `--cursor`) and the `style-library` command texts: same words as before, now read from the contract.
+
+### SDK and CLI source comments (not user-facing)
+
+- `types.ts` and `commands/project.ts` no longer list op names in comments; they point to `get_schema`.

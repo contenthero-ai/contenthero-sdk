@@ -10,6 +10,17 @@
  */
 
 import type { LimitAction } from './errors.js'
+import {
+  JOB_KINDS,
+  LIST_SORTS,
+  MEDIA_LIST_SOURCES,
+  MEDIA_LIST_TYPES,
+  MEDIA_STOCK_ORIENTATIONS,
+  PLACEMENT_ENDS,
+  SOCIAL_PLATFORMS,
+  SORT_ORDERS,
+  STOCK_COLLECTIONS,
+} from './contract.generated.js'
 
 /**
  * Reference inputs (image-to-image, video-to-video, frame conditioning).
@@ -37,8 +48,6 @@ export interface References {
    * support them.
    */
   klingElements?: ReferenceKlingElement[]
-  /** @deprecated Alias for `klingElements`, accepted for one release window. `klingElements` wins if both are set. */
-  elements?: ReferenceKlingElement[]
 }
 
 /**
@@ -49,8 +58,6 @@ export interface References {
 export interface ReferenceKlingElement {
   /** Reference a saved Kling element by id (resolves to its name + images). */
   klingElementId?: string
-  /** @deprecated Alias for `klingElementId`, accepted for one release window. `klingElementId` wins if both are set. */
-  elementId?: string
   /** Inline: referenced in the prompt as @name. */
   name?: string
   /** Inline: what the Kling element represents (passed to the provider for conditioning). */
@@ -144,14 +151,7 @@ export interface Paged {
  * person gave, so the server refuses it for creations, which have none. A card's `position` is one stage's own order,
  * top first, so it needs a stage.
  */
-export const LIST_SORTS = {
-  cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title', 'position'],
-  projects: ['updatedAt', 'createdAt', 'title'],
-  spaces: ['updatedAt', 'name', 'cardCount'],
-  styleLibraries: ['updatedAt', 'name'],
-  content: ['relevance', 'outlierScore', 'publishedAt', 'viewCount', 'engagementRate'],
-  media: ['createdAt', 'fileName', 'sizeBytes'],
-} as const
+export { LIST_SORTS }
 
 /** A listing that sorts. */
 export type SortableList = keyof typeof LIST_SORTS
@@ -171,7 +171,7 @@ export type MediaSort = SortFieldOf<'media'>
 // ---------------------------------------------------------------------------
 
 /** The two ends of a hand-arranged list. */
-export const PLACEMENT_ENDS = ['top', 'bottom'] as const
+export { PLACEMENT_ENDS }
 export type PlacementEnd = (typeof PLACEMENT_ENDS)[number]
 
 /**
@@ -189,7 +189,7 @@ export interface Placement {
 }
 
 /** The direction of every sort: one word, two values. */
-export const SORT_ORDERS = ['asc', 'desc'] as const
+export { SORT_ORDERS }
 export type SortOrder = (typeof SORT_ORDERS)[number]
 
 /**
@@ -866,7 +866,7 @@ export interface WaitOptions {
  * The kinds of background job `getStatus` reads. An id alone names most jobs; the kind is needed only for a full
  * UUID, for the kinds in `KINDS_NAMED_BY_KIND`, or when the server says an id is ambiguous.
  */
-export const JOB_KINDS = ['output', 'export', 'brand_kit', 'avatar', 'content', 'scenes', 'transcript'] as const
+export { JOB_KINDS }
 export type JobKind = (typeof JOB_KINDS)[number]
 
 /**
@@ -1218,6 +1218,8 @@ export interface CreateAvatarResult {
 export interface UpdateAvatarRequest extends Placement {
   /** At least 3 characters. */
   name?: string
+  /** What the avatar is, in words. An empty string clears it. */
+  description?: string
   /**
    * An existing look OF THIS AVATAR, from `getAvatar().looks`. Also becomes the avatar's profile photo,
    * because the two are one fact and setting them apart is how they drift.
@@ -1742,7 +1744,7 @@ export type BrandKitAccountInput = string | { platform?: string; handleOrUrl: st
 export type MediaType = 'image' | 'video' | 'audio' | 'doc' | 'other' | 'transcript'
 
 /** The types a media listing filters by. */
-export const MEDIA_LIST_TYPES = ['image', 'video', 'audio', 'doc', 'other'] as const
+export { MEDIA_LIST_TYPES }
 export type MediaListType = (typeof MEDIA_LIST_TYPES)[number]
 
 /**
@@ -1751,15 +1753,15 @@ export type MediaListType = (typeof MEDIA_LIST_TYPES)[number]
  * stock catalog, which is not the account's files and is never part of `all`. Each listed item names where it is, in
  * its `source`.
  */
-export const MEDIA_LIST_SOURCES = ['all', 'creations', 'uploads', 'exports', 'stock'] as const
+export { MEDIA_LIST_SOURCES }
 export type MediaListSource = (typeof MEDIA_LIST_SOURCES)[number]
 
 /** The parts of the stock catalog a stock read names, in its `collection`. */
-export const MEDIA_STOCK_COLLECTIONS = ['photos', 'videos', 'gifs', 'stickers', 'sounds'] as const
+export const MEDIA_STOCK_COLLECTIONS = STOCK_COLLECTIONS
 export type MediaStockCollection = (typeof MEDIA_STOCK_COLLECTIONS)[number]
 
 /** The shapes a stock photo or video read can be narrowed to, in its `orientation`. */
-export const MEDIA_STOCK_ORIENTATIONS = ['landscape', 'portrait', 'square'] as const
+export { MEDIA_STOCK_ORIENTATIONS }
 export type MediaStockOrientation = (typeof MEDIA_STOCK_ORIENTATIONS)[number]
 
 /** The license a stock item is used under; `attribution` is the credit to show where credit is required. */
@@ -2868,6 +2870,8 @@ export interface ListStagesOptions extends PageOptions {
 export interface CreateCardInput extends Placement {
   title: string
   platform: PostPlatform
+  /** What kind of content the card holds, in a word. */
+  contentType?: string
   /**
    * Which board the card is created on. Omitted means the account's DEFAULT space.
    *
@@ -3583,7 +3587,7 @@ export interface GetContentOptions {
 }
 
 /** The platforms an account can be tracked on (the server's own list, which it validates against). */
-export const TRACKABLE_PLATFORMS = ['youtube', 'instagram', 'facebook', 'tiktok', 'x', 'threads', 'linkedin'] as const
+export const TRACKABLE_PLATFORMS = SOCIAL_PLATFORMS
 export type TrackablePlatform = (typeof TRACKABLE_PLATFORMS)[number]
 
 /** One account to track: a handle or a profile URL. A URL states its platform; a bare handle needs one. */
@@ -5222,7 +5226,7 @@ export interface EditorTypeSpec {
   props: EditorTypeProp[]
   /** Which shared prop groups this type also accepts (keys of `sharedProps`). */
   supports: string[]
-  /** A copy-pasteable minimal item skeleton for creating this type via add_item / insert_prebuilt_track. */
+  /** A copy-pasteable minimal item skeleton for creating this type. */
   example?: Record<string, unknown>
   /** The stored item's full JSON Schema, control ranges included. Present only when asked for (`{ jsonSchema: true }`). */
   jsonSchema?: Record<string, unknown>
@@ -5281,11 +5285,11 @@ export interface TimelineTypeCatalog {
   sharedProps: EditorSharedProps
   clipTypes: EditorTypeSpec[]
   trackTypes: EditorTrackSpec[]
-  /** How to CREATE clips + tracks (add_item, insert_track, insert_prebuilt_track), using each clipType `example`. */
+  /** How to CREATE clips and tracks, using each clipType `example`. */
   creation?: EditorCreationSpec
-  /** The EDIT ops of update_timeline (move_clip, trim_clip, disable_ranges, ...), with each field signature. */
+  /** The EDIT ops of update_timeline, with each field signature. */
   editOps?: EditorCreationSpec
-  /** The presets add_animation, add_transition and apply_combo accept. */
+  /** The presets the animation and transition ops accept. */
   animations?: AnimationCatalog
 }
 

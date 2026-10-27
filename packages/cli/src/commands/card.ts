@@ -33,7 +33,7 @@ import { emit, keyValues, table, linkRow, displayId, withMore } from '../output.
 import { CliError, EXIT } from '../errors.js'
 import { compact } from '../generation.js'
 import { collect, isClear, placementFrom, toInt, toJson, toList, withPageFlags, withPlacementFlags, withSortFlags } from '../args.js'
-import { LIST_SORTS } from '@contenthero/sdk'
+import { LIST_SORTS, optionFromContract } from '@contenthero/sdk'
 
 const PLATFORMS: PostPlatform[] = [
   'youtube',
@@ -229,6 +229,7 @@ export function registerCard(program: Command): void {
     .description('Create a post (requires planner:write)')
     .argument('<title>', 'post title')
     .requiredOption('--platform <platform>', `primary platform: ${PLATFORMS.join(', ')}`)
+    .option('--content-type <word>', optionFromContract('create_card', 'contentType').description)
     .option('--space <space>', "which space's board (from `contenthero space list`); default space if omitted")
     .option('--stage <stage>', 'stage id, slug, or name (defaults to the first stage)')
     .option('--cover-url <url>', 'public URL for the post cover')
@@ -240,6 +241,7 @@ export function registerCard(program: Command): void {
       const input = compact<CreateCardInput>({
         title,
         platform: opts.platform as PostPlatform,
+        contentType: opts.contentType as string | undefined,
         spaceId: opts.space as string | undefined,
         stage: opts.stage as string | undefined,
         coverUrl: opts.coverUrl as string | undefined,
@@ -256,6 +258,7 @@ export function registerCard(program: Command): void {
     .argument('<id>', 'the post id')
     .option('--title <text>')
     .option('--platform <platform>')
+    .option('--content-type <word>', optionFromContract('update_card', 'contentType').description)
     .option('--stage <stage>', 'move the post to this stage (id, slug, or name)')
     .option('--space <space>', "move the card to another space (id or slug); without --stage it lands in that space's matching stage, or its first")
     .option('--also <id>', 'another card id to apply this to; repeatable. Fields describing ONE card (title, notes, cover) still need exactly one', collect)
@@ -287,6 +290,7 @@ export function registerCard(program: Command): void {
       const input = compact<UpdateCardInput>({
         title: opts.title as string | undefined,
         platform: opts.platform as PostPlatform | undefined,
+        contentType: opts.contentType as string | undefined,
         stage: opts.stage as string | undefined,
         spaceId: opts.space as string | undefined,
         notes: opts.notes as string | undefined,

@@ -115,8 +115,6 @@ export function registerGenerate(program: Command): void {
       .option('--ref-video <urlOrId>', 'reference video (URL or output id); repeatable', collect)
       .option('--ref-audio <urlOrId>', 'reference audio (URL or output id); repeatable', collect)
       .option('--kling-element <id>', 'saved Kling element id (Kling 3.0, @name in prompt); repeatable', collect)
-      // `--element`, the flag's name before 2026-10-04, still accepted and hidden from help. `--kling-element` wins.
-      .addOption(new Option('--element <id>', 'deprecated alias for --kling-element').argParser(collect).hideHelp())
       .option('--multi-shot', 'multi-shot with the cuts planned by the model, on a model whose shots include auto (model get); to write each shot yourself, pass --shots instead')
       .option('--shots <json>', 'write each shot yourself, on a model whose shots include custom: JSON array of { prompt, duration } objects', toJson)
       .option('--input-mode <id>', 'the input mode, by id from model get; omit to let the attached inputs decide'),
@@ -150,7 +148,7 @@ export function registerGenerate(program: Command): void {
         images: opts.ref as string[] | undefined,
         videos: opts.refVideo as string[] | undefined,
         audio: opts.refAudio as string[] | undefined,
-        klingElements: ((opts.klingElement ?? opts.element) as string[] | undefined)?.map((klingElementId) => ({
+        klingElements: (opts.klingElement as string[] | undefined)?.map((klingElementId) => ({
           klingElementId,
         })),
       }),
