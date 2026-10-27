@@ -10,7 +10,7 @@
  *   project version list|create|restore|update|delete <projectId>        its version history (premium)
  *   project edit undo|redo <projectId> [--expected-revision <n>]         the editor's own undo and redo
  *   project delete <projectId> --yes                                     (permanent, requires editor:write)
- *   project transcript get <projectId> [--search] [--granularity] ...    its transcript (requires editor:read)
+ *   project transcript get <projectId> | --media <mediaId> [--start-seconds] [--end-seconds] [--search] [--granularity] ...   its words (requires editor:read)
  *   project apply <projectId> --ops <json> | --ops-file <path> [--intent <text>] [--expected-revision <n>]
  *
  * Ops are the shared editor/canvas op vocabulary (the same the manual UI + in-app agent use). update_timeline
@@ -26,12 +26,14 @@
 import { readFileSync } from 'node:fs'
 import { Option, type Command } from 'commander'
 import {
+  ContentHeroError,
   LIST_SORTS,
   describeDocumentFindings, describeStyleLibraryPins,
   describePartsAsked,
   PASS_REVISION_LINE,
   describeEditorOps,
   describeLoudness,
+  describeModulesIndex,
   describeProjectShareLink,
   describeScope,
   isProjectParts,
@@ -126,6 +128,7 @@ export function registerProject(program: Command): void {
     .option('--modules <names>', "read these project modules' code (separated by commas)")
     .option('--source-asset <id>', "with --at-sec: the recording whose moments to place on the timeline, by the assetId a clip's source names")
     .option('--at-sec <list>', 'with --source-asset: the seconds of that recording to place (separated by commas)')
+    .option('--modules-index', "read the index of the project's modules: each one's name, how many clips draw it, whether none does, and its size, without code (read alone, like the other parts)")
     // ⛔ No `--include-render-url` (retired 2026-10-04): a read must not render and save a cover. See a project with
     // `context --project <id> --render`.
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
@@ -140,6 +143,7 @@ export function registerProject(program: Command): void {
         moduleNames: list(opts.modules),
         sourceAssetId: typeof opts.sourceAsset === 'string' ? opts.sourceAsset : undefined,
         atSec: list(opts.atSec)?.map(Number),
+        modulesIndex: opts.modulesIndex === true ? true : undefined,
       })
       // A read of named parts is those parts alone, said as the MCP's get_project says them.
       if (isProjectParts(p)) {
@@ -151,6 +155,7 @@ export function registerProject(program: Command): void {
                 .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
                 .join('\n')}`
             : '') +
+          describeModulesIndex(p.modulesIndex).map((l) => `\n${l}`).join('') +
           describeDocumentFindings(p.findings, 'Problems in what was read:').map((l) => `\n${l}`).join('') +
           (p.state ? `\n${JSON.stringify(p.state, null, 2)}` : ''),
         )
@@ -184,8 +189,11 @@ export function registerProject(program: Command): void {
     .command('transcript')
     .description("A project's transcript")
     .command('get')
-    .description("Read a project's transcript mapped to its timeline clips (requires editor:read)")
-    .argument('<projectId>', 'the editor project id')
+    .description("Read the words of a project's timeline or of one recording (requires editor:read)")
+    .argument('[projectId]', "the editor project id (the words as the timeline plays them); or pass --media instead")
+    .option('--media <mediaId>', "the recording whose words to read, instead of a project; its times are in the recording's own clock")
+    .option('--start-seconds <s>', "with --media: where in the recording the window begins, in the recording's seconds (inclusive)", Number)
+    .option('--end-seconds <s>', 'with --media: where the window ends (exclusive)', Number)
     .option('--search <text>', 'only clip segments whose text contains this substring')
     .option('--start <ms>', 'source-media start time in ms (with --end, filters to this window; word mode also clips words to it)', toInt)
     .option('--end <ms>', 'source-media end time in ms', toInt)
@@ -195,13 +203,18 @@ export function registerProject(program: Command): void {
     .option('--padding-end <ms>', 'word mode: breathing room (ms) kept before speech at a silence end edge (negative tightens)', toInt)
     .option('--limit <n>', 'How many clip segments a page holds. Omit for the default.', toInt)
     .option('--cursor <cursor>', "The answer's nextCursor, to read the next page of segments with the same other inputs.")
-    .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
+    .action(async (projectId: string | undefined, opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const granularity = opts.granularity as string | undefined
       if (granularity && granularity !== 'clip' && granularity !== 'word') {
         throw new CliError("--granularity must be 'clip' or 'word'.", EXIT.USAGE)
       }
-      const r = await client.getTranscript(projectId, {
+      // The SDK refuses a mix of the two ways to address the words, before any request; its message is the usage error.
+      const query = {
+        projectId,
+        mediaId: opts.media as string | undefined,
+        startSeconds: opts.startSeconds as number | undefined,
+        endSeconds: opts.endSeconds as number | undefined,
         search: opts.search as string | undefined,
         startMs: opts.start as number | undefined,
         endMs: opts.end as number | undefined,
@@ -211,7 +224,25 @@ export function registerProject(program: Command): void {
         paddingEndMs: opts.paddingEnd as number | undefined,
         limit: opts.limit as number | undefined,
         cursor: opts.cursor as string | undefined,
-      })
+      }
+      let r: Awaited<ReturnType<typeof client.getTranscript>>
+      try {
+        r = await client.getTranscript(query)
+      } catch (err) {
+        if (err instanceof ContentHeroError && err.status === undefined) throw new CliError(err.message, EXIT.USAGE)
+        throw err
+      }
+      if ('mediaId' in r) {
+        emit(r, ctx, () =>
+          r.mediaTranscribed
+            ? `Transcript of recording ${r.mediaId}, ${r.startMs}ms to ${r.endMs === null ? 'the end' : `${r.endMs}ms`}: ${r.wordCount} word(s)` +
+              `${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n${r.text || '(no speech in the span)'}` +
+              (r.words ? `\n${r.words.length} word row(s) and ${r.audioEvents?.length ?? 0} audio event(s) on this page, in the structured output.` : '') +
+              (moreLine(r.nextCursor) ? `\n${moreLine(r.nextCursor)}` : '')
+            : (r.note ?? 'No transcript available yet.'),
+        )
+        return
+      }
       emit(r, ctx, () =>
         r.mediaTranscribed
           ? `Transcript for ${r.projectId}: ${r.segments.length} of ${r.segmentCount} clip segment(s) on this page${r.speakers && r.speakers.length ? `, speakers: ${r.speakers.join(', ')}` : ''}\n` +

@@ -1748,7 +1748,7 @@ export interface MediaVariation {
   }
   /**
    * The recorded facts of an audio file, on an audio item's variations only. Each field is present only when known.
-   * Codec, sample rate and channels are not recorded, so none appears. Read it with `describeAudioFacts`.
+   * Read it with `describeAudioFacts`.
    */
   audio?: AudioFacts
 }
@@ -1757,12 +1757,17 @@ export interface MediaVariation {
  * What the library recorded about one audio file. `mimeType` is the container (for example `audio/mpeg`), not the
  * codec. `derivedBitrateKbps` is DERIVED: size x 8 / duration / 1000, the file's mean rate including container
  * overhead, not the encoder's setting. It is present only when both the size and a positive duration are known.
+ * `codec`, `sampleRate` (Hz) and `channels` are the stream facts the file states, recorded when the file is registered
+ * or the next time it is measured; absent until then, which means unknown, never zero.
  */
 export interface AudioFacts {
   sizeBytes?: number
   mimeType?: string
   durationSeconds?: number
   derivedBitrateKbps?: number
+  codec?: string
+  sampleRate?: number
+  channels?: number
 }
 
 /**
@@ -4121,8 +4126,19 @@ export interface SourceTime {
   frames: Array<{ clipId: string; frame: number }>
 }
 
+/**
+ * One module of a project in the index (`ProjectParts.modulesIndex`): `usedBy` counts the clips that reach it, directly
+ * or through other modules; `unused` is true when none does; `bytes` is the size of its source. Never its code.
+ */
+export interface ModuleIndexEntry {
+  name: string
+  usedBy: number
+  unused: boolean
+  bytes: number
+}
+
 /** A part a `getProject` read named. */
-export type ProjectPartName = 'clips' | 'modules' | 'sourceTimes'
+export type ProjectPartName = 'clips' | 'modules' | 'sourceTimes' | 'modulesIndex'
 
 /**
  * A `getProject` read that names parts (`clipIds`, `moduleNames`, `sourceAssetId` with `atSec`): the project named and
@@ -4146,6 +4162,8 @@ export interface ProjectParts {
   compositionSpace?: { width: number; height: number }
   state?: { clips?: Array<Record<string, unknown>>; modules?: Record<string, string>; modulesNotIncluded?: unknown[]; missing?: string[] }
   sourceTimes?: SourceTime[]
+  /** The modules' index (`GetProjectOptions.modulesIndex`): each one's name, use and size, without code. */
+  modulesIndex?: ModuleIndexEntry[]
   findings?: DocumentFinding[]
 }
 
@@ -4171,6 +4189,8 @@ export interface GetProjectOptions {
   /** With `atSec`: where those seconds of this asset play on the timeline (`ProjectParts.sourceTimes`). */
   sourceAssetId?: string
   atSec?: number[]
+  /** Read the index of the project's modules (`ProjectParts.modulesIndex`): name, use and size, without code. A part, read alone like the others. */
+  modulesIndex?: boolean
 }
 
 /** What a `getProject` read was narrowed to (see `ProjectDetail.scope`). */
@@ -5330,4 +5350,77 @@ export interface TranscriptResult {
   speakers?: string[]
   /** Present only when nothing has been transcribed yet, explaining the empty result. */
   note?: string
+}
+
+/** The order of the values in each row of a media transcript read (`MediaTranscriptResult.fields`). Times are the recording's own ms. */
+export interface MediaTranscriptFields {
+  words: readonly ['text', 'startMs', 'endMs', 'speakerId', 'confidence']
+  audioEvents: readonly ['text', 'startMs', 'endMs', 'speakerId']
+}
+
+/** A spoken word of a media read: text, the recording's own ms, diarized speaker (when known), 0-1 confidence (when known). */
+export type MediaWordTuple = [text: string, startMs: number, endMs: number, speakerId: string | null, confidence: number | null]
+/** A non-speech audio event of a media read: its text, the recording's own ms and speaker. */
+export type MediaAudioEventTuple = [text: string, startMs: number, endMs: number, speakerId: string | null]
+
+/**
+ * The words of one recording within a window of its own seconds (`getTranscript` with `mediaId`), whether or not any
+ * timeline plays that span. Times are in the recording's own clock. `words`, `audioEvents` and `fields` come with
+ * `granularity: 'word'`; `audioEvents` ride the first page only. `wordCount` counts the whole span across pages.
+ */
+export interface MediaTranscriptResult {
+  mediaId: string
+  /** false when the recording has no transcript yet; the span's text and words are then empty. */
+  mediaTranscribed: boolean
+  /** The span read, in ms of the recording (`endMs` is null when the span runs to the end). */
+  startMs: number
+  endMs: number | null
+  wordCount: number
+  /** The span's words, space-joined. */
+  text: string
+  fields?: MediaTranscriptFields
+  words?: MediaWordTuple[]
+  audioEvents?: MediaAudioEventTuple[]
+  nextCursor: string | null
+  speakers?: string[]
+  note?: string
+}
+
+/** Options of a timeline transcript read (`getTranscript` with a project). */
+export interface ProjectTranscriptOptions {
+  search?: string
+  /** Source-media window in ms (with `endMs`). */
+  startMs?: number
+  endMs?: number
+  granularity?: 'clip' | 'word'
+  paceThresholdMs?: number
+  paddingStartMs?: number
+  paddingEndMs?: number
+  /** How many segments a page holds. */
+  limit?: number
+  /** The `nextCursor` of the page before. */
+  cursor?: string
+}
+
+/** Options of a recording's transcript read (`getTranscript` with a media id). */
+export interface MediaTranscriptOptions {
+  /** Where in the recording the window begins, in the recording's own seconds (inclusive). */
+  startSeconds?: number
+  /** Where the window ends, in the recording's own seconds (exclusive). */
+  endSeconds?: number
+  granularity?: 'clip' | 'word'
+  /** How many words a page holds (word mode). */
+  limit?: number
+  /** The `nextCursor` of the page before. */
+  cursor?: string
+}
+
+/**
+ * What `getTranscript` takes when the caller has not yet chosen the way to address the words: exactly one of `projectId`
+ * (the words as a timeline plays them) or `mediaId` (the words of one recording). The client refuses any other mix
+ * before it sends a request.
+ */
+export interface TranscriptQuery extends ProjectTranscriptOptions, MediaTranscriptOptions {
+  projectId?: string
+  mediaId?: string
 }

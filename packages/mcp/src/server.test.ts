@@ -6155,9 +6155,10 @@ test('get_transcript says each clip once, its words as rows in the order fields 
   }
   const result = { projectId: 'p1', revision: 4, fps: 30, mediaTranscribed: true, segmentCount: 2, segments: [segment], nextCursor: 'NEXT', fields, speakers: ['A'] }
   let asked: Record<string, unknown> = {}
-  const mcp = await connect(fakeClient({ getTranscript: async (_id: string, o: Record<string, unknown>) => ((asked = o), result) }))
+  const mcp = await connect(fakeClient({ getTranscript: async (o: Record<string, unknown>) => ((asked = o), result) }))
   const res = await mcp.callTool({ name: 'get_transcript', arguments: { projectId: 'p1', granularity: 'word', limit: 1, cursor: 'PREV' } })
   const body = res.content[0].text
+  assert.equal(asked.projectId, 'p1')
   assert.equal(asked.limit, 1)
   assert.equal(asked.cursor, 'PREV')
   assert.match(body, /1 of 2 clip segment\(s\) on this page/)
@@ -6185,4 +6186,74 @@ test("view says what of a source's picture is not ready, and where its next page
   assert.match(body, /coarse \(one picture per shot/)
   assert.match(body, /where is still being made \(since 2026-10-15T14:19:14\.663Z, expected by 2026-10-15T14:22:58\.000Z\)/)
   assert.match(body, /More: pass cursor "NEXT"\./)
+})
+
+test('get_transcript reads a recording by mediaId in its own seconds and says its words once', async () => {
+  const result = {
+    mediaId: 'm1', mediaTranscribed: true, startMs: 1500, endMs: 4000, wordCount: 2, text: 'hello there', nextCursor: 'NEXT', speakers: ['A'],
+    fields: { words: ['text', 'startMs', 'endMs', 'speakerId', 'confidence'], audioEvents: ['text', 'startMs', 'endMs', 'speakerId'] },
+    words: [['hello', 1500, 1900, 'A', 0.98], ['there', 2000, 2400, 'A', 0.97]], audioEvents: [],
+  }
+  let asked: Record<string, unknown> = {}
+  const mcp = await connect(fakeClient({ getTranscript: async (o: Record<string, unknown>) => ((asked = o), result) }))
+  const res = await mcp.callTool({ name: 'get_transcript', arguments: { mediaId: 'm1', startSeconds: 1.5, endSeconds: 4, granularity: 'word' } })
+  assert.ok(!res.isError)
+  assert.equal(asked.mediaId, 'm1')
+  assert.equal(asked.projectId, undefined)
+  assert.equal(asked.startSeconds, 1.5)
+  assert.equal(asked.endSeconds, 4)
+  const body = res.content[0].text
+  assert.equal(body.match(/hello there/g)?.length, 1)
+  assert.match(body, /\["hello",1500,1900,"A",0\.98\]/)
+  assert.match(body, /More: pass cursor "NEXT"\./)
+})
+
+test('get_project reads the modules index alone and names each module with its exact size', async () => {
+  const parts = {
+    id: 'p1', shortId: 'abc', appUrl: 'https://app.contenthero.ai/editor/abc', type: 'editor', title: 'My Edit', revision: 4, fps: 30,
+    parts: ['modulesIndex'], modulesIndex: [{ name: 'intro', usedBy: 2, unused: false, bytes: 1234 }, { name: 'old', usedBy: 0, unused: true, bytes: 99 }],
+  }
+  let asked: Record<string, unknown> = {}
+  const mcp = await connect(fakeClient({ getProject: async (_id: string, o: Record<string, unknown>) => ((asked = o), parts) }))
+  const res = await mcp.callTool({ name: 'get_project', arguments: { projectId: 'p1', modulesIndex: true } })
+  assert.equal(asked.modulesIndex, true)
+  const body = res.content[0].text
+  assert.match(body, /intro: 2 clips draw it, 1234 bytes/)
+  assert.match(body, /old: no clip draws it, 99 bytes/)
+  assert.doesNotMatch(body, /Layer geometry|Frame rate:|Groups:/)
+})
+
+test("get_media names an audio item's codec, sample rate and channels, and carries its measured facts exact", async () => {
+  const audio = { sizeBytes: 480000, mimeType: 'audio/mpeg', durationSeconds: 30.123, codec: 'mp3', sampleRate: 44100, channels: 2 }
+  const mcp = await connect(
+    fakeClient({
+      getMediaBatch: async (items) => ({
+        items: [{ ok: true, input: items[0], url: 'https://cdn/a.mp3', type: 'audio', mediaId: 'Aud00001', otherMediaIds: [], durationSeconds: 30.123, audio }],
+      }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'Aud00001' }] } })
+  const text = res.content.map((c) => c.text ?? '').join('\n')
+  assert.match(text, /audio: audio\/mpeg, .*30\.12s, mp3, 44100 Hz, stereo/)
+  assert.match(text, /Exact values for computing are in the structured data/)
+  const sc = res.structuredContent as { items: Array<Record<string, unknown>>; summary: string }
+  assert.equal(sc.items[0].durationSeconds, 30.123)
+  assert.deepEqual(sc.items[0].audio, audio)
+  assert.match(sc.summary, /Found 1 of 1 item/)
+})
+
+/**
+ * Rounding is display only: the structured result carries the API's numbers as numbers. Break-verified: mapping the
+ * summary through its describe text, or rounding it, turns the exact assertions red.
+ */
+test('a reading keeps 1.334 and -14.237 exactly in the structured result while the text reads 1.3s and -14.2 LUFS', async () => {
+  const summary = { durationSec: 6, speechSec: 1.334, soundCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null, integratedLufs: -14.237 }
+  const video = { copy: { status: 'ready' }, videos: [{ slide: 0, copy: { status: 'ready' }, audioMap: { status: 'ready', summary } }] }
+  const mcp = await connect(fakeClient({ getContent: async () => ({ title: 'x', hashtags: [], analysis: { status: 'absent' }, video }) }))
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.match(res.content[0].text, /1\.3s of speech/)
+  assert.match(res.content[0].text, /-14\.2 LUFS/)
+  const sc = res.structuredContent as { videos: Array<{ audioMap: { summary: { speechSec: unknown; integratedLufs: unknown } } }> }
+  assert.strictEqual(sc.videos[0].audioMap.summary.speechSec, 1.334)
+  assert.strictEqual(sc.videos[0].audioMap.summary.integratedLufs, -14.237)
 })

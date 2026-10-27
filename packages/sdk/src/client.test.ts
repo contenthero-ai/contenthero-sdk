@@ -1819,3 +1819,57 @@ test('getMedia returns an audio variation with its recorded facts, and one witho
   assert.deepEqual(item.variations[1]!.audio, { mimeType: 'audio/wav' })
   assert.equal(item.variations[2]!.audio, undefined)
 })
+
+test('getTranscript by mediaId sends the recording and its window in its own seconds, and returns the media shape', async () => {
+  const result = { mediaId: 'm1', mediaTranscribed: true, startMs: 1500, endMs: 4000, wordCount: 2, text: 'hello there', nextCursor: null }
+  const { fetch, calls } = stubFetch([{ status: 200, body: result }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const r = await client.getTranscript({ mediaId: 'm1', startSeconds: 1.5, endSeconds: 4, granularity: 'word', limit: 50, cursor: 'C' })
+  const url = new URL(calls[0]?.url ?? '')
+  assert.equal(url.pathname, '/api/v1/editor/transcript')
+  assert.equal(url.searchParams.get('mediaId'), 'm1')
+  assert.equal(url.searchParams.get('projectId'), null)
+  assert.equal(url.searchParams.get('startSeconds'), '1.5')
+  assert.equal(url.searchParams.get('endSeconds'), '4')
+  assert.equal(url.searchParams.get('granularity'), 'word')
+  assert.equal(url.searchParams.get('limit'), '50')
+  assert.equal(url.searchParams.get('cursor'), 'C')
+  assert.equal('mediaId' in r && r.mediaId, 'm1')
+})
+
+test('getTranscript by projectId keeps the positional form and sends the project alone', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { projectId: 'p1', segments: [], segmentCount: 0, mediaTranscribed: true } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.getTranscript('p1', { startMs: 100, endMs: 900, search: 'hi' })
+  const url = new URL(calls[0]?.url ?? '')
+  assert.equal(url.searchParams.get('projectId'), 'p1')
+  assert.equal(url.searchParams.get('mediaId'), null)
+  assert.equal(url.searchParams.get('startMs'), '100')
+  assert.equal(url.searchParams.get('search'), 'hi')
+})
+
+test('getTranscript refuses a bad address or window before any request', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: {} }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const bad: Array<Record<string, unknown>> = [
+    {},
+    { projectId: 'p1', mediaId: 'm1' },
+    { mediaId: 'm1', startMs: 5 },
+    { mediaId: 'm1', search: 'x' },
+    { projectId: 'p1', startSeconds: 1 },
+    { mediaId: 'm1', startSeconds: -1 },
+    { mediaId: 'm1', startSeconds: 5, endSeconds: 5 },
+    { mediaId: 'm1', endSeconds: Number.NaN },
+  ]
+  for (const q of bad) await assert.rejects(client.getTranscript(q as never), ContentHeroError)
+  assert.equal(calls.length, 0)
+})
+
+test('getProject asks for the modules index alone and reads it back', async () => {
+  const index = [{ name: 'intro', usedBy: 2, unused: false, bytes: 1234 }]
+  const { fetch, calls } = stubFetch([{ status: 200, body: { project: { id: 'p1', parts: ['modulesIndex'], modulesIndex: index } } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const r = await client.getProject('p1', { modulesIndex: true })
+  assert.equal(new URL(calls[0]?.url ?? '').searchParams.get('modulesIndex'), 'true')
+  assert.deepEqual(r.modulesIndex, index)
+})

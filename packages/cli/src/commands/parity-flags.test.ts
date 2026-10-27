@@ -457,3 +457,38 @@ test('audio split sends operation split on a file, and split-clips sends it in p
   const clips = await run('audio', 'split-clips', 'p1', '--clips', 'c1', 'c2', '--no-wait')
   assert.deepEqual(clips.body, { operation: 'split', projectId: 'p1', clipIds: ['c1', 'c2'], inPlace: true })
 })
+
+test('project transcript get reads a recording by --media in its own seconds, or a project, and refuses a mix', async () => {
+  const media = await run('project', 'transcript', 'get', '--media', 'm1', '--start-seconds', '1.5', '--end-seconds', '4', '--granularity', 'word')
+  assert.equal(media.path, '/api/v1/editor/transcript')
+  assert.equal(media.query.get('mediaId'), 'm1')
+  assert.equal(media.query.get('projectId'), null)
+  assert.equal(media.query.get('startSeconds'), '1.5')
+  assert.equal(media.query.get('endSeconds'), '4')
+  assert.equal(media.query.get('granularity'), 'word')
+
+  const project = await run('project', 'transcript', 'get', 'p1', '--start', '100', '--end', '900')
+  assert.equal(project.query.get('projectId'), 'p1')
+  assert.equal(project.query.get('mediaId'), null)
+  assert.equal(project.query.get('startMs'), '100')
+
+  for (const args of [
+    ['project', 'transcript', 'get'],
+    ['project', 'transcript', 'get', 'p1', '--media', 'm1'],
+    ['project', 'transcript', 'get', '--media', 'm1', '--start', '5'],
+    ['project', 'transcript', 'get', 'p1', '--start-seconds', '1'],
+    ['project', 'transcript', 'get', '--media', 'm1', '--start-seconds', '5', '--end-seconds', '2'],
+  ]) {
+    seen.length = 0
+    await assert.rejects(buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', ...args], { from: 'user' }), undefined, args.join(' '))
+    assert.equal(seen.length, 0, `no request for: ${args.join(' ')}`)
+  }
+})
+
+test('project get --modules-index sends modulesIndex', async () => {
+  // The stub answers no project, so the command fails reading it; the request it made is what is asserted.
+  seen.length = 0
+  await buildProgram().parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'project', 'get', 'p1', '--modules-index'], { from: 'user' }).catch(() => undefined)
+  assert.equal(seen.length, 1)
+  assert.equal(seen[0].query.get('modulesIndex'), 'true')
+})

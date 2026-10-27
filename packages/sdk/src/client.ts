@@ -110,6 +110,9 @@ import type {
   LayerSchemaEntry,
   TypeCatalogOptions,
   TranscriptResult,
+  MediaTranscriptResult,
+  ProjectTranscriptOptions,
+  TranscriptQuery,
   MediaItem,
   MediaSource,
   SearchMediaOptions,
@@ -2014,6 +2017,7 @@ export class ContentHero {
   async getProject(projectId: string, options: GetProjectOptions & { clipIds: string[] }): Promise<ProjectParts>
   async getProject(projectId: string, options: GetProjectOptions & { moduleNames: string[] }): Promise<ProjectParts>
   async getProject(projectId: string, options: GetProjectOptions & { sourceAssetId: string }): Promise<ProjectParts>
+  async getProject(projectId: string, options: GetProjectOptions & { modulesIndex: true }): Promise<ProjectParts>
   async getProject(projectId: string, options?: GetProjectOptions): Promise<ProjectDetail | ProjectParts>
   async getProject(projectId: string, options: GetProjectOptions = {}): Promise<ProjectDetail | ProjectParts> {
     const params = new URLSearchParams()
@@ -2026,6 +2030,7 @@ export class ContentHero {
     if (options.moduleNames?.length) params.set('moduleNames', options.moduleNames.join(','))
     if (options.sourceAssetId) params.set('sourceAssetId', options.sourceAssetId)
     if (options.atSec?.length) params.set('atSec', options.atSec.join(','))
+    if (options.modulesIndex !== undefined) params.set('modulesIndex', String(options.modulesIndex))
     const qs = params.toString() ? `?${params.toString()}` : ''
     const { project } = await this.request<{ project: ProjectDetail | ProjectParts }>(
       'GET',
@@ -2393,7 +2398,9 @@ export class ContentHero {
   }
 
   /**
-   * Read an editor project's transcript mapped to its timeline clips. Returns one segment per transcribable
+   * Read the words of a recording (`mediaId`, with an optional window in the recording's own seconds, including spans no
+   * timeline plays) or of an editor project (`projectId`); pass exactly one, and a mix of the two's options is refused before
+   * any request. A recording's answer is `MediaTranscriptResult`, in the recording's own clock. A project's transcript is mapped to its timeline clips. Returns one segment per transcribable
    * primary-track clip, in timeline order, carrying the words spoken within it plus its current enabled/disabled
    * state, so you can read what is said, see which parts are already cut, and target exact clipIds with
    * update_timeline (disable_ranges / set_disabled / delete_ranges). Scope with `search` (substring) or
@@ -2404,33 +2411,49 @@ export class ContentHero {
    * tune the silence detection and default to the project's saved pace/padding. Segments come a page at a time:
    * pass `nextCursor` back as `cursor` for the next; `limit` sets the page size. Requires the `editor:read` scope.
    */
+  async getTranscript(projectId: string, options?: ProjectTranscriptOptions): Promise<TranscriptResult>
+  async getTranscript(query: TranscriptQuery & { mediaId: string; projectId?: undefined }): Promise<MediaTranscriptResult>
+  async getTranscript(query: TranscriptQuery & { projectId: string; mediaId?: undefined }): Promise<TranscriptResult>
+  async getTranscript(query: TranscriptQuery): Promise<TranscriptResult | MediaTranscriptResult>
   async getTranscript(
-    projectId: string,
-    options: {
-      search?: string
-      startMs?: number
-      endMs?: number
-      granularity?: 'clip' | 'word'
-      paceThresholdMs?: number
-      paddingStartMs?: number
-      paddingEndMs?: number
-      /** How many segments a page holds. */
-      limit?: number
-      /** The `nextCursor` of the page before. */
-      cursor?: string
-    } = {},
-  ): Promise<TranscriptResult> {
-    const params = new URLSearchParams({ projectId })
-    if (options.search) params.set('search', options.search)
-    if (options.startMs !== undefined) params.set('startMs', String(options.startMs))
-    if (options.endMs !== undefined) params.set('endMs', String(options.endMs))
-    if (options.granularity) params.set('granularity', options.granularity)
-    if (options.paceThresholdMs !== undefined) params.set('paceThresholdMs', String(options.paceThresholdMs))
-    if (options.paddingStartMs !== undefined) params.set('paddingStartMs', String(options.paddingStartMs))
-    if (options.paddingEndMs !== undefined) params.set('paddingEndMs', String(options.paddingEndMs))
-    if (options.limit !== undefined) params.set('limit', String(options.limit))
-    if (options.cursor) params.set('cursor', options.cursor)
-    return this.request<TranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
+    first: string | TranscriptQuery,
+    options: ProjectTranscriptOptions = {},
+  ): Promise<TranscriptResult | MediaTranscriptResult> {
+    const q: TranscriptQuery = typeof first === 'string' ? { ...options, projectId: first } : first
+    const params = new URLSearchParams()
+    if (q.projectId && q.mediaId) throw new ContentHeroError('Pass exactly one of projectId (the words on a timeline) or mediaId (the words of a recording), not both.')
+    if (!q.projectId && !q.mediaId) throw new ContentHeroError('Pass exactly one of projectId (the words on a timeline) or mediaId (the words of a recording).')
+    if (q.mediaId) {
+      // A recording is windowed in its own seconds; the timeline's ms window, search and silence tuning do not apply.
+      for (const name of ['startMs', 'endMs', 'search', 'paceThresholdMs', 'paddingStartMs', 'paddingEndMs'] as const) {
+        if (q[name] !== undefined && q[name] !== '') throw new ContentHeroError(`${name} applies to a project's timeline; with mediaId use startSeconds and endSeconds.`)
+      }
+      for (const name of ['startSeconds', 'endSeconds'] as const) {
+        const v = q[name]
+        if (v !== undefined && (!Number.isFinite(v) || v < 0)) throw new ContentHeroError(`${name} must be a non-negative number.`)
+      }
+      if (q.startSeconds !== undefined && q.endSeconds !== undefined && q.endSeconds <= q.startSeconds) {
+        throw new ContentHeroError('endSeconds must be greater than startSeconds.')
+      }
+      params.set('mediaId', q.mediaId)
+      if (q.startSeconds !== undefined) params.set('startSeconds', String(q.startSeconds))
+      if (q.endSeconds !== undefined) params.set('endSeconds', String(q.endSeconds))
+    } else {
+      for (const name of ['startSeconds', 'endSeconds'] as const) {
+        if (q[name] !== undefined) throw new ContentHeroError(`${name} addresses a recording; with projectId use startMs and endMs.`)
+      }
+      params.set('projectId', q.projectId as string)
+      if (q.search) params.set('search', q.search)
+      if (q.startMs !== undefined) params.set('startMs', String(q.startMs))
+      if (q.endMs !== undefined) params.set('endMs', String(q.endMs))
+      if (q.paceThresholdMs !== undefined) params.set('paceThresholdMs', String(q.paceThresholdMs))
+      if (q.paddingStartMs !== undefined) params.set('paddingStartMs', String(q.paddingStartMs))
+      if (q.paddingEndMs !== undefined) params.set('paddingEndMs', String(q.paddingEndMs))
+    }
+    if (q.granularity) params.set('granularity', q.granularity)
+    if (q.limit !== undefined) params.set('limit', String(q.limit))
+    if (q.cursor) params.set('cursor', q.cursor)
+    return this.request<TranscriptResult | MediaTranscriptResult>('GET', `/api/v1/editor/transcript?${params.toString()}`)
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. `signal` cuts it (a wait's deadline). */
