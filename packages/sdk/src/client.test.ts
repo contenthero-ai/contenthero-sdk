@@ -1289,11 +1289,11 @@ test('getContent asks for the audio map window on the wire only when asked', asy
   assert.equal(new URL(calls[1]!.url).search, '')
 })
 
-test('every listProjects filter reaches the request, aliases included', async () => {
+test('every listProjects filter reaches the request', async () => {
   // `Required<>` makes a new ListProjectsInput field a compile error here until it is covered. Until sdk 0.4.16 the
   // client sent only `kind`, so `surface` (the documented field) was silently dropped and every caller got both
   // project types back (found by a Cowork test, 2026-09-27).
-  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', surface: 'canvas', kind: 'canvas', search: 'deck', sort: 'title', order: 'asc', limit: 10, cursor: 'c9' }
+  const every: Required<ListProjectsInput> = { filter: 'archived', type: 'canvas', search: 'deck', sort: 'title', order: 'asc', limit: 10, cursor: 'c9' }
   for (const key of Object.keys(every) as Array<keyof ListProjectsInput>) {
     const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [] } }])
     const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
@@ -1302,16 +1302,6 @@ test('every listProjects filter reaches the request, aliases included', async ()
     const sent = [...params.values()]
     assert.ok(sent.includes(String(every[key])), `${key} did not reach the request: ${calls[0]!.url}`)
   }
-})
-
-test('listProjects sends one type field, and type wins over its aliases', async () => {
-  const { fetch, calls } = stubFetch([{ status: 200, body: { projects: [] } }])
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
-  await client.listProjects({ type: 'editor', surface: 'canvas', kind: 'canvas' })
-  const params = new URL(calls[0]!.url).searchParams
-  assert.equal(params.get('type'), 'editor')
-  assert.equal(params.get('surface'), null)
-  assert.equal(params.get('kind'), null)
 })
 
 const KLING_ELEMENT = {

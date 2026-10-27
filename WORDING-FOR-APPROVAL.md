@@ -159,3 +159,7 @@ No tool or field description text changed. Behavior and help-text changes a user
 - MCP `search_media` and CLI `media search`, when a search finds nothing and the server gives a reason. Before: "No matching media found." Now: the same line, then "Why empty: <the server's message>".
 - CLI `brand-kit get`, when the kit import kept accounts as they were. New row, before: none. Now: "Accounts kept as they were: <n> (already tracked as the other kind)".
 - No tool or field description text changed.
+
+### Phase B SDK follow-ups, second pass
+
+No tool, field or help text changed. SDK type comments were added for the new fields (`seed`, `voiceSettings`, `lookOutputId`, `archive`, `notes`, `coverPosition`, `status`, `script`, `fps`, redo `revision`, `accountsKept`); they reuse the app wire's own descriptions. `listProjects` no longer accepts the `surface` and `kind` aliases, and the project summary no longer types them.

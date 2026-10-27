@@ -15,6 +15,7 @@ import {
   GenerationTimeoutError,
   type SubmittedJob,
 } from './errors.js'
+import type { DETAIL_LEVELS, MEDIA_KINDS } from './contract.generated.js'
 import { readCreateUpload, runUpload } from './upload.js'
 import type {
   Folder,
@@ -878,7 +879,7 @@ export class ContentHero {
   async getBrandKit(brandKitId: string, options: BrandKitSectionFilter & { history?: boolean }): Promise<BrandKitSectionsRead>
   async getBrandKit(
     brandKitId: string,
-    options: { detail?: 'full' | 'summary'; history?: boolean } & BrandKitSectionFilter = {},
+    options: { detail?: (typeof DETAIL_LEVELS)[number]; history?: boolean } & BrandKitSectionFilter = {},
   ): Promise<BrandKit | BrandKitSummaryRead | BrandKitSectionsRead> {
     const q = new URLSearchParams()
     if (options.detail) q.set('detail', options.detail)
@@ -1238,7 +1239,7 @@ export class ContentHero {
    * exist, their content type and operation kind, and their capability surface.
    * The source of truth for building model selections instead of hardcoding ids.
    */
-  async listModels(options: { contentType?: 'image' | 'video' | 'audio' } = {}): Promise<ModelInfo[]> {
+  async listModels(options: { contentType?: (typeof MEDIA_KINDS)[number] } = {}): Promise<ModelInfo[]> {
     const query = options.contentType ? `?contentType=${options.contentType}` : ''
     const data = await this.request<{ models: ModelInfo[] }>('GET', `/api/v1/models${query}`)
     return data.models
@@ -2039,10 +2040,7 @@ export class ContentHero {
   async listProjects(input: ListProjectsInput = {}): Promise<ProjectListResult> {
     const q = new URLSearchParams()
     if (input.filter) q.set('filter', input.filter)
-    // One field on the wire: `type`, with the deprecated aliases folded into it here. Until sdk 0.4.16 this sent only
-    // `kind`, so a `surface` filter was silently dropped and every caller got both types back.
-    const type = input.type ?? input.surface ?? input.kind
-    if (type) q.set('type', type)
+    if (input.type) q.set('type', input.type)
     if (input.search) q.set('search', input.search)
     setSort(q, input)
     setPage(q, input)

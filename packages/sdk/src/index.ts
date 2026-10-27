@@ -171,6 +171,7 @@ export type {
   BrandKitKnowledge,
   BrandKit,
   BrandKitAccountsLinkReport,
+  BrandKitKeptAccount,
   UpdateBrandKitInput,
   CreateBrandKitInput,
   BrandImportOutcome,
