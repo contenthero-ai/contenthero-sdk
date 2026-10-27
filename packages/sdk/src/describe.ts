@@ -370,6 +370,7 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
       ? `Nothing was applied: a batch applies whole or not at all. Revision ${r.revision}, unchanged.`
       : `Applied ${okCount}/${r.results.length} op(s). New revision: ${r.revision}.`,
   ]
+  if (r.rebased) lines.push(`Built on revision ${r.rebased.fromRevision} and applied over revision ${r.rebased.overRevision}: nothing since touched what this edit touches.`)
   if (created.length) lines.push(`Created: ${created.join(', ')}.`)
   // Async effect ops (remove_background, separate_layers) start a job and return its output's id, a UUID until the job
   // writes its record, so the wait names it with its kind (`statusTarget`), and each job's link beside it.

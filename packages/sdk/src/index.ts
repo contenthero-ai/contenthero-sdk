@@ -433,7 +433,7 @@ export {
   pendingOutputId,
   pendingJob,
 } from './errors.js'
-export type { ContentHeroErrorOptions, LimitAction, LimitCode, SubmittedJob } from './errors.js'
+export type { ContentHeroErrorOptions, LimitAction, LimitCode, RevisionOverlap, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
 export { PASS_REVISION_LINE, describePartsAsked, describeModulesIndex, chargeSentence, describeAccountIdsNotFound, describeEmptyReason, describeCharge, describeClip, describeDocumentFindings, describeStyleLibraryPins, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, describePicturePart, describeProjectPicture, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeTranscriptionState } from './describe.js'
 export {
@@ -447,5 +447,5 @@ export {
   UPDATE_STYLE_LIBRARY_TEXT,
   STYLE_LIBRARY_PARAMETER_TEXT,
   viewDescription,
-  VIEW_PICTURE_INPUT_TEXT, getProjectDescription, updateTimelineDescription, updateCanvasDescription, type ToolTextAudience } from './tool-text.js'
+  VIEW_PICTURE_INPUT_TEXT, getProjectDescription, updateTimelineDescription, updateCanvasDescription, EXPECTED_REVISION_CONTRACT, EXPECTED_REVISION_FIELD, EXPECTED_REVISION_PROJECT_NOTE, type ToolTextAudience } from './tool-text.js'
 export { UPLOAD_PART_CONCURRENCY, UPLOAD_ATTEMPTS, UPLOAD_RETRY_DELAY_MS } from './upload.js'

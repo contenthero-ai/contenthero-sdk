@@ -318,6 +318,9 @@ test('project update sends the settings named, on and off, to the project', asyn
   assert.deepEqual(r.body, { fps: 25, loudness: -16, magneticTrack: false, linkage: true, linkedTracks: { audio: false } })
   assert.deepEqual((await run('project', 'update', 'p1', '--loudness', 'off')).body, { loudness: 'off' })
   assert.deepEqual((await run('project', 'update', 'p1', '--orientation', '9:16')).body, { orientation: '9:16' })
+  // The revision read rides with the settings it guards, and alone it is not a change.
+  assert.deepEqual((await run('project', 'update', 'p1', '--fps', '30', '--expected-revision', '4')).body, { fps: 30, expectedRevision: 4 })
+  await assert.rejects(run('project', 'update', 'p1', '--expected-revision', '4'))
   // The timeline settings commands are gone: a project setting has one reader and one writer.
   await assert.rejects(run('project', 'settings', 'get', 'p1'))
 })

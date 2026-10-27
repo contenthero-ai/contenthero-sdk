@@ -81,6 +81,9 @@ import {
   getProjectDescription,
   updateTimelineDescription,
   updateCanvasDescription,
+  EXPECTED_REVISION_CONTRACT,
+  EXPECTED_REVISION_FIELD,
+  EXPECTED_REVISION_PROJECT_NOTE,
   LIST_STYLE_LIBRARIES_TEXT,
   CREATE_UPLOAD_TEXT,
   SIGN_UPLOAD_PARTS_TEXT,
@@ -5102,7 +5105,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Project',
       annotations: WRITE,
       description:
-        "Change a project: its title, brand kit and cover, and its settings: canvas size, and for a video project its frame rate, delivery loudness, magnetic main track, linkage and the kinds of track linkage reaches. This is a PATCH: a field you omit is left alone. A setting belongs to the project and is shared by everyone who edits it; changing one is an edit, so undo_project_edit reverses it and every open editor shows it at once. To change what is in the composition, use update_timeline or update_canvas instead. get_project reads every setting. Returns the project with its settings as they now stand. Requires the editor:write scope.",
+        `Change a project: its title, brand kit and cover, and its settings: canvas size, and for a video project its frame rate, delivery loudness, magnetic main track, linkage and the kinds of track linkage reaches. This is a PATCH: a field you omit is left alone. A setting belongs to the project and is shared by everyone who edits it; changing one is an edit, so undo_project_edit reverses it and every open editor shows it at once. To change what is in the composition, use update_timeline or update_canvas instead. get_project reads every setting. ${EXPECTED_REVISION_CONTRACT} Returns the project with its settings as they now stand. Requires the editor:write scope.`,
       inputSchema: {
         projectId: z.string().describe('The project id.'),
         title: z.string().optional().describe('A new title.'),
@@ -5118,6 +5121,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .optional()
           .describe('Video projects only: which kinds of track linkage reaches; a kind you omit is left alone.'),
 
+        expectedRevision: z.number().int().optional().describe(EXPECTED_REVISION_FIELD + EXPECTED_REVISION_PROJECT_NOTE),
         brandKitId: z.string().nullable().optional().describe('A brand kit id from list_brand_kits, or null to clear it.'),
         cover: z
           .union([
@@ -5345,7 +5349,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .int()
           .optional()
-          .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.'),
+          .describe(EXPECTED_REVISION_FIELD),
       },
     },
     async (args, extra) => {
@@ -5379,7 +5383,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .number()
           .int()
           .optional()
-          .describe('The revision from get_project; rejects with a conflict if a concurrent edit landed.'),
+          .describe(EXPECTED_REVISION_FIELD),
       },
     },
     async (args, extra) => {
