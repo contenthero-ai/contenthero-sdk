@@ -72,7 +72,7 @@ Reason: an agent that lost its state mid-upload can finish, because sign_upload_
 
 # Group 5b: transcribe takes a public video link (2026-10-27)
 
-Status: for approval. Reason for all of it: `transcribe` now reads a public video page (`videoUrl`) through the one link implementation (lib/api/link-transcript.ts), and the in-app link tool `get_transcript` retires.
+Status: approved by Taylan 2026-10-27 (W1 to W14 in https://claude.ai/artifact/H8UTuCvbPPhScyN5sJ7ceq); item 6 below is deleted instead, by a follow-up migration. Reason for all of it: `transcribe` now reads a public video page (`videoUrl`) through the one link implementation (lib/api/link-transcript.ts), and the in-app link tool `get_transcript` retires.
 
 ## Tool text changes
 
