@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS, SORT_ORDERS, LIST_STYLE_LIBRARIES_TEXT, CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, UPLOAD_PARAMETER_TEXT, GET_STYLE_LIBRARY_TEXT, CREATE_STYLE_LIBRARY_TEXT, UPDATE_STYLE_LIBRARY_TEXT } from '@contenthero/sdk'
+import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS, SORT_ORDERS, toolDescription, AGENT_CONTRACT, AGENT_CONTRACT_VERSION } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -1681,7 +1681,7 @@ test('get_media prints an audio item\'s recorded facts, only the ones known, and
 /**
  * get_media reads no clip frames: its items take no window, a video's keyframes are not shown even if a server sent
  * them, and its description points a clip to view. Break-verified: restoring the `frames` and `fromSec` fields on the
- * mediaId item schema turns the first assertion red (zod strips an unknown key, so the server never sees them);
+ * mediaId item schema turns the first assertion red (the item is closed, so the call is refused);
  * restoring the video keyframe sentence in the description turns the last two red.
  */
 test('get_media takes no clip window and points a clip to view', async () => {
@@ -1701,13 +1701,18 @@ test('get_media takes no clip window and points a clip to view', async () => {
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5, frameWidth: 640 }] } })
-  assert.deepEqual(captured, [{ mediaId: 'vid-1' }])
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1' }] } })
+  // The item is a closed object, so a clip window is refused rather than silently dropped.
+  const windowed = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5, frameWidth: 640 }] } })
+  assert.equal(windowed.isError, true)
+  assert.equal((captured as { mediaId: string }[])[0]!.mediaId, 'vid-1')
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
   assert.match(res.content[0].text, /\(video: no still available for this view; use the url\)/)
   const { tools } = await mcp.listTools()
   const getMedia = tools.find((t) => t.name === 'get_media')
   assert.doesNotMatch(getMedia.description, /keyframe|fromSec/i)
+  // The contract declares no clip window on an item, so none is listed.
+  assert.doesNotMatch(JSON.stringify(getMedia.inputSchema), /fromSec|toSec|frameWidth/)
   assert.match(getMedia.description, /To see a clip's frames, use view;/)
 })
 
@@ -1995,6 +2000,29 @@ test('transcribe prices an audio file by its length, and says when it cannot', a
   price = { getCost: true, audioUrl: 'https://cdn/a.mp3', creditsEstimate: null, durationSeconds: null, note: "This file's length could not be read, so its price is known only after it is transcribed." }
   const unknown = await mcp.callTool({ name: 'transcribe', arguments: { audioUrl: 'https://cdn/a.mp3', getCost: true } })
   assert.equal(unknown.content[0].text, "This file's length could not be read, so its price is known only after it is transcribed. Nothing ran and nothing was charged.")
+})
+
+test('transcribe a public video page: priced with getCost, answered with its words and facts, or why none', async () => {
+  const asked = []
+  const mcp = await connect(fakeClient({
+    estimateTranscribeCost: async (req) => (asked.push(['cost', req]), { getCost: true, videoUrl: 'https://youtu.be/x', platform: 'youtube', creditsEstimate: 4 }),
+    transcribe: async (req) => {
+      asked.push(['run', req])
+      return asked.length === 2
+        ? { status: 'completed', videoUrl: 'https://youtu.be/x', platform: 'youtube', title: 'T', channel: 'C', transcript: 'the words', charge: null }
+        : { status: 'unavailable', videoUrl: 'https://youtu.be/x', platform: 'youtube', reason: 'No captions or speech are available for this video.', charge: null }
+    },
+  }))
+  const priced = await mcp.callTool({ name: 'transcribe', arguments: { videoUrl: 'https://youtu.be/x', getCost: true } })
+  assert.match(priced.content[0].text, /^Transcribing this video costs 4 credits/)
+  const done = await mcp.callTool({ name: 'transcribe', arguments: { videoUrl: ' https://youtu.be/x ' } })
+  assert.match(done.content[0].text, /^Transcript of youtube video https:\/\/youtu\.be\/x \(T, C\):\n\nthe words/)
+  const none = await mcp.callTool({ name: 'transcribe', arguments: { videoUrl: 'https://youtu.be/x' } })
+  assert.match(none.content[0].text, /Nothing was charged for it\.$/)
+  assert.deepEqual(asked, [['cost', { videoUrl: 'https://youtu.be/x' }], ['run', { videoUrl: 'https://youtu.be/x' }], ['run', { videoUrl: 'https://youtu.be/x' }]])
+  for (const args of [{ videoUrl: 'https://youtu.be/x', audioUrl: 'https://cdn/a.mp3' }, { videoUrl: 'https://youtu.be/x', diarize: true }, { videoUrl: 'https://youtu.be/x', slide: 0 }]) {
+    assert.equal((await mcp.callTool({ name: 'transcribe', arguments: args })).isError, true, JSON.stringify(args))
+  }
 })
 
 test('transcribe takes exactly one source, and slide only for a post', async () => {
@@ -4667,7 +4695,7 @@ test('a tool declares the widget exactly when it can emit one', () => {
   const EMITTERS = [...emitters]
   assert.ok(EMITTERS.length >= 4, `only found ${EMITTERS.length} widget-emitting builders; the scan broke`)
 
-  const blocks = [...src.matchAll(/server\.registerTool\(\s*'([a-z_]+)'/g)]
+  const blocks = [...src.matchAll(/^  tool\(\s*'([a-z_]+)'/gm)]
   assert.ok(blocks.length > 20, 'the tool scan found almost nothing; the registration shape changed')
 
   const problems: string[] = []
@@ -5118,7 +5146,7 @@ test('the Kling element tools reach the Kling element SDK methods, by klingEleme
   ])
 })
 
-test('generate_video forwards klingElements, and the deprecated elements and elementId, for the server to resolve', async () => {
+test('generate_video forwards klingElements alone: the deprecated elements and elementId aliases are gone', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -5134,15 +5162,13 @@ test('generate_video forwards klingElements, and the deprecated elements and ele
   assert.deepEqual(captured.references?.klingElements, [{ klingElementId: 'Kling001' }])
   assert.equal(captured.references?.elements, undefined)
 
-  // Older callers, and tool lists cached before the rename, still send these; the server's one reader resolves them.
-  await mcp.callTool({ name: 'generate_video', arguments: { ...base, elements: [{ elementId: 'Kling001' }] } })
-  assert.deepEqual(captured.references?.elements, [{ elementId: 'Kling001' }])
-  assert.equal(captured.references?.klingElements, undefined)
+  const rejected = await mcp.callTool({ name: 'generate_video', arguments: { ...base, elements: [{ elementId: 'Kling001' }] } })
+  assert.ok(rejected.isError, 'the old alias is an undeclared parameter')
 
   const { tools } = await mcp.listTools()
   const props = tools.find((t) => t.name === 'generate_video').inputSchema.properties
-  assert.match(props.elements.description, /^Deprecated alias for `klingElements`/)
-  assert.match(props.klingElements.items.properties.elementId.description, /^Deprecated alias for `klingElementId`/)
+  assert.equal(props.elements, undefined)
+  assert.equal(props.klingElements.items.properties.elementId, undefined)
 })
 
 /**
@@ -5194,7 +5220,7 @@ test('the template tools are filed with the editor, and reach the template SDK m
     `list ${JSON.stringify({ scope: 'user', kind: 'code', category: ['lower-thirds'], archived: 'only' })}`,
     `list ${JSON.stringify({ kind: 'logo' })}`,
     `get ${row.id}`,
-    `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { projectId: 'p1', itemId: 'g1' } })}`,
+    `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { itemId: 'g1', projectId: 'p1' } })}`,
     `create ${JSON.stringify({ name: 'Mine', fromTemplateId: row.id })}`,
     `update ${row.id} {"props":{"title":"Bye"}} {"expectedVersion":3}`,
     `delete ${row.id}`,
@@ -5344,17 +5370,16 @@ test('upload tools: schemas and approved wording, with the old names gone', asyn
   const { tools } = await mcp.listTools()
   const byName = (n: string) => tools.find((t) => t.name === n)
   for (const old of ['create_media_upload', 'complete_media_upload']) assert.equal(byName(old), undefined, `${old} is removed`)
-  assert.equal(byName('create_upload').description, CREATE_UPLOAD_TEXT)
-  assert.equal(byName('sign_upload_parts').description, SIGN_UPLOAD_PARTS_TEXT)
-  assert.equal(byName('complete_upload').description, COMPLETE_UPLOAD_TEXT)
+  for (const n of ['create_upload', 'sign_upload_parts', 'complete_upload'] as const) assert.equal(byName(n).description, toolDescription(n, 'mcp'))
   // Principle-based: no number another system owns appears in any of the three texts or their parameter texts.
-  const prose = [CREATE_UPLOAD_TEXT, SIGN_UPLOAD_PARTS_TEXT, COMPLETE_UPLOAD_TEXT, ...Object.values(UPLOAD_PARAMETER_TEXT)].join(' ')
+  const texts = (v: unknown): string[] => (typeof v === 'string' ? [] : v && typeof v === 'object' ? Object.entries(v).flatMap(([k, x]) => (k === 'description' && typeof x === 'string' ? [x] : texts(x))) : [])
+  const prose = ['create_upload', 'sign_upload_parts', 'complete_upload'].flatMap((n) => texts(byName(n))).join(' ')
   assert.doesNotMatch(prose, /\d{2,}|MiB|MB\b|GB\b/)
   assert.doesNotMatch(prose, /[\u2013\u2014]/)
 
   const files = byName('create_upload').inputSchema.properties.files
   assert.deepEqual(files.items.required.sort(), ['contentType', 'fileName', 'sizeBytes'], 'the size is required')
-  assert.equal(files.items.properties.sizeBytes.description, UPLOAD_PARAMETER_TEXT.sizeBytes)
+  assert.ok(files.items.properties.sizeBytes.description)
   assert.deepEqual(byName('sign_upload_parts').inputSchema.required.sort(), ['outputId', 'partNumbers'])
   const upload = byName('complete_upload').inputSchema.properties.uploads.items
   assert.deepEqual(upload.required, ['outputId'], 'parts are optional: a single upload completes without them')
@@ -5491,8 +5516,7 @@ test('the style library tools are filed with the editor, use the approved texts,
   const names = ['list_style_libraries', 'get_style_library', 'create_style_library', 'update_style_library']
   assert.deepEqual(names.filter((n) => !editor.tools.includes(n)), [])
   const { tools } = await mcp.listTools()
-  const text = { list_style_libraries: LIST_STYLE_LIBRARIES_TEXT, get_style_library: GET_STYLE_LIBRARY_TEXT, create_style_library: CREATE_STYLE_LIBRARY_TEXT, update_style_library: UPDATE_STYLE_LIBRARY_TEXT }
-  for (const n of names) assert.equal(tools.find((t) => t.name === n).description, text[n])
+  for (const n of names) assert.equal(tools.find((t) => t.name === n).description, toolDescription(n as 'get_style_library', 'mcp'))
   assert.ok(!tools.some((t) => t.name === 'delete_style_library'))
   const archiveTool = tools.find((t) => t.name === 'archive')
   assert.ok(archiveTool.inputSchema.properties.assetType.enum.includes('style_library'))
@@ -5511,11 +5535,11 @@ test('the style library tools are filed with the editor, use the approved texts,
   await mcp.callTool({ name: 'update_style_library', arguments: { name: 'motion', description: null, baseVersion: 2, modules: { ease: null }, fromProject: { projectId: 'p1', modules: ['a'], revision: 4 } } })
 
   assert.deepEqual(calls, [
-    `list ${JSON.stringify({ archived: true, search: 'mo', sort: 'name', order: 'asc' })}`,
+    `list ${JSON.stringify({ archived: true, order: 'asc', search: 'mo', sort: 'name' })}`,
     `get motion ${JSON.stringify({ limit: 3 })}`,
     `get motion ${JSON.stringify({ version: 2 })}`,
-    `create ${JSON.stringify({ name: 'motion', notes: 'first', modules: { ease: { code: 'x' } } })}`,
-    `update motion ${JSON.stringify({ description: null, baseVersion: 2, modules: { ease: null }, fromProject: { projectId: 'p1', modules: ['a'], revision: 4 } })}`,
+    `create ${JSON.stringify({ modules: { ease: { code: 'x' } }, name: 'motion', notes: 'first' })}`,
+    `update motion ${JSON.stringify({ baseVersion: 2, description: null, fromProject: { modules: ['a'], projectId: 'p1', revision: 4 }, modules: { ease: null } })}`,
   ])
 
   const archived = []
@@ -5702,7 +5726,7 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
   assert.match(set.content[0].text, /Frame rate: 30 fps\./)
   // The revision the caller read rides along, the one contract update_timeline and update_canvas share.
   await call('update_project', { projectId: 'p1', fps: 24, expectedRevision: 9 })
-  assert.ok(calls.includes('update p1 {"fps":24,"expectedRevision":9}'))
+  assert.ok(calls.includes('update p1 {"expectedRevision":9,"fps":24}'))
   const tools = (await mcp.listTools()).tools
   for (const name of ['update_project', 'update_timeline', 'update_canvas']) {
     const field = (tools.find((t) => t.name === name)!.inputSchema.properties as Record<string, { description?: string }>).expectedRevision
@@ -5731,9 +5755,9 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
   assert.equal(undone.content[0].text, 'Undid revision 8 on project p1. The project is at revision 10.')
   await call('redo_project_edit', { projectId: 'p1', expectedRevision: 10 })
   assert.deepEqual(calls, [
-    'update p1 {"title":"Launch","brandKitId":null,"cover":{"frame":12},"coverPosition":{"x":50,"y":40}}',
-    'update p1 {"width":1080,"height":1920,"fps":30,"loudness":"off","magneticTrack":false,"linkedTracks":{"audio":false}}',
-    'update p1 {"fps":24,"expectedRevision":9}',
+    'update p1 {"brandKitId":null,"cover":{"frame":12},"coverPosition":{"x":50,"y":40},"title":"Launch"}',
+    'update p1 {"fps":30,"height":1920,"linkedTracks":{"audio":false},"loudness":"off","magneticTrack":false,"width":1080}',
+    'update p1 {"expectedRevision":9,"fps":24}',
     'get p1',
     'duplicate p1 {}',
     'duplicate p1 {"versionId":"v1"}',
@@ -6328,4 +6352,29 @@ test('update_template names the MediaRef shape its props take and refuses stored
   const props = (tool.inputSchema?.properties as Record<string, { description?: string }>).props
   assert.match(props?.description ?? '', /MediaRef \(\{ assetId, role \}\), never a stored URL/)
   assert.doesNotMatch(tool.description ?? '', /[–—]/)
+})
+
+/**
+ * THE LISTING IS THE CONTRACT. The app declares every tool's description and input in `lib/api/contract`; the MCP lists
+ * them verbatim (`x-dynamic` markers included) and a hand edit here cannot change what a host sees. The app's own
+ * `agent-contract-pinned` test reads the same listing the same way, so this holds the comparison it will make.
+ */
+test('listTools equals the agent contract, tool by tool and field by field, and lists nothing outside it', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const contractNames = AGENT_CONTRACT.tools.map((t) => t.name).sort()
+  assert.deepEqual(tools.map((t) => t.name).sort(), contractNames)
+  const byName = new Map(tools.map((t) => [t.name, t]))
+  for (const c of AGENT_CONTRACT.tools) {
+    const listed = byName.get(c.name)!
+    assert.equal(listed.description, c.description.mcp, `${c.name} description`)
+    const { $schema: _ignored, ...schema } = listed.inputSchema as Record<string, unknown>
+    assert.deepEqual(schema, c.inputSchema, `${c.name} inputSchema`)
+  }
+})
+
+test('the SDK exports the contract version, and it is the vendored file\'s', () => {
+  const vendored = JSON.parse(readFileSync(new URL('../../sdk/contract/agent-contract.json', import.meta.url), 'utf8')) as { version: string }
+  assert.equal(AGENT_CONTRACT_VERSION, vendored.version)
+  assert.equal(AGENT_CONTRACT.version, vendored.version)
 })

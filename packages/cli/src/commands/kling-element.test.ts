@@ -64,7 +64,8 @@ const VERBS: Array<{ args: string[]; method: string; path: string; body?: Record
   { args: ['delete', 'Kling001'], method: 'DELETE', path: '/api/v1/kling-elements/Kling001' },
 ]
 
-for (const group of ['kling-element', 'element']) {
+{
+  const group = 'kling-element'
   test(`${group} <verb> reaches /api/v1/kling-elements`, async () => {
     for (const verb of VERBS) {
       const r = await run(group, ...verb.args)
@@ -74,6 +75,10 @@ for (const group of ['kling-element', 'element']) {
   })
 }
 
+test('the retired element command group is refused', async () => {
+  await assert.rejects(run('element', 'list'), /unknown command 'element'/)
+})
+
 test('generate video --kling-element sends klingElements by klingElementId', async () => {
   const r = await run('generate', 'video', '@hero walks in', '-m', 'kling-3.0', '--start-frame', 'https://cdn/s.png',
     '--kling-element', 'Kling001', '--kling-element', 'Kling002', '--cost')
@@ -82,12 +87,8 @@ test('generate video --kling-element sends klingElements by klingElementId', asy
   assert.equal(references.elements, undefined)
 })
 
-test('the hidden --element still works, and --kling-element wins over it', async () => {
-  const old = await run('generate', 'video', 'p', '-m', 'kling-3.0', '--start-frame', 'https://cdn/s.png', '--element', 'Kling001', '--cost')
-  assert.deepEqual((old.body?.references as Record<string, unknown>).klingElements, [{ klingElementId: 'Kling001' }])
-  const both = await run('generate', 'video', 'p', '-m', 'kling-3.0', '--start-frame', 'https://cdn/s.png',
-    '--kling-element', 'NewOne11', '--element', 'OldOne11', '--cost')
-  assert.deepEqual((both.body?.references as Record<string, unknown>).klingElements, [{ klingElementId: 'NewOne11' }])
+test('the retired --element flag is refused', async () => {
+  await assert.rejects(run('generate', 'video', 'p', '-m', 'kling-3.0', '--start-frame', 'https://cdn/s.png', '--element', 'Kling001', '--cost'), /unknown option '--element'/)
 })
 
 test('help shows kling-element and --kling-element, never the deprecated spellings', () => {

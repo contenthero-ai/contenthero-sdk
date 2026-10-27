@@ -314,8 +314,13 @@ test('the old command names are gone', () => {
     'project version rename',
     'tag remove',
     'card publish',
+    'element',
   ]) {
     assert.equal(find(old), undefined, `${old} is still registered`)
+  }
+  // The retired `--surface` spelling of `--type` is not an option on either command that took it.
+  for (const path of ['project list', 'project create']) {
+    assert.ok(!find(path)!.options.some((o) => o.long === '--surface'), `${path} still takes --surface`)
   }
   // `schema <kind>` and `project transcript <projectId>` became groups: they no longer run on their own.
   for (const group of ['schema', 'project transcript', 'project edit', 'post']) {

@@ -14,6 +14,7 @@
 
 import type { Command } from 'commander'
 import type { Avatar, AvatarListResult, Voice, VoiceListResult } from '@contenthero/sdk'
+import { optionFromContract } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, table, linkRow, displayId, statusCommand, withMore } from '../output.js'
 import { collect, placementFrom, toJson, withPageFlags, withPlacementFlags } from '../args.js'
@@ -129,6 +130,7 @@ export function registerIdentity(program: Command): void {
       .description("Rename an avatar, set its default look or voice, or move it among your avatars")
       .argument('<id>', 'the avatar id')
       .option('--name <name>', 'new name, at least 3 characters')
+      .option('--description <text>', optionFromContract('update_avatar', 'description').description)
       .option('--default-look <lookId>', "look to make the default (also becomes the profile photo)")
       .option('--voice <voiceId>', 'default voice id, or "none" to clear it'),
   )
@@ -136,6 +138,7 @@ export function registerIdentity(program: Command): void {
       const { client, ctx } = makeClient(command)
       const result = await client.updateAvatar(id, {
         ...(opts.name !== undefined ? { name: opts.name as string } : {}),
+        ...(opts.description !== undefined ? { description: opts.description as string } : {}),
         ...(opts.defaultLook !== undefined ? { defaultLookId: opts.defaultLook as string } : {}),
         // `--voice none` is how a flag-based interface says null. Omitting the flag leaves it alone,
         // which is a different intent and must stay distinguishable.

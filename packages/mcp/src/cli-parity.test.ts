@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { Command } from 'commander'
 import { buildServer } from './server.js'
+import { AGENT_CONTRACT, optionFromContract, toolDescription } from '@contenthero/sdk'
 import { buildProgram } from '../../cli/src/program.js'
 import { isRunnable } from '../../cli/src/commands/schema.js'
 
@@ -152,21 +153,6 @@ const MCP_ONLY: Record<string, string> = {
   show_media: 'renders an inline widget in the chat host; a terminal has no equivalent display surface',
 }
 
-/**
- * HIDDEN CLI commands kept for one release window under a previous name, each with the command it stands in for.
- * They are the canonical subcommands registered a second time onto the old parent, so the checks below hold that
- * each one still exists, stays out of help, and takes exactly the canonical command's flags. Closing the window is
- * deleting the alias mount and these lines.
- */
-const DEPRECATED_COMMANDS: Record<string, string> = {
-  // `element` became `kling-element` on 2026-10-04 (the word also named the editor's Elements panel).
-  'element list': 'kling-element list',
-  'element get': 'kling-element get',
-  'element create': 'kling-element create',
-  'element update': 'kling-element update',
-  'element delete': 'kling-element delete',
-}
-
 /** CLI commands with no MCP counterpart, BY DESIGN. */
 const CLI_ONLY: Record<string, string> = {
   'auth login': 'terminal credential storage; an MCP host authenticates the connection itself',
@@ -277,8 +263,6 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
   create_upload: { files: '`upload` takes local paths and reads each name, type and size from the file itself' },
   sign_upload_parts: { outputId: '`upload` signs every part itself, just before it sends it', partNumbers: '`upload` signs every part itself, just before it sends it' },
   complete_upload: { uploads: '`upload` runs begin, send and complete in one command, so the ids and ETags never reach the caller' },
-  list_projects: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
-  create_project: { kind: 'deprecated MCP alias of `surface`, which the CLI already has' },
 }
 
 /**
@@ -340,29 +324,15 @@ test('every MCP tool maps to CLI commands or is MCP-only by design, and every CL
   const missingCommands = [...targeted].filter((c) => !leaves.has(c))
   assert.deepEqual(missingCommands, [], 'TOOL_TO_CLI names CLI commands that do not exist')
 
-  const orphanCommands = [...leaves.keys()].filter((c) => !targeted.has(c) && !CLI_ONLY[c] && !DEPRECATED_COMMANDS[c])
+  const orphanCommands = [...leaves.keys()].filter((c) => !targeted.has(c) && !CLI_ONLY[c])
   assert.deepEqual(orphanCommands, [], 'CLI commands with no MCP tool (map a tool to them, or CLI_ONLY with a reason)')
   assert.deepEqual(Object.keys(CLI_ONLY).filter((c) => !leaves.has(c)), [], 'CLI_ONLY names commands that no longer exist')
 })
 
-test('every deprecated CLI command is hidden, and stands in exactly for a command a tool maps to', () => {
-  const leaves = cliLeaves()
-  const targeted = new Set(Object.values(TOOL_TO_CLI).flat())
-  const problems: string[] = []
-  for (const [alias, canonical] of Object.entries(DEPRECATED_COMMANDS)) {
-    const old = leaves.get(alias)
-    const current = leaves.get(canonical)
-    if (!old) problems.push(`${alias}: no such command (the window closed? delete the entry)`)
-    if (!current || !targeted.has(canonical)) problems.push(`${alias}: ${canonical} is not a command any tool maps to`)
-    if (!old || !current) continue
-    if (!old.hidden) problems.push(`${alias}: shown in help, but it is a deprecated alias`)
-    if (current.hidden) problems.push(`${canonical}: hidden, but it is the canonical command`)
-    const flagsOf = (leaf: Leaf) => [...leaf.flags].sort().join(' ')
-    if (flagsOf(old) !== flagsOf(current)) {
-      problems.push(`${alias} takes [${flagsOf(old)}] but ${canonical} takes [${flagsOf(current)}]`)
-    }
-  }
-  assert.deepEqual(problems, [])
+// A hard cutover keeps no old name: no command is hidden from help, so none can stand in for a retired one.
+test('no CLI command is hidden', () => {
+  const hidden = [...cliLeaves()].filter(([, leaf]) => leaf.hidden).map(([name]) => name)
+  assert.deepEqual(hidden, [])
 })
 
 // A copy from a saved version is `project duplicate <projectId> [versionId]`, matched by the naming rules rather than
@@ -409,4 +379,40 @@ test('every input of a mapped MCP tool is expressible in the CLI, or is a record
   assert.deepEqual(uncovered, [], 'MCP inputs the CLI cannot express. Add the CLI flag (preferred), an ALIAS if it exists under another name, or a KNOWN_GAPS entry with the reason')
   assert.deepEqual(closedGaps, [], 'these KNOWN_GAPS are now closed: delete their entries')
   assert.deepEqual(stale, [], 'entries that name inputs or flags that no longer exist')
+})
+
+/**
+ * CHOICES AND WORDS COME FROM THE CONTRACT. A CLI option that mirrors a tool input of the same name takes that input's
+ * allowed values, and the options that carry the contract's words say them exactly. Both surfaces read one contract, so
+ * a closed set cannot differ between them.
+ */
+test('a CLI option that mirrors a tool input takes its choices from the contract', () => {
+  const byName = new Map(AGENT_CONTRACT.tools.map((t) => [t.name, t]))
+  const commandAt = (path: string): Command => path.split(' ').reduce((c: Command, n) => c.commands.find((x) => x.name() === n)!, buildProgram())
+  const checked: string[] = []
+  for (const [tool, paths] of Object.entries(TOOL_TO_CLI)) {
+    const props = (byName.get(tool)?.inputSchema as { properties?: Record<string, { enum?: string[] }> } | undefined)?.properties ?? {}
+    for (const path of paths) {
+      for (const option of commandAt(path).options) {
+        if (!option.argChoices || !option.long) continue
+        const input = Object.keys(props).find((k) => `--${kebab(k)}` === option.long)
+        const values = input ? props[input]!.enum : undefined
+        if (!values) continue
+        assert.deepEqual([...option.argChoices], [...values], `${path} ${option.long} against ${tool}.${input}`)
+        checked.push(`${path} ${option.long}`)
+      }
+    }
+  }
+  assert.ok(checked.length >= 6, `only ${checked.length} choice options were compared: ${checked.join(', ')}`)
+})
+
+test('CLI options that carry a tool input\'s words say the contract\'s words', () => {
+  const view = (flag: string) => buildProgram().commands.find((c) => c.name() === 'view')!.options.find((o) => o.long === flag)!.description
+  for (const [flag, input] of [['--find', 'find'], ['--where', 'where'], ['--picture', 'picture'], ['--limit', 'limit'], ['--cursor', 'cursor']] as const) {
+    assert.equal(view(flag), optionFromContract('view', input).description, flag)
+  }
+  const styles = buildProgram().commands.find((c) => c.name() === 'style-library')!
+  const list = styles.commands.find((c) => c.name() === 'list')!
+  assert.equal(list.description(), toolDescription('list_style_libraries'))
+  assert.equal(list.options.find((o) => o.long === '--search')!.description, optionFromContract('list_style_libraries', 'search').description)
 })

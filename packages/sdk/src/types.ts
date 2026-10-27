@@ -10,6 +10,22 @@
  */
 
 import type { LimitAction } from './errors.js'
+import {
+  JOB_KINDS,
+  CARD_SORTS,
+  CONTENT_SORTS,
+  MEDIA_LIST_SOURCES,
+  MEDIA_LIST_TYPES,
+  MEDIA_SORTS,
+  PLACEMENT_ENDS,
+  PROJECT_SORTS,
+  SOCIAL_PLATFORMS,
+  SORT_ORDERS,
+  SPACE_SORTS,
+  STOCK_COLLECTIONS,
+  STOCK_ORIENTATIONS,
+  STYLE_LIBRARY_SORTS,
+} from './contract.generated.js'
 
 /**
  * Reference inputs (image-to-image, video-to-video, frame conditioning).
@@ -37,8 +53,6 @@ export interface References {
    * support them.
    */
   klingElements?: ReferenceKlingElement[]
-  /** @deprecated Alias for `klingElements`, accepted for one release window. `klingElements` wins if both are set. */
-  elements?: ReferenceKlingElement[]
 }
 
 /**
@@ -49,8 +63,6 @@ export interface References {
 export interface ReferenceKlingElement {
   /** Reference a saved Kling element by id (resolves to its name + images). */
   klingElementId?: string
-  /** @deprecated Alias for `klingElementId`, accepted for one release window. `klingElementId` wins if both are set. */
-  elementId?: string
   /** Inline: referenced in the prompt as @name. */
   name?: string
   /** Inline: what the Kling element represents (passed to the provider for conditioning). */
@@ -145,12 +157,12 @@ export interface Paged {
  * top first, so it needs a stage.
  */
 export const LIST_SORTS = {
-  cards: ['updatedAt', 'createdAt', 'scheduledAt', 'title', 'position'],
-  projects: ['updatedAt', 'createdAt', 'title'],
-  spaces: ['updatedAt', 'name', 'cardCount'],
-  styleLibraries: ['updatedAt', 'name'],
-  content: ['relevance', 'outlierScore', 'publishedAt', 'viewCount', 'engagementRate'],
-  media: ['createdAt', 'fileName', 'sizeBytes'],
+  cards: CARD_SORTS,
+  projects: PROJECT_SORTS,
+  spaces: SPACE_SORTS,
+  styleLibraries: STYLE_LIBRARY_SORTS,
+  content: CONTENT_SORTS,
+  media: MEDIA_SORTS,
 } as const
 
 /** A listing that sorts. */
@@ -171,7 +183,7 @@ export type MediaSort = SortFieldOf<'media'>
 // ---------------------------------------------------------------------------
 
 /** The two ends of a hand-arranged list. */
-export const PLACEMENT_ENDS = ['top', 'bottom'] as const
+export { PLACEMENT_ENDS }
 export type PlacementEnd = (typeof PLACEMENT_ENDS)[number]
 
 /**
@@ -189,7 +201,7 @@ export interface Placement {
 }
 
 /** The direction of every sort: one word, two values. */
-export const SORT_ORDERS = ['asc', 'desc'] as const
+export { SORT_ORDERS }
 export type SortOrder = (typeof SORT_ORDERS)[number]
 
 /**
@@ -866,7 +878,7 @@ export interface WaitOptions {
  * The kinds of background job `getStatus` reads. An id alone names most jobs; the kind is needed only for a full
  * UUID, for the kinds in `KINDS_NAMED_BY_KIND`, or when the server says an id is ambiguous.
  */
-export const JOB_KINDS = ['output', 'export', 'brand_kit', 'avatar', 'content', 'scenes', 'transcript'] as const
+export { JOB_KINDS }
 export type JobKind = (typeof JOB_KINDS)[number]
 
 /**
@@ -974,6 +986,7 @@ export type JobTarget = string | { id: string; kind?: JobKind }
 export interface TranscribeAudioRequest {
   /** Public URL of the audio to transcribe. */
   audioUrl: string
+  videoUrl?: never
   contentId?: never
   slide?: never
   /** Optional ISO language hint (e.g. "en"); auto-detected when omitted. */
@@ -988,6 +1001,7 @@ export interface TranscribeAudioRequest {
  */
 export interface TranscribePostRequest {
   audioUrl?: never
+  videoUrl?: never
   /** The tracked post whose video to transcribe. */
   contentId: string
   /** Which video of a carousel post, by its 0-based slide (as `analyzeContent` kind `video` reports it). */
@@ -997,8 +1011,43 @@ export interface TranscribePostRequest {
   diarize?: never
 }
 
-/** Request to transcribe speech to text: an audio file by its URL, or a tracked post's downloaded video. */
-export type TranscribeRequest = TranscribeAudioRequest | TranscribePostRequest
+/**
+ * Transcribe a public video page (YouTube, Instagram, TikTok, X) by its link, read from its captions or audio. Priced
+ * flat by where the words come from, and free once they are held; price it first with `estimateTranscribeCost`.
+ */
+export interface TranscribeLinkRequest {
+  /** Link to the public video page whose spoken words to transcribe. */
+  videoUrl: string
+  audioUrl?: never
+  contentId?: never
+  slide?: never
+  languageCode?: never
+  diarize?: never
+}
+
+/** Request to transcribe speech to text: an audio file by its URL, a public video page by its link, or a tracked post's downloaded video. */
+export type TranscribeRequest = TranscribeAudioRequest | TranscribeLinkRequest | TranscribePostRequest
+
+/**
+ * Result of `transcribe` for a video link: `completed` with the words, or `unavailable` with why none could be read
+ * (nothing is charged then). The video's own facts come where the platform gives them.
+ */
+export interface LinkTranscription {
+  status: 'completed' | 'unavailable'
+  videoUrl: string
+  /** The platform the link names. */
+  platform: string
+  /** The words, when `completed`. */
+  transcript?: string
+  /** Why no words could be read, when `unavailable`. */
+  reason?: string
+  title?: string
+  channel?: string
+  viewCount?: number
+  duration?: string
+  /** What the run cost: null when the words were already held. */
+  charge: Charge | null
+}
 
 /** What names the source of a transcription, and what it cost. */
 interface TranscriptionSource {
@@ -1066,6 +1115,10 @@ export interface TranscribeCostEstimate extends Omit<CostEstimate, 'creditsEstim
   slide?: number
   /** The audio file priced, for an audio file. */
   audioUrl?: string
+  /** The video link priced, for a video link. */
+  videoUrl?: string
+  /** The platform the video link names, for a video link. */
+  platform?: string
   /** The audio file's measured length in seconds; null when it could not be read. */
   durationSeconds?: number | null
   /** Why there is no price, when there is none. */
@@ -1177,6 +1230,8 @@ export interface CreateAvatarResult {
 export interface UpdateAvatarRequest extends Placement {
   /** At least 3 characters. */
   name?: string
+  /** What the avatar is, in words. An empty string clears it. */
+  description?: string
   /**
    * An existing look OF THIS AVATAR, from `getAvatar().looks`. Also becomes the avatar's profile photo,
    * because the two are one fact and setting them apart is how they drift.
@@ -1701,7 +1756,7 @@ export type BrandKitAccountInput = string | { platform?: string; handleOrUrl: st
 export type MediaType = 'image' | 'video' | 'audio' | 'doc' | 'other' | 'transcript'
 
 /** The types a media listing filters by. */
-export const MEDIA_LIST_TYPES = ['image', 'video', 'audio', 'doc', 'other'] as const
+export { MEDIA_LIST_TYPES }
 export type MediaListType = (typeof MEDIA_LIST_TYPES)[number]
 
 /**
@@ -1710,15 +1765,15 @@ export type MediaListType = (typeof MEDIA_LIST_TYPES)[number]
  * stock catalog, which is not the account's files and is never part of `all`. Each listed item names where it is, in
  * its `source`.
  */
-export const MEDIA_LIST_SOURCES = ['all', 'creations', 'uploads', 'exports', 'stock'] as const
+export { MEDIA_LIST_SOURCES }
 export type MediaListSource = (typeof MEDIA_LIST_SOURCES)[number]
 
 /** The parts of the stock catalog a stock read names, in its `collection`. */
-export const MEDIA_STOCK_COLLECTIONS = ['photos', 'videos', 'gifs', 'stickers', 'sounds'] as const
+export const MEDIA_STOCK_COLLECTIONS = STOCK_COLLECTIONS
 export type MediaStockCollection = (typeof MEDIA_STOCK_COLLECTIONS)[number]
 
 /** The shapes a stock photo or video read can be narrowed to, in its `orientation`. */
-export const MEDIA_STOCK_ORIENTATIONS = ['landscape', 'portrait', 'square'] as const
+export const MEDIA_STOCK_ORIENTATIONS = STOCK_ORIENTATIONS
 export type MediaStockOrientation = (typeof MEDIA_STOCK_ORIENTATIONS)[number]
 
 /** The license a stock item is used under; `attribution` is the credit to show where credit is required. */
@@ -2827,6 +2882,8 @@ export interface ListStagesOptions extends PageOptions {
 export interface CreateCardInput extends Placement {
   title: string
   platform: PostPlatform
+  /** What kind of content the card holds, in a word. */
+  contentType?: string
   /**
    * Which board the card is created on. Omitted means the account's DEFAULT space.
    *
@@ -3542,7 +3599,7 @@ export interface GetContentOptions {
 }
 
 /** The platforms an account can be tracked on (the server's own list, which it validates against). */
-export const TRACKABLE_PLATFORMS = ['youtube', 'instagram', 'facebook', 'tiktok', 'x', 'threads', 'linkedin'] as const
+export const TRACKABLE_PLATFORMS = SOCIAL_PLATFORMS
 export type TrackablePlatform = (typeof TRACKABLE_PLATFORMS)[number]
 
 /** One account to track: a handle or a profile URL. A URL states its platform; a bare handle needs one. */
@@ -5181,7 +5238,7 @@ export interface EditorTypeSpec {
   props: EditorTypeProp[]
   /** Which shared prop groups this type also accepts (keys of `sharedProps`). */
   supports: string[]
-  /** A copy-pasteable minimal item skeleton for creating this type via add_item / insert_prebuilt_track. */
+  /** A copy-pasteable minimal item skeleton for creating this type. */
   example?: Record<string, unknown>
   /** The stored item's full JSON Schema, control ranges included. Present only when asked for (`{ jsonSchema: true }`). */
   jsonSchema?: Record<string, unknown>
@@ -5240,11 +5297,11 @@ export interface TimelineTypeCatalog {
   sharedProps: EditorSharedProps
   clipTypes: EditorTypeSpec[]
   trackTypes: EditorTrackSpec[]
-  /** How to CREATE clips + tracks (add_item, insert_track, insert_prebuilt_track), using each clipType `example`. */
+  /** How to CREATE clips and tracks, using each clipType `example`. */
   creation?: EditorCreationSpec
-  /** The EDIT ops of update_timeline (move_clip, trim_clip, disable_ranges, ...), with each field signature. */
+  /** The EDIT ops of update_timeline, with each field signature. */
   editOps?: EditorCreationSpec
-  /** The presets add_animation, add_transition and apply_combo accept. */
+  /** The presets the animation and transition ops accept. */
   animations?: AnimationCatalog
 }
 

@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -821,6 +821,11 @@ export function describeTranscribeCost(est: TranscribeCostEstimate): string {
     const length = est.durationSeconds ? ` (${Math.round(est.durationSeconds)} s)` : ''
     return `Transcribing this audio file${length} costs ${credits(est.creditsEstimate)}, priced from its length and charged for what is heard. Nothing ran and nothing was charged.`
   }
+  if (est.videoUrl !== undefined) {
+    return est.creditsEstimate === 0
+      ? 'The words of this video are already held: transcribing it costs 0 credits. Nothing ran and nothing was charged.'
+      : `Transcribing this video costs ${credits(est.creditsEstimate ?? 0)}, a flat price set by where its words come from. Nothing ran and nothing was charged.`
+  }
   const what = transcriptionSource(est) ?? 'this post'
   return est.creditsEstimate === 0
     ? `The words of ${what} already exist or are being made: transcribing it costs 0 credits. Nothing ran and nothing was charged.`
@@ -884,4 +889,12 @@ export function describeProjectPicture(part: ProjectPicturePart | null | undefin
   if (unseen.length) lines.push(`${unseen.length} clip${unseen.length === 1 ? '' : 's'} on this page ${unseen.length === 1 ? 'is' : 'are'} not seen by it (code, text or a shape; a still image; a file not stored here), listed in unseen with why.`)
   if (part.cost) lines.push(`Answering it was charged ${credits(part.cost.credits)}.`)
   return lines
+}
+
+/** A video link's answer: where the video is and, when read, its facts; or why no words could be read. */
+export function describeLinkTranscription(t: LinkTranscription): string {
+  const facts = [t.title, t.channel, t.viewCount !== undefined ? `${t.viewCount} views` : null, t.duration].filter((f) => f !== undefined && f !== null && f !== '')
+  const head = `${t.platform} video ${t.videoUrl}${facts.length ? ` (${facts.join(', ')})` : ''}`
+  if (t.status === 'unavailable') return `No transcript for ${head}: ${t.reason ?? 'no words could be read'} Nothing was charged for it.`
+  return `Transcript of ${head}:\n\n${t.transcript ?? ''}`
 }

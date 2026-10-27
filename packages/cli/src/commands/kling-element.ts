@@ -8,10 +8,6 @@
  *
  * A Kling element is a named group of images (a character, prop, location) referenced
  * in a Kling prompt as @name. Create one, then pass its id to `generate video --kling-element`.
- *
- * ⚠️ `element` was this command's name until 2026-10-04, when the word also named the editor's Elements panel
- * (templates). It answers for one release window as a HIDDEN alias: the same subcommands, registered by the
- * same function onto a second parent, so the two cannot drift. Delete that mount when the window closes.
  */
 
 import type { Command } from 'commander'
@@ -37,7 +33,6 @@ function detail(e: KlingElement): string {
 
 export function registerKlingElement(program: Command): void {
   addKlingElementCommands(program.command('kling-element').description('Your reusable Kling elements (Kling 3.0)'))
-  addKlingElementCommands(program.command('element', { hidden: true }).description('deprecated alias for kling-element'))
 }
 
 function addKlingElementCommands(group: Command): void {
