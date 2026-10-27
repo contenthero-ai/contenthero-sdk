@@ -3950,6 +3950,10 @@ export interface EditorOpResult {
   generatingOutputId?: string
   /** That job's result in the app, beside `generatingOutputId`. Absent from an older server. */
   generatingAppUrl?: string
+  /** For `copy_project_modules`: the modules copied into this project, by name. */
+  copiedModules?: string[]
+  /** For `copy_project_modules`: the modules not copied, each with the reason. Present when any was refused. */
+  refusedModules?: Array<{ name: string; reason: string }>
   /** The compiler's findings for code this op wrote or carried. An error among them is why `ok` is
    *  false; warnings ride on an op that applied. */
   diagnostics?: CodeDiagnostic[]
