@@ -351,6 +351,7 @@ export type {
   GetProjectOptions,
   ClipSourceSummary,
   PendingPart,
+  RenderError,
   FailedPart,
   Adjustment,
   ViewInput,

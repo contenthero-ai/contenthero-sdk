@@ -54,7 +54,7 @@ const EFFECT = { id: UUID(7), appUrl: `${APP}/media/${UUID(7)}` }
 
 type Path = 'finished' | 'pending'
 
-function generation(state: 'completed' | 'processing', contentType = 'image'): Record<string, unknown> {
+function generation(state: 'settled' | 'processing', contentType = 'image'): Record<string, unknown> {
   return {
     outputId: OUTPUT.id,
     shortId: OUTPUT.shortId,
@@ -63,12 +63,12 @@ function generation(state: 'completed' | 'processing', contentType = 'image'): R
     contentType,
     modelId: 'test-model',
     outputs:
-      state === 'completed'
+      state === 'settled'
         ? [{ mediaId: `${OUTPUT.shortId}-1`, status: 'succeeded', url: 'https://media.contenthero.ai/a.png', appUrl: `${OUTPUT.appUrl}-1` }]
         : [],
     error: null,
     createdAt: 't',
-    completedAt: state === 'completed' ? 't2' : null,
+    completedAt: state === 'settled' ? 't2' : null,
   }
 }
 
@@ -90,7 +90,7 @@ function server(path: Path) {
     const p = url.pathname
     if (method === 'GET' && p.startsWith('/api/v1/models/')) return { id: 'test-model', contentType: 'image', kind: 'upscale', capabilities: {} }
     if (method === 'POST' && p === '/api/v1/studio/generate') {
-      if (body.contentType === 'audio') return { ...generation('completed', 'audio'), status: 'completed' }
+      if (body.contentType === 'audio') return { ...generation('settled', 'audio'), status: 'settled' }
       return { outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, status: 'processing' }
     }
     if (method === 'POST' && p === '/api/v1/studio/reference-board') {
@@ -105,7 +105,7 @@ function server(path: Path) {
           jobs: [{ outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, clipIds: ['c1'], windows: 1 }],
         }
       }
-      if (body.operation === 'isolate') return { ...generation('completed', 'audio'), status: 'completed' }
+      if (body.operation === 'isolate') return { ...generation('settled', 'audio'), status: 'settled' }
       return { outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, status: 'processing' }
     }
     if (method === 'POST' && p === '/api/v1/media/imports') {
@@ -153,13 +153,13 @@ function server(path: Path) {
       const id = decodeURIComponent(p.split('/').pop() as string)
       const kind = url.searchParams.get('kind')
       if (kind === 'export' || id === EXPORT.shortId || id === EXPORT.id) {
-        return { kind: 'export', id: EXPORT.shortId, state: done ? 'completed' : 'processing', reason: null, appUrl: EXPORT.appUrl, progress: done ? 1 : 0.4, detail: exportJob(done ? 'completed' : 'rendering') }
+        return { kind: 'export', id: EXPORT.shortId, state: done ? 'settled' : 'processing', reason: null, appUrl: EXPORT.appUrl, progress: done ? 1 : 0.4, detail: exportJob(done ? 'completed' : 'rendering') }
       }
       if (kind === 'content' || kind === 'scenes') {
-        return { kind, id: POST.shortId, state: done ? 'completed' : 'processing', reason: null, appUrl: POST.appUrl, progress: null, detail: { status: done ? 'complete' : 'running' } }
+        return { kind, id: POST.shortId, state: done ? 'settled' : 'processing', reason: null, appUrl: POST.appUrl, progress: null, detail: { status: done ? 'complete' : 'running' } }
       }
-      const gen = generation(done ? 'completed' : 'processing')
-      return { kind: 'output', id: OUTPUT.shortId, state: done ? 'completed' : 'processing', reason: null, appUrl: OUTPUT.appUrl, progress: null, detail: gen }
+      const gen = generation(done ? 'settled' : 'processing')
+      return { kind: 'output', id: OUTPUT.shortId, state: done ? 'settled' : 'processing', reason: null, appUrl: OUTPUT.appUrl, progress: null, detail: gen }
     }
     throw new Error(`The fake server has no route for ${method} ${p}`)
   }

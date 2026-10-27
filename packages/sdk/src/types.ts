@@ -490,12 +490,13 @@ export interface GenerateBoardRequest {
 }
 
 /**
- * Lifecycle state of a generation.
+ * Lifecycle state of a generation, the one vocabulary every read and reply speaks (it is a `JobState` for an output).
  *
- * `abandoned` is terminal and NOT a failure: the row was set aside with no output of its own. An import whose bytes
- * were already in the account ends this way (see `Generation.alreadyExisted`), as does a discarded voice variant.
+ * `processing` and `applying` mean it is still running: `applying` is the window after the file exists and before the
+ * placement it was asked for has landed in the project. `settled` and `failed` are the only terminal states. An import
+ * whose bytes were already in the account ends `settled` with `Generation.alreadyExisted` naming where they are.
  */
-export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'abandoned'
+export type GenerationStatus = 'processing' | 'applying' | 'settled' | 'failed'
 
 /**
  * What a paid call cost: the receipt on every paid response and status read (one shape everywhere).
@@ -559,7 +560,8 @@ export interface GenerateResult {
   shortId?: string
   /** This generation in the app (its first output, or its pending state while it runs). */
   appUrl: string
-  status: 'processing' | 'completed'
+  /** Where the generation is now. It is over only when this is `settled` or `failed`; a replay reports the current state. */
+  status: GenerationStatus
   /** What it cost: held while it runs, charged per output when it finishes. */
   charge?: Charge
   /** Present when the result is already complete (audio, or a replayed id): its outputs in slot order. */
@@ -579,7 +581,10 @@ export interface GenerateResult {
    * follows the driving input on a model whose output does, whatever ratio was asked for. Null when not yet known.
    */
   displayAspect?: string | null
-  /** True when a client-supplied `outputId` matched an existing job (no new work was started). */
+  /**
+   * True when the `outputId` sent matched a job already started (no new work, no second charge): the reply names that
+   * job and its current `status`. The client sends one `outputId` per call and repeats it on every retry.
+   */
   idempotentReplay?: boolean
   /** Where the asset is being placed (present only when `projectId` was supplied). Lets a caller chain further
    *  ops onto the placed clip/layer without a view hop, and see any placement warnings. */
@@ -714,6 +719,12 @@ export interface EditAudioRequest {
   clipIds?: string[]
   /** Opt in to in-place mode without naming clips (whole timeline). Implied when `clipIds` is present. */
   inPlace?: boolean
+  /**
+   * FILE mode only: your own id for this run, a UUID, which becomes the job's id. A repeat with the same id returns the
+   * job already started and never charges twice. `editAudio` sends one per call when this is omitted, and repeats it on
+   * every retry of that call. In-place mode needs none: one job per clip set is held by the server.
+   */
+  outputId?: string
 }
 
 /**
@@ -746,7 +757,7 @@ export interface InPlaceAudioJob {
  * `'noop'` when the selection contained no audible audio, which is deliberately distinguishable from a failure.
  */
 export interface EditAudioResult extends Omit<GenerateResult, 'status'> {
-  status: 'processing' | 'completed' | 'noop'
+  status: GenerationStatus | 'noop'
   /** In-place mode only: one job per source. (`outputs` names a generation's own outputs, as in file mode.) */
   jobs?: InPlaceAudioJob[]
   /** In-place mode only: the project the results are applied to. */
@@ -772,7 +783,7 @@ export interface Generation {
   modelId: string
   /**
    * Its outputs in slot order, each with its name, its file once it lands, its links and its previews. A running
-   * generation fills these in one at a time; `status` remains the only terminal signal.
+   * generation fills these in one at a time; `status` remains the only terminal signal (`settled` or `failed`).
    */
   outputs: GenerationOutput[]
   /** Error detail when `status` is 'failed', otherwise null. */
@@ -785,13 +796,6 @@ export interface Generation {
   alreadyExisted?: ImportDuplicate
   createdAt: string
   completedAt: string | null
-  /** The terminal signal to await when a generation carries a project PLACEMENT (a fresh asset placed on a canvas
-   *  / timeline, or an in-place background removal): true once the output exists AND its placement side-effect
-   *  (the placeholder->asset swap, the cutout, a background promotion) has been applied to the project. `status`
-   *  flips to 'completed' when the asset exists and billing settles, which can precede the swap; an output's
-   *  `JobStatus.state` is 'completed' only once this is true, so "done" always implies the visible composition change
-   *  is in. Outputs with no placement are settled as soon as they complete. */
-  settled?: boolean
   /** Where the asset was placed (present only when `projectId` was supplied to generate). Carried from the submit
    *  response through `generateAndWait` so a caller gets the placement outcome alongside the finished asset. */
   placement?: PlacementResult
@@ -892,8 +896,12 @@ export function statusTargetOf(status: { id: string; kind: JobKind }): { id: str
   return statusTarget({ id: status.id, shortId: FULL_ID.test(status.id) ? null : status.id, kind: status.kind })
 }
 
-/** Where a background job is. `completed` and `failed` are terminal; the other two mean it is still going. */
-export type JobState = 'queued' | 'processing' | 'completed' | 'failed'
+/**
+ * Where a background job is. `settled` and `failed` are terminal; `queued`, `processing` and `applying` mean it is still
+ * going. Every kind reports its own success as `settled`, and `applying` is the window after the work is made and
+ * before its result has landed where it was asked to go.
+ */
+export type JobState = 'queued' | 'processing' | 'applying' | 'settled' | 'failed'
 
 /** One named step of a job that runs in stages (a brand kit's website read and its analysis). */
 export interface JobStep {
@@ -927,7 +935,7 @@ interface JobStatusOf<K extends JobKind, D> {
 
 /**
  * One background job's status, as `getStatus` and `waitForStatus` return it. `kind` says which resource `detail` is:
- * an output's is the generation itself, so a finished output is `state: 'completed'` only once it has settled.
+ * an output's is the generation itself, and its `state` is its `status`.
  */
 export type JobStatus =
   | JobStatusOf<'output', Generation>
@@ -3875,9 +3883,10 @@ export interface EditorOp {
   op: string
   /**
    * Optional client-generated stable id (uuid) for this op. When omitted, `applyEditorOps` generates one
-   * for you before sending. It is the op's identity across its whole lifecycle: the server persists it, the
-   * unique-per-project constraint makes a retried op idempotent, and a live editor client uses it to ignore
-   * the broadcast echo of its own edit.
+   * for you ONCE per call, before sending, and repeats it on every retry of that call. It is the op's identity across
+   * its whole lifecycle: the server persists it, the unique-per-project constraint makes a retried op idempotent
+   * (the replay returns the committed revision, and an op that started a job returns its handle again), and a live
+   * editor client uses it to ignore the broadcast echo of its own edit.
    */
   opId?: string
   [key: string]: unknown
@@ -4207,6 +4216,18 @@ export interface PendingPart {
   reason?: string
   /** What the user pays when the work is done, in credits: present only for work that is priced. */
   price?: { credits: number }
+}
+
+/**
+ * Why a render could not be made, on `rendered.error`, `renderedSound.error` and `clip.error`. `render_busy` means
+ * rendering has no room right now and carries `retryAfterSeconds`, the whole seconds (at least one) after which the same
+ * request is worth sending again; `view` waits that out itself when the caller's `wait` allows, and otherwise returns
+ * the error with the field untouched.
+ */
+export interface RenderError {
+  code: string
+  message: string
+  retryAfterSeconds?: number
 }
 
 /** Something a `view` answer carries that could not be made, with why. */

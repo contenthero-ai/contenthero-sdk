@@ -62,9 +62,9 @@ function withCatalogEntry(model) {
 }
 
 /** A minimal fake of the SDK client; override any method per test. */
-/** A generation as the status route answers for it: `state` is completed only once it has settled. */
+/** A generation as the status route answers for it: `state` is its `status`, settled only once it has settled. */
 function outputStatus(gen) {
-  const state = gen.status === 'completed' || gen.status === 'abandoned' ? 'completed' : gen.status === 'failed' ? 'failed' : 'processing'
+  const state = gen.status
   return { kind: 'output', id: gen.outputId, state, reason: gen.error ?? null, appUrl: gen.appUrl ?? null, progress: null, detail: gen }
 }
 
@@ -206,11 +206,11 @@ function fakeClient(overrides = {}) {
      * sync submit and return a pollable pending result rather than waiting. They read only `outputId`
      * from this, so the completed audio shape serves both without a second fake.
      */
-    generate: async () => ({ outputId: 'gen1', status: 'completed', outputs: outs(['https://cdn/a.mp3']) }),
+    generate: async () => ({ outputId: 'gen1', status: 'settled', outputs: outs(['https://cdn/a.mp3']) }),
     /** Still the path for `generate_audio` and anything else that genuinely waits for its result. */
     generateAndWait: async () => ({
       outputId: 'gen1',
-      status: 'completed',
+      status: 'settled',
       contentType: 'image',
       modelId: 'nano-banana-2',
       outputs: outs(['https://cdn/x.png']),
@@ -220,7 +220,7 @@ function fakeClient(overrides = {}) {
     }),
     getGeneration: async () => ({
       outputId: 'gen1',
-      status: 'completed',
+      status: 'settled',
       contentType: 'video',
       modelId: 'veo-3.1-fast',
       outputs: outs(['https://cdn/v.mp4']),
@@ -230,7 +230,7 @@ function fakeClient(overrides = {}) {
     }),
     waitForGeneration: async () => ({
       outputId: 'gen1',
-      status: 'completed',
+      status: 'settled',
       contentType: 'video',
       modelId: 'veo-3.1-fast',
       outputs: outs(['https://cdn/v.mp4']),
@@ -263,7 +263,7 @@ function fakeClient(overrides = {}) {
     },
     generateBoardAndWait: async () => ({
       outputId: 'board1',
-      status: 'completed',
+      status: 'settled',
       contentType: 'image',
       modelId: 'gpt-image-2',
       outputs: outs(['https://cdn/board.png']),
@@ -828,7 +828,7 @@ test('a retired tier mode never reaches the wire', async () => {
       generate: async (req) => {
         captured = req
         return {
-          outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
+          outputId: 'g', status: 'settled', contentType: 'image', modelId: 'gpt-image-2',
           outputs: outs(['https://cdn/x.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
@@ -876,7 +876,7 @@ test('generate_image forwards avatarId, so a generation can file itself as a loo
       generate: async (req) => {
         captured = req
         return {
-          outputId: 'g', status: 'completed', contentType: 'image', modelId: 'gpt-image-2',
+          outputId: 'g', status: 'settled', contentType: 'image', modelId: 'gpt-image-2',
           outputs: outs(['https://cdn/look.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
@@ -896,7 +896,7 @@ test('generate_board forwards avatarId', async () => {
       generateBoardAndWait: async (req) => {
         captured = req
         return {
-          outputId: 'b', status: 'completed', contentType: 'image', modelId: 'board',
+          outputId: 'b', status: 'settled', contentType: 'image', modelId: 'board',
           outputs: outs(['https://cdn/board.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
@@ -916,7 +916,7 @@ test('generate_video forwards keepInputLength, described in the approved words',
       generate: async (req) => {
         captured = req
         return {
-          outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast',
+          outputId: 'g', status: 'settled', contentType: 'video', modelId: 'veo-3.1-fast',
           outputs: outs(['https://cdn/v.mp4']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
@@ -944,7 +944,7 @@ test('generate_video forwards wan multiShot and reference audio', async () => {
       generate: async (req) => {
         captured = req
         return {
-          outputId: 'g', status: 'completed', contentType: 'video', modelId: 'veo-3.1-fast',
+          outputId: 'g', status: 'settled', contentType: 'video', modelId: 'veo-3.1-fast',
           outputs: outs(['https://cdn/v.mp4']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
@@ -1055,9 +1055,9 @@ test('import of a url waits within the call, and hands back the outputId as pend
   assert.match(res.content[0].text, /get_status \{ ids: \["im9"\], kind: "output" \}/)
 })
 
-test('get_status: an abandoned import says where the bytes already are, and never asks to poll again', async () => {
+test('get_status: a settled import says where the bytes already are, and never asks to poll again', async () => {
   const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
-  const abandoned = (id, extra = {}) => ({ outputId: id, status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputs: outs([]), error: null, ...extra })
+  const abandoned = (id, extra = {}) => ({ outputId: id, status: 'settled', contentType: 'image', modelId: 'import', outputs: outs([]), error: null, ...extra })
   const mcp = await connect(fakeClient({ waitForGeneration: async (id) => abandoned(id, id === 'imp1' ? { alreadyExisted: dup } : {}) }))
   const dupRes = await mcp.callTool({ name: 'get_status', arguments: { ids: ['imp1'] } })
   assert.match(dupRes.content[0].text, /Already in your library/)
@@ -1072,7 +1072,7 @@ test('get_status takes wait:false for an instant snapshot', async () => {
     fakeClient({
       waitForGeneration: async (id) => {
         waited = true
-        return { outputId: id, status: 'completed', contentType: 'video', outputs: outs(['https://cdn/v.mp4']), error: null }
+        return { outputId: id, status: 'settled', contentType: 'video', outputs: outs(['https://cdn/v.mp4']), error: null }
       },
     }),
   )
@@ -1124,7 +1124,7 @@ test('get_status answers each id on its own: one that names nothing is its own l
     const id = url.split('/').pop().split('?')[0]
     if (id === 'Exp12345') {
       return new Response(
-        JSON.stringify({ kind: 'export', id, state: 'completed', reason: null, appUrl: 'https://app/exports/Exp12345', progress: 1, detail: {} }),
+        JSON.stringify({ kind: 'export', id, state: 'settled', reason: null, appUrl: 'https://app/exports/Exp12345', progress: 1, detail: {} }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
@@ -1138,7 +1138,7 @@ test('get_status answers each id on its own: one that names nothing is its own l
     const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Exp12345', 'Nope1234', 'Theirs12'], wait } })
     const out = res.content[0].text
     assert.match(out, /3 job\(s\):/)
-    assert.match(out, /- export Exp12345: completed \| progress: 100% \| https:\/\/app\/exports\/Exp12345/)
+    assert.match(out, /- export Exp12345: settled \| progress: 100% \| https:\/\/app\/exports\/Exp12345/)
     assert.match(out, /- Nope1234: not found \| 'Nope1234' names nothing\./)
     assert.match(out, /- Theirs12: not found \| Export 'Theirs12' not found in your account\./)
     assert.ok(!res.isError, `wait ${wait}: one unknown id beside a found one is an answer, not an error`)
@@ -1155,13 +1155,13 @@ test('get_status passes kind through, and a lone finished transcript reads as do
     fakeClient({
       getStatus: async (id, opts) => {
         asked = { id, kind: opts?.kind }
-        return { kind: 'transcript', id, state: 'completed', reason: null, appUrl: null, progress: null, detail: { status: 'ready', mediaId: id } }
+        return { kind: 'transcript', id, state: 'settled', reason: null, appUrl: null, progress: null, detail: { status: 'ready', mediaId: id } }
       },
     }),
   )
   const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['Med12345'], kind: 'transcript', wait: false } })
   assert.deepEqual(asked, { id: 'Med12345', kind: 'transcript' })
-  assert.match(res.content[0].text, /^- transcript Med12345: completed$/)
+  assert.match(res.content[0].text, /^- transcript Med12345: settled$/)
   assert.doesNotMatch(res.content[0].text, /poll_after_seconds|again/)
 })
 
@@ -1328,7 +1328,7 @@ test('generate_lip_sync (script mode) builds a portrait + script request and ret
         captured = request
         return {
           outputId: 'ls1',
-          status: 'completed',
+          status: 'settled',
           contentType: 'video',
           modelId: 'infinitalk',
           outputs: outs(['https://cdn/talk.mp4']),
@@ -1371,7 +1371,7 @@ test('generate_lip_sync (audio mode) routes audioUrl into references.audio', asy
         captured = request
         return {
           outputId: 'ls2',
-          status: 'completed',
+          status: 'settled',
           contentType: 'video',
           modelId: 'infinitalk',
           outputs: outs(['https://cdn/talk2.mp4']),
@@ -2660,7 +2660,7 @@ test('analyze_content prices first, waits for a running analysis, and returns it
       waitForStatus: async (targets) => {
         reads++
         assert.deepEqual(targets, [{ id: 'c1', kind: 'content' }])
-        return [{ kind: 'content', id: 'c1', state: 'completed', reason: null, appUrl: null, progress: null, detail: { status: 'complete' } }]
+        return [{ kind: 'content', id: 'c1', state: 'settled', reason: null, appUrl: null, progress: null, detail: { status: 'complete' } }]
       },
     }),
   )
@@ -2688,7 +2688,7 @@ test('analyze_content kind scenes prices by kind, waits through get_status as sc
       ),
       waitForStatus: async (targets) => (
         (seen.waited = targets),
-        [{ kind: 'scenes', id: 'c1', state: 'completed', reason: null, appUrl: null, progress: null, detail: { status: 'complete', sceneCount: 7 } }]
+        [{ kind: 'scenes', id: 'c1', state: 'settled', reason: null, appUrl: null, progress: null, detail: { status: 'complete', sceneCount: 7 } }]
       ),
     }),
   )
@@ -4448,7 +4448,7 @@ test('an image yields an inline BLOCK; video yields text alone', async () => {
   }) as typeof fetch
   try {
     const image = await attachmentsFor({
-      outputId: 'o1', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputId: 'o1', modelId: 'nb2', status: 'settled', contentType: 'image',
       outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
     } as never)
     assert.equal(image.filter((a) => a.kind === 'bytes').length, 1, 'an image MUST produce a block')
@@ -4457,7 +4457,7 @@ test('an image yields an inline BLOCK; video yields text alone', async () => {
     assert.equal(image.filter((a) => a.kind === 'link').length, 0, 'the link is carried by the text list now')
 
     const video = await attachmentsFor({
-      outputId: 'o2', modelId: 'v', status: 'completed', contentType: 'video',
+      outputId: 'o2', modelId: 'v', status: 'settled', contentType: 'video',
       outputs: outs(['https://media.contenthero.ai/u/a.mp4?t=tok']),
     } as never)
     assert.equal(video.filter((a) => a.kind === 'bytes').length, 0, 'video has no MCP block to fill')
@@ -4478,7 +4478,7 @@ test('⛔ an oversized image degrades to text rather than eating the context', a
     })) as typeof fetch
   try {
     const out = await attachmentsFor({
-      outputId: 'o3', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputId: 'o3', modelId: 'nb2', status: 'settled', contentType: 'image',
       outputs: outs(['https://media.contenthero.ai/u/big.jpg?t=tok']),
     } as never)
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 0, 'over the cap, no block')
@@ -4498,7 +4498,7 @@ test('⛔ every variation of a batch that fits gets its own block, not just the 
     })) as typeof fetch
   try {
     const out = await attachmentsFor({
-      outputId: 'o4', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputId: 'o4', modelId: 'nb2', status: 'settled', contentType: 'image',
       outputs: outs(['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`)),
     } as never)
     // 1 byte each, so all four fit inside one budget and all four must appear.
@@ -4530,7 +4530,7 @@ test('a batch never exceeds the inline budget, however many outputs it has', asy
     })) as typeof fetch
   try {
     const out = await attachmentsFor({
-      outputId: 'batch', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputId: 'batch', modelId: 'nb2', status: 'settled', contentType: 'image',
       outputs: outs(['a', 'b', 'c', 'd'].map((n) => `https://media.contenthero.ai/u/${n}.png?t=tok`)),
     } as never)
 
@@ -4559,7 +4559,7 @@ test('one output that fits is still inlined, so the common case keeps its fallba
     })) as typeof fetch
   try {
     const out = await attachmentsFor({
-      outputId: 'single', modelId: 'nb2', status: 'completed', contentType: 'image',
+      outputId: 'single', modelId: 'nb2', status: 'settled', contentType: 'image',
       outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']),
     } as never)
     assert.equal(out.filter((a) => a.kind === 'bytes').length, 1, 'a single fitting image MUST still inline')
@@ -5018,15 +5018,15 @@ const SPENDING_CALLS = {
 }
 
 test('every tool that spends reports its cost the same way', async () => {
-  const done = { outputId: 'o1', appUrl: 'https://app/o1', status: 'completed', contentType: 'image', modelId: 'm', outputs: outs(['https://cdn/o1.png']), error: null, createdAt: 't', completedAt: 't', charge: CHARGE }
+  const done = { outputId: 'o1', appUrl: 'https://app/o1', status: 'settled', contentType: 'image', modelId: 'm', outputs: outs(['https://cdn/o1.png']), error: null, createdAt: 't', completedAt: 't', charge: CHARGE }
   const mcp = await connect(
     fakeClient({
       generate: async (req) =>
         req.modelId === 'elevenlabs-tts'
-          ? { outputId: 'a1', appUrl: 'https://app/a1', status: 'completed', outputs: outs(['https://cdn/a1.mp3']), charge: CHARGE }
+          ? { outputId: 'a1', appUrl: 'https://app/a1', status: 'settled', outputs: outs(['https://cdn/a1.mp3']), charge: CHARGE }
           : { outputId: 'o1', appUrl: 'https://app/o1', status: 'processing', charge: CHARGE },
       generateBoardAndWait: async () => done,
-      editAudio: async () => ({ outputId: 'e1', appUrl: 'https://app/e1', status: 'completed', outputs: outs(['https://cdn/e1.mp3']), charge: CHARGE }),
+      editAudio: async () => ({ outputId: 'e1', appUrl: 'https://app/e1', status: 'settled', outputs: outs(['https://cdn/e1.mp3']), charge: CHARGE }),
       transcribe: async () => ({ outputId: 'tr1', transcript: 'hi', language: 'en', wordCount: 1, durationSeconds: 1, charge: CHARGE }),
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
       analyzeContent: async () => ({ contentId: 'c1', analysis: { status: 'complete', sections: [], data: {} }, charge: CHARGE }),
@@ -5616,7 +5616,7 @@ test('inline bytes stop at the call deadline instead of fetching past it', async
   }) as typeof fetch
   try {
     const out = await attachmentsFor(
-      { outputId: 'o', modelId: 'm', status: 'completed', contentType: 'image', outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']) } as never,
+      { outputId: 'o', modelId: 'm', status: 'settled', contentType: 'image', outputs: outs(['https://media.contenthero.ai/u/a.png?t=tok']) } as never,
       Date.now() - 1,
     )
     assert.equal(out.length, 0)
@@ -6185,4 +6185,30 @@ test("view says what of a source's picture is not ready, and where its next page
   assert.match(body, /coarse \(one picture per shot/)
   assert.match(body, /where is still being made \(since 2026-10-15T14:19:14\.663Z, expected by 2026-10-15T14:22:58\.000Z\)/)
   assert.match(body, /More: pass cursor "NEXT"\./)
+})
+
+/**
+ * One contract for long work: the tool texts say how a job ends and how a retry stays safe, in words, with no example value.
+ * Dropping a sentence from `get_status`, a long-write tool or `view` turns this red; a digit in them turns the last check red.
+ */
+test('long-work tool texts: a job ends at settled or failed, a retry repeats the id, a render is read by its renderId', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const text = (name: string) => tools.find((t) => t.name === name)?.description ?? ''
+  assert.match(text('get_status'), /A job is over only when its status is settled or failed\. Processing and applying mean it is still running; keep reading the same id\./)
+  for (const name of ['generate_image', 'generate_board', 'generate_video', 'edit_audio', 'upscale', 'generate_lip_sync']) {
+    assert.match(text(name), /A retry that repeats the same operation id or output id returns the work already started and never charges twice\. The reply names the id to read its progress\./, name)
+  }
+  assert.match(text('update_timeline'), /A retry that repeats the same operation id returns the revision already committed/)
+  assert.match(text('view'), /A render that is not ready answers with a renderId: read it again with that id instead of rendering again\. When rendering is busy the answer says how many seconds to wait before asking again\./)
+  assert.doesNotMatch(text('view'), /asking for the same render again/)
+  assert.doesNotMatch(text('get_status'), /\bcompleted\b/)
+})
+
+test('get_status prints a generation in its last stretch as running, and a settled one as settled', async () => {
+  const applying = { outputId: 'g1', shortId: 'Gen00001', appUrl: 'https://app/media/Gen00001', status: 'applying', contentType: 'image', modelId: 'm', outputs: [], error: null, createdAt: 't' }
+  const mcp = await connect(fakeClient({ waitForGeneration: async () => applying, getGeneration: async () => applying }))
+  const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['g1'] } })
+  assert.match(res.content[0].text, /is still running/)
+  assert.doesNotMatch(res.content[0].text, /applying/)
 })

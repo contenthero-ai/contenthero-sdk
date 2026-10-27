@@ -431,7 +431,7 @@ export function registerContent(program: Command): void {
           timeoutMs,
           pollIntervalMs: ANALYZE_POLL_MS,
         })
-        return status?.state === 'completed' || status?.state === 'failed'
+        return status?.state === 'settled' || status?.state === 'failed'
       }
       if (kind === 'scenes') {
         let scenes = await client.analyzeContent(id, { kind: 'scenes' })

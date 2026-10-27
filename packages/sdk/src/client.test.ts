@@ -42,19 +42,11 @@ function stubFetch(
 
 /**
  * A generation as the status route answers for it: `waitForGeneration` (behind every generate and import wait) reads
- * `GET /api/v1/status/{id}?kind=output`, whose `detail` is the generation and whose `state` is completed only once
- * it has settled.
+ * `GET /api/v1/status/{id}?kind=output`, whose `detail` is the generation and whose `state` is its `status`
+ * (`settled` or `failed` ends the wait; `applying` does not).
  */
-function asStatus(gen: { outputId: string; status: string; error?: string | null; appUrl?: string; settled?: boolean }) {
-  const state =
-    gen.status === 'completed' || gen.status === 'abandoned'
-      ? 'completed'
-      : gen.status === 'failed'
-        ? 'failed'
-        : gen.status === 'pending'
-          ? 'queued'
-          : 'processing'
-  return { kind: 'output', id: gen.outputId, state, reason: gen.error ?? null, appUrl: gen.appUrl ?? null, progress: null, detail: gen }
+function asStatus(gen: { outputId: string; status: string; error?: string | null; appUrl?: string }) {
+  return { kind: 'output', id: gen.outputId, state: gen.status, reason: gen.error ?? null, appUrl: gen.appUrl ?? null, progress: null, detail: gen }
 }
 
 test('constructor requires an api key', () => {
@@ -373,11 +365,11 @@ test('generateAndWait polls until completed', async () => {
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'gen1', status: 'processing' } },
     { status: 200, body: asStatus({ outputId: 'gen1', status: 'processing', contentType: 'image', modelId: 'nano-banana-2', outputs: [], error: null, createdAt: 't', completedAt: null }) },
-    { status: 200, body: asStatus({ outputId: 'gen1', status: 'completed', contentType: 'image', modelId: 'nano-banana-2', outputs: [{ mediaId: 'Gen00001', status: 'succeeded', url: 'https://cdn/x.png', appUrl: 'https://app/media/Gen00001' }], error: null, createdAt: 't', completedAt: 't2' }) },
+    { status: 200, body: asStatus({ outputId: 'gen1', status: 'settled', contentType: 'image', modelId: 'nano-banana-2', outputs: [{ mediaId: 'Gen00001', status: 'succeeded', url: 'https://cdn/x.png', appUrl: 'https://app/media/Gen00001' }], error: null, createdAt: 't', completedAt: 't2' }) },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   const gen = await client.generateAndWait({ modelId: 'nano-banana-2', prompt: 'a cat' }, { pollIntervalMs: 1 })
-  assert.equal(gen.status, 'completed')
+  assert.equal(gen.status, 'settled')
   assert.deepEqual(gen.outputs.map((o) => o.url), ['https://cdn/x.png'])
 })
 
@@ -409,7 +401,7 @@ test('import waits for the import job and returns the new item', async () => {
   const { fetch, calls } = stubFetch([
     { status: 202, body: { outputId: 'imp1', status: 'processing', shortId: 'Imp00001', appUrl: 'https://app/media/Imp00001', url: null, alreadyExisted: false } },
     { status: 200, body: asStatus({ outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'processing', contentType: 'image', modelId: 'import', outputs: [], error: null, createdAt: 't', completedAt: null }) },
-    { status: 200, body: asStatus({ outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'completed', contentType: 'video', modelId: 'import', outputs: [{ mediaId: 'Imp00001', status: 'succeeded', url: 'https://cdn/a.mp4', appUrl: 'https://app/media/Imp00001' }], error: null, createdAt: 't', completedAt: 't2' }) },
+    { status: 200, body: asStatus({ outputId: 'imp1', appUrl: 'https://app/media/Imp00001', status: 'settled', contentType: 'video', modelId: 'import', outputs: [{ mediaId: 'Imp00001', status: 'succeeded', url: 'https://cdn/a.mp4', appUrl: 'https://app/media/Imp00001' }], error: null, createdAt: 't', completedAt: 't2' }) },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   const m = await client.import({ url: 'https://example.com/a.mp4' }, { pollIntervalMs: 1 })
@@ -418,11 +410,11 @@ test('import waits for the import job and returns the new item', async () => {
   assert.ok(calls[1].url.endsWith('/api/v1/status/imp1?kind=output'))
 })
 
-test('import: an import whose bytes were already there settles abandoned and names the item holding them', async () => {
+test('import: an import whose bytes were already there settles and names the item holding them', async () => {
   const dup = { outputId: 'old1', shortId: 'Old00001', appUrl: 'https://app/media/Old00001', url: 'https://cdn/old.png', objectName: 'u/old.png', role: 'original', ownedBy: 'studio_outputs' }
   const { fetch } = stubFetch([
     { status: 202, body: { outputId: 'imp2', status: 'processing', shortId: 'Imp00002', appUrl: 'https://app/media/Imp00002', url: null, alreadyExisted: false } },
-    { status: 200, body: asStatus({ outputId: 'imp2', appUrl: 'https://app/media/Imp00002', status: 'abandoned', settled: true, contentType: 'image', modelId: 'import', outputs: [], error: null, alreadyExisted: dup, createdAt: 't', completedAt: null }) },
+    { status: 200, body: asStatus({ outputId: 'imp2', appUrl: 'https://app/media/Imp00002', status: 'settled', contentType: 'image', modelId: 'import', outputs: [], error: null, alreadyExisted: dup, createdAt: 't', completedAt: null }) },
   ])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
   const m = await client.import({ url: 'https://example.com/old.png' }, { pollIntervalMs: 1 })

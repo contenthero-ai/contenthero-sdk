@@ -532,3 +532,11 @@ test('audio facts with only some known say only those, and none says nothing', (
   assert.equal(describeAudioFacts({}), null)
   assert.equal(describeAudioFacts(undefined), null)
 })
+
+test('describeRenderFailure: a busy render is a pause with its wait, not a failure', () => {
+  const busy = describeRenderFailure({ error: { code: 'render_busy', message: 'no room', retryAfterSeconds: 7 } })
+  assert.match(busy ?? '', /busy/)
+  assert.match(busy ?? '', /nothing was started/)
+  assert.match(busy ?? '', /in 7 seconds/)
+  assert.doesNotMatch(busy ?? '', /produced no image/)
+})

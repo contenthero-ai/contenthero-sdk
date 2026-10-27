@@ -36,7 +36,7 @@ function structured(r: { structuredContent?: Record<string, unknown> }) {
 }
 
 test('a finished generation, polled or returned, carries its charge', () => {
-  const gen = { outputId: 'o1', status: 'completed', contentType: 'image', modelId: 'nano-banana-2', outputs: outs(['https://a/1.jpg']), charge: charged }
+  const gen = { outputId: 'o1', status: 'settled', contentType: 'image', modelId: 'nano-banana-2', outputs: outs(['https://a/1.jpg']), charge: charged }
   for (const r of [completedResult(gen as never), generationStatusResult(gen as never)]) {
     assert.deepEqual(structured(r).charge, charged)
     assert.equal(structured(r).cost, 'Cost: 6 credits charged. Balance after: 86,427 credits.')

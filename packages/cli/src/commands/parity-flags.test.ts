@@ -452,7 +452,10 @@ test('status sends each id in the path and --kind as the query', async () => {
 test('audio split sends operation split on a file, and split-clips sends it in place', async () => {
   const file = await run('audio', 'split', 'abc12345', '--no-wait')
   assert.equal(file.path, '/api/v1/studio/audio/edit')
-  assert.deepEqual(file.body, { operation: 'split', sourceUrl: 'abc12345' })
+  // File mode names its output once per call, so a retry of the call is a replay and not a second job.
+  const { outputId, ...fileRest } = file.body as { outputId?: string }
+  assert.equal(typeof outputId, 'string')
+  assert.deepEqual(fileRest, { operation: 'split', sourceUrl: 'abc12345' })
 
   const clips = await run('audio', 'split-clips', 'p1', '--clips', 'c1', 'c2', '--no-wait')
   assert.deepEqual(clips.body, { operation: 'split', projectId: 'p1', clipIds: ['c1', 'c2'], inPlace: true })
