@@ -156,6 +156,8 @@ No tool or field description text changed. Behavior and help-text changes a user
 
 ## Phase B SDK follow-ups
 
+Status: approved by Taylan 2026-10-27, with "Phase B final" below (P1 to P7 in https://claude.ai/artifact/9JbvZLB7nwyqc365ekaAFy).
+
 - MCP `search_media` and CLI `media search`, when a search finds nothing and the server gives a reason. Before: "No matching media found." Now: the same line, then "Why empty: <the server's message>".
 - CLI `brand-kit get`, when the kit import kept accounts as they were. New row, before: none. Now: "Accounts kept as they were: <n> (already tracked as the other kind)".
 - No tool or field description text changed.
