@@ -3009,6 +3009,32 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
+  // -- update_media ---------------------------------------------------------
+  server.registerTool(
+    'update_media',
+    {
+      title: 'Update Media',
+      annotations: WRITE,
+      description:
+        "Rename a stored file or give it a description, after upload. Pass name, description or both; passing neither is refused. Only files in the library can be changed this way: a generated output or a stock item cannot. An empty description clears it. Returns the file as get_media reads it, with its new name and description. Requires the library:write scope.",
+      inputSchema: {
+        mediaId: z.string().describe('The file\'s media id, as list_media, search_media and get_folder print it.'),
+        name: z.string().optional().describe('The new name for the file.'),
+        description: z.string().optional().describe('A description of the file, in your own words.'),
+      },
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const item = await client.updateMedia(args.mediaId, { name: args.name, description: args.description })
+        const lines = [`Updated ${item.mediaId}.`, `Name: ${item.name ?? ''}`, `Description: ${item.description ?? ''}`]
+        return text(lines.join('\n'))
+      } catch (err) {
+        return errorResult(err)
+      }
+    },
+  )
+
   // -- show_media -----------------------------------------------------------
   server.registerTool(
     'show_media',
@@ -5384,7 +5410,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'List Templates',
       annotations: READ,
       description:
-        "List the templates you can place: ContentHero's and the user's own (the editor's Elements panel), without their code, a page at a time. Each is code, a shape, an animated emoji or a logo, with its category, version and default size. Logos are listed only with kind logo, and search finds one by name or alias across the whole logo library. Place one with an insert_template op in update_timeline or update_canvas, branded with the project's brand kit; a logo's id is its slug; read one whole with get_template. Requires the editor:read scope.",
+        "List the templates you can place: ContentHero's and the user's own (the editor's Elements panel), without their code, a page at a time. Each is code, a shape, an animated emoji or a logo, with its category, version and default size. Logos are listed only with kind logo, and search finds one by name or alias across the whole logo library. Place one with an insert_template op in update_timeline or update_canvas, branded with the project's brand kit; a logo's id is its slug; the logo library is a curated set kept in the product, so a brand's own logos are added through update_brand_kit; read one whole with get_template. Requires the editor:read scope.",
       inputSchema: {
         scope: z.enum(['system', 'user', 'all']).optional().describe("system is ContentHero's, user is the user's own; all (the default) is both."),
         kind: z.enum(['code', 'shape', 'emoji', 'logo']).optional().describe('Only templates that draw this.'),

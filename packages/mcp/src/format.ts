@@ -1306,6 +1306,7 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
     // The display name first when the item has one; the file's own name after it, when it is a different thing.
     const displayStr = m.name ? ` | ${clipped(m.name, LISTING_TEXT_MAX)}` : ''
     const nameStr = m.fileName && m.fileName !== m.name ? ` | ${clipped(m.fileName, LISTING_TEXT_MAX)}` : ''
+    const descStr = m.description ? ` | ${clipped(m.description, LISTING_TEXT_MAX)}` : ''
     const durStr = m.durationSeconds != null ? ` | ${Math.round(m.durationSeconds)}s` : ''
     const sizeStr = m.sizeBytes != null ? ` | ${describeFileSize(m.sizeBytes)}` : ''
     // The asset id is what get_project reports as a clip's sourceId: printed so an agent can match a clip to the
@@ -1314,7 +1315,7 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = listingLink(m)
-    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${displayStr}${nameStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
+    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${displayStr}${nameStr}${descStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
   })
   return text(lines([`${items.length} item(s):`, ...rows, moreLine(page.nextCursor)]))
 }
@@ -1327,11 +1328,12 @@ export function mediaSearchResult(page: SearchMediaPage): CallToolResult {
     const rel = ` | ${Math.round(r.relevance * 100)}%`
     const kindTag = r.kind ? `[${r.kind}]` : '[media]'
     const summaryStr = r.summary ? ` | ${clipped(r.summary, 90)}` : ''
+    const writtenStr = r.description ? ` | ${clipped(r.description, 90)}` : ''
     const scenesStr = r.scenes.length
       ? ` | scenes: ${r.scenes.map((s) => `${(s.startMs / 1000).toFixed(1)}-${(s.endMs / 1000).toFixed(1)}s`).join(', ')}`
       : ''
     const urlStr = listingLink(r)
-    return `- ${kindTag} (${idOf({ id: r.mediaId, appUrl: r.appUrl }, 'media')})${rel}${summaryStr}${scenesStr}${urlStr}`
+    return `- ${kindTag} (${idOf({ id: r.mediaId, appUrl: r.appUrl }, 'media')})${rel}${writtenStr}${summaryStr}${scenesStr}${urlStr}`
   })
   return text(lines([`${results.length} match(es) (most relevant first):`, ...rows, moreLine(page.nextCursor)]))
 }
@@ -1359,7 +1361,7 @@ export function folderContentsResult({ folder, items, nextCursor }: FolderConten
     if (i.type === 'media') {
       const rel = i.relevance != null ? ` | ${Math.round(i.relevance * 100)}%` : ''
       const fav = i.isFavorited ? ' [favorite]' : ''
-      const summ = i.summary ? ` | ${clipped(i.summary, 80)}` : ''
+      const summ = (i.description ? ` | ${clipped(i.description, 80)}` : '') + (i.summary ? ` | ${clipped(i.summary, 80)}` : '')
       return `- [${i.kind ?? 'media'}] (${idOf({ id: i.mediaId, appUrl: i.appUrl }, 'media')})${rel}${fav}${summ}${listingLink(i)}`
     }
     return `- [${i.type}] ${i.name} (${idOf(i)})${i.subtype ? ` | ${i.subtype}` : ''}`
@@ -1378,6 +1380,7 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   const others = it.otherMediaIds.length > 0 ? ` | other outputs: ${it.otherMediaIds.join(', ')}` : ''
   const model = it.model ? ` from ${it.model}` : ''
   const prompt = it.prompt ? `\n    prompt: ${it.prompt}` : ''
+  const written = it.description ? `\n    description: ${it.description}` : ''
   // Explain the absence of an image so the model does not assume it failed.
   let note = ''
   if (!hasImage) {
@@ -1413,7 +1416,7 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   // What it was made FROM, labeled as Studio labels it, so "make another like this" can pass the same inputs back.
   const refs = describeReferences(it.references)
   const madeFrom = refs.length > 0 ? `\n    made from:${refs.map((r) => `\n      ${r}`).join('')}` : ''
-  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${audio}${zoom}${prompt}${madeFrom}${note}`
+  return `${label} ${idPart}${model}${others}\n    ${it.url}${geom}${dur}${audio}${zoom}${written}${prompt}${madeFrom}${note}`
 }
 
 /**

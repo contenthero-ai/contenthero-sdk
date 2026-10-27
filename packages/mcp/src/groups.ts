@@ -46,7 +46,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
       'list_media', 'get_media', 'show_media', 'search_media', 'import', 'download',
       'create_upload', 'sign_upload_parts', 'complete_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
-      'favorite', 'archive', 'share',
+      'update_media', 'favorite', 'archive', 'share',
     ],
   },
   {

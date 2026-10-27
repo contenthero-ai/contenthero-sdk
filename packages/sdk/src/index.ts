@@ -300,6 +300,7 @@ export type {
   FavoriteAssetType,
   ArchiveAssetType,
   FavoriteInput,
+  UpdateMediaInput,
   ShareItemInput,
   ShareInput,
   ShareAssetType,

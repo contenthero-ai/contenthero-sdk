@@ -893,3 +893,25 @@ test('transcribe names a post by its short id and page in every state, never a U
   assert.match(states[3], /slide 2/)
   assert.match(textOf(transcriptResult({ status: 'running', contentId: uuid } as never)), new RegExp(uuid))
 })
+
+/**
+ * A description written with update_media comes back from every read that returns the item: get_media, list_media,
+ * search_media and get_folder contents. Break-verified: dropping the description print from any one turns it red.
+ */
+test('a written description is printed by get_media, list_media, search_media and folder contents', async () => {
+  const { mediaBatchResult, mediaListResult, mediaSearchResult, folderContentsResult } = await import('./format.js')
+  const d = 'the hero bottle, final cut'
+  const batch = body(
+    mediaBatchResult(
+      { items: [{ ok: true, input: { mediaId: 'Gen12345' }, url: 'https://a/1.png', type: 'image', mediaId: 'Gen12345', otherMediaIds: [], description: d }] } as never,
+      [null] as never,
+    ),
+  )
+  assert.match(batch, /description: the hero bottle, final cut/)
+  const list = body(mediaListResult({ media: [{ mediaId: 'Gen12345', type: 'image', source: 'creations', description: d }], nextCursor: null } as never))
+  assert.match(list, /the hero bottle, final cut/)
+  const search = body(mediaSearchResult({ results: [{ mediaId: 'Gen12345', kind: 'image', relevance: 0.9, scenes: [], summary: null, description: d }], nextCursor: null } as never))
+  assert.match(search, /the hero bottle, final cut/)
+  const folder = body(folderContentsResult({ folder: null, items: [{ type: 'media', mediaId: 'Gen12345', kind: 'image', summary: null, description: d, isFavorited: false }], nextCursor: null } as never))
+  assert.match(folder, /the hero bottle, final cut/)
+})

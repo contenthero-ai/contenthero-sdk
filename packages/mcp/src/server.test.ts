@@ -443,6 +443,7 @@ function fakeClient(overrides = {}) {
     deleteTag: async (id) => ({ id }),
     import: async (_input) => ({ outputId: 'im1', url: 'https://cloud/im1.png' }),
     favorite: async () => {},
+    updateMedia: async (id, patch) => ({ mediaId: id, name: patch.name ?? 'Old', description: patch.description ?? null }),
     archive: async () => {},
     applyEditorOps: async (input) => ({ surface: input.projectId === 'canvas1' ? 'canvas' : 'editor', revision: 5, results: input.ops.map((o) => ({ op: o.op, opId: o.opId ?? 'mock-op-id', ok: true })) }),
     listProjects: async () => ({
@@ -6282,4 +6283,27 @@ test('get_status prints a generation in its last stretch as running, and a settl
   const res = await mcp.callTool({ name: 'get_status', arguments: { ids: ['g1'] } })
   assert.match(res.content[0].text, /is still running/)
   assert.doesNotMatch(res.content[0].text, /applying/)
+})
+
+test('update_media takes mediaId, name and description, writes through the client and states the result', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const tool = tools.find((t) => t.name === 'update_media')
+  assert.ok(tool, 'update_media is registered')
+  const props = (tool.inputSchema as { properties: Record<string, unknown>; required?: string[] })
+  assert.deepEqual(Object.keys(props.properties).sort(), ['description', 'mediaId', 'name'])
+  assert.deepEqual(props.required, ['mediaId'])
+  assert.match(tool.description ?? '', /library:write/)
+  assert.match(tool.description ?? '', /neither is refused/)
+  const res = await mcp.callTool({ name: 'update_media', arguments: { mediaId: 'a1B2c3D4', name: 'Renamed', description: 'About it' } })
+  const out = (res.content as Array<{ text: string }>)[0].text
+  assert.match(out, /Updated a1B2c3D4/)
+  assert.match(out, /Name: Renamed/)
+  assert.match(out, /Description: About it/)
+})
+
+test('list_templates states that a brand\'s own logos are added through update_brand_kit', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  assert.match(tools.find((t) => t.name === 'list_templates')?.description ?? '', /curated set.*update_brand_kit/)
 })

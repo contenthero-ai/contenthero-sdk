@@ -1819,6 +1819,8 @@ export interface MediaSummary {
   name: string | null
   /** The file's name, which a download saves under: one a person gave, or one made for a creation. */
   fileName: string | null
+  /** What a person wrote about a library file, set with `updateMedia`; null when none. Absent from a server that predates it. */
+  description?: string | null
   /** The file's size in bytes, as the library shows it and the storage meter counts it; listings only. */
   sizeBytes?: number
   /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
@@ -1895,6 +1897,17 @@ export interface MediaRegion {
   height: number
 }
 
+/**
+ * What `updateMedia` changes on a stored file: its name, its description, or both. A field left out is left alone;
+ * an empty `description` clears it. At least one is required.
+ */
+export interface UpdateMediaInput {
+  /** The name the library shows and downloads save under. */
+  name?: string
+  /** Free text about the file. An empty string clears it. */
+  description?: string
+}
+
 /** One requested item for `getMediaBatch`: a raw URL, or a media reference; either a region. */
 export type MediaBatchItem = ({ url: string } | { mediaId: string }) & { region?: MediaRegion }
 
@@ -1905,6 +1918,8 @@ export type MediaBatchItem = ({ url: string } | { mediaId: string }) & { region?
  */
 export interface ResolvedMediaBatchItem {
   ok: boolean
+  /** What a person wrote about this item with update_media. Absent when none; the machine `summary` is separate. */
+  description?: string | null
   /** Where this item opens in the app. Absent for a url that is not one of the account's media items. */
   appUrl?: string
   /** The item's 8-character public id. Absent for a url that is not one of the account's media items. */
@@ -2073,6 +2088,8 @@ export interface SearchMediaResult {
   url: string | null
   /** The vision description of the asset. */
   summary: string | null
+  /** What a person wrote about this item with update_media. */
+  description?: string | null
   tags: string[]
   /** Best cosine relevance of this asset to the query (0..1). */
   relevance: number
@@ -2156,6 +2173,8 @@ export type FolderItem =
       /** The smallest copy kept of an image, when the folder was read with `smallCopies`; as on `MediaSummary`. */
       smallUrl?: string | null
       summary: string | null
+      /** What a person wrote about this item with update_media. */
+      description?: string | null
       isFavorited: boolean
       relevance?: number
     }
