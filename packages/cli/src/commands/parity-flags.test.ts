@@ -366,16 +366,16 @@ test('project version commands reach the version routes with the bodies the API 
 })
 
 test('media list sends the library contract: a source partition, several types, and no status', async () => {
-  const r = await run('media', 'list', '--source', 'exports', '--type', 'video,doc', '--kind', 'board', '--favorite')
+  const r = await run('media', 'list', '--source', 'exports', '--type', 'video,doc', '--origin', 'board', '--favorite')
   assert.equal(r.query.get('source'), 'exports')
   assert.equal(r.query.get('contentType'), 'video,doc')
-  assert.equal(r.query.get('kind'), 'board')
+  assert.equal(r.query.get('origin'), 'board')
   assert.equal(r.query.get('favorited'), 'true')
   assert.equal(r.query.has('status'), false)
 })
 
 test('media list refuses the sources and types the API refuses', async () => {
-  for (const bad of [['--source', 'files'], ['--type', 'transcript'], ['--kind', 'upload']]) {
+  for (const bad of [['--source', 'files'], ['--type', 'transcript'], ['--origin', 'upload']]) {
     seen.length = 0
     const failure = await buildProgram()
       .parseAsync(['--api-key', 'k', '--base-url', baseUrl, '--json', 'media', 'list', ...bad], { from: 'user' })

@@ -16,9 +16,9 @@ const card = {
   tags: [],
   posts: [],
   assets: [
-    { id: 'att-1', assetType: 'editor', contentId: null, projectId: 'proj-1', assetId: 'proj-1', assetUrl: null, displayName: 'Cut', sortOrder: 0, inspiration: null },
-    { id: 'att-2', assetType: 'inspiration', contentId: 'content-1', projectId: null, assetId: 'content-1', assetUrl: 'https://instagram.com/p/x', displayName: null, sortOrder: 1, inspiration: null },
-    { id: 'att-3', assetType: 'image', contentId: null, projectId: null, assetId: 'obj-1', assetUrl: 'https://media.contenthero.ai/a.png', displayName: 'Cover', sortOrder: 2, inspiration: null },
+    { id: 'att-1', assetType: 'editor', contentId: null, projectId: 'proj-1', outputId: null, assetUrl: null, displayName: 'Cut', sortOrder: 0, inspiration: null },
+    { id: 'att-2', assetType: 'inspiration', contentId: 'content-1', projectId: null, outputId: null, assetUrl: 'https://instagram.com/p/x', displayName: null, sortOrder: 1, inspiration: null },
+    { id: 'att-3', assetType: 'image', contentId: null, projectId: null, outputId: 'obj-1', assetUrl: 'https://media.contenthero.ai/a.png', displayName: 'Cover', sortOrder: 2, inspiration: null },
   ],
 } as unknown as CardDetail
 
@@ -41,7 +41,7 @@ test('an attachment prints the app link of what it points at, so a card links it
   const linked = {
     ...card,
     assets: [
-      { id: 'att-2', assetType: 'inspiration', contentId: 'content-1', projectId: null, assetId: 'content-1', assetUrl: 'https://instagram.com/p/x', appUrl: 'https://app.contenthero.ai/content/P0stAbcD', displayName: 'Reel', sortOrder: 0, inspiration: null },
+      { id: 'att-2', assetType: 'inspiration', contentId: 'content-1', projectId: null, outputId: null, assetUrl: 'https://instagram.com/p/x', appUrl: 'https://app.contenthero.ai/content/P0stAbcD', displayName: 'Reel', sortOrder: 0, inspiration: null },
     ],
   } as unknown as CardDetail
   const out = (cardResult(linked).content[0] as { text: string }).text

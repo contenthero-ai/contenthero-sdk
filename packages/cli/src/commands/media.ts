@@ -1,12 +1,12 @@
 /**
  * `contenthero media` - the account's studio outputs ("creations").
- *   media list [--source --collection --query --orientation --type --kind --status --limit --cursor --small-copies]   media you can place; stock with --source stock
+ *   media list [--source --collection --query --orientation --type --origin --status --limit --cursor --small-copies]   media you can place; stock with --source stock
  *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
  *   media update <id> [--name --description]                rename a stored file or describe it
  *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
  *
- * Spans creations, reference boards, and looks; filter with --kind. Every item is named by its media id: the short
+ * Spans creations, reference boards, and looks; filter with --origin. Every item is named by its media id: the short
  * id, plus "-N" for output N of a generation with several, exactly as these commands print it.
  */
 
@@ -48,8 +48,8 @@ function bufferFromDataUrl(dataUrl: string): Buffer | null {
   return b64 ? Buffer.from(b64, 'base64') : null
 }
 
-const KINDS = ['creation', 'board', 'look'] as const
-type Kind = (typeof KINDS)[number]
+const ORIGINS = ['creation', 'board', 'look'] as const
+type Origin = (typeof ORIGINS)[number]
 // `list` reads the library's files, all or one partition (`MEDIA_LIST_SOURCES`); a single-item `get` names its library.
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']
 const SEARCH_KINDS: MediaKind[] = ['image', 'video', 'audio']
@@ -66,7 +66,7 @@ export function registerMedia(program: Command): void {
       .option('--query <query>', "Stock only. Describe what to find. Omit it to read the collection's featured items.")
       .option('--orientation <orientation>', "Stock photos and videos only. Narrow the results to one shape: 'landscape', 'portrait' or 'square'. Omit it to read every shape.")
       .option('--type <types>', `filter by media type (comma-separated): ${MEDIA_LIST_TYPES.join(', ')}`, toList)
-      .option('--kind <kind>', `creations only: filter by asset class: ${KINDS.join(', ')}`)
+      .option('--origin <origin>', `creations only: filter by what the generation is: ${ORIGINS.join(', ')}`)
       .option('--favorite', 'only favorited files')
       .option('--archived', 'only archived files'),
   ), LIST_SORTS.media)
@@ -95,9 +95,9 @@ export function registerMedia(program: Command): void {
           throw new CliError(`Invalid --type "${t}". Expected: ${MEDIA_LIST_TYPES.join(', ')}.`, EXIT.USAGE)
         }
       }
-      if (opts.kind && !KINDS.includes(opts.kind as Kind)) {
+      if (opts.origin && !ORIGINS.includes(opts.origin as Origin)) {
         throw new CliError(
-          `Invalid --kind "${opts.kind}". Expected one of: ${KINDS.join(', ')}.`,
+          `Invalid --origin "${opts.origin}". Expected one of: ${ORIGINS.join(', ')}.`,
           EXIT.USAGE,
         )
       }
@@ -108,7 +108,7 @@ export function registerMedia(program: Command): void {
         query: opts.query as string | undefined,
         orientation: opts.orientation as MediaStockOrientation | undefined,
         contentType: opts.type as MediaListType[] | undefined,
-        kind: opts.kind as Kind | undefined,
+        origin: opts.origin as Origin | undefined,
         sort: opts.sort as MediaSort | undefined,
         order: opts.order as SortOrder | undefined,
         favorited: opts.favorite ? true : undefined,
@@ -123,10 +123,10 @@ export function registerMedia(program: Command): void {
         if (p.media.length && p.media.every((m) => m.source === 'stock')) {
           return withMore(
             table(
-              ['ID', 'TYPE', 'COLLECTION', 'NAME', 'CREDIT'],
+              ['ID', 'KIND', 'COLLECTION', 'NAME', 'CREDIT'],
               p.media.map((m) => [
                 m.mediaId,
-                m.type,
+                m.kind ?? '',
                 m.collection ?? '',
                 clip(m.name, 48),
                 clip(m.license?.attribution ?? (m.creator ? `by ${m.creator}` : m.providerLabel ?? ''), 48),
@@ -137,13 +137,13 @@ export function registerMedia(program: Command): void {
         }
         return withMore(
           table(
-            ['ID', 'FAV', 'TYPE', 'SOURCE', 'KIND', 'NAME/MODEL', 'SIZE', 'DESCRIPTION', 'PROMPT'],
+            ['ID', 'FAV', 'KIND', 'SOURCE', 'ORIGIN', 'NAME/MODEL', 'SIZE', 'DESCRIPTION', 'PROMPT'],
             p.media.map((m) => [
               m.mediaId,
               m.isFavorited ? '★' : '',
-              m.type,
-              m.source,
               m.kind ?? '',
+              m.source,
+              m.origin ?? '',
               clip(m.name ?? m.fileName ?? m.model, 48),
               m.sizeBytes != null ? describeFileSize(m.sizeBytes) : '',
               clip(m.description, 48),
@@ -252,8 +252,8 @@ export function registerMedia(program: Command): void {
       emit(item, ctx, (m: MediaItem) => {
         const head = keyValues([
           ['Id', m.mediaId], ...linkRow(m),
-          ['Type', m.type],
-          ['Kind', m.kind ?? 'creation'],
+          ['Kind', m.kind ?? ''],
+          ['Origin', m.origin ?? ''],
           ['Model', m.model ?? ''],
           ['Status', m.status ?? ''],
           ...(m.prompt ? [['Prompt', clip(m.prompt, 80)] as [string, string]] : []),

@@ -363,7 +363,7 @@ test('a revision conflict surfaces the current revision and the overlap, and is 
 })
 
 test('listMedia builds the query string and getMedia encodes the token', async () => {
-  const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 0, url: null, generationSize: 1, isFavorited: false }], nextCursor: null } }])
+  const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', kind: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 0, url: null, generationSize: 1, isFavorited: false }], nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: list.fetch, baseUrl: 'https://example.test' })
   const page = await c1.listMedia({ contentType: 'image', limit: 5 })
   assert.equal(page.media[0]?.id, 'o1')
@@ -382,8 +382,8 @@ test('getMediaBatch POSTs the items to /api/v1/media/batch', async () => {
       status: 200,
       body: {
         items: [
-          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', imageUrl: 'https://cdn/1.png', type: 'image', model: 'nb2', prompt: null, mediaId: 'abcd1234-1', otherMediaIds: ['abcd1234-2'] },
-          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', imageUrl: 'https://cdn/x.png', type: 'image', model: null, prompt: null, mediaId: null, otherMediaIds: [] },
+          { ok: true, input: { mediaId: 'abcd1234' }, url: 'https://cdn/1.png', imageUrl: 'https://cdn/1.png', kind: 'image', model: 'nb2', prompt: null, mediaId: 'abcd1234-1', otherMediaIds: ['abcd1234-2'] },
+          { ok: true, input: { url: 'https://cdn/x.png' }, url: 'https://cdn/x.png', imageUrl: 'https://cdn/x.png', kind: 'image', model: null, prompt: null, mediaId: null, otherMediaIds: [] },
         ],
       },
     },
@@ -1344,28 +1344,14 @@ test('Kling elements live at /api/v1/kling-elements, and the list reads klingEle
   assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { name: 'villain' })
 })
 
-test('the pre-rename element methods call their Kling twins, so there is one implementation', async () => {
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 500, body: {} }]).fetch })
-  const seen: string[] = []
-  const twin = client as unknown as Record<string, unknown>
-  for (const name of ['listKlingElements', 'getKlingElement', 'createKlingElement', 'updateKlingElement', 'deleteKlingElement']) {
-    twin[name] = async (...args: unknown[]) => {
-      seen.push(`${name} ${JSON.stringify(args)}`)
-      return name
-    }
+test('the pre-rename element methods are gone: only the Kling-named ones exist', () => {
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 500, body: {} }]).fetch }) as unknown as Record<string, unknown>
+  for (const name of ['listElements', 'getElement', 'createElement', 'updateElement', 'deleteElement']) {
+    assert.equal(client[name], undefined, name)
   }
-  assert.equal(await client.listElements(), 'listKlingElements')
-  assert.equal(await client.getElement('k1'), 'getKlingElement')
-  assert.equal(await client.createElement({ name: 'n', description: 'd', video: 'v' }), 'createKlingElement')
-  assert.equal(await client.updateElement('k1', { category: 'prop' }), 'updateKlingElement')
-  assert.equal(await client.deleteElement('k1'), 'deleteKlingElement')
-  assert.deepEqual(seen, [
-    'listKlingElements [{}]',
-    'getKlingElement ["k1"]',
-    'createKlingElement [{"name":"n","description":"d","video":"v"}]',
-    'updateKlingElement ["k1",{"category":"prop"}]',
-    'deleteKlingElement ["k1"]',
-  ])
+  for (const name of ['listKlingElements', 'getKlingElement', 'createKlingElement', 'updateKlingElement', 'deleteKlingElement']) {
+    assert.equal(typeof client[name], 'function', name)
+  }
 })
 
 test('templates live at /api/v1/templates: a list pages with a cursor, reads unwrap template, writes keep their warnings', async () => {

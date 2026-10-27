@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "2bd2c898071c9b65a86f34e8f18d94983391cea733bbf07eb33c3e45f53eb266"
+export const AGENT_CONTRACT_VERSION = "4c25bbd9e0741c45c468c876b16dc39ff7d0ec48f1cb84b94f5e8de177706ef5"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -1386,15 +1386,6 @@ export const AGENT_CONTRACT = {
             "description": "Only favorited files.",
             "type": "boolean"
           },
-          "kind": {
-            "description": "Creations only. Filter by asset class: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all.",
-            "enum": [
-              "creation",
-              "board",
-              "look"
-            ],
-            "type": "string"
-          },
           "limit": {
             "description": "How many to return.",
             "maximum": 100,
@@ -1415,6 +1406,15 @@ export const AGENT_CONTRACT = {
               "landscape",
               "portrait",
               "square"
+            ],
+            "type": "string"
+          },
+          "origin": {
+            "description": "Creations only. Narrow to one kind of generation: 'creation' (normal generations), 'board' (reference boards), or 'look'. The same word an item's origin says. Omit to list all.",
+            "enum": [
+              "creation",
+              "board",
+              "look"
             ],
             "type": "string"
           },
@@ -3603,7 +3603,7 @@ export const AGENT_CONTRACT = {
           "expectedRevision": {
             "description": "REQUIRED when writing notes: the revision get_card reported for this card. A card's notes have four independent writers, each reading the whole document and writing it back, so without this the last writer silently erases the others and still gets a success. If the card changed since you read it, the call fails with a conflict carrying the current notes and revision: merge onto those and retry with the revision they came with. Never guess it or add one to it, because it only advances when notes actually change.",
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer"
           },
           "notes": {
@@ -5144,7 +5144,7 @@ export const AGENT_CONTRACT = {
           "expectedRevision": {
             "description": "The project revision you last read, from get_project or the last edit. An older one still applies when nothing since touched what the edit touches; otherwise nothing is written and the conflict names the current revision and what overlapped. Omit to apply to the project as it is. On update_project it guards the settings in the document; the title, brand kit and cover are not versioned.",
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer"
           },
           "fps": {
@@ -5610,7 +5610,7 @@ export const AGENT_CONTRACT = {
           "expectedRevision": {
             "description": "The revision from get_project; rejects with a conflict if a concurrent edit landed.",
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer"
           },
           "projectId": {
@@ -5645,7 +5645,7 @@ export const AGENT_CONTRACT = {
           "expectedRevision": {
             "description": "The revision from get_project; rejects with a conflict if a concurrent edit landed.",
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer"
           },
           "projectId": {
@@ -5680,7 +5680,7 @@ export const AGENT_CONTRACT = {
           "expectedRevision": {
             "description": "The project revision you last read, from get_project or the last edit. An older one still applies when nothing since touched what the edit touches; otherwise nothing is written and the conflict names the current revision and what overlapped. Omit to apply to the project as it is.",
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer"
           },
           "ops": {
@@ -5737,7 +5737,7 @@ export const AGENT_CONTRACT = {
           "expectedRevision": {
             "description": "The project revision you last read, from get_project or the last edit. An older one still applies when nothing since touched what the edit touches; otherwise nothing is written and the conflict names the current revision and what overlapped. Omit to apply to the project as it is.",
             "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "type": "integer"
           },
           "ops": {
@@ -7517,7 +7517,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "2bd2c898071c9b65a86f34e8f18d94983391cea733bbf07eb33c3e45f53eb266",
+  "version": "4c25bbd9e0741c45c468c876b16dc39ff7d0ec48f1cb84b94f5e8de177706ef5",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7691,7 +7691,7 @@ export const AGENT_CONTRACT = {
       "trim",
       "overwrite"
     ],
-    "POST_PLATFORMS": [
+    "PLATFORMS_OR_GENERAL": [
       "youtube",
       "instagram",
       "tiktok",
@@ -7819,7 +7819,7 @@ export interface ToolInputs {
   get_status: { ids: Array<string>; kind?: "output" | "export" | "brand_kit" | "avatar" | "content" | "scenes" | "transcript"; wait?: boolean }
   list_models: { contentType?: "image" | "video" | "audio" }
   get_model: { modelId: string }
-  list_media: { archived?: boolean; collection?: "photos" | "videos" | "gifs" | "stickers" | "sounds"; contentType?: Array<"image" | "video" | "audio" | "doc" | "other">; cursor?: string; favorited?: boolean; kind?: "creation" | "board" | "look"; limit?: number; order?: "asc" | "desc"; orientation?: "landscape" | "portrait" | "square"; query?: string; smallCopies?: boolean; sort?: "createdAt" | "fileName" | "sizeBytes"; source?: "all" | "creations" | "uploads" | "exports" | "stock" }
+  list_media: { archived?: boolean; collection?: "photos" | "videos" | "gifs" | "stickers" | "sounds"; contentType?: Array<"image" | "video" | "audio" | "doc" | "other">; cursor?: string; favorited?: boolean; limit?: number; order?: "asc" | "desc"; orientation?: "landscape" | "portrait" | "square"; origin?: "creation" | "board" | "look"; query?: string; smallCopies?: boolean; sort?: "createdAt" | "fileName" | "sizeBytes"; source?: "all" | "creations" | "uploads" | "exports" | "stock" }
   get_media: { items: Array<{ region?: { height: number; width: number; x: number; y: number }; url: string } | { mediaId: string; region?: { height: number; width: number; x: number; y: number } }> }
   show_media: { items: Array<{ url: string } | { mediaId: string }> }
   search_media: { cursor?: string; kinds?: Array<"image" | "video" | "audio">; limit?: number; query: string; smallCopies?: boolean }
@@ -7965,7 +7965,7 @@ export const PICTURE_DETECTORS = ["pointer","face"] as const
 export const PLACEMENT_DURATIONS = ["natural","match"] as const
 export const PLACEMENT_ENDS = ["top","bottom"] as const
 export const PLACEMENT_RANGE_FITS = ["cover","trim","overwrite"] as const
-export const POST_PLATFORMS = ["youtube","instagram","tiktok","facebook","linkedin","x","threads","general"] as const
+export const PLATFORMS_OR_GENERAL = ["youtube","instagram","tiktok","facebook","linkedin","x","threads","general"] as const
 export const PROJECT_FILTERS = ["archived","favorited"] as const
 export const PROJECT_SORTS = ["updatedAt","createdAt","title"] as const
 export const PROJECT_TYPES = ["editor","canvas"] as const

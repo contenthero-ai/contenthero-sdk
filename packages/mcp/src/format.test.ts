@@ -272,7 +272,7 @@ test('placement notes survive alongside the attachment', () => {
       ...baseGen,
       contentType: 'image',
       outputs: outs(['https://media.contenthero.ai/u/a.jpg']),
-      placement: { projectType: 'canvas', surface: 'canvas', layerId: 'L1', slideId: 'S1' },
+      placement: { projectType: 'canvas', layerId: 'L1', slideId: 'S1' },
     } as never,
     [{ kind: 'bytes', type: 'image', data: 'QUJD', mimeType: 'image/jpeg' }],
   )
@@ -903,12 +903,12 @@ test('a written description is printed by get_media, list_media, search_media an
   const d = 'the hero bottle, final cut'
   const batch = body(
     mediaBatchResult(
-      { items: [{ ok: true, input: { mediaId: 'Gen12345' }, url: 'https://a/1.png', type: 'image', mediaId: 'Gen12345', otherMediaIds: [], description: d }] } as never,
+      { items: [{ ok: true, input: { mediaId: 'Gen12345' }, url: 'https://a/1.png', kind: 'image', mediaId: 'Gen12345', otherMediaIds: [], description: d }] } as never,
       [null] as never,
     ),
   )
   assert.match(batch, /description: the hero bottle, final cut/)
-  const list = body(mediaListResult({ media: [{ mediaId: 'Gen12345', type: 'image', source: 'creations', description: d }], nextCursor: null } as never))
+  const list = body(mediaListResult({ media: [{ mediaId: 'Gen12345', kind: 'image', source: 'creations', description: d }], nextCursor: null } as never))
   assert.match(list, /the hero bottle, final cut/)
   const search = body(mediaSearchResult({ results: [{ mediaId: 'Gen12345', kind: 'image', relevance: 0.9, scenes: [], summary: null, description: d }], nextCursor: null } as never))
   assert.match(search, /the hero bottle, final cut/)

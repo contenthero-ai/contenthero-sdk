@@ -985,7 +985,7 @@ export class ContentHero {
       q.set('contentType', types.join(','))
     }
     if (options.status) q.set('status', options.status)
-    if (options.kind) q.set('kind', options.kind)
+    if (options.origin) q.set('origin', options.origin)
     if (options.favorited) q.set('favorited', 'true')
     if (options.archived) q.set('archived', 'true')
     setSort(q, options)
@@ -1120,7 +1120,7 @@ export class ContentHero {
    * `upload()`, which does all of it. `sizeBytes` is required: the store chooses the mode from it.
    */
   async createUpload(input: CreateUploadInput): Promise<CreateUploadResult> {
-    return readCreateUpload(await this.request<unknown>('POST', '/api/v1/media/uploads', input), input.contentType)
+    return readCreateUpload(await this.request<unknown>('POST', '/api/v1/media/uploads', input))
   }
 
   /**
@@ -1322,37 +1322,6 @@ export class ContentHero {
   /** Delete a saved Kling element. */
   async deleteKlingElement(id: string): Promise<{ deleted: boolean; id: string }> {
     return this.request<{ deleted: boolean; id: string }>('DELETE', `/api/v1/kling-elements/${encodeURIComponent(id)}`)
-  }
-
-  // The names before 2026-10-04, kept for one release window. Each calls its Kling twin, so there is one
-  // implementation; remove them when the window closes.
-
-  /** @deprecated Use `listKlingElements`. */
-  async listElements(options: PageOptions = {}): Promise<KlingElementListResult> {
-    return this.listKlingElements(options)
-  }
-
-  /** @deprecated Use `getKlingElement`. */
-  async getElement(id: string): Promise<KlingElement> {
-    return this.getKlingElement(id)
-  }
-
-  /** @deprecated Use `createKlingElement`. */
-  async createElement(request: CreateKlingElementRequest): Promise<KlingElement> {
-    return this.createKlingElement(request)
-  }
-
-  /** @deprecated Use `updateKlingElement`. */
-  async updateElement(
-    id: string,
-    patch: { name?: string; description?: string; category?: string },
-  ): Promise<KlingElement> {
-    return this.updateKlingElement(id, patch)
-  }
-
-  /** @deprecated Use `deleteKlingElement`. */
-  async deleteElement(id: string): Promise<{ deleted: boolean; id: string }> {
-    return this.deleteKlingElement(id)
   }
 
   // -------------------------------------------------------------------------

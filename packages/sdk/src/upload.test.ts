@@ -14,8 +14,6 @@ import type { CompletedUploadPart, UploadProgress } from './types.js'
 interface FakeOptions {
   /** Files larger than this are begun as multipart, in parts of this size (the fake server's own choice). */
   partSize?: number
-  /** Answer the create call in the older shape: top-level uploadUrl only. */
-  olderAnswer?: { withHeaders: boolean }
   /** Fail a part's PUT: [partNumber, how many times, how]. */
   failPut?: Array<{ part: number; times: number; how: 'throw' | 500 | 403 | 400 }>
   /** Delay a part's PUT, in milliseconds. */
@@ -61,15 +59,6 @@ function fakeServer(options: FakeOptions = {}) {
     if (url === `${base}/api/v1/media/uploads` && method === 'POST') {
       const input = JSON.parse(body as string)
       log.created.push(input)
-      if (options.olderAnswer) {
-        return json(201, {
-          outputId: 'out_1',
-          uploadUrl: 'https://store.example/put',
-          ...(options.olderAnswer.withHeaders ? { uploadHeaders: { 'Content-Type': input.contentType, 'x-amz-meta-user_id': 'u1' } } : {}),
-          storagePath: 'a/b',
-          expiresAt: 'later',
-        })
-      }
       if (options.partSize && input.sizeBytes > options.partSize) {
         plan = { partSize: options.partSize, partCount: Math.ceil(input.sizeBytes / options.partSize) }
         return json(201, {
@@ -80,10 +69,6 @@ function fakeServer(options: FakeOptions = {}) {
       return json(201, {
         outputId: 'out_1',
         upload: { mode: 'single', url: 'https://store.example/put', headers: { 'Content-Type': input.contentType, 'x-amz-meta-user_id': 'u1' }, expiresAt: 'later' },
-        uploadUrl: 'https://store.example/put',
-        uploadHeaders: { 'Content-Type': input.contentType, 'x-amz-meta-user_id': 'u1' },
-        storagePath: 'a/b',
-        expiresAt: 'later',
       })
     }
     if (url.endsWith('/parts') && method === 'GET') {
@@ -397,18 +382,7 @@ test('upload: a completion that the server could not answer is tried again, sinc
   assert.equal(server.log.aborted.length, 0)
 })
 
-test('upload: an older answer with only the top-level uploadUrl is read as a single target', async () => {
-  const withHeaders = fakeServer({ olderAnswer: { withHeaders: true } })
-  await new ContentHero({ apiKey: 'k', fetch: withHeaders.fetch }).upload(bytesOf(3), opts)
-  assert.deepEqual(withHeaders.log.puts[0]!.headers, { 'Content-Type': 'image/png', 'x-amz-meta-user_id': 'u1' })
-
-  // An API from before the headers were returned needs the content type alone.
-  const bare = fakeServer({ olderAnswer: { withHeaders: false } })
-  await new ContentHero({ apiKey: 'k', fetch: bare.fetch }).upload(bytesOf(3), opts)
-  assert.deepEqual(bare.log.puts[0]!.headers, { 'Content-Type': 'image/png' })
-})
-
-test('createUpload reads the new answer and ignores the deprecated fields beside it', async () => {
+test('createUpload reads the answer: the output id and one upload target', async () => {
   const server = fakeServer()
   const created = await new ContentHero({ apiKey: 'k', fetch: server.fetch }).createUpload({ fileName: 'a.png', contentType: 'image/png', sizeBytes: 5 })
   assert.deepEqual(created, {

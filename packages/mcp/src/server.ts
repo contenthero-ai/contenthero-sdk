@@ -1980,7 +1980,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
             query: args.query,
             orientation: args.orientation,
             contentType: args.contentType,
-            kind: args.kind,
+            origin: args.origin,
             favorited: args.favorited,
             archived: args.archived,
             sort: args.sort,
