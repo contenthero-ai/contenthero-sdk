@@ -6317,3 +6317,15 @@ test('list_templates states that a brand\'s own logos are added through update_b
   const { tools } = await mcp.listTools()
   assert.match(tools.find((t) => t.name === 'list_templates')?.description ?? '', /curated set.*update_brand_kit/)
 })
+
+test('update_template names the MediaRef shape its props take and refuses stored URLs by design', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const tool = tools.find((t) => t.name === 'update_template')
+  assert.ok(tool)
+  assert.match(tool.description ?? '', /MediaRef, an object of assetId and role/)
+  assert.match(tool.description ?? '', /stored media URL is refused by design/)
+  const props = (tool.inputSchema?.properties as Record<string, { description?: string }>).props
+  assert.match(props?.description ?? '', /MediaRef \(\{ assetId, role \}\), never a stored URL/)
+  assert.doesNotMatch(tool.description ?? '', /[–—]/)
+})
