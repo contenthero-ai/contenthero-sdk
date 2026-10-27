@@ -5469,7 +5469,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Update Template',
       annotations: WRITE,
       description:
-        "Change one of the user's own templates: only the fields given. ContentHero's templates are read-only; copy one with create_template fromTemplateId. Pass the version you read as expectedVersion to refuse a write over a change made since. Clips already placed from it keep what they had. Requires the editor:write scope.",
+        "Change one of the user's own templates: only the fields given. ContentHero's templates are read-only; copy one with create_template fromTemplateId. Pass the version you read as expectedVersion to refuse a write over a change made since. Clips already placed from it keep what they had. A template's props may hold media only as a MediaRef, an object of assetId and role, at any depth including inside arrays; a stored media URL is refused by design, because it is bound to one audience and one account, and a MediaRef is resolved for whoever reads it. Requires the editor:write scope.",
       inputSchema: {
         templateId: z.string().describe('The template id.'),
         expectedVersion: z.number().int().optional().describe('The version you read; the write is refused if the template changed since.'),
@@ -5641,7 +5641,7 @@ const templateFieldsInput = {
     .describe('A Lottie file of ours, and the colors in it that props recolor (each role names a prop).'),
   emoji: z.string().optional().describe("An animated emoji's name, as the animated emoji list names it."),
   shape: z.string().optional().describe("A shape's name, as the shape layer type lists them in get_schema kind 'layer'."),
-  props: z.record(z.string(), z.unknown()).optional().describe('Its props as placed.'),
+  props: z.record(z.string(), z.unknown()).optional().describe('Its props as placed. Media in them is a MediaRef ({ assetId, role }), never a stored URL.'),
   propsSchema: z.record(z.string(), z.unknown()).nullable().optional().describe("Each prop's control, as get_template shows them; brand names the brand value a prop takes when placed."),
   durationFrames: z.number().int().positive().optional().describe('How long it lasts when placed, in frames.'),
   coverage: z.enum(['full', 'partial']).optional().describe('full: the whole frame; partial: a box of widthFraction by heightFraction.'),

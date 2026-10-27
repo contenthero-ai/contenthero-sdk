@@ -6283,3 +6283,15 @@ test('get_status prints a generation in its last stretch as running, and a settl
   assert.match(res.content[0].text, /is still running/)
   assert.doesNotMatch(res.content[0].text, /applying/)
 })
+
+test('update_template names the MediaRef shape its props take and refuses stored URLs by design', async () => {
+  const mcp = await connect(fakeClient())
+  const { tools } = await mcp.listTools()
+  const tool = tools.find((t) => t.name === 'update_template')
+  assert.ok(tool)
+  assert.match(tool.description ?? '', /MediaRef, an object of assetId and role/)
+  assert.match(tool.description ?? '', /stored media URL is refused by design/)
+  const props = (tool.inputSchema?.properties as Record<string, { description?: string }>).props
+  assert.match(props?.description ?? '', /MediaRef \(\{ assetId, role \}\), never a stored URL/)
+  assert.doesNotMatch(tool.description ?? '', /[–—]/)
+})
