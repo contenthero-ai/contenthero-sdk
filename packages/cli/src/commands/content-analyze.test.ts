@@ -78,6 +78,7 @@ before(async () => {
       res.end(JSON.stringify({
         content: [], total: 0, nextCursor: null,
         accountIdsNotFound: [{ id: 'Nope0001', reason: "'Nope0001' names no tracked account of yours, so it matched nothing." }],
+        emptyReason: { code: 'rankerUnavailable', message: 'The relevance judge was unavailable, try again.' },
       }))
       return
     }
@@ -111,6 +112,7 @@ test('content analyze waits on a running analysis through the status route, then
 test('content list says each account id that named nothing', async () => {
   const out = await printed(['content', 'list', '--account', 'Nope0001'])
   assert.match(out, /Not matched: 'Nope0001' names no tracked account of yours, so it matched nothing\./)
+  assert.match(out, /Why empty: The relevance judge was unavailable, try again\./)
 })
 
 test("content analyze --kind video still downloading names how to follow it; a ready one prints each video's cuts and says nothing reached the library", async () => {

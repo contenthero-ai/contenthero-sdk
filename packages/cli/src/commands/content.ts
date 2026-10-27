@@ -20,7 +20,7 @@
  * Reads, plus tracking and moving accounts.
  */
 
-import { chargeSentence, contentVideoLabel, contentVideosPending, describeAccountIdsNotFound, describeLimit, describeContentVideoWindow, describeContentVideo, describeVideoCostDetail, describeSegmentWords, describeWordTiming, statusTarget, type Charge, type ContentAnalysisCostEstimate, type ContentVideoResolution } from '@contenthero/sdk'
+import { chargeSentence, contentVideoLabel, contentVideosPending, describeAccountIdsNotFound, describeEmptyReason, describeLimit, describeContentVideoWindow, describeContentVideo, describeVideoCostDetail, describeSegmentWords, describeWordTiming, statusTarget, type Charge, type ContentAnalysisCostEstimate, type ContentVideoResolution } from '@contenthero/sdk'
 import type { Command } from 'commander'
 import type {
   ContentScenes,
@@ -237,7 +237,7 @@ export function registerContent(program: Command): void {
       .option('--published-before <iso>', 'published on or before this ISO timestamp')
       .option(
         '--search <text>',
-        'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance; returns only the posts judged relevant, so no rows means nothing matched',
+        'finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance, or the one post a pasted link names; returns only the posts judged relevant, never the unranked candidates; an empty result says why',
       )
       .option('--account <id>', "limit to this tracked account, by its id or short id, its profile link, its handle, or the platform's own id for it; repeatable", collectAccount)
       .option('--added-by-you', 'only the one-off posts saved by url')
@@ -279,7 +279,7 @@ export function registerContent(program: Command): void {
       })
       emit(result, ctx, (r: ContentListResult) => {
         const t = outliersTable(r.content)
-        const notMatched = describeAccountIdsNotFound(r.accountIdsNotFound)
+        const notMatched = [...describeAccountIdsNotFound(r.accountIdsNotFound), ...describeEmptyReason(r.emptyReason)]
         return withMore(`${t}\n\n${r.content.length} of ${r.total}${notMatched.length ? `\n${notMatched.join('\n')}` : ''}`, r.nextCursor)
       })
     })

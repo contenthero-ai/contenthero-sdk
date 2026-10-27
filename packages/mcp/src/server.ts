@@ -4362,7 +4362,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           .string()
           .optional()
           .describe(
-            'Finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance. Returns only the posts judged relevant, so an empty result means nothing matched.',
+            'Finds posts by meaning and by keyword across title, creator, description and transcript, ranked by relevance, or the one post a pasted link names. Returns only the posts judged relevant, never the unranked candidates. An empty result carries emptyReason: nothing matched, the relevance judge was unavailable (try again), or the link names no post this list covers.',
           ),
         ...sortInput('content'),
         accountIds: z.array(z.string()).optional().describe("Limit to these tracked accounts, each by its id or short id, its profile link, its handle, or the platform's own id for it."),

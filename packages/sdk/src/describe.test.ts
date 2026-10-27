@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -577,4 +577,9 @@ test('describeRenderFailure: a busy render is a pause with its wait, not a failu
   assert.match(busy ?? '', /nothing was started/)
   assert.match(busy ?? '', /in 7 seconds/)
   assert.doesNotMatch(busy ?? '', /produced no image/)
+})
+
+test('describeEmptyReason says the server reason for an empty search, and nothing when there is none', () => {
+  assert.deepEqual(describeEmptyReason({ code: 'noMatch', message: 'Nothing matched.' }), ['Why empty: Nothing matched.'])
+  assert.deepEqual(describeEmptyReason(undefined), [])
 })

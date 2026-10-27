@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -463,6 +463,14 @@ export function describeStyleLibraryPins(pins: readonly ProjectStyleLibrary[] | 
  */
 export function describeAccountIdsNotFound(notFound: readonly AccountIdNotFound[] | null | undefined): string[] {
   return (notFound ?? []).map((n) => `Not matched: ${n.reason}`)
+}
+
+/**
+ * The server's reason a content search came back empty, as one line, or nothing when it gave none. A surface says it so
+ * an empty page is never read as "no such content" when the judge was only unavailable.
+ */
+export function describeEmptyReason(reason: EmptyReason | null | undefined): string[] {
+  return reason ? [`Why empty: ${reason.message}`] : []
 }
 
 /** A project's live link after `share`: where anyone sees it, or that its old link is dead. */
