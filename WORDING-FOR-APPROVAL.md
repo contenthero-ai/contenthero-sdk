@@ -163,3 +163,31 @@ No tool or field description text changed. Behavior and help-text changes a user
 ### Phase B SDK follow-ups, second pass
 
 No tool, field or help text changed. SDK type comments were added for the new fields (`seed`, `voiceSettings`, `lookOutputId`, `archive`, `notes`, `coverPosition`, `status`, `script`, `fps`, redo `revision`, `accountsKept`); they reuse the app wire's own descriptions. `listProjects` no longer accepts the `surface` and `kind` aliases, and the project summary no longer types them.
+
+## Phase B final
+
+One media item across the four reads, and the last aliases gone. The contract carries the new words (synced, version 4c25bbd9e074); the entries below are what a person or an agent reads.
+
+### Tool input: list_media
+
+- Parameter `kind` is now `origin`. Before: "Creations only. Narrow to one kind of generation: 'creation' (normal generations), 'board' (reference boards), or 'look'. Omit to list all." Now: "Creations only. Narrow to one kind of generation: 'creation' (normal generations), 'board' (reference boards), or 'look'. The same word an item's origin says. Omit to list all." Same three values.
+- CLI: `media list --kind <kind>` is now `media list --origin <origin>`; help text before: "creations only: filter by asset class: creation, board, look". Now: "creations only: filter by what the generation is: creation, board, look". The SDK option is `origin` too.
+
+### What a media item says (MCP text, CLI tables)
+
+`kind` now means the media kind on every read: image, video or audio (empty for a document or an unknown file). What `kind` used to say on a listed item (creation, board, look, upload, stock) is now `origin` (creation, board or look; empty for anything a generation did not make). Which library an item is in was already `source`.
+
+- MCP `list_media` row. Before: `- [image] model (id) ... | board:character | creations | prompt`. Now: the same row, where `[image]` is the media kind and a `| board:character` or `| look` tag comes from the origin. A document or an unknown file shows `[file]` where it showed `[doc]` or `[other]`.
+- MCP stock row. Before: `- [image] name (media id ...)`. Now: the same, `[image]` is the media kind.
+- MCP `get_media` batch lines. Before: `image Abc12345`, `video (url)`; for a transcript the note "(transcript: text only)". Now: same lines from the media kind; a transcript file has no media kind, so that note is gone and the line reads `media Abc12345`.
+- CLI `media list` table. Before columns: ID, FAV, TYPE, SOURCE, KIND, NAME/MODEL, SIZE, DESCRIPTION, PROMPT. Now: ID, FAV, KIND, SOURCE, ORIGIN, NAME/MODEL, SIZE, DESCRIPTION, PROMPT. Stock table: TYPE column is now KIND.
+- CLI `media get` header. Before rows: "Type" (image) and "Kind" (creation, or empty). Now rows: "Kind" (image) and "Origin" (creation, board, look, or empty).
+
+### Fields (JSON output)
+
+- Every item read (list, get, batch, search, folder contents): `kind` is image, video, audio or null. The batch item's `type` is now `kind`; the list item's `type` is now `kind`, and its old `kind` is now `origin`.
+- `description` is always present on a list item and a batch item (null when nothing was said). Before: absent when none.
+- `appUrl` is absent, not null, for a stock item.
+- Removed: placement result `surface` (use `projectType`), export formats `surfaces` (use `projectTypes`), card `coverIsDerived`, SDK types `ProjectKind` and `ProjectSurface` (use `ProjectType`). `POST_PLATFORMS` is now `PLATFORMS_OR_GENERAL` (same eight values). `expectedRevision` is refused below 0.
+
+No other tool or field description text changed.

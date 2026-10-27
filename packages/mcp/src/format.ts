@@ -1284,7 +1284,7 @@ function listingLink(item: { url: string | null; smallUrl?: string | null }): st
 function stockRow(m: MediaListResult['media'][number]): string {
   const credit = m.license?.attribution ?? (m.creator ? `by ${m.creator}` : m.providerLabel ?? '')
   const parts = [
-    `- [${m.type}] ${m.name ? clipped(m.name, LISTING_TEXT_MAX) : m.mediaId} (media id ${m.mediaId})`,
+    `- [${m.kind ?? 'file'}] ${m.name ? clipped(m.name, LISTING_TEXT_MAX) : m.mediaId} (media id ${m.mediaId})`,
     credit ? `credit: ${clipped(credit, LISTING_TEXT_MAX)}` : '',
     m.collection ?? '',
     m.providerLabel ?? '',
@@ -1303,11 +1303,11 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
     const varTag = m.generationSize != null && m.generationSize > 1 ? ` | one of ${m.generationSize} outputs` : ''
     const favTag = m.isFavorited ? ' [favorite]' : ''
     const promptStr = m.prompt ? ` | ${clipped(m.prompt, LISTING_TEXT_MAX)}` : ''
-    const kindTag =
-      m.kind === 'board'
+    const originTag =
+      m.origin === 'board'
         ? ` | board${m.boardType ? `:${m.boardType}` : ''}`
-        : m.kind && m.kind !== 'creation'
-          ? ` | ${m.kind}`
+        : m.origin && m.origin !== 'creation'
+          ? ` | ${m.origin}`
           : ''
     // The display name first when the item has one; the file's own name after it, when it is a different thing.
     const displayStr = m.name ? ` | ${clipped(m.name, LISTING_TEXT_MAX)}` : ''
@@ -1321,7 +1321,7 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
     // Every item is a single variation carrying its resolved url; surface it inline so the agent can
     // reference the media directly (e.g. add it to a timeline) without a get call.
     const urlStr = listingLink(m)
-    return `- [${m.type}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${kindTag}${displayStr}${nameStr}${descStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
+    return `- [${m.kind ?? 'file'}] ${m.model ?? ''} (${idOf({ id: m.mediaId, appUrl: m.appUrl }, 'media')})${varTag}${favTag}${originTag}${displayStr}${nameStr}${descStr}${durStr}${sizeStr}${assetStr} | ${m.source}${promptStr}${urlStr}`
   })
   return text(lines([`${items.length} item(s):`, ...rows, moreLine(page.nextCursor)]))
 }
@@ -1382,7 +1382,7 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
     const ref = it.mediaId ?? ('url' in it.input ? it.input.url : JSON.stringify(it.input))
     return `${label} ERROR (${ref}): ${it.error ?? 'could not resolve'}`
   }
-  const idPart = it.mediaId ? `${it.type ?? 'media'} ${it.mediaId}` : `${it.type ?? 'media'} (url)`
+  const idPart = it.mediaId ? `${it.kind ?? 'media'} ${it.mediaId}` : `${it.kind ?? 'media'} (url)`
   const others = it.otherMediaIds.length > 0 ? ` | other outputs: ${it.otherMediaIds.join(', ')}` : ''
   const model = it.model ? ` from ${it.model}` : ''
   const prompt = it.prompt ? `\n    prompt: ${it.prompt}` : ''
@@ -1390,9 +1390,8 @@ function batchItemLine(it: ResolvedMediaBatchItem, index: number, hasImage: bool
   // Explain the absence of an image so the model does not assume it failed.
   let note = ''
   if (!hasImage) {
-    if (it.type === 'audio') note = '\n    (audio: no visual; use the url)'
-    else if (it.type === 'video') note = '\n    (video: no still available for this view; use the url)'
-    else if (it.type === 'transcript') note = '\n    (transcript: text only)'
+    if (it.kind === 'audio') note = '\n    (audio: no visual; use the url)'
+    else if (it.kind === 'video') note = '\n    (video: no still available for this view; use the url)'
   }
   // MEASURED GEOMETRY, when the spine has it. Without these numbers a caller cannot compute an asset's true
   // aspect (so it stretches it on placement) and cannot align to the VISIBLE artwork of a padded logo at all.
@@ -1455,18 +1454,18 @@ function mediaBatchItems(result: MediaBatchResult): MediaWidgetItem[] {
   const items: MediaWidgetItem[] = []
   for (const it of result.items) {
     if (!it.ok || !it.url) continue
-    if (it.type !== 'image' && it.type !== 'video' && it.type !== 'audio') continue
+    if (it.kind !== 'image' && it.kind !== 'video' && it.kind !== 'audio') continue
     const g = it.geometry
     items.push({
       url: it.url,
       // A video's still, so a tile shows something before anyone presses play.
-      posterUrl: it.type === 'video' ? it.imageUrl : null,
+      posterUrl: it.kind === 'video' ? it.imageUrl : null,
       // The reference the API takes, formatted by the server (`a1B2c3D4`, or `a1B2c3D4-2` for one output of
       // several). It used to be built here, and output 1 of several came out with no suffix (7.44).
       name: it.mediaId ?? it.url,
       // ⚠️ Only a mediaId is referenceable. A raw url resolved here is not a library item the API can name.
       reference: it.mediaId ?? undefined,
-      contentType: it.type,
+      contentType: it.kind,
       // MEASURED, from the storage spine. Null when nothing measured it, which the tile handles.
       displayAspect: g ? aspectLabel(g.width, g.height) : null,
       // The server's link. Absent for a raw url that is not one of the account's items.
@@ -1687,7 +1686,7 @@ function displayItemLine(it: ResolvedMediaBatchItem, i: number): string {
     return `${label} ERROR (${ref}): ${it.error ?? 'could not resolve'}`
   }
   const name = it.mediaId ?? it.url ?? 'url'
-  return `${label} ${it.type ?? 'media'} ${name}`
+  return `${label} ${it.kind ?? 'media'} ${name}`
 }
 
 export function mediaDisplayResult(result: MediaBatchResult): CallToolResult {

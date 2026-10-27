@@ -125,8 +125,8 @@ function fakeClient(overrides = {}) {
     }),
     listMedia: async () => ({
       media: [
-        { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
-        { id: 'out-uuid-1', type: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, kind: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+        { id: 'out-uuid-1', kind: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, origin: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+        { id: 'out-uuid-1', kind: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, origin: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
       ],
       nextCursor: null,
     }),
@@ -961,7 +961,7 @@ test('generate_video forwards wan multiShot and reference audio', async () => {
   assert.deepEqual(captured.references?.audio, ['https://cdn/a.mp3'])
 })
 
-test('list_media forwards the kind filter', async () => {
+test('list_media forwards the origin filter', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -971,8 +971,8 @@ test('list_media forwards the kind filter', async () => {
       },
     }),
   )
-  await mcp.callTool({ name: 'list_media', arguments: { kind: 'board' } })
-  assert.equal(captured.kind, 'board')
+  await mcp.callTool({ name: 'list_media', arguments: { origin: 'board' } })
+  assert.equal(captured.origin, 'board')
 })
 
 test('generate_audio returns the audio URL synchronously', async () => {
@@ -1628,7 +1628,7 @@ test('get_media resolves a batch and reports each item with its variation + url'
               input: items[0],
               url: 'https://cdn/2.png',
               imageUrl: 'https://cdn/2.png',
-              type: 'image',
+              kind: 'image',
               model: 'nano-banana-2',
               prompt: 'a cat',
               mediaId: 'Out12345-2',
@@ -1693,7 +1693,7 @@ test('get_media takes no clip window and points a clip to view', async () => {
         return {
           items: [
             {
-              ok: true, input: items[0], url: 'https://cdn/clip.mp4', imageUrl: null, type: 'video', model: null, prompt: null,
+              ok: true, input: items[0], url: 'https://cdn/clip.mp4', imageUrl: null, kind: 'video', model: null, prompt: null,
               mediaId: 'vid-1', otherMediaIds: [], keyframes: [{ atSec: 0, dataUrl: 'data:image/jpeg;base64,AAAA' }],
             },
           ],

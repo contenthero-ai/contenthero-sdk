@@ -37,7 +37,7 @@ import {
   PLACEMENT_DURATIONS,
   PLACEMENT_ENDS,
   PLACEMENT_RANGE_FITS,
-  POST_PLATFORMS,
+  PLATFORMS_OR_GENERAL,
   PROJECT_FILTERS,
   PROJECT_SORTS,
   PROJECT_TYPES,
@@ -649,8 +649,6 @@ export interface PlacementResult {
   itemId?: string
   /** 'canvas' when placed as a layer on a slide, 'editor' when placed as a clip on a track: the project's type. */
   projectType?: ProjectType
-  /** @deprecated Alias for `projectType`, still emitted for one release window. */
-  surface?: (typeof PROJECT_TYPES)[number]
   /** Canvas only: the placed layer id (same as itemId) and the resolved target slide. */
   layerId?: string
   slideId?: string
@@ -1898,6 +1896,9 @@ export interface AudioFacts {
   channels?: number
 }
 
+/** What a generation is: 'creation' (the default), 'board' (a reference board) or 'look'. An item's `origin`, and the `origin` filter of `listMedia`. */
+export type MediaOrigin = 'creation' | 'board' | 'look'
+
 /**
  * One atomic library asset as returned by `listMedia`. The grain is a VARIATION (an individual media file),
  * not a whole generation: a studio generation with N variations lists as N items sharing one `id`, each with
@@ -1907,9 +1908,10 @@ export interface MediaSummary {
   id: string
   /** The item's 8-character public id, used in app links and shown to people; `id` stays the UUID. */
   shortId: string
-  /** This item in the app: open it in the browser. Null for a stock item, which has no page of its own. */
-  appUrl: string | null
-  type: MediaType
+  /** This item in the app: open it in the browser. Absent for a stock item, which has no page of its own until it is used. */
+  appUrl?: string
+  /** What the file is: image, video or audio. Null for a file that is none of them (a document) or whose type is not known. */
+  kind: MediaKind | null
   model: string | null
   prompt: string | null
   /** A library file's status; null for a stock item, which no generation made. */
@@ -1926,9 +1928,9 @@ export interface MediaSummary {
   generationSize: number | null
   /** Whether THIS variation is favorited (studio per-slot; uploads are go-forward, false); null for a stock item in a list. */
   isFavorited: boolean | null
-  /** Asset class: 'creation' (default), 'board' (a reference board), or 'look'. */
-  kind: string | null
-  /** Board type when kind is 'board' (character, weapon, location, etc.); else null. */
+  /** For a creation, what the generation is: 'creation' (default), 'board' (a reference board) or 'look'. Null for anything a generation did not make (an upload, an export, stock). */
+  origin: MediaOrigin | null
+  /** Board type when origin is 'board' (character, weapon, location, etc.); else null. */
   boardType: string | null
   /** Which part of the library this item is in; self-describing. */
   source: MediaSource
@@ -1939,8 +1941,8 @@ export interface MediaSummary {
   name: string | null
   /** The file's name, which a download saves under: one a person gave, or one made for a creation. */
   fileName: string | null
-  /** What a person wrote about a library file, set with `updateMedia`; null when none. Absent from a server that predates it. */
-  description?: string | null
+  /** What a person or an agent said this file is, set with `updateMedia`; null when nothing was said, and always null for a generation or a stock item. */
+  description: string | null
   /** The file's size in bytes, as the library shows it and the storage meter counts it; listings only. */
   sizeBytes?: number
   /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
@@ -2038,8 +2040,8 @@ export type MediaBatchItem = ({ url: string } | { mediaId: string }) & { region?
  */
 export interface ResolvedMediaBatchItem {
   ok: boolean
-  /** What a person wrote about this item with update_media. Absent when none; the machine `summary` is separate. */
-  description?: string | null
+  /** What a person or an agent said this item is, with update_media. Null when nothing was said; the machine `summary` is separate. */
+  description: string | null
   /** Where this item opens in the app. Absent for a url that is not one of the account's media items. */
   appUrl?: string
   /** The item's 8-character public id. Absent for a url that is not one of the account's media items. */
@@ -2099,7 +2101,8 @@ export interface ResolvedMediaBatchItem {
   modelName: string | null
   modelBrandColor: string | null
   modelIconKey: string | null
-  type: MediaType | null
+  /** What the file is: image, video or audio. Null for a file that is none of them or whose type is not known. */
+  kind: MediaKind | null
   model: string | null
   prompt: string | null
   /**
@@ -2169,8 +2172,8 @@ export interface ListMediaOptions extends PageOptions, SortOptions<MediaSort> {
   contentType?: MediaListType | MediaListType[]
   /** A listed file exists once its generation completed, so this takes only `completed`. */
   status?: 'completed'
-  /** Creations only: the generation's class. */
-  kind?: 'creation' | 'board' | 'look'
+  /** Creations only: what the generation is, the same word an item's `origin` says. */
+  origin?: MediaOrigin
   /** When true, only favorited files that are not archived. */
   favorited?: boolean
   /** When true, only archived files. */
@@ -2632,7 +2635,7 @@ export interface ModelInfo {
 // ---------------------------------------------------------------------------
 
 /** Platforms a card or one of its posts may target. */
-export type PostPlatform = (typeof POST_PLATFORMS)[number]
+export type PostPlatform = (typeof PLATFORMS_OR_GENERAL)[number]
 
 /**
  * 🚨 `CardStatus` IS GONE, AND SO IS THE COLUMN BEHIND IT. A card has no status.
@@ -4155,13 +4158,8 @@ export interface DocumentFinding {
  * A project's type: an editor project (video timeline) or a canvas project (slides and layers).
  *
  * Named `type` since sdk 0.4.16 (2026-09-27). It was `kind`, then `surface`; neither read as what it is.
- * `ProjectKind` and `ProjectSurface` stay as aliases so no import breaks.
  */
 export type ProjectType = (typeof PROJECT_TYPES)[number]
-/** @deprecated Use `ProjectType`. */
-export type ProjectKind = ProjectType
-/** @deprecated Use `ProjectType`. */
-export type ProjectSurface = ProjectType
 
 /** Lightweight project list item (spans both types), from `listProjects`. */
 export interface ProjectSummary {
@@ -5119,8 +5117,6 @@ export interface ExportFormatSpec {
   format: string
   /** The project types that can export this format. */
   projectTypes: ProjectType[]
-  /** @deprecated Alias for `projectTypes`, still emitted for one release window. */
-  surfaces: string[]
   /** true = async render job (poll it); false = returned completed immediately. */
   async: boolean
   description: string

@@ -985,7 +985,7 @@ export class ContentHero {
       q.set('contentType', types.join(','))
     }
     if (options.status) q.set('status', options.status)
-    if (options.kind) q.set('kind', options.kind)
+    if (options.origin) q.set('origin', options.origin)
     if (options.favorited) q.set('favorited', 'true')
     if (options.archived) q.set('archived', 'true')
     setSort(q, options)
