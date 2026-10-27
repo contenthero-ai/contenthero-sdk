@@ -4,7 +4,7 @@
  * `generate`, `upscale`, and `status` commands so they behave identically.
  *
  * Async contract (mirrors the SDK / MCP): image, video, and upscale return
- * `processing`; audio returns `completed` inline. With --wait (the default) we
+ * `processing`; audio returns `settled` inline. With --wait (the default) we
  * poll to a terminal state; on timeout we emit the outputId and set exit 4 so
  * the caller can keep polling and still script around it.
  */
@@ -76,7 +76,7 @@ function generationHuman(g: Generation): string {
   const pairs: Array<[string, string | number]> = [
     ['Output id', displayId({ id: g.outputId, shortId: g.shortId })],
     ...linkRow(g),
-    ['Status', g.status],
+    ['Status', g.status === 'applying' ? 'running' : g.status],
     ['Model', g.modelId],
     ['Type', g.contentType],
   ]
@@ -90,7 +90,8 @@ function generationHuman(g: Generation): string {
   // What it was made FROM, in the words the MCP and Studio use.
   for (const r of describeReferences(g.references)) pairs.push(['Made from', r])
   pairs.push(...costRows(g.charge))
-  if (g.status === 'processing' || g.status === 'pending') {
+  // Still going until it is settled or failed: `applying` is the last stretch of a running job.
+  if (g.status !== 'settled' && g.status !== 'failed') {
     pairs.push(['Next', statusCommand([{ id: g.outputId, shortId: g.shortId, kind: 'output' }])])
   }
   return keyValues(pairs)
@@ -126,7 +127,7 @@ export async function runGeneration(
 
 /**
  * Same as runGeneration, for the edit_audio pipeline (existing audio -> audio).
- * Isolation returns `completed` inline; --cost previews without running.
+ * Isolation returns `settled` inline; --cost previews without running.
  */
 export async function runEditAudio(
   client: ContentHero,
@@ -162,7 +163,7 @@ async function renderSubmission(
   submitted: GenerateResult | EditAudioResult,
   opts: RunOptions,
 ): Promise<void> {
-  if (submitted.status === 'completed' || !opts.wait) {
+  if (submitted.status === 'settled' || !opts.wait) {
     emit(submitted, ctx, resultHuman)
     return
   }

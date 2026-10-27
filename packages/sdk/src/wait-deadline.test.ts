@@ -77,7 +77,7 @@ test('3. the timeout carries the last status read, and every read is reported', 
 
 test('4. waitForStatus hands back every job: completed, failed, or as last read, under one deadline', async () => {
   const bodies: Record<string, unknown> = {
-    done: status('done', 'completed', { kind: 'export', progress: 1, detail: { exportId: 'done', status: 'completed' } }),
+    done: status('done', 'settled', { kind: 'export', progress: 1, detail: { exportId: 'done', status: 'completed' } }),
     bad: status('bad', 'failed', { reason: 'provider error' }),
     slow: status('slow', 'processing', { kind: 'brand_kit', steps: [{ name: 'website', state: 'completed', reason: null }, { name: 'analysis', state: 'processing', reason: null }] }),
   }
@@ -93,7 +93,7 @@ test('4. waitForStatus hands back every job: completed, failed, or as last read,
   const started = Date.now()
   const got = await client.waitForStatus(['done', { id: 'bad', kind: 'output' }, 'slow'], { timeoutMs: 150, pollIntervalMs: 40 })
   assert.ok(Date.now() - started < 600, 'one deadline for every target')
-  assert.deepEqual(got.map((s) => [s.id, s.kind, s.state]), [['done', 'export', 'completed'], ['bad', 'output', 'failed'], ['slow', 'brand_kit', 'processing']])
+  assert.deepEqual(got.map((s) => [s.id, s.kind, s.state]), [['done', 'export', 'settled'], ['bad', 'output', 'failed'], ['slow', 'brand_kit', 'processing']])
   // From what the wait already read: no second read for a finished one.
   assert.equal(reads.done, 1)
   assert.equal(reads.bad, 1)
@@ -107,7 +107,7 @@ test('5. getStatus reads one job at once, by id alone or with its kind', async (
   const urls: string[] = []
   const fetch: FetchLike = async (url) => {
     urls.push(url)
-    return json(status('Med12345', 'completed', { kind: 'transcript', detail: { status: 'ready', mediaId: 'Med12345' } }))
+    return json(status('Med12345', 'settled', { kind: 'transcript', detail: { status: 'ready', mediaId: 'Med12345' } }))
   }
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' })
   const s = await client.getStatus('Med12345', { kind: 'transcript' })
@@ -122,10 +122,10 @@ test('6. waitForGeneration reads the status route as an output and keeps its own
   const failed: FetchLike = async () => json(status('g6', 'failed', { reason: 'provider error', detail: { ...processing('g6'), status: 'failed', error: 'provider error' } }))
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch: failed, baseUrl: 'https://x.test' })
   await assert.rejects(client.waitForGeneration('g6', { pollIntervalMs: 10 }), (e: unknown) => e instanceof GenerationFailedError && e.outputId === 'g6' && /provider error/.test(e.message))
-  // An abandoned output is terminal without being a failure, whichever state the server files it under.
-  const abandoned: FetchLike = async () => json(status('g7', 'failed', { detail: { ...processing('g7'), status: 'abandoned' } }))
-  const gen = await new ContentHero({ apiKey: 'ch_live_test', fetch: abandoned, baseUrl: 'https://x.test' }).waitForGeneration('g7', { pollIntervalMs: 10 })
-  assert.equal(gen.status, 'abandoned')
+  // An import that found its bytes already held is settled, not failed.
+  const held: FetchLike = async () => json(status('g7', 'settled', { detail: { ...processing('g7'), status: 'settled' } }))
+  const gen = await new ContentHero({ apiKey: 'ch_live_test', fetch: held, baseUrl: 'https://x.test' }).waitForGeneration('g7', { pollIntervalMs: 10 })
+  assert.equal(gen.status, 'settled')
 })
 
 test('7. an export waits through the status route as an export, and answers with the export it read', async () => {
@@ -140,7 +140,7 @@ test('7. an export waits through the status route as an export, and answers with
     return json(
       reads < 2
         ? exportStatus('processing', { exportId: 'Exp12345', status: 'rendering' })
-        : exportStatus('completed', { exportId: 'Exp12345', status: 'completed', outputUrl: 'https://cdn/o.mp4' }),
+        : exportStatus('settled', { exportId: 'Exp12345', status: 'completed', outputUrl: 'https://cdn/o.mp4' }),
     )
   }
   const job = await new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' }).waitForExport('Exp12345', { pollIntervalMs: 10 })
@@ -167,11 +167,11 @@ test('8. one id the server cannot answer for is its own answer, and every other 
     reads[id] = (reads[id] ?? 0) + 1
     if (id === 'gone') return new Response(JSON.stringify({ error: "Export 'gone' not found in your account." }), { status: 404 })
     if (id === 'uuid') return new Response(JSON.stringify({ error: 'A full id needs its kind.' }), { status: 400 })
-    return json(status(id, 'completed'))
+    return json(status(id, 'settled'))
   }
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://x.test' })
   const expected = [
-    ['done', 'output', 'completed', null],
+    ['done', 'output', 'settled', null],
     ['gone', null, 'unanswered', 404],
     ['uuid', null, 'unanswered', 400],
   ]

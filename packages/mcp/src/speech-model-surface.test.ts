@@ -26,7 +26,7 @@ test('an audio card carries the model the server named', () => {
   const r = audioResult({
     outputId: 'a1',
     appUrl: 'https://app.contenthero.ai/media/a1',
-    status: 'completed',
+    status: 'settled',
     outputs: outs(['https://a/1.mp3']),
     modelId: 'elevenlabs-tts',
     modelDisplayName: 'Text to Speech',
@@ -41,7 +41,7 @@ test('an audio card carries the model the server named', () => {
 })
 
 test('an audio card from a server that names no model renders no chip rather than the id', () => {
-  const s = structured(audioResult({ outputId: 'a1', appUrl: 'x', status: 'completed', outputs: outs(['https://a/1.mp3']) }))
+  const s = structured(audioResult({ outputId: 'a1', appUrl: 'x', status: 'settled', outputs: outs(['https://a/1.mp3']) }))
   assert.equal(s.modelName, null)
 })
 

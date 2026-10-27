@@ -558,3 +558,11 @@ test('an audio map summary reads rounded for people while the number it came fro
   assert.equal(summary.speechSec, 1.334)
   assert.equal(summary.integratedLufs, -14.237)
 })
+
+test('describeRenderFailure: a busy render is a pause with its wait, not a failure', () => {
+  const busy = describeRenderFailure({ error: { code: 'render_busy', message: 'no room', retryAfterSeconds: 7 } })
+  assert.match(busy ?? '', /busy/)
+  assert.match(busy ?? '', /nothing was started/)
+  assert.match(busy ?? '', /in 7 seconds/)
+  assert.doesNotMatch(busy ?? '', /produced no image/)
+})

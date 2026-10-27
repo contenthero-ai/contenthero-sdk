@@ -787,7 +787,9 @@ export function generationStatusResult(
    * ⭐ Found by the `verify:inline` harness in its first run, minutes after it existed. The unit tests could
    * not see it: they call `completedResult` directly and never go through here.
    */
-  if (gen.status === 'completed') {
+  // An import that found its bytes already held is settled with the item holding them; it reads as that item.
+  if (gen.status === 'settled' && gen.alreadyExisted) return importedMediaResult(importedMediaFrom(gen, gen.shortId ?? null))
+  if (gen.status === 'settled') {
     const res = completedResult(gen, attachments)
     /**
      * ⛔⛔⛔ **`_meta` IS WHAT MOUNTS A WIDGET. `structuredContent` IS JUST DATA, AND DELETING IT BROKE THE
@@ -813,11 +815,6 @@ export function generationStatusResult(
   if (gen.status === 'failed') {
     return text(`Generation ${name} failed: ${gen.error ?? 'unknown error'}`, true)
   }
-  // Terminal and not a failure. Without this branch it read "still abandoned, call again", a poll that never ends.
-  if (gen.status === 'abandoned') {
-    if (gen.alreadyExisted) return importedMediaResult(importedMediaFrom(gen, gen.shortId ?? null))
-    return text(`Generation ${name} was set aside and produced nothing of its own. It will not change.`)
-  }
   const secs = pollAfterSecondsFor(gen.contentType)
   const poll = `Call ${statusCallFor([{ id: gen.outputId, shortId: gen.shortId, kind: 'output' }])} again in ~${secs}s [poll_after_seconds: ${secs}]`
   /**
@@ -833,11 +830,11 @@ export function generationStatusResult(
    * and the partial payload below was unreachable. Nothing is known only when NEITHER source has a url.
    */
   if (landed.length === 0) {
-    return text(`Generation ${name} is still ${gen.status}. ${poll}.`)
+    return text(`Generation ${name} is still ${runningWord(gen.status)}. ${poll}.`)
   }
   const noun = landed.length === 1 ? gen.contentType : `${gen.contentType}s`
   const prose = [
-    `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${name}), more still ${gen.status}:`,
+    `Partial. ${landed.length} ${noun} ready from ${gen.modelId} (outputId ${name}), more still ${runningWord(gen.status)}:`,
     ...landed.map((o) => `${outputName(o)}: ${o.url}`),
     `NOT the full set. ${poll} for the rest.`,
   ].join('\n')
@@ -872,12 +869,20 @@ export function generationStatusResult(
   }
 }
 
+/**
+ * A job in flight in the caller's words. `applying` is the stretch where the work is made and the project is being
+ * given it: still running to the caller, who keeps reading the same id until the job is settled or failed.
+ */
+function runningWord(state: string): string {
+  return state === 'applying' ? 'running' : state
+}
+
 /** One generation as a line of a batch answer: its state, the files that have landed, and a re-poll hint while unfinished. */
 function generationRow(gen: Generation): string {
   const name = jobName({ id: gen.outputId, shortId: gen.shortId, appUrl: gen.appUrl })
-  if (gen.status === 'completed') {
+  if (gen.status === 'settled') {
     const landed = landedOutputs(gen)
-    return `- ${name}: completed | ${landed.map((o) => `${outputName(o)} ${o.url}`).join(', ') || '(no urls)'}`
+    return `- ${name}: settled | ${landed.map((o) => `${outputName(o)} ${o.url}`).join(', ') || '(no urls)'}`
   }
   if (gen.status === 'failed') {
     return `- ${name}: failed | ${gen.error ?? 'unknown error'}`
@@ -888,9 +893,9 @@ function generationRow(gen: Generation): string {
   // mistaken for a finished generation.
   const ready = landedOutputs(gen)
   if (ready.length > 0) {
-    return `- ${name}: ${gen.status}, ${ready.length} ready so far | ${ready.map((o) => `${outputName(o)} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
+    return `- ${name}: ${runningWord(gen.status)}, ${ready.length} ready so far | ${ready.map((o) => `${outputName(o)} ${o.url}`).join(', ')} [poll_after_seconds: ${secs}]`
   }
-  return `- ${name}: ${gen.status} [poll_after_seconds: ${secs}]`
+  return `- ${name}: ${runningWord(gen.status)} [poll_after_seconds: ${secs}]`
 }
 
 /** One or more generations (snapshot or post-wait). Falls through to the single form for one id. */
@@ -904,7 +909,7 @@ export function generationBatchResult(
   if (gens.length === 1)
     return generationStatusResult(gens[0]!, attachmentsByOutputId[gens[0]!.outputId] ?? [])
   const rows = gens.map(generationRow)
-  const unfinished = gens.filter((g) => g.status !== 'completed' && g.status !== 'failed' && g.status !== 'abandoned')
+  const unfinished = gens.filter((g) => g.status !== 'settled' && g.status !== 'failed')
   const tail = unfinished.length
     ? `Still running: call ${statusCallFor(unfinished.map((g) => ({ id: g.outputId, shortId: g.shortId, kind: 'output' as const })))} again.`
     : null
@@ -923,14 +928,14 @@ export function jobPollAfterSeconds(kind: JobKind): number {
 export function jobStatusRow(status: JobStatusResult): string {
   if (status.state === 'unanswered') return `- ${status.id}: ${unansweredState(status.httpStatus)} | ${status.reason}`
   if (status.kind === 'output') return generationRow(status.detail)
-  const parts = [`- ${status.kind} ${status.id}: ${status.state}`]
+  const parts = [`- ${status.kind} ${status.id}: ${runningWord(status.state)}`]
   if (status.reason) parts.push(`reason: ${status.reason}`)
   if (status.progress !== null && status.progress !== undefined) parts.push(`progress: ${Math.round(status.progress * 100)}%`)
   if (status.steps?.length) {
     parts.push(`steps: ${status.steps.map((st) => `${st.name} ${st.state}${st.reason ? ` (${st.reason})` : ''}`).join(', ')}`)
   }
   if (status.appUrl) parts.push(status.appUrl)
-  const unfinished = status.state !== 'completed' && status.state !== 'failed'
+  const unfinished = status.state !== 'settled' && status.state !== 'failed'
   const line = parts.join(' | ')
   return unfinished ? `${line} [poll_after_seconds: ${jobPollAfterSeconds(status.kind)}]` : line
 }
@@ -949,7 +954,7 @@ function unansweredState(httpStatus: number): string {
  */
 export function jobStatusesResult(statuses: JobStatusResult[]): CallToolResult {
   const unfinished = statuses.filter(
-    (s): s is JobStatus => s.state !== 'completed' && s.state !== 'failed' && s.state !== 'unanswered',
+    (s): s is JobStatus => s.state !== 'settled' && s.state !== 'failed' && s.state !== 'unanswered',
   )
   const rows = statuses.map(jobStatusRow)
   const head = statuses.length === 1 ? null : `${statuses.length} job(s):`
@@ -1072,7 +1077,7 @@ export function avatarPendingResult(created: CreateAvatarResult): CallToolResult
       '',
       `⚠️ NOT READY YET: status is ${created.status}. The avatar has no image until its first look`,
       'finishes generating, which is also when its default look and profile photo are set.',
-      `Wait for it with ${statusCallFor([{ id: a.id, shortId: a.shortId, kind: 'avatar' }])} until it is completed (usually 1-4 minutes).`,
+      `Wait for it with ${statusCallFor([{ id: a.id, shortId: a.shortId, kind: 'avatar' }])} until it is settled (usually 1-4 minutes).`,
       '',
       'Credits are charged when that look completes, not now, so a failed generation is not charged.',
       chargeLine(created.charge),

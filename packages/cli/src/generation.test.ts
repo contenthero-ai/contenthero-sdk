@@ -111,7 +111,7 @@ test('runGeneration wait-to-timeout emits a snapshot and sets exit 4', async () 
 
 /** A generation as the status route answers for it; `waitForGeneration` reads `GET /api/v1/status/{id}?kind=output`. */
 function asStatus(gen: { outputId: string; status: string; error: string | null }) {
-  const state = gen.status === 'completed' ? 'completed' : gen.status === 'failed' ? 'failed' : 'processing'
+  const state = gen.status
   return { kind: 'output', id: gen.outputId, state, reason: gen.error, appUrl: null, progress: null, detail: gen }
 }
 
@@ -123,7 +123,7 @@ test('runGeneration wait-to-complete emits the finished generation, exit unchang
     assert.match(path, /^\/api\/v1\/status\/abc\?kind=output$/)
     return asStatus({
       outputId: 'abc',
-      status: 'completed',
+      status: 'settled',
       contentType: 'image',
       modelId: 'm',
       outputUrls: ['https://cdn/x.jpg'],
@@ -136,7 +136,7 @@ test('runGeneration wait-to-complete emits the finished generation, exit unchang
     runGeneration(client, jsonCtx, { modelId: 'm', contentType: 'image' }, { cost: false, wait: true, timeoutSec: 5 }),
   )
   assert.ok(polls >= 1)
-  assert.match(out, /"status": "completed"/)
+  assert.match(out, /"status": "settled"/)
   assert.match(out, /x\.jpg/)
 })
 

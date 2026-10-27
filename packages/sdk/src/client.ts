@@ -198,6 +198,7 @@ import type {
   JobStatusResult,
   JobStatusUnanswered,
   JobTarget,
+  RenderError,
 } from './types.js'
 
 /** Minimal fetch signature, so a custom implementation can be injected. */
@@ -241,7 +242,21 @@ export type ResponseEvent = { type: 'sent' } | { type: 'answered'; body: unknown
 export type ResponseListener = (event: ResponseEvent) => void
 
 const DEFAULT_BASE_URL = 'https://app.contenthero.ai'
-const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed'])
+/** A job is over only in one of these. `applying` (the file exists, the placement has not landed) is still running. */
+const OVER: ReadonlySet<string> = new Set(['settled', 'failed'])
+
+/** The parts of a `view` answer a render fills, and so the ones that can be busy or pending. */
+const RENDER_PARTS = ['rendered', 'renderedSound'] as const
+/** Less than this left of the wait, a pending render is handed back for the caller to read by its id. */
+const VIEW_CONTINUE_MIN_MS = 1000
+/** The pause before a pending render is read again, so an answer that came back at once is not asked for in a loop. */
+const VIEW_CONTINUE_PAUSE_MS = 500
+
+/** How often a write that carries its own client id is sent again after a transport failure, and the first pause. */
+const WRITE_RETRIES = 2
+const WRITE_RETRY_BASE_MS = 250
+/** The most a pause gains from jitter, so callers that failed together do not retry together. */
+const JITTER_MS = 250
 
 export class ContentHero {
   private readonly apiKey: string
@@ -343,10 +358,13 @@ export class ContentHero {
   /**
    * Submit a generation. Returns immediately. For image/video the result is
    * `status: 'processing'` (poll with `getStatus` or use `generateAndWait`);
-   * audio returns `status: 'completed'` with `outputUrls` populated.
+   * audio returns `status: 'settled'` with `outputs` populated.
+   *
+   * The call carries one `outputId` (yours, or one made here), repeated on every retry after a transport failure, so a
+   * retry returns the job already started (`idempotentReplay`) and never charges twice.
    */
   async generate(request: GenerateRequest): Promise<GenerateResult> {
-    return this.request<GenerateResult>('POST', '/api/v1/studio/generate', request)
+    return this.requestWithRetry<GenerateResult>('POST', '/api/v1/studio/generate', withOutputId(request))
   }
 
   /** Fetch the current state of a generation by its id. */
@@ -381,7 +399,7 @@ export class ContentHero {
    * are ordinary outputs) or use `generateBoardAndWait`.
    */
   async generateBoard(request: GenerateBoardRequest): Promise<GenerateResult> {
-    return this.request<GenerateResult>('POST', '/api/v1/studio/reference-board', request)
+    return this.requestWithRetry<GenerateResult>('POST', '/api/v1/studio/reference-board', withOutputId(request))
   }
 
   /**
@@ -467,7 +485,7 @@ export class ContentHero {
   }
 
   /**
-   * Wait for several jobs under ONE deadline. Each comes back finished (`completed` or `failed`), as last read when
+   * Wait for several jobs under ONE deadline. Each comes back finished (`settled` or `failed`), as last read when
    * the deadline came, or `unanswered` when the server cannot answer for its id (as in `getStatuses`), so one slow,
    * failed or unknown job never hides the others: read each `state`. Nothing throws for a failed job, an unknown id
    * or a timeout. A transient read error on one target falls back to a single snapshot within the same deadline.
@@ -505,8 +523,9 @@ export class ContentHero {
    * does not finish within `timeoutMs` (the server-side job may still complete;
    * re-poll). Also backs `generateAndWait` / `generateBoardAndWait`.
    *
-   * The same wait as `waitForStatus`, read as an output: the server says when a generation is done (completed AND
-   * settled), so this client holds no second copy of that rule.
+   * The same wait as `waitForStatus`, read as an output: the server says when a generation is done (`settled`; the
+   * window where its file exists but its placement has not landed reads `applying`), so this client holds no second
+   * copy of that rule.
    */
   async waitForGeneration(
     outputId: string,
@@ -526,8 +545,7 @@ export class ContentHero {
     }
     const generation = generationOf(status)
     if (!generation) throw new ContentHeroError(`${outputId} is not a generation (the server named it a ${status.kind}).`)
-    // Terminal without being a failure: set aside with no output of its own (see GenerationStatus).
-    if (status.state === 'failed' && generation.status !== 'abandoned') {
+    if (status.state === 'failed') {
       throw new GenerationFailedError(generation.outputId, status.reason ?? generation.error ?? 'Generation failed', {
         generation,
       })
@@ -536,7 +554,7 @@ export class ContentHero {
   }
 
   /**
-   * One job, read until it is `completed` or `failed`, through `#pollWithin`. Running out of time throws a
+   * One job, read until it is `settled` or `failed` (`applying` is still running), through `#pollWithin`. Running out of time throws a
    * `StatusDeadline` carrying the last status read, which each caller turns into its own answer.
    */
   async #pollStatus(
@@ -549,7 +567,7 @@ export class ContentHero {
       (signal) => this.getStatus(id, { kind, signal }),
       (status) => {
         onRead?.(status)
-        return status.state === 'completed' || status.state === 'failed'
+        return OVER.has(status.state)
       },
       options,
       (last) => new StatusDeadline(id, last),
@@ -557,7 +575,7 @@ export class ContentHero {
   }
 
   /**
-   * Read until `settled` says the item is done, within ONE deadline nothing runs past: a read still in flight at the
+   * Read until `over` says the item is done, within ONE deadline nothing runs past: a read still in flight at the
    * deadline is cut, and the last pause is shortened to fit. The one poll loop behind every wait in this client.
    *
    * It used to check the deadline only after each read and then pause a full interval, with no limit on the read
@@ -567,7 +585,7 @@ export class ContentHero {
    */
   async #pollWithin<T>(
     read: (signal: AbortSignal) => Promise<T>,
-    settled: (value: T) => boolean,
+    over: (value: T) => boolean,
     options: WaitOptions,
     timedOut: (last: T | undefined) => Error,
   ): Promise<T> {
@@ -587,7 +605,7 @@ export class ContentHero {
         timer.release()
       }
       last = value
-      if (settled(value)) return value
+      if (over(value)) return value
       const left = deadline - Date.now()
       if (left <= 0) throw timedOut(last)
       await sleep(Math.min(pollIntervalMs, left), signal)
@@ -667,7 +685,10 @@ export class ContentHero {
    * separate jobs.
    */
   async editAudio(request: EditAudioRequest): Promise<EditAudioResult> {
-    return this.request<EditAudioResult>('POST', '/api/v1/studio/audio/edit', request)
+    // FILE mode carries one `outputId` per call, repeated on every retry. In-place mode needs none: the server holds one
+    // job per clip set, so the same call again returns the same job.
+    const inPlace = request.inPlace === true || (request.clipIds?.length ?? 0) > 0
+    return this.requestWithRetry<EditAudioResult>('POST', '/api/v1/studio/audio/edit', inPlace ? request : withOutputId(request))
   }
 
   /** Cost preview for `editAudio` (nothing runs, nothing is charged). */
@@ -2057,6 +2078,37 @@ export class ContentHero {
    * project. Requires the `context:read` scope.
    */
   async view(input: ViewInput = {}): Promise<ViewResult> {
+    // `wait` (seconds) is the caller's whole budget for this call: the server waits inside it, and what is left after an
+    // answer is spent here, never past it. Without one the client waits for nothing and answers as the server did.
+    const deadline = Date.now() + (typeof input.wait === 'number' ? input.wait * 1000 : 0)
+    let answer = await this.#viewOnce(input)
+    for (;;) {
+      const left = deadline - Date.now()
+      const busy = RENDER_PARTS.find((key) => busyRetryOf(answer[key]) !== null)
+      if (busy) {
+        // Busy: no job was started, so the same request is asked again once the server's pause has passed, if the budget
+        // covers it. Otherwise the error goes back to the caller with `retryAfterSeconds` as the server gave it.
+        const pause = (busyRetryOf(answer[busy]) as number) * 1000 + jitterMs()
+        if (pause > left) return answer
+        await sleep(pause, undefined)
+        answer = await this.#viewOnce({ ...input, wait: Math.max(0, Math.floor((left - pause) / 1000)) })
+        continue
+      }
+      const pending = RENDER_PARTS.find((key) => pendingReadOf(answer[key]) !== null)
+      if (!pending || left < VIEW_CONTINUE_MIN_MS) return answer
+      // Pending: the render exists. Read it by its id with what is left of the wait; never ask for it to be rendered again.
+      const read = pendingReadOf(answer[pending]) as { renderId: string; page?: number }
+      await sleep(Math.min(VIEW_CONTINUE_PAUSE_MS, left), undefined)
+      const continued = await this.#viewOnce({
+        renderId: read.renderId,
+        ...(read.page !== undefined ? { page: read.page } : {}),
+        wait: Math.max(0, Math.floor((deadline - Date.now()) / 1000)),
+      })
+      answer = { ...answer, [pending]: continued.rendered }
+    }
+  }
+
+  async #viewOnce(input: ViewInput): Promise<ViewResult> {
     const params = new URLSearchParams()
     if (input.projectId) params.set('projectId', input.projectId)
     if (input.capture) params.set('capture', 'true')
@@ -2243,16 +2295,15 @@ export class ContentHero {
    * a concurrent edit landed, instead of clobbering it. Returns the new revision and the per-op results (a
    * bad op is reported, never throws).
    *
-   * Each op is given a client-generated `opId` (uuid) here if it does not already have one, so the op has a
-   * stable identity from the point of intent: resending the same batch is idempotent (the server dedupes by
-   * opId), and a live editor sees the edit as an attributed collaborator change keyed by that id. The
-   * assigned id is echoed back on each result's `opId`.
+   * Each op is given a client-generated `opId` (uuid) here if it does not already have one, once for this call, so
+   * the op has a stable identity from the point of intent: the same ids go out on every retry after a transport
+   * failure, resending the same batch is idempotent (the server dedupes by opId and a replay returns the committed
+   * revision, with the handle of any job an op started), and a live editor sees the edit as an attributed collaborator
+   * change keyed by that id. The assigned id is echoed back on each result's `opId`.
    */
   async applyEditorOps(input: ApplyEditorOpsInput): Promise<ApplyEditorOpsResult> {
-    const ops = input.ops.map((op) =>
-      typeof op.opId === 'string' && op.opId ? op : { ...op, opId: globalThis.crypto.randomUUID() },
-    )
-    return this.request<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', { ...input, ops })
+    const ops = input.ops.map((op) => (typeof op.opId === 'string' && op.opId ? op : { ...op, opId: newClientId() }))
+    return this.requestWithRetry<ApplyEditorOpsResult>('POST', '/api/v1/editor/ops', { ...input, ops })
   }
 
   /**
@@ -2457,6 +2508,23 @@ export class ContentHero {
   }
 
   /** Issue an authenticated request and map non-2xx responses to typed errors. `signal` cuts it (a wait's deadline). */
+  /**
+   * A write that carries its own client id (`opId`, `outputId`), sent again after a transport failure: a thrown fetch or a
+   * 5xx answer, never the caller's own abort. The body is built ONCE by the caller and the very same body goes out on
+   * every attempt, so the server sees one logical call however many times it arrives: it answers a repeat with the work
+   * already started instead of starting (and charging) it again. A refusal (4xx) is final and is not repeated.
+   */
+  private async requestWithRetry<T>(method: string, path: string, body: unknown, init: { signal?: AbortSignal } = {}): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.request<T>(method, path, body, init)
+      } catch (err) {
+        if (attempt >= WRITE_RETRIES || init.signal?.aborted || !isTransportFailure(err)) throw err
+        await sleep(WRITE_RETRY_BASE_MS * 2 ** attempt + jitterMs(), init.signal)
+      }
+    }
+  }
+
   private async request<T>(method: string, path: string, body?: unknown, init: { signal?: AbortSignal } = {}): Promise<T> {
     const headers: Record<string, string> = {
       ...this.identityHeaders,
@@ -2523,6 +2591,45 @@ export class ContentHero {
       }
     }
   }
+}
+
+/** A fresh client id (a UUID) for one logical call: made once per call and repeated on every retry of it. */
+function newClientId(): string {
+  return globalThis.crypto.randomUUID()
+}
+
+/** A request given its own `outputId` when the caller named none, so a retry of the call is a replay and not a second job. */
+function withOutputId<R extends { outputId?: string }>(request: R): R & { outputId: string } {
+  return { ...request, outputId: request.outputId || newClientId() }
+}
+
+/** Extra pause so callers that waited on the same thing do not all ask again at the same moment. */
+function jitterMs(): number {
+  return Math.floor(Math.random() * JITTER_MS)
+}
+
+/**
+ * Whether a failed write may have been lost in transit and is safe to send again with the same ids: no answer at all
+ * (the fetch threw), or the server failing (5xx). A 4xx is the server's answer to this request and is final.
+ */
+function isTransportFailure(err: unknown): boolean {
+  if (err instanceof ContentHeroError) return typeof err.status === 'number' && err.status >= 500
+  return true
+}
+
+/** The seconds after which a busy render is worth asking again, or null when the part is not a busy answer. */
+function busyRetryOf(part: unknown): number | null {
+  const error = (part as { error?: Partial<RenderError> } | undefined)?.error
+  if (error?.code !== 'render_busy') return null
+  const seconds = error.retryAfterSeconds
+  return typeof seconds === 'number' && Number.isFinite(seconds) ? Math.max(1, seconds) : null
+}
+
+/** What reads a render that is not ready (its `readWith`), or null when the part is ready, failed or not a render. */
+function pendingReadOf(part: unknown): { renderId: string; page?: number } | null {
+  const p = part as { status?: unknown; readWith?: { renderId?: unknown; page?: unknown } } | undefined
+  if (p?.status !== 'pending' || typeof p.readWith?.renderId !== 'string') return null
+  return { renderId: p.readWith.renderId, ...(typeof p.readWith.page === 'number' ? { page: p.readWith.page } : {}) }
 }
 
 /** Read an env var without assuming `process` exists (keeps non-Node bundles happy). */
@@ -2644,13 +2751,13 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * The finished import a settled generation describes: the new item when it completed, or the one that already held
- * these bytes when it ended `abandoned`. `shortId` is the import's own, from `startImport`, since a generation
+ * The finished import a settled generation describes: the new item, or the one that already held these bytes when
+ * `alreadyExisted` names it. `shortId` is the import's own, from `startImport`, since a generation
  * carries only its link. The one mapping, so `import` and anything reading an import's status agree.
  */
 export function importedMediaFrom(gen: Generation, shortId: string | null): ImportedMedia {
   const dup = gen.alreadyExisted
-  if (gen.status === 'abandoned' && dup) {
+  if (dup) {
     return {
       outputId: dup.outputId,
       url: dup.url,

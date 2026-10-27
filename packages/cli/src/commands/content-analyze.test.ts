@@ -37,7 +37,7 @@ before(async () => {
       return
     }
     if (req.method === 'GET' && url.pathname.startsWith('/api/v1/status/')) {
-      res.end(JSON.stringify({ kind: 'content', id: POST.shortId, state: 'completed', reason: null, appUrl: POST.appUrl, progress: null, detail: { status: 'complete' } }))
+      res.end(JSON.stringify({ kind: 'content', id: POST.shortId, state: 'settled', reason: null, appUrl: POST.appUrl, progress: null, detail: { status: 'complete' } }))
       return
     }
     if (req.method === 'GET' && url.pathname === `/api/v1/content/${POST.shortId}`) {

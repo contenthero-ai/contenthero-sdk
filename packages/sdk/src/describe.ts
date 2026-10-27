@@ -92,7 +92,12 @@ export function describeRenderFailure(rendered: Record<string, unknown> | null |
   if (!rendered) return null
   const error = rendered.error
   if (!error || typeof error !== 'object' || Array.isArray(error)) return null
-  const { code, message } = error as { code?: unknown; message?: unknown }
+  const { code, message, retryAfterSeconds } = error as { code?: unknown; message?: unknown; retryAfterSeconds?: unknown }
+  // Busy is a pause, not a failure: nothing was started, and the same request is worth sending after the wait it names.
+  if (code === 'render_busy' && typeof retryAfterSeconds === 'number' && Number.isFinite(retryAfterSeconds)) {
+    const secs = Math.max(1, Math.ceil(retryAfterSeconds))
+    return `Rendering is busy and nothing was started. Ask again in ${secs} ${secs === 1 ? 'second' : 'seconds'}.`
+  }
   const why = `${typeof code === 'string' ? code : 'render_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`
   const missing = Array.isArray(rendered.missingFrames) ? (rendered.missingFrames as unknown[]) : []
   if (missing.length > 0) {

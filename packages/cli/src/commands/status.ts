@@ -24,13 +24,13 @@ export function statusHuman(s: JobStatusResult): string {
   const pairs: Array<[string, string | number]> = [
     ['Id', s.id],
     ['Kind', s.kind],
-    ['State', s.state],
+    ['State', s.state === 'applying' ? 'running' : s.state],
   ]
   if (s.reason) pairs.push(['Reason', s.reason])
   if (s.progress !== null && s.progress !== undefined) pairs.push(['Progress', `${Math.round(s.progress * 100)}%`])
   for (const step of s.steps ?? []) pairs.push([`Step ${step.name}`, step.reason ? `${step.state} (${step.reason})` : step.state])
   if (s.appUrl) pairs.push(['App', s.appUrl])
-  if (s.state !== 'completed' && s.state !== 'failed') {
+  if (s.state !== 'settled' && s.state !== 'failed') {
     pairs.push(['Next', statusCommandFor([statusTargetOf(s)])])
   }
   return keyValues(pairs)
@@ -64,7 +64,7 @@ export function registerStatus(program: Command): void {
 
       if (results.some((s) => s.state === 'failed' || s.state === 'unanswered')) {
         process.exitCode = EXIT.GENERAL
-      } else if (results.some((s) => s.state !== 'completed')) {
+      } else if (results.some((s) => s.state !== 'settled')) {
         process.exitCode = EXIT.TIMEOUT
       }
     })

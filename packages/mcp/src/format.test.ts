@@ -81,7 +81,7 @@ test('a running generation with no urls yet is unchanged', () => {
 
 test('a completed generation still uses the Done header', () => {
   const out = body(
-    generationStatusResult(gen({ status: 'completed', outputs: outs(['https://a/1.png', 'https://a/2.png']) })),
+    generationStatusResult(gen({ status: 'settled', outputs: outs(['https://a/1.png', 'https://a/2.png']) })),
   )
   assert.match(out, /^Done\. 2 images/)
   assert.doesNotMatch(out, /Partial/)
@@ -98,12 +98,12 @@ test('the batch form also surfaces partial urls', () => {
     generationBatchResult([
       gen({ outputId: 'a', outputs: outs(['https://a/1.png']) }),
       gen({ outputId: 'b' }),
-      gen({ outputId: 'c', status: 'completed', outputs: outs(['https://c/1.png']) }),
+      gen({ outputId: 'c', status: 'settled', outputs: outs(['https://c/1.png']) }),
     ]),
   )
   assert.match(out, /- a: processing, 1 ready so far \| Gen12345 https:\/\/a\/1\.png/)
   assert.match(out, /- b: processing \[poll_after_seconds/)
-  assert.match(out, /- c: completed \| Gen12345 https:\/\/c\/1\.png/)
+  assert.match(out, /- c: settled \| Gen12345 https:\/\/c\/1\.png/)
 })
 
 /**
@@ -177,7 +177,7 @@ test('in-place enhancement hands back every outputId in one callable form', () =
 const baseGen = {
   outputId: 'o1',
   modelId: 'nb2',
-  status: 'completed' as const,
+  status: 'settled' as const,
   createdAt: 't',
   completedAt: 't',
   error: null,
@@ -446,7 +446,7 @@ test('each tile opens the link its own output carries, past a failed one', () =>
   const data = generationWidgetData({
     outputId: 'cfe3bafb-ddc5-4e51-bae6-68ec61112a23',
     appUrl: 'https://app.contenthero.ai/media/Gen12345',
-    status: 'completed',
+    status: 'settled',
     contentType: 'image',
     modelId: 'm',
     outputs: [outputs[0]!, failed, { ...outputs[2]!, mediaId: 'Gen12345-3', appUrl: 'https://app.contenthero.ai/media/Gen12345-3' }],
@@ -463,7 +463,7 @@ test('each tile opens the link its own output carries, past a failed one', () =>
 test('with no server link, a tile offers no Open rather than a guessed one', () => {
   const data = generationWidgetData({
     outputId: 'o',
-    status: 'completed',
+    status: 'settled',
     contentType: 'image',
     modelId: 'm',
     outputs: [{ mediaId: 'Gen12345', status: 'succeeded', url: 'https://a/1.png' }],
@@ -780,7 +780,7 @@ test('a finished generation says what it was made from, so "another like this" c
   const out = body(
     generationStatusResult(
       gen({
-        status: 'completed',
+        status: 'settled',
         outputs: outs(['https://a/1.png']),
         references: [{ label: 'Reference 1', type: 'image', role: 'reference', url: 'https://media.contenthero.ai/ref/original.png?t=x' }],
       }),
@@ -790,7 +790,7 @@ test('a finished generation says what it was made from, so "another like this" c
 })
 
 test('a generation with no references says nothing about them', () => {
-  const out = body(generationStatusResult(gen({ status: 'completed', outputs: outs(['https://a/1.png']) })))
+  const out = body(generationStatusResult(gen({ status: 'settled', outputs: outs(['https://a/1.png']) })))
   assert.doesNotMatch(out, /Made from/)
 })
 
@@ -836,7 +836,7 @@ test("a finished split's outputs are named by their stem", () => {
     completedResult({
       outputId: 'sp1',
       appUrl: 'https://app/media/sp1',
-      status: 'completed',
+      status: 'settled',
       contentType: 'audio',
       modelId: 'contenthero-stem-split',
       outputs: (['vocals', 'drums', 'bass', 'other'] as const).map((stem, i) => ({
