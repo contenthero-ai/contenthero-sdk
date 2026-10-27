@@ -3464,7 +3464,7 @@ export interface ListContentOptions extends PageOptions, SortOptions<ContentSort
   publicationDate?: string
   /**
    * Finds posts by meaning and keyword; results are only the posts judged relevant, ranked by relevance. Any other
-   * `sort` reorders the same relevant set.
+   * `sort` reorders the same relevant set. A post's own link finds that post.
    */
   search?: string
   /**
@@ -3580,6 +3580,25 @@ export interface ContentListResult extends Paged {
    * answers with what the others matched; absent when every id named an account (and from an older server).
    */
   accountIdsNotFound?: AccountIdNotFound[]
+  /**
+   * Why a `search` came back with no rows, when the server can say: the code names the cause and the message says it in
+   * words. Absent when rows came back (and from an older server).
+   */
+  emptyReason?: EmptyReason
+}
+
+/** Why a content search answered with nothing. */
+export type EmptyReasonCode =
+  | 'noMatch'
+  | 'rankerUnavailable'
+  | 'postNotFound'
+  | 'notAPostLink'
+  | 'postOutsideList'
+
+/** The cause of an empty content search, in a code a program can branch on and a sentence a person can read. */
+export interface EmptyReason {
+  code: EmptyReasonCode
+  message: string
 }
 
 /** An `accountIds` filter entry that named no account. */

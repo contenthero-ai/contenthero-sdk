@@ -831,6 +831,19 @@ test('list_content says each account id that named nothing, beside what the othe
   assert.match(some, /Not matched: 'Nope0001'/)
 })
 
+/**
+ * list_content lines carry each post's link and length (the API already sends both), and an empty search says why.
+ * Break-verified: dropping the link or the emptyReason line turns it red.
+ */
+test('list_content prints each post link and duration, and the reason a search came back empty', () => {
+  const row = { id: 'c1', title: 'A post', platform: 'youtube', viewCount: 10, url: 'https://youtu.be/abc', durationSeconds: 42 } as never
+  const some = (outlierListResult({ content: [row], total: 1, nextCursor: null }).content[0] as { text: string }).text
+  assert.match(some, /42s/)
+  assert.match(some, /https:\/\/youtu\.be\/abc/)
+  const none = (outlierListResult({ content: [], total: 0, nextCursor: null, emptyReason: { code: 'rankerUnavailable', message: 'The relevance judge was unavailable, try again.' } }).content[0] as { text: string }).text
+  assert.match(none, /Why empty: The relevance judge was unavailable/)
+})
+
 test("a finished split's outputs are named by their stem", () => {
   const out = body(
     completedResult({
