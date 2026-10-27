@@ -217,7 +217,7 @@ export function registerCard(program: Command): void {
               // ID is the reference the next command takes: for an `inspiration` row it is the
               // tracked-content id `contenthero content get` resolves to the full record.
               ['TYPE', 'NAME', 'ID', 'URL'],
-              post.assets.map((a) => [a.assetType ?? '', a.displayName ?? '', a.assetId ?? '', a.assetUrl ?? '']),
+              post.assets.map((a) => [a.assetType ?? '', a.displayName ?? '', a.contentId ?? a.projectId ?? a.outputId ?? '', a.assetUrl ?? '']),
             )
           : ''
         return head + dests + assets

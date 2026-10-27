@@ -1344,28 +1344,14 @@ test('Kling elements live at /api/v1/kling-elements, and the list reads klingEle
   assert.deepEqual(JSON.parse(String(calls[3]?.init?.body)), { name: 'villain' })
 })
 
-test('the pre-rename element methods call their Kling twins, so there is one implementation', async () => {
-  const client = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 500, body: {} }]).fetch })
-  const seen: string[] = []
-  const twin = client as unknown as Record<string, unknown>
-  for (const name of ['listKlingElements', 'getKlingElement', 'createKlingElement', 'updateKlingElement', 'deleteKlingElement']) {
-    twin[name] = async (...args: unknown[]) => {
-      seen.push(`${name} ${JSON.stringify(args)}`)
-      return name
-    }
+test('the pre-rename element methods are gone: only the Kling-named ones exist', () => {
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch: stubFetch([{ status: 500, body: {} }]).fetch }) as unknown as Record<string, unknown>
+  for (const name of ['listElements', 'getElement', 'createElement', 'updateElement', 'deleteElement']) {
+    assert.equal(client[name], undefined, name)
   }
-  assert.equal(await client.listElements(), 'listKlingElements')
-  assert.equal(await client.getElement('k1'), 'getKlingElement')
-  assert.equal(await client.createElement({ name: 'n', description: 'd', video: 'v' }), 'createKlingElement')
-  assert.equal(await client.updateElement('k1', { category: 'prop' }), 'updateKlingElement')
-  assert.equal(await client.deleteElement('k1'), 'deleteKlingElement')
-  assert.deepEqual(seen, [
-    'listKlingElements [{}]',
-    'getKlingElement ["k1"]',
-    'createKlingElement [{"name":"n","description":"d","video":"v"}]',
-    'updateKlingElement ["k1",{"category":"prop"}]',
-    'deleteKlingElement ["k1"]',
-  ])
+  for (const name of ['listKlingElements', 'getKlingElement', 'createKlingElement', 'updateKlingElement', 'deleteKlingElement']) {
+    assert.equal(typeof client[name], 'function', name)
+  }
 })
 
 test('templates live at /api/v1/templates: a list pages with a cursor, reads unwrap template, writes keep their warnings', async () => {

@@ -190,4 +190,6 @@ One media item across the four reads, and the last aliases gone. The contract ca
 - `appUrl` is absent, not null, for a stock item.
 - Removed: placement result `surface` (use `projectType`), export formats `surfaces` (use `projectTypes`), card `coverIsDerived`, SDK types `ProjectKind` and `ProjectSurface` (use `ProjectType`). `POST_PLATFORMS` is now `PLATFORMS_OR_GENERAL` (same eight values). `expectedRevision` is refused below 0.
 
+- Removed, the last deprecated aliases (hard cutover): `surface` on the timeline and canvas schema reads and their indexes (use `projectType`); card asset `assetId` (read `contentId`, `projectId`, or the new `outputId` for a generation, each the same name the write takes); the upload answer's top-level `uploadUrl`, `uploadHeaders`, `storagePath` and `expiresAt` (read `upload`); the route `/api/v1/elements` (use `/api/v1/kling-elements`); the SDK methods `listElements`, `getElement`, `createElement`, `updateElement`, `deleteElement` and types `Element`, `ReferenceElement`, `CreateElementRequest` (use the Kling-named ones). The CLI `element` command and `--element` flag were already refused. The CLI `card get` ID column now shows the content, project or output id of the asset.
+
 No other tool or field description text changed.

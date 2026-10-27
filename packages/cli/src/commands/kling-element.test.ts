@@ -6,9 +6,9 @@ import { buildProgram } from '../program.js'
 
 /**
  * `contenthero kling-element` and `generate video --kling-element` (renamed 2026-10-04 from `element` and `--element`,
- * because the word also named the editor's Elements panel). The old spellings stay for one release window, HIDDEN:
- * they must still reach the wire exactly as the new ones do, and help must show only the new ones. Each case runs the
- * real command against a local server and asserts what it received.
+ * because the word also named the editor's Elements panel). The old spellings are gone (a hard cutover): they are
+ * refused, and help shows only the new ones. Each case runs the real command against a local server and asserts what
+ * it received.
  */
 
 type Seen = { method: string; path: string; body: Record<string, unknown> | null }

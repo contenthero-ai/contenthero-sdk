@@ -272,7 +272,7 @@ test('placement notes survive alongside the attachment', () => {
       ...baseGen,
       contentType: 'image',
       outputs: outs(['https://media.contenthero.ai/u/a.jpg']),
-      placement: { projectType: 'canvas', surface: 'canvas', layerId: 'L1', slideId: 'S1' },
+      placement: { projectType: 'canvas', layerId: 'L1', slideId: 'S1' },
     } as never,
     [{ kind: 'bytes', type: 'image', data: 'QUJD', mimeType: 'image/jpeg' }],
   )

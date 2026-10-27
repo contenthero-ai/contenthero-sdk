@@ -2377,7 +2377,7 @@ export function cardResult(p: CardDetail): CallToolResult {
       `assets (${p.assets.length}):`,
       ...p.assets.map((a) => {
         /**
-         * ⭐ AN INSPIRATION ATTACHMENT'S `assetId` IS THE TRACKED-CONTENT ID, AND IT IS PRINTED BECAUSE IT
+         * ⭐ AN INSPIRATION ATTACHMENT'S `contentId` IS THE TRACKED-CONTENT ID, AND IT IS PRINTED BECAUSE IT
          * IS AN INPUT TO THE NEXT CALL, same rule as `revision` above. It is exactly what `get_content`
          * takes to return the full record and its transcript; without it the agent could see the
          * attachment but never follow it. The triage line (creator, score, views, availability) is

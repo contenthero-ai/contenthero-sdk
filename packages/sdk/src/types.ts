@@ -101,9 +101,6 @@ export interface ReferenceKlingElement {
   images?: string[]
 }
 
-/** @deprecated Use `ReferenceKlingElement`. */
-export type ReferenceElement = ReferenceKlingElement
-
 /**
  * A saved Kling element in the account's library (the persistent form): Kling 3.0's reusable reference for a
  * character, location or prop. Named `KlingElement` since 2026-10-04, because "element" alone also names the
@@ -129,9 +126,6 @@ export interface KlingElement {
   updatedAt?: string
 }
 
-/** @deprecated Use `KlingElement`. */
-export type Element = KlingElement
-
 /** Result of `listKlingElements`: a page of the account's saved Kling elements, newest first. */
 export interface KlingElementListResult extends Paged {
   klingElements: KlingElement[]
@@ -148,9 +142,6 @@ export interface CreateKlingElementRequest {
   /** A single video URL or output-id token (alternative to images). */
   video?: string
 }
-
-/** @deprecated Use `CreateKlingElementRequest`. */
-export type CreateElementRequest = CreateKlingElementRequest
 
 // ---------------------------------------------------------------------------
 // Paging: the one shape every paged listing takes and returns
@@ -2760,11 +2751,8 @@ export interface CardAsset {
   contentId: string | null
   /** A linked project's id: what `getProject` takes, and the same `projectId` that attached it. Null otherwise. */
   projectId: string | null
-  /**
-   * @deprecated The id an attachment points at under one name for every kind (a content id, a project id, a media
-   * object id). Read `contentId` or `projectId`, which match the field that attached it. Emitted for one window.
-   */
-  assetId: string | null
+  /** A generation's output id: what `outputId` attached it with. Null for every other kind. */
+  outputId: string | null
   assetUrl: string | null
   /**
    * Where the attached thing opens in the app: an inspiration post's page, a project's editor or canvas, a file's media
@@ -5322,8 +5310,6 @@ export interface EditorSharedProps {
 /** The whole canvas schema, from `getLayerTypes({ detail: 'full' })`. Makes `update_canvas` self-describing. */
 export interface LayerTypeCatalog {
   projectType: 'canvas'
-  /** @deprecated Alias for `projectType`, still emitted for one release window. */
-  surface: 'canvas'
   description: string
   sharedProps: EditorSharedProps
   layerTypes: EditorTypeSpec[]
@@ -5335,8 +5321,6 @@ export interface LayerTypeCatalog {
  *  self-describing. */
 export interface TimelineTypeCatalog {
   projectType: 'editor'
-  /** @deprecated Alias for `projectType`, still emitted for one release window. */
-  surface: 'editor'
   description: string
   sharedProps: EditorSharedProps
   clipTypes: EditorTypeSpec[]
@@ -5381,8 +5365,6 @@ export interface TimelineOpIndexEntry {
  */
 export interface TimelineSchemaIndex {
   projectType: 'editor'
-  /** @deprecated Alias for `projectType`, still emitted for one release window. */
-  surface: 'editor'
   description: string
   /** What holds for every op, so one op read in full is enough to use it. */
   rules: string[]
@@ -5424,8 +5406,6 @@ export interface LayerOpIndexEntry {
  */
 export interface LayerSchemaIndex {
   projectType: 'canvas'
-  /** @deprecated Alias for `projectType`, still emitted for one release window. */
-  surface: 'canvas'
   description: string
   /** What holds for every op, so one op read in full is enough to use it. */
   rules: string[]

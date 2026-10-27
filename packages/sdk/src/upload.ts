@@ -66,35 +66,16 @@ function sliceOf(data: UploadData, start: number, end: number): BodyInit {
   return new Uint8Array(data.buffer as ArrayBuffer, data.byteOffset + start, end - start)
 }
 
-/**
- * Read the answer of beginning an upload. An older API answers with the single-upload fields at the top level and no
- * `upload`; that is read as a single target, which is what lets the SDK and the API deploy in either order.
- */
-export function readCreateUpload(raw: unknown, contentType: string): CreateUploadResult {
-  const answer = (raw ?? {}) as {
-    outputId?: string
-    upload?: UploadTarget
-    uploadUrl?: string
-    uploadHeaders?: Record<string, string>
-    expiresAt?: string
-  }
+/** Read the answer of beginning an upload: the output id and the one target the bytes go to. */
+export function readCreateUpload(raw: unknown): CreateUploadResult {
+  const answer = (raw ?? {}) as { outputId?: string; upload?: UploadTarget }
   if (typeof answer.outputId !== 'string') {
     throw new ContentHeroError('The server answered a new upload without an output id. Try again, and if it keeps failing contact support.')
   }
-  if (answer.upload) return { outputId: answer.outputId, upload: answer.upload }
-  if (typeof answer.uploadUrl === 'string') {
-    return {
-      outputId: answer.outputId,
-      upload: {
-        mode: 'single',
-        url: answer.uploadUrl,
-        // An API that returns no headers needs the content type alone.
-        headers: answer.uploadHeaders ?? { 'Content-Type': contentType },
-        expiresAt: answer.expiresAt ?? '',
-      },
-    }
+  if (!answer.upload) {
+    throw new ContentHeroError('The server answered a new upload without a target for its bytes. Try again, and if it keeps failing contact support.')
   }
-  throw new ContentHeroError('The server answered a new upload without a target for its bytes. Try again, and if it keeps failing contact support.')
+  return { outputId: answer.outputId, upload: answer.upload }
 }
 
 /** Whether a plan of `partCount` parts of `partSize` bytes can be exactly a file of `totalBytes` bytes. */
