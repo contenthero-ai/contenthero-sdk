@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
+import type { AccountIdNotFound, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -395,11 +395,25 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
 /** The reminder every read of a project prints, whole or in parts, since an edit that follows it needs the revision. */
 export const PASS_REVISION_LINE = 'Pass this revision back as expectedRevision when you edit.'
 
-const PART_WORDS: Record<ProjectPartName, string> = { clips: 'the clips', modules: 'the modules', sourceTimes: 'where the seconds play' }
+const PART_WORDS: Record<ProjectPartName, string> = { clips: 'the clips', modules: 'the modules', sourceTimes: 'where the seconds play', modulesIndex: "the modules' index" }
 
 /** The parts a read of named parts returned, in words, and that nothing else of the project came with them. */
 export function describePartsAsked(parts: readonly ProjectPartName[]): string {
   return `Only what was asked for: ${parts.map((p) => PART_WORDS[p] ?? p).join(', ')}. Nothing else of the project.`
+}
+
+/**
+ * A project's modules index as lines, one module each: its name, how many clips draw it (directly or through other
+ * modules), whether none does, and the size of its source. Empty when the project has no modules. The one wording the MCP and
+ * the CLI share.
+ */
+export function describeModulesIndex(index: readonly ModuleIndexEntry[] | null | undefined): string[] {
+  if (!index) return []
+  if (!index.length) return ['The project has no modules.']
+  return [
+    'Modules:',
+    ...index.map((m) => `  ${m.name}: ${m.unused ? 'no clip draws it' : `${m.usedBy} clip${m.usedBy === 1 ? '' : 's'} draw${m.usedBy === 1 ? 's' : ''} it`}, ${m.bytes} bytes`),
+  ]
 }
 
 /** A finding as one line: its subject, its place, and what it says (the app's own form, `describeFinding`). */
@@ -487,8 +501,8 @@ export function describeFileSize(bytes: number): string {
 }
 
 /**
- * The recorded facts of an audio file as one line: its size, container type and duration, and the mean bitrate labeled
- * as derived from size and duration. Only what is known is said; null when nothing is. The one wording the MCP and the
+ * The recorded facts of an audio file as one line: its size, container type and duration, the mean bitrate labeled
+ * as derived from size and duration, and the stream facts the file states (codec, sample rate, channels). Only what is known is said; null when nothing is. The one wording the MCP and the
  * CLI share.
  */
 export function describeAudioFacts(audio: AudioFacts | undefined | null): string | null {
@@ -498,6 +512,9 @@ export function describeAudioFacts(audio: AudioFacts | undefined | null): string
   if (audio.sizeBytes != null) parts.push(describeFileSize(audio.sizeBytes))
   if (audio.durationSeconds != null) parts.push(`${audio.durationSeconds.toFixed(2)}s`)
   if (audio.derivedBitrateKbps != null) parts.push(`${audio.derivedBitrateKbps} kbps mean (derived from size and duration)`)
+  if (audio.codec) parts.push(audio.codec)
+  if (audio.sampleRate != null) parts.push(`${audio.sampleRate} Hz`)
+  if (audio.channels != null) parts.push(audio.channels === 1 ? 'mono' : audio.channels === 2 ? 'stereo' : `${audio.channels} channels`)
   return parts.length ? parts.join(', ') : null
 }
 

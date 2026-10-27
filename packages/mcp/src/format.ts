@@ -128,6 +128,7 @@ import type {
   TimelineSchemaIndex,
   TimelineSchemaEntry,
   TranscriptResult,
+  MediaTranscriptResult,
   ExportJob,
   ExportFormatCatalog,
   LinkFormats,
@@ -138,7 +139,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -1615,10 +1616,27 @@ export function mediaBatchResult(result: MediaBatchResult, images: InlinedImageS
    * already looking" stops being an argument for a card and becomes an argument for none: looking and
    * showing are now two tools, and a tool that does both is the thing we split apart.
    *
-   * ⚠️ NO `structuredContent` EITHER. Without `_meta` no host mounts anything, so a payload here would be
-   * bytes on the wire that nothing can ever read, on the one tool whose entire constraint is its size.
+   * ⭐ STRUCTURED CONTENT CARRIES ONLY THE MEASURED FACTS, EXACT. The text rounds a duration for reading; an agent that
+   * computes with it (a placement, a price) reads the numbers here, unrounded. Without `_meta` no host mounts anything,
+   * so this is deliberately small: no prompt, no urls, no crop bytes, only the numbers the file states.
    */
-  return { content }
+  const measured = items.flatMap((it, i) =>
+    it.ok && (it.durationSeconds != null || it.geometry || it.audio || it.crop)
+      ? [
+          {
+            item: i + 1,
+            ...(it.mediaId ? { mediaId: it.mediaId } : {}),
+            ...(it.durationSeconds != null ? { durationSeconds: it.durationSeconds } : {}),
+            ...(it.geometry ? { geometry: it.geometry } : {}),
+            ...(it.audio ? { audio: it.audio } : {}),
+            ...(it.crop ? { crop: { width: it.crop.width, height: it.crop.height, region: it.crop.region, pixelsPerSourcePixel: it.crop.pixelsPerSourcePixel } } : {}),
+          },
+        ]
+      : [],
+  )
+  if (measured.length === 0) return { content }
+  content[0] = { type: 'text', text: `${summary}\n\n${EXACT_VALUES_POINTER}` }
+  return { content, structuredContent: standaloneStructured(summary, { items: measured }) }
 }
 
 /**
@@ -2671,10 +2689,20 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
 
 /** The parts of a post an agent computes with, exact, when they were asked for; null when none was. */
 function contentExactData(c: ContentDetail): Record<string, unknown> | null {
-  const words = c.transcript?.segments?.some((sg) => sg.words) ? { transcript: c.transcript } : null
-  const maps = (c.video?.videos ?? []).filter((v) => v.audioMap?.status === 'ready' && v.audioMap.window)
-  const audioMaps = maps.length ? { videos: maps.map((v) => ({ ...(v.slide !== undefined ? { slide: v.slide } : {}), audioMap: v.audioMap })) } : null
-  return words || audioMaps ? { contentId: c.id, ...words, ...audioMaps } : null
+  // ⭐ Whatever the text above rounds is carried exact: the transcript's segments (with their words when asked), each
+  // ready audio map (its summary, and its window when asked), and each video's cut list.
+  const transcript = c.transcript?.segments?.length ? { transcript: c.transcript } : null
+  const measured = (c.video?.videos ?? []).filter((v) => v.audioMap?.status === 'ready' || v.cuts)
+  const videos = measured.length
+    ? {
+        videos: measured.map((v) => ({
+          ...(v.slide !== undefined ? { slide: v.slide } : {}),
+          ...(v.audioMap?.status === 'ready' ? { audioMap: v.audioMap } : {}),
+          ...(v.cuts ? { cuts: v.cuts } : {}),
+        })),
+      }
+    : null
+  return transcript || videos ? { contentId: c.id, ...transcript, ...videos } : null
 }
 
 function seconds(ms: number): string {
@@ -2833,15 +2861,16 @@ export function contentVideoResult(r: ContentVideoResult): CallToolResult {
             ? `This post has no video to analyze: ${copy.reason.trim().replace(/\.+$/, '')}.`
             : `${its} not downloaded yet. ${again} downloads ${many ? 'them' : 'it'}.`
   const videoLines = r.videos.map((v) => `${contentVideoLabel(v)}: ${describeContentVideo(v)}`)
+  const text_ = lines([`Post ${post}`, body, ...(r.notice ? [r.notice] : []), ...videoLines, chargeLine(r.charge)])
   return {
-    content: [{ type: 'text', text: lines([`Post ${post}`, body, ...(r.notice ? [r.notice] : []), ...videoLines, chargeLine(r.charge)]) }],
-    structuredContent: {
+    content: [{ type: 'text', text: text_ }],
+    structuredContent: standaloneStructured(text_, {
       contentId: r.contentId,
       appUrl: r.appUrl ?? null,
       status: copy.status,
       videos: r.videos,
       ...chargeData(r.charge),
-    },
+    }),
   }
 }
 
@@ -3019,6 +3048,7 @@ function projectPartsResult(p: ProjectParts): CallToolResult {
             .map((t) => `  ${t.atSec}s: ${t.frames.length ? t.frames.map((f) => `clip ${f.clipId} at frame ${f.frame}`).join(', ') : 'nowhere (cut out, or on no clip)'}`)
             .join('\n')}\n`
         : '') +
+      describeModulesIndex(p.modulesIndex).map((l) => `${l}\n`).join('') +
       describeDocumentFindings(p.findings, 'Problems in what was read:').map((l) => `${l}\n`).join('') +
       (p.state ? `\n${JSON.stringify(p.state, null, 2)}` : ''),
   )
@@ -3709,7 +3739,8 @@ export function linkFormatsResult(f: LinkFormats): CallToolResult {
  * events as rows of values in the order `fields` names, without the line's facts again. A page's clip lines were once
  * printed twice, in lines and in JSON.
  */
-export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
+export function editorTranscriptResult(r: TranscriptResult | MediaTranscriptResult): CallToolResult {
+  if ('mediaId' in r) return mediaTranscriptResult(r)
   if (!r.mediaTranscribed) {
     return text(r.note ?? 'No transcript available for this project yet.')
   }
@@ -3731,6 +3762,28 @@ export function editorTranscriptResult(r: TranscriptResult): CallToolResult {
       speakerLine +
       `To edit safely against a concurrent change, pass revision ${r.revision} as expectedRevision; or omit expectedRevision to just apply to the current state.\n\n` +
       lines.join('\n') +
+      (more ? `\n${more}` : '') +
+      rows,
+  )
+}
+
+/**
+ * A recording's words within a window (`get_transcript` with mediaId): the span and its text once, and in word mode the
+ * words and audio events as rows of values in the order `fields` names, in the recording's own clock.
+ */
+function mediaTranscriptResult(r: MediaTranscriptResult): CallToolResult {
+  if (!r.mediaTranscribed) return text(r.note ?? 'No transcript available for this recording yet.')
+  const span = `${r.startMs}ms to ${r.endMs === null ? 'the end' : `${r.endMs}ms`}`
+  const speakerLine = r.speakers && r.speakers.length > 0 ? `Speakers: ${r.speakers.join(', ')}.\n` : ''
+  const rows = r.fields
+    ? `\n\n${JSON.stringify({ fields: r.fields, words: r.words ?? [], audioEvents: r.audioEvents ?? [] })}`
+    : ''
+  const more = moreLine(r.nextCursor)
+  return text(
+    `Transcript of recording ${r.mediaId}, ${span} of its own clock: ${r.wordCount} word(s) in the span.` +
+      (r.fields ? ' The words and audio events follow as rows of values, in the order fields names.' : '') +
+      `\n${speakerLine}` +
+      (r.text ? `\n${r.text}` : '\n(no speech in the span)') +
       (more ? `\n${more}` : '') +
       rows,
   )

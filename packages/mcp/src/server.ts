@@ -2957,7 +2957,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        */
       annotations: READ,
       description:
-        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from view, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or a { mediaId } (the media id list_media, search_media and get_folder print: a1B2c3D4, or a1B2c3D4-2 for one output of a generation with several). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. To see a clip\'s frames, use view; audio still returns metadata + the url. A bare id for a generation returns ONLY its primary output, named by its full media id, and lists the others\' media ids; pass one of those to see it. To ZOOM into an image, set region { x, y, width, height } on an item, in the image\'s own pixels: that part is cut from the original and returned at its own detail, never enlarged, so you can check small text or an edge. Use this to inspect the actual pixels, not just URLs.',
+        'SEE specific media, up to 5 items. This is for YOUR eyes only: it returns image blocks so you can judge a face, check legibility or compare variations, and it renders NOTHING for the person. If they should see it, call show_media, which displays up to 100 items and costs you almost no context. Pass a batch of items to view at once, returned as image blocks for you: each item is either a { url } (e.g. a URL threaded from view, a layer/asset URL from get_project / get_card, or an upload URL from list_media source=uploads) or a { mediaId } (the media id list_media, search_media and get_folder print: a1B2c3D4, or a1B2c3D4-2 for one output of a generation with several). Returns light metadata per item plus an IMAGE block for each image so you can actually see it. To see a clip\'s frames, use view; audio still returns metadata + the url, and the metadata of an audio item names its size, duration and container with the stream facts the file states (its codec, sample rate and channels), each only when known. A bare id for a generation returns ONLY its primary output, named by its full media id, and lists the others\' media ids; pass one of those to see it. To ZOOM into an image, set region { x, y, width, height } on an item, in the image\'s own pixels: that part is cut from the original and returned at its own detail, never enlarged, so you can check small text or an edge. Use this to inspect the actual pixels, not just URLs.',
       inputSchema: {
         items: z
           .array(
@@ -4743,6 +4743,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         moduleNames: z.array(z.string()).min(1).optional().describe("Read these project modules' code."),
         sourceAssetId: z.string().optional().describe("With atSec: the recording whose moments to place on the timeline, by the assetId a clip's source names."),
         atSec: z.array(z.number().min(0)).min(1).optional().describe('With sourceAssetId: the seconds of that recording to place.'),
+        modulesIndex: z.boolean().optional().describe("Read the index of the project's modules: each one's name, how many clips draw it, whether none does, and its size, without code. Read alone, like the other parts."),
       },
     },
     async (args, extra) => {
@@ -4758,6 +4759,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           moduleNames: args.moduleNames,
           sourceAssetId: args.sourceAssetId,
           atSec: args.atSec,
+          modulesIndex: args.modulesIndex,
         }))
       } catch (err) {
         return errorResult(err)
@@ -4893,9 +4895,12 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Transcript',
       annotations: READ,
       description:
-        "Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current state ([disabled] = cut/excluded from the render, [enabled] = kept) and its exact clipId. Use this to read what is said, see which parts are already disabled, then target the exact clipId(s) or source-time ranges with update_timeline (disable_ranges to non-destructively cut, set_disabled to toggle a whole clip). Pass `granularity: 'word'` to also get, per segment: word-level timing with ABSOLUTE timeline frames (so split / range ops are exact), per-word confidence + speaker, the derived silence gaps (for dead-air removal; already inset to the cuttable region so cutting them keeps breathing room), and the non-speech audio events; plus the distinct speaker set at the top level. In word mode each word, silence and audio event is a row of values in the order `fields` names. Segments come a page at a time in timeline order: pass the answer's nextCursor back as cursor for the next page, and limit sets how many a page holds. Scope it with `search` (a phrase to find) or `startMs`/`endMs` (a source-media window, which also clips the returned words) to read only the part that matters. Also returns the project's current `revision` so you can edit right away without a separate get_project: pass it as update_timeline's expectedRevision for a concurrency-safe edit, or omit expectedRevision to just apply to the current state. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
+        "Addresses the words one of two ways. With projectId it reads the words as the timeline plays them, in timeline order. With mediaId it reads the words of that recording itself, within an optional window of the recording's own seconds, including spans no timeline plays. Pass exactly one. The window is start inclusive and end exclusive. A media read's times are in the recording's own clock, and its words come a page at a time with word granularity. The rest of this describes the project read. Read an EDITOR project's transcript mapped to its timeline clips, so you can do content-aware editing. Returns one segment per transcribable clip in timeline order, each carrying the words spoken within it plus its current state ([disabled] = cut/excluded from the render, [enabled] = kept) and its exact clipId. Use this to read what is said, see which parts are already disabled, then target the exact clipId(s) or source-time ranges with update_timeline (disable_ranges to non-destructively cut, set_disabled to toggle a whole clip). Pass `granularity: 'word'` to also get, per segment: word-level timing with ABSOLUTE timeline frames (so split / range ops are exact), per-word confidence + speaker, the derived silence gaps (for dead-air removal; already inset to the cuttable region so cutting them keeps breathing room), and the non-speech audio events; plus the distinct speaker set at the top level. In word mode each word, silence and audio event is a row of values in the order `fields` names. Segments come a page at a time in timeline order: pass the answer's nextCursor back as cursor for the next page, and limit sets how many a page holds. Scope it with `search` (a phrase to find) or `startMs`/`endMs` (a source-media window, which also clips the returned words) to read only the part that matters. Also returns the project's current `revision` so you can edit right away without a separate get_project: pass it as update_timeline's expectedRevision for a concurrency-safe edit, or omit expectedRevision to just apply to the current state. Returns mediaTranscribed:false when the media has not been transcribed yet. Requires the editor:read scope.",
       inputSchema: {
-        projectId: z.string().describe('The editor project id.'),
+        projectId: z.string().optional().describe('The project whose timeline words to read. Use instead of mediaId.'),
+        mediaId: z.string().optional().describe('The recording whose words to read. Use instead of projectId.'),
+        startSeconds: z.number().min(0).optional().describe("With mediaId: where in the recording the window begins, in the recording's seconds."),
+        endSeconds: z.number().min(0).optional().describe('With mediaId: where the window ends.'),
         search: z.string().optional().describe('Case-insensitive substring; returns only clip segments whose text contains it.'),
         startMs: z.number().int().min(0).optional().describe('Source-media start time in ms; with endMs, returns only segments overlapping this window (and, in word mode, clips the returned words to it).'),
         endMs: z.number().int().min(0).optional().describe('Source-media end time in ms; companion to startMs.'),
@@ -4910,8 +4915,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const client = await getClient(extra)
-        const { projectId, ...options } = args
-        return editorTranscriptResult(await client.getTranscript(projectId, options))
+        return editorTranscriptResult(await client.getTranscript(args))
       } catch (err) {
         return errorResult(err)
       }

@@ -253,6 +253,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   favorite: { mediaId: '<id>', favorited: '--off' },
   archive: { mediaId: '<id>', archived: '--off' },
   share: { mediaIds: '<ids>', id: '<ids>', shared: '--off', shareUrl: '--link' },
+  get_transcript: { mediaId: '--media' },
   get_project: { fromFrame: '--from', toFrame: '--to', clipIds: '--clips', moduleNames: '--modules' },
   view: { trackIds: '--tracks', clipIds: '--clips' },
   export: { watermark: '--no-watermark' },

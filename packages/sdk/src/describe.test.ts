@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -531,4 +531,30 @@ test('audio facts with only some known say only those, and none says nothing', (
   assert.equal(describeAudioFacts({ durationSeconds: 2.5 }), '2.50s')
   assert.equal(describeAudioFacts({}), null)
   assert.equal(describeAudioFacts(undefined), null)
+})
+
+test('audio facts add the codec, sample rate and channels only when the file states them', () => {
+  assert.equal(describeAudioFacts({ mimeType: 'audio/mpeg', codec: 'mp3', sampleRate: 44100, channels: 2 }), 'audio/mpeg, mp3, 44100 Hz, stereo')
+  assert.equal(describeAudioFacts({ codec: 'aac', channels: 1 }), 'aac, mono')
+  assert.equal(describeAudioFacts({ channels: 6 }), '6 channels')
+  assert.equal(describeAudioFacts({ mimeType: 'audio/wav' }), 'audio/wav')
+})
+
+test('the modules index names each module, who draws it, and its exact size', () => {
+  assert.deepEqual(describeModulesIndex(undefined), [])
+  assert.deepEqual(describeModulesIndex([]), ['The project has no modules.'])
+  assert.deepEqual(describeModulesIndex([{ name: 'intro', usedBy: 1, unused: false, bytes: 1234 }, { name: 'old', usedBy: 0, unused: true, bytes: 99 }]), [
+    'Modules:',
+    '  intro: 1 clip draws it, 1234 bytes',
+    '  old: no clip draws it, 99 bytes',
+  ])
+})
+
+test('an audio map summary reads rounded for people while the number it came from is untouched', () => {
+  const summary = { durationSec: 30, speechSec: 1.334, soundCount: 0, music: { present: false, tempoBpm: null, key: null, mode: null }, duckingDropDb: null, integratedLufs: -14.237 }
+  const text = describeAudioMapSummary(summary)
+  assert.match(text, /1\.3s of speech/)
+  assert.match(text, /-14\.2 LUFS/)
+  assert.equal(summary.speechSec, 1.334)
+  assert.equal(summary.integratedLufs, -14.237)
 })
