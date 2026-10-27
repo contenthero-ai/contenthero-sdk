@@ -1915,3 +1915,12 @@ test('updateMedia patches the media route with name and description and returns 
   assert.equal(item.name, 'New')
   assert.equal(item.description, 'About')
 })
+
+test('searchBrandKnowledge sends the query under the name the route reads', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { results: [] } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await client.searchBrandKnowledge('kit-1', 'tone of voice').catch(() => undefined)
+  const url = new URL(calls[0]?.url ?? '')
+  assert.equal(url.searchParams.get('query'), 'tone of voice')
+  assert.equal(url.searchParams.has('q'), false)
+})

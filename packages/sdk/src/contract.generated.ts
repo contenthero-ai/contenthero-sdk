@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "3c9ce416f0278ecaaa9ee75b7ab97bb87130fcd44f284456b8e62a44426c2778"
+export const AGENT_CONTRACT_VERSION = "2bd2c898071c9b65a86f34e8f18d94983391cea733bbf07eb33c3e45f53eb266"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -1068,188 +1068,123 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "placement": {
-            "anyOf": [
+            "description": "Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends.",
+            "oneOf": [
               {
-                "oneOf": [
-                  {
-                    "additionalProperties": false,
-                    "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
-                    "properties": {
-                      "mode": {
-                        "const": "append",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "description": "Land at an explicit time; optionally choose the track.",
-                    "properties": {
-                      "durationSeconds": {
-                        "description": "For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio, whose length is the asset's own.",
-                        "type": "number"
-                      },
-                      "mode": {
-                        "const": "at",
-                        "type": "string"
-                      },
-                      "startSeconds": {
-                        "type": "number"
-                      },
-                      "track": {
-                        "description": "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track.",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "description": "Land at the current playhead.",
-                    "properties": {
-                      "durationSeconds": {
-                        "description": "For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio.",
-                        "type": "number"
-                      },
-                      "mode": {
-                        "const": "atPlayhead",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
-                    "properties": {
-                      "duration": {
-                        "enum": [
-                          "natural",
-                          "match"
-                        ],
-                        "type": "string"
-                      },
-                      "itemId": {
-                        "type": "string"
-                      },
-                      "mode": {
-                        "const": "replace",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "itemId",
-                      "mode"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "description": "Fill or cover a time span; optionally choose the track.",
-                    "properties": {
-                      "endSeconds": {
-                        "type": "number"
-                      },
-                      "fit": {
-                        "enum": [
-                          "cover",
-                          "trim",
-                          "overwrite"
-                        ],
-                        "type": "string"
-                      },
-                      "mode": {
-                        "const": "range",
-                        "type": "string"
-                      },
-                      "startSeconds": {
-                        "type": "number"
-                      },
-                      "track": {
-                        "description": "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track.",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ],
-                    "type": "object"
+                "additionalProperties": false,
+                "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
+                "properties": {
+                  "mode": {
+                    "const": "append",
+                    "type": "string"
                   }
-                ]
+                },
+                "required": [
+                  "mode"
+                ],
+                "type": "object"
               },
               {
                 "additionalProperties": false,
-                "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
+                "description": "Land at an explicit time; optionally choose the track.",
                 "properties": {
-                  "anchor": {
-                    "description": "A nine-point anchor positioning the layer relative to the slide (default center).",
-                    "enum": [
-                      "center",
-                      "top-left",
-                      "top",
-                      "top-right",
-                      "left",
-                      "right",
-                      "bottom-left",
-                      "bottom",
-                      "bottom-right"
-                    ],
+                  "durationSeconds": {
+                    "description": "For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio, whose length is the asset's own.",
+                    "type": "number"
+                  },
+                  "mode": {
+                    "const": "at",
                     "type": "string"
                   },
-                  "asBackground": {
-                    "description": "Make the generated asset the slide's BACKGROUND rather than a free layer: placed full-bleed and promoted into the background slot once it lands. Ignores anchor / x / y / width / height (a background fills the slide).",
-                    "type": "boolean"
+                  "startSeconds": {
+                    "type": "number"
                   },
-                  "fit": {
-                    "description": "How the asset is sized to the slide: 'contain' (default) scales to fit inside it, 'cover' fills it edge to edge, 'none' uses a default box. Overridden by explicit width/height.",
-                    "enum": [
-                      "contain",
-                      "cover",
-                      "none"
-                    ],
+                  "track": {
+                    "description": "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track.",
                     "type": "string"
-                  },
-                  "height": {
-                    "description": "Explicit layer height in design pixels; overrides fit.",
-                    "type": "number"
-                  },
-                  "slideId": {
-                    "description": "The target slide. Omitted, the asset is placed on the slide the user is currently focused on (the one centered in their viewport, the same focused slide view reports), falling back to the first slide when no view is active.",
-                    "type": "string"
-                  },
-                  "slideIndex": {
-                    "description": "1-based slide number, an alternative to slideId.",
-                    "maximum": 9007199254740991,
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "width": {
-                    "description": "Explicit layer width in design pixels; the precise escape hatch that overrides fit.",
-                    "type": "number"
-                  },
-                  "x": {
-                    "description": "Fine position offset in design pixels from the anchor (from slide center when no anchor is given).",
-                    "type": "number"
-                  },
-                  "y": {
-                    "description": "Fine position offset in design pixels from the anchor.",
-                    "type": "number"
                   }
                 },
+                "required": [
+                  "mode"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Land at the current playhead.",
+                "properties": {
+                  "durationSeconds": {
+                    "description": "For an IMAGE placed as a point, the clip length in seconds (omitted uses the default still duration). Ignored for video/audio.",
+                    "type": "number"
+                  },
+                  "mode": {
+                    "const": "atPlayhead",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
+                "properties": {
+                  "duration": {
+                    "enum": [
+                      "natural",
+                      "match"
+                    ],
+                    "type": "string"
+                  },
+                  "itemId": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "const": "replace",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "mode"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Fill or cover a time span; optionally choose the track.",
+                "properties": {
+                  "endSeconds": {
+                    "type": "number"
+                  },
+                  "fit": {
+                    "enum": [
+                      "cover",
+                      "trim",
+                      "overwrite"
+                    ],
+                    "type": "string"
+                  },
+                  "mode": {
+                    "const": "range",
+                    "type": "string"
+                  },
+                  "startSeconds": {
+                    "type": "number"
+                  },
+                  "track": {
+                    "description": "Which track to place on: 'overlay' (a non-primary track with room, else a new track), 'primary' (the main track, media only), or a specific track id. Omit for the default track.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ],
                 "type": "object"
               }
-            ],
-            "description": "Where the clip lands: append to the end, at a time, at the playhead, replacing an existing clip, or filling a time range. Omitted places it at the playhead when known, else appends."
+            ]
           },
           "playheadFrame": {
             "description": "The current playhead frame, for playhead-relative placement.",
@@ -1813,10 +1748,12 @@ export const AGENT_CONTRACT = {
               "properties": {
                 "contentType": {
                   "description": "The MIME type of the file.",
+                  "minLength": 1,
                   "type": "string"
                 },
                 "fileName": {
                   "description": "The file name, used for its extension.",
+                  "minLength": 1,
                   "type": "string"
                 },
                 "sizeBytes": {
@@ -1863,10 +1800,11 @@ export const AGENT_CONTRACT = {
           "partNumbers": {
             "description": "The numbers of the parts to sign, counted from 1.",
             "items": {
-              "maximum": 9007199254740991,
+              "maximum": 10000,
               "minimum": 1,
               "type": "integer"
             },
+            "maxItems": 100,
             "minItems": 1,
             "type": "array"
           }
@@ -1906,11 +1844,12 @@ export const AGENT_CONTRACT = {
                     "properties": {
                       "etag": {
                         "description": "The ETag header of the store's answer to the part's PUT, exactly as received.",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "partNumber": {
                         "description": "The part number, counted from 1.",
-                        "maximum": 9007199254740991,
+                        "maximum": 10000,
                         "minimum": 1,
                         "type": "integer"
                       }
@@ -5131,11 +5070,16 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "A brand kit id from list_brand_kits, or null to clear it.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A brand kit id from list_brand_kits, or null to clear it."
           },
           "cover": {
             "anyOf": [
@@ -5161,6 +5105,7 @@ export const AGENT_CONTRACT = {
                 "additionalProperties": false,
                 "properties": {
                   "mediaId": {
+                    "minLength": 1,
                     "type": "string"
                   }
                 },
@@ -5314,6 +5259,7 @@ export const AGENT_CONTRACT = {
           },
           "versionId": {
             "description": "A saved version to copy from, by its id from list_project_versions. Omit to copy the project as it is now.",
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -6066,11 +6012,12 @@ export const AGENT_CONTRACT = {
           "durationFrames": {
             "description": "How long it lasts when placed, in frames.",
             "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
+            "maximum": 108000,
             "type": "integer"
           },
           "emoji": {
             "description": "An animated emoji's name, as the animated emoji list names it.",
+            "minLength": 1,
             "type": "string"
           },
           "fromItem": {
@@ -6078,9 +6025,12 @@ export const AGENT_CONTRACT = {
             "description": "A placed code clip, code layer or shape to save: the project id and the clip or layer id.",
             "properties": {
               "itemId": {
+                "minLength": 1,
                 "type": "string"
               },
               "projectId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
                 "type": "string"
               }
             },
@@ -6131,6 +6081,7 @@ export const AGENT_CONTRACT = {
                 "type": "array"
               },
               "url": {
+                "format": "uri",
                 "type": "string"
               }
             },
@@ -6186,6 +6137,7 @@ export const AGENT_CONTRACT = {
           },
           "shape": {
             "description": "A shape's name, as the shape layer type lists them in get_schema kind 'layer'.",
+            "minLength": 1,
             "type": "string"
           },
           "tags": {
@@ -6280,11 +6232,12 @@ export const AGENT_CONTRACT = {
           "durationFrames": {
             "description": "How long it lasts when placed, in frames.",
             "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
+            "maximum": 108000,
             "type": "integer"
           },
           "emoji": {
             "description": "An animated emoji's name, as the animated emoji list names it.",
+            "minLength": 1,
             "type": "string"
           },
           "expectedVersion": {
@@ -6330,6 +6283,7 @@ export const AGENT_CONTRACT = {
                 "type": "array"
               },
               "url": {
+                "format": "uri",
                 "type": "string"
               }
             },
@@ -6385,6 +6339,7 @@ export const AGENT_CONTRACT = {
           },
           "shape": {
             "description": "A shape's name, as the shape layer type lists them in get_schema kind 'layer'.",
+            "minLength": 1,
             "type": "string"
           },
           "tags": {
@@ -7562,7 +7517,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "3c9ce416f0278ecaaa9ee75b7ab97bb87130fcd44f284456b8e62a44426c2778",
+  "version": "2bd2c898071c9b65a86f34e8f18d94983391cea733bbf07eb33c3e45f53eb266",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7687,6 +7642,13 @@ export const AGENT_CONTRACT = {
       "stacked",
       "icon",
       "wordmark"
+    ],
+    "MEDIA_GET_SOURCES": [
+      "creations",
+      "uploads",
+      "exports",
+      "stock",
+      "files"
     ],
     "MEDIA_KINDS": [
       "image",
@@ -7852,7 +7814,7 @@ export interface ToolInputs {
   generate_board: { avatarId?: string; boardName?: string; boardType: string; getCost?: boolean; numImages?: number; prompt?: string; referenceImages?: Array<string> }
   generate_lip_sync: { audioDurationSeconds?: number; audioUrl?: string; getCost?: boolean; imageUrl: string; modelId: string; motionPrompt?: string; resolution?: string; script?: string; voiceId?: string; voiceName?: string }
   upscale: { durationSeconds?: number; factor: string; getCost?: boolean; modelId: string; sourceUrl: string }
-  edit_audio: { clipIds?: Array<string>; durationSeconds?: number; getCost?: boolean; inPlace?: boolean; modelId?: string; operation?: "isolate" | "enhance" | "split"; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; sourceUrl?: string }
+  edit_audio: { clipIds?: Array<string>; durationSeconds?: number; getCost?: boolean; inPlace?: boolean; modelId?: string; operation?: "isolate" | "enhance" | "split"; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string }; playheadFrame?: number; projectId?: string; sourceUrl?: string }
   transcribe: { audioUrl?: string; contentId?: string; diarize?: boolean; getCost?: boolean; languageCode?: string; slide?: number; videoUrl?: string }
   get_status: { ids: Array<string>; kind?: "output" | "export" | "brand_kit" | "avatar" | "content" | "scenes" | "transcript"; wait?: boolean }
   list_models: { contentType?: "image" | "video" | "audio" }
@@ -7994,6 +7956,7 @@ export const KLING_ELEMENT_CATEGORIES = ["auto","character","location","prop"] a
 export const KNOWLEDGE_SOURCE_TYPES = ["text","url","youtube","file"] as const
 export const LOGO_COLOR_MODES = ["full_color","light","dark","grayscale"] as const
 export const LOGO_LAYOUTS = ["horizontal","stacked","icon","wordmark"] as const
+export const MEDIA_GET_SOURCES = ["creations","uploads","exports","stock","files"] as const
 export const MEDIA_KINDS = ["image","video","audio"] as const
 export const MEDIA_LIST_SOURCES = ["all","creations","uploads","exports","stock"] as const
 export const MEDIA_LIST_TYPES = ["image","video","audio","doc","other"] as const

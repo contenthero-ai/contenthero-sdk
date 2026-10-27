@@ -170,6 +170,7 @@ export type {
   BrandKitSectionWrite,
   BrandKitKnowledge,
   BrandKit,
+  BrandKitAccountsLinkReport,
   UpdateBrandKitInput,
   CreateBrandKitInput,
   BrandImportOutcome,

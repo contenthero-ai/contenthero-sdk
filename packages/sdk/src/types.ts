@@ -11,6 +11,17 @@
 
 import type { LimitAction } from './errors.js'
 import {
+  ANALYSIS_COPY_RESOLUTIONS,
+  ANALYSIS_KINDS,
+  ARCHIVE_ASSET_TYPES,
+  CONTENT_SCOPES,
+  FOLDER_TYPES,
+  KNOWLEDGE_SOURCE_TYPES,
+  LOGO_COLOR_MODES,
+  LOGO_LAYOUTS,
+  POST_PLATFORMS,
+  PROJECT_TYPES,
+  TEMPLATE_SCOPE_FILTERS,
   JOB_KINDS,
   CARD_SORTS,
   CONTENT_SORTS,
@@ -222,7 +233,7 @@ export interface SortOptions<F extends string> {
 export type TemplateKind = 'code' | 'shape' | 'emoji' | 'logo'
 
 /** Whose templates: ContentHero's, the caller's own, or both. */
-export type TemplateScope = 'system' | 'user' | 'all'
+export type TemplateScope = (typeof TEMPLATE_SCOPE_FILTERS)[number]
 
 /**
  * A template in a list: everything but its code. ContentHero's (`scope: 'system'`) are read-only; the caller's own
@@ -1499,7 +1510,7 @@ export interface BrandKnowledgeMatch {
 }
 
 /** How a knowledge item is ingested. */
-export type BrandKnowledgeSourceType = 'text' | 'url' | 'youtube' | 'file'
+export type BrandKnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number]
 
 /** Input for `addBrandKnowledge`. */
 export interface AddBrandKnowledgeInput {
@@ -1558,11 +1569,27 @@ export interface BrandKit extends BrandKitSummary {
   brandAccounts: BrandKitAccount[]
   inspirationAccounts: BrandKitAccount[]
   knowledge: BrandKitKnowledge[]
+  /**
+   * What the last import left alone when it linked accounts: those already tracked as the other kind, kept as they
+   * were. Null when it left none.
+   */
+  accountsLinkReport: BrandKitAccountsLinkReport | null
+}
+
+/** The accounts a brand kit import kept as they were because they were already tracked as the other kind. */
+export interface BrandKitAccountsLinkReport {
+  kept: {
+    trackedAccountId: string
+    platform: string
+    handleOrUrl?: string
+    /** The kind the account is already tracked as. */
+    keptAs: 'brand' | 'inspiration'
+  }[]
 }
 
 /** How a logo is laid out, and the colors it is drawn in. */
-export type LogoLayout = 'horizontal' | 'stacked' | 'icon' | 'wordmark'
-export type LogoColorMode = 'full_color' | 'light' | 'dark' | 'grayscale'
+export type LogoLayout = (typeof LOGO_LAYOUTS)[number]
+export type LogoColorMode = (typeof LOGO_COLOR_MODES)[number]
 
 /** A kit's logo, as a full read carries it. Its place among the others is the list's order. */
 export interface BrandKitLogo {
@@ -1718,7 +1745,8 @@ export interface UpdateBrandKitInput {
 }
 
 /** Fields accepted when creating a brand kit. */
-export interface CreateBrandKitInput extends UpdateBrandKitInput {
+/** A new kit. It cannot be made the default in the same call: `isDefault` is for `updateBrandKit`. */
+export interface CreateBrandKitInput extends Omit<UpdateBrandKitInput, 'isDefault'> {
   /** Optional when a website or a social profile is given: it then defaults to the first site's hostname or the @handle. */
   name?: string
   /** Caller-minted id, so a create can be made idempotent. Must be a UUID. */
@@ -2169,11 +2197,16 @@ export interface SearchMediaOptions extends PageOptions {
 /** Result of `searchMedia`: a page of matches, most relevant first. */
 export interface SearchMediaPage extends Paged {
   results: SearchMediaResult[]
+  /**
+   * Why the search came back with no rows, when the server can say: the code names the cause and the message says it
+   * in words. Absent when rows came back (and from an older server).
+   */
+  emptyReason?: EmptyReason
 }
 
 // ─── Library folders (Unified Content Library, Phase D) ──────────────────────
 
-export type FolderType = 'manual' | 'smart'
+export type FolderType = (typeof FOLDER_TYPES)[number]
 
 /** The smart-folder query spec = the same filters the library search bar produces. */
 export interface SmartFolderQuery {
@@ -2562,15 +2595,7 @@ export interface ModelInfo {
 // ---------------------------------------------------------------------------
 
 /** Platforms a card or one of its posts may target. */
-export type PostPlatform =
-  | 'youtube'
-  | 'instagram'
-  | 'tiktok'
-  | 'facebook'
-  | 'linkedin'
-  | 'x'
-  | 'threads'
-  | 'general'
+export type PostPlatform = (typeof POST_PLATFORMS)[number]
 
 /**
  * 🚨 `CardStatus` IS GONE, AND SO IS THE COLUMN BEHIND IT. A card has no status.
@@ -2969,8 +2994,6 @@ export type NotesEdit = { append: string } | { find: string; replace: string }
 export interface UpdateCardInput extends Placement {
   title?: string
   platform?: PostPlatform
-  /** Archive or restore the card. `status` is untouched because a card no longer has one. */
-  archived?: boolean
   /** A stage id, slug, or name; resolved in the space the card is landing in. */
   stage?: string | null
   /**
@@ -3216,13 +3239,13 @@ export interface ContentScene {
 }
 
 /** What `analyzeContent` makes: `breakdown` (the default), `scenes`, or `video` (the post's video for analysis). */
-export type ContentAnalysisKind = 'breakdown' | 'scenes' | 'video'
+export type ContentAnalysisKind = (typeof ANALYSIS_KINDS)[number]
 
 /**
  * The most detail a post's analysis copy is fetched at, as a ceiling on the video's shorter side: the best the
  * platform offers up to it is downloaded. Only with kind `video`.
  */
-export type ContentVideoResolution = '720p' | '1080p'
+export type ContentVideoResolution = (typeof ANALYSIS_COPY_RESOLUTIONS)[number]
 
 /** What `estimateAnalysisCost` reports: the price, and for kind `video` the detail stored, offered and on offer. */
 export interface ContentAnalysisCostEstimate extends CostEstimate {
@@ -3522,7 +3545,7 @@ export interface TrackedAccountDetail {
 }
 
 /** Which ownership tiers a content read spans. */
-export type ContentScope = 'all' | 'inspiration' | 'brand'
+export type ContentScope = (typeof CONTENT_SCOPES)[number]
 
 /** Options for `listContent`. */
 export interface ListContentOptions extends PageOptions, SortOptions<ContentSort> {
@@ -3902,7 +3925,7 @@ export type FavoriteAssetType =
   | 'space'
 
 /** The asset types that can be archived. */
-export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space' | 'template' | 'style_library'
+export type ArchiveAssetType = (typeof ARCHIVE_ASSET_TYPES)[number]
 
 /**
  * The target of a favorite / unfavorite call: a media item by its `mediaId` (one output, `a1B2c3D4-2`, an upload,
@@ -4099,7 +4122,7 @@ export interface DocumentFinding {
  * Named `type` since sdk 0.4.16 (2026-09-27). It was `kind`, then `surface`; neither read as what it is.
  * `ProjectKind` and `ProjectSurface` stay as aliases so no import breaks.
  */
-export type ProjectType = 'editor' | 'canvas'
+export type ProjectType = (typeof PROJECT_TYPES)[number]
 /** @deprecated Use `ProjectType`. */
 export type ProjectKind = ProjectType
 /** @deprecated Use `ProjectType`. */
@@ -4800,10 +4823,6 @@ export interface ProjectListResult extends Paged {
  *  flow (16:9 landscape, an `editor` project, an empty composition the app lazy-inits). */
 export interface CreateProjectInput {
   type?: ProjectType
-  /** @deprecated Alias for `type`, accepted for one release window. */
-  surface?: ProjectType
-  /** @deprecated Alias for `type`, accepted for one release window. */
-  kind?: ProjectType
   title?: string
   orientation?: string
   width?: number

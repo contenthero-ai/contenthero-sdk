@@ -1329,7 +1329,7 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
 /** A page of semantic library-search matches: assets ranked by relevance, with matched scene timestamps for video. */
 export function mediaSearchResult(page: SearchMediaPage): CallToolResult {
   const results = page.results
-  if (!results.length) return text('No matching media found.')
+  if (!results.length) return text(lines(['No matching media found.', ...describeEmptyReason(page.emptyReason)]))
   const rows = results.map((r) => {
     const rel = ` | ${Math.round(r.relevance * 100)}%`
     const kindTag = r.kind ? `[${r.kind}]` : '[media]'

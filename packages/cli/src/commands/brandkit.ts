@@ -262,6 +262,9 @@ export function registerBrandKit(program: Command): void {
           ['Brand accounts', k.brandAccounts.length],
           ['Inspiration accounts', k.inspirationAccounts.length],
           ['Knowledge items', k.knowledge.length],
+          ...(k.accountsLinkReport?.kept.length
+            ? [['Accounts kept as they were', `${k.accountsLinkReport.kept.length} (already tracked as the other kind)`] as [string, string]]
+            : []),
         ]),
       )
     })
