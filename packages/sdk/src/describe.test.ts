@@ -61,6 +61,18 @@ test('an edit batch lists its warnings without doubling their periods', () => {
   assert.doesNotMatch(text, /\.\./)
 })
 
+/** Break-verified: dropping the copied and refused lines from describeEditorOps turns this red. */
+test('a module copy names the modules copied and each one refused with its reason', () => {
+  const result = {
+    revision: 4,
+    results: [{ op: 'copy_project_modules', ok: true, copiedModules: ['timing', 'colors'], refusedModules: [{ name: 'ghost', reason: 'The source project has no such module.' }] }],
+  } as unknown as ApplyEditorOpsResult
+  const text = describeEditorOps(result)
+  assert.match(text, /^Copied modules: timing, colors\.$/m)
+  assert.match(text, /^Modules not copied:\n {2}- ghost: The source project has no such module\.$/m)
+  assert.doesNotMatch(describeEditorOps({ revision: 4, results: [{ op: 'update_clip', ok: true }] } as unknown as ApplyEditorOpsResult), /Copied modules|not copied/)
+})
+
 /** A batch applies whole or not at all (2026-10-09): a refused batch says nothing was applied, never "Applied 1/2". */
 test('a refused batch says nothing was applied, and lists every op with its reason', () => {
   const result = {

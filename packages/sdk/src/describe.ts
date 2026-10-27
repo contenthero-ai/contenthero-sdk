@@ -304,6 +304,8 @@ const EDITOR_OP_RESULT_EXPOSURE = {
   generatingOutputId: 'rendered',
   generatingAppUrl: 'rendered',
   diagnostics: 'rendered',
+  copiedModules: 'rendered',
+  refusedModules: 'rendered',
   opId: 'omitted: the SDK mints it per call, and nothing the reader does next takes it',
 } satisfies Record<keyof EditorOpResult, string>
 void EDITOR_OP_RESULT_EXPOSURE
@@ -378,6 +380,14 @@ export function describeEditorOps(r: ApplyEditorOpsResult, options: { waitCall?:
   if (failures.length) {
     lines.push('Failed ops:')
     for (const f of failures) lines.push(`  - ${f.op}: ${f.error ?? 'unknown error'}`)
+  }
+  // `copy_project_modules`: what came across and what did not, each refusal with its reason.
+  const copied = r.results.flatMap((x) => x.copiedModules ?? [])
+  if (copied.length) lines.push(`Copied modules: ${copied.join(', ')}.`)
+  const refused = r.results.flatMap((x) => x.refusedModules ?? [])
+  if (refused.length) {
+    lines.push('Modules not copied:')
+    for (const m of refused) lines.push(`  - ${m.name}: ${m.reason}`)
   }
   const warnings = r.results.flatMap((x) => x.warnings ?? [])
   // Each warning is a sentence of its own; joined, its closing period is the line's, so none is doubled.

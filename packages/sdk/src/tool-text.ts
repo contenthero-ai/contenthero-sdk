@@ -65,7 +65,7 @@ export function getProjectDescription(audience: ToolTextAudience): string {
 export function updateTimelineDescription(audience: ToolTextAudience): string {
   return [
     'Edit a video timeline with a batch of operations, the same ones every ContentHero agent uses, applied by the server and shown in the open editor at once. Each operation is an object with an `op` name and its fields.',
-    "get_schema kind 'timeline' lists every operation with its shape and the rules they all follow; read an operation in full by its name before using one you have not read, and build a clip from its type's example there. A code clip imports project modules, which an operation sets.",
+    "get_schema kind 'timeline' lists every operation with its shape and the rules they all follow; read an operation in full by its name before using one you have not read, and build a clip from its type's example there. A code clip imports project modules, which an operation sets or copies from another of your projects.",
     `Read clip, track and transition ids from ${IDS_FROM[audience]}.`,
     'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result reports each operation, with what the compiler found in any code an operation wrote, and what the edit left in the project that may not render as intended, clip by clip.',
     'Prefer an edit the person can review and turn back over one that cannot be reversed, and make a destructive one only when they asked for it. A clip\'s length on the timeline follows its source and its speed: change its speed, not its length.',
@@ -78,7 +78,7 @@ export function updateTimelineDescription(audience: ToolTextAudience): string {
 export function updateCanvasDescription(audience: ToolTextAudience): string {
   return [
     'Edit a canvas (slides and layers) with a batch of operations, applied by the server and shown in the open editor at once. Each operation is an object with an `op` name and its fields.',
-    "get_schema kind 'layer' lists every operation with its shape and the rules they all follow; read an operation or a layer type in full by its name before using one you have not read.",
+    "get_schema kind 'layer' lists every operation with its shape and the rules they all follow; read an operation or a layer type in full by its name before using one you have not read. A code layer imports project modules, which an operation sets or copies from another of your projects.",
     `Read slide and layer ids from ${IDS_FROM[audience]}.`,
     'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result also reports what the edit left in the project that may not render as intended, layer by layer.',
     'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
