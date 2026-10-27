@@ -1873,3 +1873,14 @@ test('getProject asks for the modules index alone and reads it back', async () =
   assert.equal(new URL(calls[0]?.url ?? '').searchParams.get('modulesIndex'), 'true')
   assert.deepEqual(r.modulesIndex, index)
 })
+
+test('updateMedia patches the media route with name and description and returns the item', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { mediaId: 'a1B2c3D4', name: 'New', description: 'About' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const item = await client.updateMedia('a1B2c3D4', { name: 'New', description: 'About' })
+  assert.equal(calls[0]?.init?.method, 'PATCH')
+  assert.equal(new URL(calls[0]!.url).pathname, '/api/v1/media/a1B2c3D4')
+  assert.equal(calls[0]?.init?.body, '{"name":"New","description":"About"}')
+  assert.equal(item.name, 'New')
+  assert.equal(item.description, 'About')
+})

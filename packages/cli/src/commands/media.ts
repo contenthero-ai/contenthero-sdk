@@ -3,6 +3,7 @@
  *   media list [--source --collection --query --orientation --type --kind --status --limit --cursor --small-copies]   media you can place; stock with --source stock
  *   media search <query> [--kinds --limit --cursor --small-copies]         semantic search of the editable library
  *   media get <id>                                          one item, with its outputs
+ *   media update <id> [--name --description]                rename a stored file or describe it
  *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
  *
  * Spans creations, reference boards, and looks; filter with --kind. Every item is named by its media id: the short
@@ -192,6 +193,26 @@ export function registerMedia(program: Command): void {
           ),
           p.nextCursor,
         ),
+      )
+    })
+
+  media
+    .command('update')
+    .description('Rename a stored file or give it a description. Pass --name, --description or both; an empty --description clears it. Only library files can be changed, never a generated output or a stock item')
+    .argument('<id>', 'media id, as `media list` prints it')
+    .option('--name <name>', 'the new name for the file')
+    .option('--description <text>', 'a description of the file')
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+      if (opts.name === undefined && opts.description === undefined) {
+        throw new CliError('Pass --name, --description or both.', EXIT.USAGE)
+      }
+      const { client, ctx } = makeClient(command)
+      const item = await client.updateMedia(id, {
+        name: opts.name as string | undefined,
+        description: opts.description as string | undefined,
+      })
+      emit(item, ctx, (m: MediaItem) =>
+        keyValues([['Id', m.mediaId], ['Name', m.name ?? ''], ['Description', m.description ?? '']]),
       )
     })
 

@@ -1811,6 +1811,8 @@ export interface MediaSummary {
   name: string | null
   /** The file's name, which a download saves under: one a person gave, or one made for a creation. */
   fileName: string | null
+  /** What a person wrote about a library file, set with `updateMedia`; null when none. Absent from a server that predates it. */
+  description?: string | null
   /** The file's size in bytes, as the library shows it and the storage meter counts it; listings only. */
   sizeBytes?: number
   /** Duration in seconds for a single-file item (uploads video/audio); null otherwise. */
@@ -1885,6 +1887,17 @@ export interface MediaRegion {
   y: number
   width: number
   height: number
+}
+
+/**
+ * What `updateMedia` changes on a stored file: its name, its description, or both. A field left out is left alone;
+ * an empty `description` clears it. At least one is required.
+ */
+export interface UpdateMediaInput {
+  /** The name the library shows and downloads save under. */
+  name?: string
+  /** Free text about the file. An empty string clears it. */
+  description?: string
 }
 
 /** One requested item for `getMediaBatch`: a raw URL, or a media reference; either a region. */

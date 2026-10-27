@@ -78,6 +78,7 @@ import type {
   ListCardsOptions,
   ListStagesOptions,
   FavoriteInput,
+  UpdateMediaInput,
   ShareInput,
   ShareItemInput,
   ProjectShare,
@@ -970,6 +971,16 @@ export class ContentHero {
   async getMedia(idToken: string, options: { source?: MediaSource } = {}): Promise<MediaItem> {
     const qs = options.source ? `?source=${encodeURIComponent(options.source)}` : ''
     return this.request<MediaItem>('GET', `/api/v1/media/${encodeURIComponent(idToken)}${qs}`)
+  }
+
+  /**
+   * Rename a stored file or give it a description, after upload (`PATCH /api/v1/media/{token}`). Pass `name`,
+   * `description` or both; neither is refused. Only files in the library can be changed this way, never a
+   * generated output or a stock item. Returns the updated item, shaped as `getMedia` returns it. Requires the
+   * `library:write` scope.
+   */
+  async updateMedia(idToken: string, patch: UpdateMediaInput): Promise<MediaItem> {
+    return this.request<MediaItem>('PATCH', `/api/v1/media/${encodeURIComponent(idToken)}`, patch)
   }
 
   /**
