@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "a01b8563999a3bdf556cb6a25e31a72f94c51306bf6f8dbad897d9109f653cc0"
+export const AGENT_CONTRACT_VERSION = "3c9ce416f0278ecaaa9ee75b7ab97bb87130fcd44f284456b8e62a44426c2778"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -80,6 +80,7 @@ export const AGENT_CONTRACT = {
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -93,6 +94,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -117,6 +119,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -134,6 +137,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -152,12 +156,13 @@ export const AGENT_CONTRACT = {
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -191,6 +196,7 @@ export const AGENT_CONTRACT = {
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -326,6 +332,7 @@ export const AGENT_CONTRACT = {
           "klingElements": {
             "description": "Kling elements: each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Only for models that take them (get_model promptReferences, named_tag scheme). Requires a startFrame.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "description": {
                   "description": "Inline Kling element: what it represents.",
@@ -375,6 +382,7 @@ export const AGENT_CONTRACT = {
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -388,6 +396,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -412,6 +421,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -429,6 +439,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -447,12 +458,13 @@ export const AGENT_CONTRACT = {
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -486,6 +498,7 @@ export const AGENT_CONTRACT = {
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -589,6 +602,7 @@ export const AGENT_CONTRACT = {
           "shots": {
             "description": "Multi-shot mode with per-shot prompts, on a model that takes them (get_model gives its shot limits): an ordered list of shots, each with its own prompt and duration in seconds. When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "duration": {
                   "type": "number"
@@ -598,8 +612,8 @@ export const AGENT_CONTRACT = {
                 }
               },
               "required": [
-                "prompt",
-                "duration"
+                "duration",
+                "prompt"
               ],
               "type": "object"
             },
@@ -644,6 +658,7 @@ export const AGENT_CONTRACT = {
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -657,6 +672,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -681,6 +697,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -698,6 +715,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -716,12 +734,13 @@ export const AGENT_CONTRACT = {
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -755,6 +774,7 @@ export const AGENT_CONTRACT = {
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -958,8 +978,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "modelId",
-          "imageUrl"
+          "imageUrl",
+          "modelId"
         ],
         "type": "object"
       },
@@ -997,9 +1017,9 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
+          "factor",
           "modelId",
-          "sourceUrl",
-          "factor"
+          "sourceUrl"
         ],
         "type": "object"
       },
@@ -1052,6 +1072,7 @@ export const AGENT_CONTRACT = {
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -1065,6 +1086,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -1089,6 +1111,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -1106,6 +1129,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -1124,12 +1148,13 @@ export const AGENT_CONTRACT = {
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -1163,6 +1188,7 @@ export const AGENT_CONTRACT = {
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -1504,8 +1530,10 @@ export const AGENT_CONTRACT = {
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "region": {
+                      "additionalProperties": false,
                       "description": "Zoom: the part of an image to cut out, in its own pixels (an item's geometry gives its size). Cut from the original and returned at its own detail, never enlarged; clamped to the file.",
                       "properties": {
                         "height": {
@@ -1524,10 +1552,10 @@ export const AGENT_CONTRACT = {
                         }
                       },
                       "required": [
-                        "x",
-                        "y",
+                        "height",
                         "width",
-                        "height"
+                        "x",
+                        "y"
                       ],
                       "type": "object"
                     },
@@ -1542,12 +1570,14 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).",
                       "type": "string"
                     },
                     "region": {
+                      "additionalProperties": false,
                       "description": "Zoom: the part of an image to cut out, in its own pixels (an item's geometry gives its size). Cut from the original and returned at its own detail, never enlarged; clamped to the file.",
                       "properties": {
                         "height": {
@@ -1566,10 +1596,10 @@ export const AGENT_CONTRACT = {
                         }
                       },
                       "required": [
-                        "x",
-                        "y",
+                        "height",
                         "width",
-                        "height"
+                        "x",
+                        "y"
                       ],
                       "type": "object"
                     }
@@ -1607,6 +1637,7 @@ export const AGENT_CONTRACT = {
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "url": {
                       "description": "A media URL on one of our storage hosts.",
@@ -1620,6 +1651,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).",
@@ -1777,6 +1809,7 @@ export const AGENT_CONTRACT = {
           "files": {
             "description": "The files to upload.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "contentType": {
                   "description": "The MIME type of the file.",
@@ -1794,8 +1827,8 @@ export const AGENT_CONTRACT = {
                 }
               },
               "required": [
-                "fileName",
                 "contentType",
+                "fileName",
                 "sizeBytes"
               ],
               "type": "object"
@@ -1860,6 +1893,7 @@ export const AGENT_CONTRACT = {
           "uploads": {
             "description": "The files to finish.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "outputId": {
                   "description": "The outputId create_upload answered for the file.",
@@ -1868,6 +1902,7 @@ export const AGENT_CONTRACT = {
                 "parts": {
                   "description": "Multipart files only: the number and ETag of every part, exactly as the store answered its PUT.",
                   "items": {
+                    "additionalProperties": false,
                     "properties": {
                       "etag": {
                         "description": "The ETag header of the store's answer to the part's PUT, exactly as received.",
@@ -1881,8 +1916,8 @@ export const AGENT_CONTRACT = {
                       }
                     },
                     "required": [
-                      "partNumber",
-                      "etag"
+                      "etag",
+                      "partNumber"
                     ],
                     "type": "object"
                   },
@@ -1996,6 +2031,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "query": {
+            "additionalProperties": false,
             "description": "For a smart folder: the live query that defines its membership (the same filters as the library search bar).",
             "properties": {
               "favoritedOnly": {
@@ -2083,6 +2119,7 @@ export const AGENT_CONTRACT = {
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2095,6 +2132,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "projectId": {
                       "description": "A project's id.",
@@ -2107,6 +2145,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "cardId": {
                       "description": "A card's id.",
@@ -2134,11 +2173,13 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "moveItem": {
+            "additionalProperties": false,
             "description": "Move one item within this manual folder: after or before another of its items, or to an end (position). Each item is named as addItems names one. Name neighbors or a position, not both.",
             "properties": {
               "after": {
                 "anyOf": [
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "mediaId": {
                         "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2151,6 +2192,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "projectId": {
                         "description": "A project's id.",
@@ -2163,6 +2205,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "cardId": {
                         "description": "A card's id.",
@@ -2179,6 +2222,7 @@ export const AGENT_CONTRACT = {
               "before": {
                 "anyOf": [
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "mediaId": {
                         "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2191,6 +2235,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "projectId": {
                         "description": "A project's id.",
@@ -2203,6 +2248,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "cardId": {
                         "description": "A card's id.",
@@ -2219,6 +2265,7 @@ export const AGENT_CONTRACT = {
               "item": {
                 "anyOf": [
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "mediaId": {
                         "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2231,6 +2278,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "projectId": {
                         "description": "A project's id.",
@@ -2243,6 +2291,7 @@ export const AGENT_CONTRACT = {
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "cardId": {
                         "description": "A card's id.",
@@ -2281,6 +2330,7 @@ export const AGENT_CONTRACT = {
             ]
           },
           "query": {
+            "additionalProperties": false,
             "description": "For a smart folder: the live query that defines its membership (the same filters as the library search bar).",
             "properties": {
               "favoritedOnly": {
@@ -2335,6 +2385,7 @@ export const AGENT_CONTRACT = {
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2347,6 +2398,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "projectId": {
                       "description": "A project's id.",
@@ -2359,6 +2411,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "cardId": {
                       "description": "A card's id.",
@@ -2666,9 +2719,9 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "name",
           "age",
-          "gender"
+          "gender",
+          "name"
         ],
         "type": "object"
       },
@@ -2719,6 +2772,7 @@ export const AGENT_CONTRACT = {
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "imageUrls": {
                       "description": "Images the account already owns, as URLs: an upload, a creation, an editor export, or another avatar look. Anything not owned by this account is skipped rather than failing the call.",
@@ -2737,12 +2791,13 @@ export const AGENT_CONTRACT = {
                     }
                   },
                   "required": [
-                    "op",
-                    "imageUrls"
+                    "imageUrls",
+                    "op"
                   ],
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "lookId": {
                       "description": "A look id from get_avatar.",
@@ -2754,8 +2809,8 @@ export const AGENT_CONTRACT = {
                     }
                   },
                   "required": [
-                    "op",
-                    "lookId"
+                    "lookId",
+                    "op"
                   ],
                   "type": "object"
                 }
@@ -2934,8 +2989,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "name",
-          "description"
+          "description",
+          "name"
         ],
         "type": "object"
       },
@@ -3286,8 +3341,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "stageId",
-          "spaceId"
+          "spaceId",
+          "stageId"
         ],
         "type": "object"
       },
@@ -3318,8 +3373,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "stageId",
-          "spaceId"
+          "spaceId",
+          "stageId"
         ],
         "type": "object"
       },
@@ -3506,8 +3561,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "title",
-          "platform"
+          "platform",
+          "title"
         ],
         "type": "object"
       },
@@ -3531,6 +3586,7 @@ export const AGENT_CONTRACT = {
           "assets": {
             "description": "The post's assets IN ORDER, each { id } to keep an existing one or ONE of { outputId } | { assetUrl, assetType? } | { contentId } | { projectId } to add. REPLACES the list; [] clears it.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "assetType": {
                   "description": "Accepted and not needed: the kind is read from what the entry points at. Never 'inspiration' or a project type: use contentId or projectId.",
@@ -3659,6 +3715,7 @@ export const AGENT_CONTRACT = {
           "posts": {
             "description": "The card's posts, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "connectedAccountId": {
                   "type": [
@@ -3811,8 +3868,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "tagId",
-          "name"
+          "name",
+          "tagId"
         ],
         "type": "object"
       },
@@ -4029,6 +4086,7 @@ export const AGENT_CONTRACT = {
           "assets": {
             "description": "The kit's brand assets, each { url | outputId, name? }.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
@@ -4055,6 +4113,7 @@ export const AGENT_CONTRACT = {
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4086,6 +4145,7 @@ export const AGENT_CONTRACT = {
           "brandColors": {
             "description": "The kit's palette, each { hex, name?, role? }.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "hex": {
                   "description": "Six-digit hex, like #1A2B3C.",
@@ -4129,6 +4189,7 @@ export const AGENT_CONTRACT = {
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4160,6 +4221,7 @@ export const AGENT_CONTRACT = {
           "logos": {
             "description": "The kit's logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?, colorMode? }. Use outputId to bring in a generation.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "colorMode": {
                   "enum": [
@@ -4210,6 +4272,7 @@ export const AGENT_CONTRACT = {
           "sections": {
             "description": "Section content, each { key, body } to fill a starter section, or { sectionName, tab, body? } to add your own.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "afterId": {
                   "description": "Place it immediately after this item of the same list.",
@@ -4274,6 +4337,7 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "typography": {
+            "additionalProperties": false,
             "description": "The kit's fonts, { titleFont?, bodyFont? }.",
             "properties": {
               "bodyFont": {
@@ -4323,6 +4387,7 @@ export const AGENT_CONTRACT = {
           "assets": {
             "description": "The kit's brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
@@ -4353,6 +4418,7 @@ export const AGENT_CONTRACT = {
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4384,6 +4450,7 @@ export const AGENT_CONTRACT = {
           "brandColors": {
             "description": "The kit's palette, each { hex, name?, role? }. REPLACES the list; [] clears it.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "hex": {
                   "description": "Six-digit hex, like #1A2B3C.",
@@ -4427,6 +4494,7 @@ export const AGENT_CONTRACT = {
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4463,6 +4531,7 @@ export const AGENT_CONTRACT = {
           "logos": {
             "description": "The kit's logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit's cover); name none and the first wins.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "colorMode": {
                   "enum": [
@@ -4521,6 +4590,7 @@ export const AGENT_CONTRACT = {
           "sections": {
             "description": "Section writes: only the sections you change, all or nothing. { key, body, expectedVersion } edits one; { sectionName, tab, body? } adds one.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "afterId": {
                   "description": "Place it immediately after this item of the same list.",
@@ -4587,6 +4657,7 @@ export const AGENT_CONTRACT = {
           "typography": {
             "anyOf": [
               {
+                "additionalProperties": false,
                 "properties": {
                   "bodyFont": {
                     "description": "The font family for body text. null or '' clears it.",
@@ -5073,6 +5144,7 @@ export const AGENT_CONTRACT = {
                 "type": "string"
               },
               {
+                "additionalProperties": false,
                 "properties": {
                   "frame": {
                     "maximum": 9007199254740991,
@@ -5086,6 +5158,7 @@ export const AGENT_CONTRACT = {
                 "type": "object"
               },
               {
+                "additionalProperties": false,
                 "properties": {
                   "mediaId": {
                     "type": "string"
@@ -5102,6 +5175,7 @@ export const AGENT_CONTRACT = {
           "coverPosition": {
             "anyOf": [
               {
+                "additionalProperties": false,
                 "properties": {
                   "x": {
                     "type": "number"
@@ -5164,6 +5238,7 @@ export const AGENT_CONTRACT = {
             "type": "boolean"
           },
           "linkedTracks": {
+            "additionalProperties": false,
             "description": "Video projects only: which kinds of track linkage reaches; a kind you omit is left alone.",
             "properties": {
               "audio": {
@@ -5271,8 +5346,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "projectId",
-          "confirm"
+          "confirm",
+          "projectId"
         ],
         "type": "object"
       },
@@ -5539,9 +5614,9 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
+          "label",
           "projectId",
-          "versionId",
-          "label"
+          "versionId"
         ],
         "type": "object"
       },
@@ -5688,8 +5763,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "projectId",
           "ops",
+          "projectId",
           "userIntent"
         ],
         "type": "object"
@@ -5745,8 +5820,8 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "projectId",
           "ops",
+          "projectId",
           "userIntent"
         ],
         "type": "object"
@@ -5999,6 +6074,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "fromItem": {
+            "additionalProperties": false,
             "description": "A placed code clip, code layer or shape to save: the project id and the clip or layer id.",
             "properties": {
               "itemId": {
@@ -6009,8 +6085,8 @@ export const AGENT_CONTRACT = {
               }
             },
             "required": [
-              "projectId",
-              "itemId"
+              "itemId",
+              "projectId"
             ],
             "type": "object"
           },
@@ -6032,10 +6108,12 @@ export const AGENT_CONTRACT = {
             "description": "Its default height, a fraction of the canvas's."
           },
           "lottie": {
+            "additionalProperties": false,
             "description": "A Lottie file of ours, and the colors in it that props recolor (each role names a prop).",
             "properties": {
               "recolor": {
                 "items": {
+                  "additionalProperties": false,
                   "properties": {
                     "from": {
                       "type": "string"
@@ -6229,10 +6307,12 @@ export const AGENT_CONTRACT = {
             "description": "Its default height, a fraction of the canvas's."
           },
           "lottie": {
+            "additionalProperties": false,
             "description": "A Lottie file of ours, and the colors in it that props recolor (each role names a prop).",
             "properties": {
               "recolor": {
                 "items": {
+                  "additionalProperties": false,
                   "properties": {
                     "from": {
                       "type": "string"
@@ -6466,6 +6546,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "fromProject": {
+            "additionalProperties": false,
             "description": "Modules of one project: { projectId, modules, revision }. The revision guards against a project that changed.",
             "properties": {
               "modules": {
@@ -6484,8 +6565,8 @@ export const AGENT_CONTRACT = {
               }
             },
             "required": [
-              "projectId",
-              "modules"
+              "modules",
+              "projectId"
             ],
             "type": "object"
           },
@@ -6493,6 +6574,7 @@ export const AGENT_CONTRACT = {
             "additionalProperties": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "code": {
                       "type": "string"
@@ -6504,6 +6586,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "edits": {}
                   },
@@ -6562,6 +6645,7 @@ export const AGENT_CONTRACT = {
             ]
           },
           "fromProject": {
+            "additionalProperties": false,
             "description": "Modules of one project: { projectId, modules, revision }. The revision guards against a project that changed.",
             "properties": {
               "modules": {
@@ -6580,8 +6664,8 @@ export const AGENT_CONTRACT = {
               }
             },
             "required": [
-              "projectId",
-              "modules"
+              "modules",
+              "projectId"
             ],
             "type": "object"
           },
@@ -6589,6 +6673,7 @@ export const AGENT_CONTRACT = {
             "additionalProperties": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "code": {
                       "type": "string"
@@ -6600,6 +6685,7 @@ export const AGENT_CONTRACT = {
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "edits": {}
                   },
@@ -6712,6 +6798,7 @@ export const AGENT_CONTRACT = {
           "accounts": {
             "description": "The accounts to track, in the order they are listed.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "handleOrUrl": {
                   "description": "A handle or a profile URL.",
@@ -7242,6 +7329,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "region": {
+            "additionalProperties": false,
             "description": "Render only this rectangle, { x, y, width, height } in composition units (get_project's compositionSpace), to inspect detail. Without width it comes back at native pixels. For a source, the rectangle is in its own pixels.",
             "properties": {
               "height": {
@@ -7262,10 +7350,10 @@ export const AGENT_CONTRACT = {
               }
             },
             "required": [
-              "x",
-              "y",
+              "height",
               "width",
-              "height"
+              "x",
+              "y"
             ],
             "type": "object"
           },
@@ -7315,12 +7403,14 @@ export const AGENT_CONTRACT = {
                 "type": "string"
               },
               {
+                "additionalProperties": false,
                 "properties": {
                   "atSec": {
                     "minimum": 0,
                     "type": "number"
                   },
                   "box": {
+                    "additionalProperties": false,
                     "properties": {
                       "h": {
                         "exclusiveMinimum": 0,
@@ -7344,10 +7434,10 @@ export const AGENT_CONTRACT = {
                       }
                     },
                     "required": [
-                      "x",
-                      "y",
+                      "h",
                       "w",
-                      "h"
+                      "x",
+                      "y"
                     ],
                     "type": "object"
                   }
@@ -7472,7 +7562,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "a01b8563999a3bdf556cb6a25e31a72f94c51306bf6f8dbad897d9109f653cc0",
+  "version": "3c9ce416f0278ecaaa9ee75b7ab97bb87130fcd44f284456b8e62a44426c2778",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7512,6 +7602,13 @@ export const AGENT_CONTRACT = {
       "cover",
       "none"
     ],
+    "CARD_SORTS": [
+      "updatedAt",
+      "createdAt",
+      "scheduledAt",
+      "title",
+      "position"
+    ],
     "CONTENT_PLATFORMS": [
       "youtube",
       "instagram"
@@ -7520,6 +7617,13 @@ export const AGENT_CONTRACT = {
       "all",
       "inspiration",
       "brand"
+    ],
+    "CONTENT_SORTS": [
+      "relevance",
+      "outlierScore",
+      "publishedAt",
+      "viewCount",
+      "engagementRate"
     ],
     "DETAIL_LEVELS": [
       "summary",
@@ -7603,6 +7707,11 @@ export const AGENT_CONTRACT = {
       "doc",
       "other"
     ],
+    "MEDIA_SORTS": [
+      "createdAt",
+      "fileName",
+      "sizeBytes"
+    ],
     "PICTURE_DETECTORS": [
       "pointer",
       "face"
@@ -7633,6 +7742,11 @@ export const AGENT_CONTRACT = {
     "PROJECT_FILTERS": [
       "archived",
       "favorited"
+    ],
+    "PROJECT_SORTS": [
+      "updatedAt",
+      "createdAt",
+      "title"
     ],
     "PROJECT_TYPES": [
       "editor",
@@ -7672,12 +7786,30 @@ export const AGENT_CONTRACT = {
       "threads",
       "linkedin"
     ],
+    "SORT_ORDERS": [
+      "asc",
+      "desc"
+    ],
+    "SPACE_SORTS": [
+      "updatedAt",
+      "name",
+      "cardCount"
+    ],
     "STOCK_COLLECTIONS": [
       "photos",
       "videos",
       "gifs",
       "stickers",
       "sounds"
+    ],
+    "STOCK_ORIENTATIONS": [
+      "landscape",
+      "portrait",
+      "square"
+    ],
+    "STYLE_LIBRARY_SORTS": [
+      "updatedAt",
+      "name"
     ],
     "TEMPLATE_COVERAGES": [
       "full",
@@ -7848,8 +7980,10 @@ export const ANALYSIS_KINDS = ["breakdown","scenes","video"] as const
 export const ARCHIVE_ASSET_TYPES = ["card","brand_kit","brand_kit_section","project","space","template","style_library"] as const
 export const CANVAS_ANCHORS = ["center","top-left","top","top-right","left","right","bottom-left","bottom","bottom-right"] as const
 export const CANVAS_FITS = ["contain","cover","none"] as const
+export const CARD_SORTS = ["updatedAt","createdAt","scheduledAt","title","position"] as const
 export const CONTENT_PLATFORMS = ["youtube","instagram"] as const
 export const CONTENT_SCOPES = ["all","inspiration","brand"] as const
+export const CONTENT_SORTS = ["relevance","outlierScore","publishedAt","viewCount","engagementRate"] as const
 export const DETAIL_LEVELS = ["summary","full"] as const
 export const FAVORITE_ASSET_TYPES = ["card","voice","brand_kit","project","inspiration_content","gallery","transition","caption-template","template","space"] as const
 export const FOLDER_QUERY_SORTS = ["relevance","recent","name"] as const
@@ -7863,36 +7997,28 @@ export const LOGO_LAYOUTS = ["horizontal","stacked","icon","wordmark"] as const
 export const MEDIA_KINDS = ["image","video","audio"] as const
 export const MEDIA_LIST_SOURCES = ["all","creations","uploads","exports","stock"] as const
 export const MEDIA_LIST_TYPES = ["image","video","audio","doc","other"] as const
+export const MEDIA_SORTS = ["createdAt","fileName","sizeBytes"] as const
 export const PICTURE_DETECTORS = ["pointer","face"] as const
 export const PLACEMENT_DURATIONS = ["natural","match"] as const
 export const PLACEMENT_ENDS = ["top","bottom"] as const
 export const PLACEMENT_RANGE_FITS = ["cover","trim","overwrite"] as const
 export const POST_PLATFORMS = ["youtube","instagram","tiktok","facebook","linkedin","x","threads","general"] as const
 export const PROJECT_FILTERS = ["archived","favorited"] as const
+export const PROJECT_SORTS = ["updatedAt","createdAt","title"] as const
 export const PROJECT_TYPES = ["editor","canvas"] as const
 export const PUBLICATION_DATES = ["week","month","3months","6months","year","2years"] as const
 export const RENDER_LAYOUTS = ["frames","sheets"] as const
 export const SCENE_GRAINS = ["none","map"] as const
 export const SCHEMA_KINDS = ["platform","timeline","layer","export","link","code","effect"] as const
 export const SOCIAL_PLATFORMS = ["youtube","instagram","facebook","tiktok","x","threads","linkedin"] as const
+export const SORT_ORDERS = ["asc","desc"] as const
+export const SPACE_SORTS = ["updatedAt","name","cardCount"] as const
 export const STOCK_COLLECTIONS = ["photos","videos","gifs","stickers","sounds"] as const
+export const STOCK_ORIENTATIONS = ["landscape","portrait","square"] as const
+export const STYLE_LIBRARY_SORTS = ["updatedAt","name"] as const
 export const TEMPLATE_COVERAGES = ["full","partial"] as const
 export const TEMPLATE_RESIZES = ["scale","reflow"] as const
 export const TEMPLATE_SCOPE_FILTERS = ["system","user","all"] as const
 export const TRACKED_ACCOUNT_TYPES = ["inspiration","brand"] as const
 export const TRANSCRIPT_GRAINS = ["none","text","segments","words"] as const
 export const TRANSCRIPT_GRANULARITIES = ["clip","word"] as const
-
-// Vocabularies the contract carries as the enum of one tool field, read from that field.
-export const SORT_ORDERS = ["asc","desc"] as const
-export const MEDIA_STOCK_ORIENTATIONS = ["landscape","portrait","square"] as const
-
-/** Every field each sortable listing orders by: the enum of that listing's `sort` input. */
-export const LIST_SORTS = {
-  cards: ["updatedAt","createdAt","scheduledAt","title","position"],
-  projects: ["updatedAt","createdAt","title"],
-  spaces: ["updatedAt","name","cardCount"],
-  styleLibraries: ["updatedAt","name"],
-  content: ["relevance","outlierScore","publishedAt","viewCount","engagementRate"],
-  media: ["createdAt","fileName","sizeBytes"],
-} as const

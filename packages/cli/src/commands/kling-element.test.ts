@@ -64,7 +64,8 @@ const VERBS: Array<{ args: string[]; method: string; path: string; body?: Record
   { args: ['delete', 'Kling001'], method: 'DELETE', path: '/api/v1/kling-elements/Kling001' },
 ]
 
-for (const group of ['kling-element', 'element']) {
+{
+  const group = 'kling-element'
   test(`${group} <verb> reaches /api/v1/kling-elements`, async () => {
     for (const verb of VERBS) {
       const r = await run(group, ...verb.args)
@@ -73,6 +74,10 @@ for (const group of ['kling-element', 'element']) {
     }
   })
 }
+
+test('the retired element command group is refused', async () => {
+  await assert.rejects(run('element', 'list'), /unknown command 'element'/)
+})
 
 test('generate video --kling-element sends klingElements by klingElementId', async () => {
   const r = await run('generate', 'video', '@hero walks in', '-m', 'kling-3.0', '--start-frame', 'https://cdn/s.png',

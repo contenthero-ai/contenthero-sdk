@@ -37,6 +37,7 @@
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -50,6 +51,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -74,6 +76,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -91,6 +94,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -109,12 +113,13 @@
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -148,6 +153,7 @@
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -283,6 +289,7 @@
           "klingElements": {
             "description": "Kling elements: each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Only for models that take them (get_model promptReferences, named_tag scheme). Requires a startFrame.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "description": {
                   "description": "Inline Kling element: what it represents.",
@@ -332,6 +339,7 @@
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -345,6 +353,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -369,6 +378,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -386,6 +396,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -404,12 +415,13 @@
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -443,6 +455,7 @@
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -546,6 +559,7 @@
           "shots": {
             "description": "Multi-shot mode with per-shot prompts, on a model that takes them (get_model gives its shot limits): an ordered list of shots, each with its own prompt and duration in seconds. When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "duration": {
                   "type": "number"
@@ -555,8 +569,8 @@
                 }
               },
               "required": [
-                "prompt",
-                "duration"
+                "duration",
+                "prompt"
               ],
               "type": "object"
             },
@@ -601,6 +615,7 @@
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -614,6 +629,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -638,6 +654,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -655,6 +672,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -673,12 +691,13 @@
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -712,6 +731,7 @@
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -915,8 +935,8 @@
           }
         },
         "required": [
-          "modelId",
-          "imageUrl"
+          "imageUrl",
+          "modelId"
         ],
         "type": "object"
       },
@@ -954,9 +974,9 @@
           }
         },
         "required": [
+          "factor",
           "modelId",
-          "sourceUrl",
-          "factor"
+          "sourceUrl"
         ],
         "type": "object"
       },
@@ -1009,6 +1029,7 @@
               {
                 "oneOf": [
                   {
+                    "additionalProperties": false,
                     "description": "Land after the last clip on the best track of the clip's kind, or a new track.",
                     "properties": {
                       "mode": {
@@ -1022,6 +1043,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at an explicit time; optionally choose the track.",
                     "properties": {
                       "durationSeconds": {
@@ -1046,6 +1068,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Land at the current playhead.",
                     "properties": {
                       "durationSeconds": {
@@ -1063,6 +1086,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Swap in place for an existing clip; the new clip inherits its track + start.",
                     "properties": {
                       "duration": {
@@ -1081,12 +1105,13 @@
                       }
                     },
                     "required": [
-                      "mode",
-                      "itemId"
+                      "itemId",
+                      "mode"
                     ],
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "description": "Fill or cover a time span; optionally choose the track.",
                     "properties": {
                       "endSeconds": {
@@ -1120,6 +1145,7 @@
                 ]
               },
               {
+                "additionalProperties": false,
                 "description": "Canvas placement: place the asset as a layer on a slide (or as the slide background with asBackground).",
                 "properties": {
                   "anchor": {
@@ -1461,8 +1487,10 @@
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "region": {
+                      "additionalProperties": false,
                       "description": "Zoom: the part of an image to cut out, in its own pixels (an item's geometry gives its size). Cut from the original and returned at its own detail, never enlarged; clamped to the file.",
                       "properties": {
                         "height": {
@@ -1481,10 +1509,10 @@
                         }
                       },
                       "required": [
-                        "x",
-                        "y",
+                        "height",
                         "width",
-                        "height"
+                        "x",
+                        "y"
                       ],
                       "type": "object"
                     },
@@ -1499,12 +1527,14 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).",
                       "type": "string"
                     },
                     "region": {
+                      "additionalProperties": false,
                       "description": "Zoom: the part of an image to cut out, in its own pixels (an item's geometry gives its size). Cut from the original and returned at its own detail, never enlarged; clamped to the file.",
                       "properties": {
                         "height": {
@@ -1523,10 +1553,10 @@
                         }
                       },
                       "required": [
-                        "x",
-                        "y",
+                        "height",
                         "width",
-                        "height"
+                        "x",
+                        "y"
                       ],
                       "type": "object"
                     }
@@ -1564,6 +1594,7 @@
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "url": {
                       "description": "A media URL on one of our storage hosts.",
@@ -1577,6 +1608,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4, or a1B2c3D4-2 for one output of several).",
@@ -1734,6 +1766,7 @@
           "files": {
             "description": "The files to upload.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "contentType": {
                   "description": "The MIME type of the file.",
@@ -1751,8 +1784,8 @@
                 }
               },
               "required": [
-                "fileName",
                 "contentType",
+                "fileName",
                 "sizeBytes"
               ],
               "type": "object"
@@ -1817,6 +1850,7 @@
           "uploads": {
             "description": "The files to finish.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "outputId": {
                   "description": "The outputId create_upload answered for the file.",
@@ -1825,6 +1859,7 @@
                 "parts": {
                   "description": "Multipart files only: the number and ETag of every part, exactly as the store answered its PUT.",
                   "items": {
+                    "additionalProperties": false,
                     "properties": {
                       "etag": {
                         "description": "The ETag header of the store's answer to the part's PUT, exactly as received.",
@@ -1838,8 +1873,8 @@
                       }
                     },
                     "required": [
-                      "partNumber",
-                      "etag"
+                      "etag",
+                      "partNumber"
                     ],
                     "type": "object"
                   },
@@ -1953,6 +1988,7 @@
             "type": "string"
           },
           "query": {
+            "additionalProperties": false,
             "description": "For a smart folder: the live query that defines its membership (the same filters as the library search bar).",
             "properties": {
               "favoritedOnly": {
@@ -2040,6 +2076,7 @@
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2052,6 +2089,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "projectId": {
                       "description": "A project's id.",
@@ -2064,6 +2102,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "cardId": {
                       "description": "A card's id.",
@@ -2091,11 +2130,13 @@
             "type": "array"
           },
           "moveItem": {
+            "additionalProperties": false,
             "description": "Move one item within this manual folder: after or before another of its items, or to an end (position). Each item is named as addItems names one. Name neighbors or a position, not both.",
             "properties": {
               "after": {
                 "anyOf": [
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "mediaId": {
                         "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2108,6 +2149,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "projectId": {
                         "description": "A project's id.",
@@ -2120,6 +2162,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "cardId": {
                         "description": "A card's id.",
@@ -2136,6 +2179,7 @@
               "before": {
                 "anyOf": [
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "mediaId": {
                         "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2148,6 +2192,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "projectId": {
                         "description": "A project's id.",
@@ -2160,6 +2205,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "cardId": {
                         "description": "A card's id.",
@@ -2176,6 +2222,7 @@
               "item": {
                 "anyOf": [
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "mediaId": {
                         "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2188,6 +2235,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "projectId": {
                         "description": "A project's id.",
@@ -2200,6 +2248,7 @@
                     "type": "object"
                   },
                   {
+                    "additionalProperties": false,
                     "properties": {
                       "cardId": {
                         "description": "A card's id.",
@@ -2238,6 +2287,7 @@
             ]
           },
           "query": {
+            "additionalProperties": false,
             "description": "For a smart folder: the live query that defines its membership (the same filters as the library search bar).",
             "properties": {
               "favoritedOnly": {
@@ -2292,6 +2342,7 @@
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "mediaId": {
                       "description": "A media id as list_media, search_media and get_folder print it (a1B2c3D4-2 for one output of several).",
@@ -2304,6 +2355,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "projectId": {
                       "description": "A project's id.",
@@ -2316,6 +2368,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "cardId": {
                       "description": "A card's id.",
@@ -2623,9 +2676,9 @@
           }
         },
         "required": [
-          "name",
           "age",
-          "gender"
+          "gender",
+          "name"
         ],
         "type": "object"
       },
@@ -2676,6 +2729,7 @@
             "items": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "imageUrls": {
                       "description": "Images the account already owns, as URLs: an upload, a creation, an editor export, or another avatar look. Anything not owned by this account is skipped rather than failing the call.",
@@ -2694,12 +2748,13 @@
                     }
                   },
                   "required": [
-                    "op",
-                    "imageUrls"
+                    "imageUrls",
+                    "op"
                   ],
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "lookId": {
                       "description": "A look id from get_avatar.",
@@ -2711,8 +2766,8 @@
                     }
                   },
                   "required": [
-                    "op",
-                    "lookId"
+                    "lookId",
+                    "op"
                   ],
                   "type": "object"
                 }
@@ -2891,8 +2946,8 @@
           }
         },
         "required": [
-          "name",
-          "description"
+          "description",
+          "name"
         ],
         "type": "object"
       },
@@ -3243,8 +3298,8 @@
           }
         },
         "required": [
-          "stageId",
-          "spaceId"
+          "spaceId",
+          "stageId"
         ],
         "type": "object"
       },
@@ -3275,8 +3330,8 @@
           }
         },
         "required": [
-          "stageId",
-          "spaceId"
+          "spaceId",
+          "stageId"
         ],
         "type": "object"
       },
@@ -3463,8 +3518,8 @@
           }
         },
         "required": [
-          "title",
-          "platform"
+          "platform",
+          "title"
         ],
         "type": "object"
       },
@@ -3488,6 +3543,7 @@
           "assets": {
             "description": "The post's assets IN ORDER, each { id } to keep an existing one or ONE of { outputId } | { assetUrl, assetType? } | { contentId } | { projectId } to add. REPLACES the list; [] clears it.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "assetType": {
                   "description": "Accepted and not needed: the kind is read from what the entry points at. Never 'inspiration' or a project type: use contentId or projectId.",
@@ -3616,6 +3672,7 @@
           "posts": {
             "description": "The card's posts, each { platform, format?, connectedAccountId?, platformSpecificData?, scheduledAt?, status? }. REPLACES the set, keyed by platform; [] detaches all.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "connectedAccountId": {
                   "type": [
@@ -3768,8 +3825,8 @@
           }
         },
         "required": [
-          "tagId",
-          "name"
+          "name",
+          "tagId"
         ],
         "type": "object"
       },
@@ -3986,6 +4043,7 @@
           "assets": {
             "description": "The kit's brand assets, each { url | outputId, name? }.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
@@ -4012,6 +4070,7 @@
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4043,6 +4102,7 @@
           "brandColors": {
             "description": "The kit's palette, each { hex, name?, role? }.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "hex": {
                   "description": "Six-digit hex, like #1A2B3C.",
@@ -4086,6 +4146,7 @@
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4117,6 +4178,7 @@
           "logos": {
             "description": "The kit's logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?, colorMode? }. Use outputId to bring in a generation.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "colorMode": {
                   "enum": [
@@ -4167,6 +4229,7 @@
           "sections": {
             "description": "Section content, each { key, body } to fill a starter section, or { sectionName, tab, body? } to add your own.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "afterId": {
                   "description": "Place it immediately after this item of the same list.",
@@ -4231,6 +4294,7 @@
             "type": "array"
           },
           "typography": {
+            "additionalProperties": false,
             "description": "The kit's fonts, { titleFont?, bodyFont? }.",
             "properties": {
               "bodyFont": {
@@ -4280,6 +4344,7 @@
           "assets": {
             "description": "The kit's brand assets, each { url | outputId, name? }. REPLACES the list; [] clears it.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
@@ -4310,6 +4375,7 @@
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4341,6 +4407,7 @@
           "brandColors": {
             "description": "The kit's palette, each { hex, name?, role? }. REPLACES the list; [] clears it.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "hex": {
                   "description": "Six-digit hex, like #1A2B3C.",
@@ -4384,6 +4451,7 @@
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "handleOrUrl": {
                       "description": "A profile url, or a handle when platform is given.",
@@ -4420,6 +4488,7 @@
           "logos": {
             "description": "The kit's logos, each { url | outputId, name?, isPrimary?, isDisplay?, layout?: horizontal|stacked|icon|wordmark, colorMode?: full_color|light|dark|grayscale }. REPLACES the list; [] clears it. Exactly one ends up primary (the kit's cover); name none and the first wins.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "colorMode": {
                   "enum": [
@@ -4478,6 +4547,7 @@
           "sections": {
             "description": "Section writes: only the sections you change, all or nothing. { key, body, expectedVersion } edits one; { sectionName, tab, body? } adds one.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "afterId": {
                   "description": "Place it immediately after this item of the same list.",
@@ -4544,6 +4614,7 @@
           "typography": {
             "anyOf": [
               {
+                "additionalProperties": false,
                 "properties": {
                   "bodyFont": {
                     "description": "The font family for body text. null or '' clears it.",
@@ -5030,6 +5101,7 @@
                 "type": "string"
               },
               {
+                "additionalProperties": false,
                 "properties": {
                   "frame": {
                     "maximum": 9007199254740991,
@@ -5043,6 +5115,7 @@
                 "type": "object"
               },
               {
+                "additionalProperties": false,
                 "properties": {
                   "mediaId": {
                     "type": "string"
@@ -5059,6 +5132,7 @@
           "coverPosition": {
             "anyOf": [
               {
+                "additionalProperties": false,
                 "properties": {
                   "x": {
                     "type": "number"
@@ -5121,6 +5195,7 @@
             "type": "boolean"
           },
           "linkedTracks": {
+            "additionalProperties": false,
             "description": "Video projects only: which kinds of track linkage reaches; a kind you omit is left alone.",
             "properties": {
               "audio": {
@@ -5228,8 +5303,8 @@
           }
         },
         "required": [
-          "projectId",
-          "confirm"
+          "confirm",
+          "projectId"
         ],
         "type": "object"
       },
@@ -5496,9 +5571,9 @@
           }
         },
         "required": [
+          "label",
           "projectId",
-          "versionId",
-          "label"
+          "versionId"
         ],
         "type": "object"
       },
@@ -5645,8 +5720,8 @@
           }
         },
         "required": [
-          "projectId",
           "ops",
+          "projectId",
           "userIntent"
         ],
         "type": "object"
@@ -5702,8 +5777,8 @@
           }
         },
         "required": [
-          "projectId",
           "ops",
+          "projectId",
           "userIntent"
         ],
         "type": "object"
@@ -5956,6 +6031,7 @@
             "type": "string"
           },
           "fromItem": {
+            "additionalProperties": false,
             "description": "A placed code clip, code layer or shape to save: the project id and the clip or layer id.",
             "properties": {
               "itemId": {
@@ -5966,8 +6042,8 @@
               }
             },
             "required": [
-              "projectId",
-              "itemId"
+              "itemId",
+              "projectId"
             ],
             "type": "object"
           },
@@ -5989,10 +6065,12 @@
             "description": "Its default height, a fraction of the canvas's."
           },
           "lottie": {
+            "additionalProperties": false,
             "description": "A Lottie file of ours, and the colors in it that props recolor (each role names a prop).",
             "properties": {
               "recolor": {
                 "items": {
+                  "additionalProperties": false,
                   "properties": {
                     "from": {
                       "type": "string"
@@ -6186,10 +6264,12 @@
             "description": "Its default height, a fraction of the canvas's."
           },
           "lottie": {
+            "additionalProperties": false,
             "description": "A Lottie file of ours, and the colors in it that props recolor (each role names a prop).",
             "properties": {
               "recolor": {
                 "items": {
+                  "additionalProperties": false,
                   "properties": {
                     "from": {
                       "type": "string"
@@ -6423,6 +6503,7 @@
             "type": "string"
           },
           "fromProject": {
+            "additionalProperties": false,
             "description": "Modules of one project: { projectId, modules, revision }. The revision guards against a project that changed.",
             "properties": {
               "modules": {
@@ -6441,8 +6522,8 @@
               }
             },
             "required": [
-              "projectId",
-              "modules"
+              "modules",
+              "projectId"
             ],
             "type": "object"
           },
@@ -6450,6 +6531,7 @@
             "additionalProperties": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "code": {
                       "type": "string"
@@ -6461,6 +6543,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "edits": {}
                   },
@@ -6519,6 +6602,7 @@
             ]
           },
           "fromProject": {
+            "additionalProperties": false,
             "description": "Modules of one project: { projectId, modules, revision }. The revision guards against a project that changed.",
             "properties": {
               "modules": {
@@ -6537,8 +6621,8 @@
               }
             },
             "required": [
-              "projectId",
-              "modules"
+              "modules",
+              "projectId"
             ],
             "type": "object"
           },
@@ -6546,6 +6630,7 @@
             "additionalProperties": {
               "anyOf": [
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "code": {
                       "type": "string"
@@ -6557,6 +6642,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "edits": {}
                   },
@@ -6669,6 +6755,7 @@
           "accounts": {
             "description": "The accounts to track, in the order they are listed.",
             "items": {
+              "additionalProperties": false,
               "properties": {
                 "handleOrUrl": {
                   "description": "A handle or a profile URL.",
@@ -7199,6 +7286,7 @@
             "type": "string"
           },
           "region": {
+            "additionalProperties": false,
             "description": "Render only this rectangle, { x, y, width, height } in composition units (get_project's compositionSpace), to inspect detail. Without width it comes back at native pixels. For a source, the rectangle is in its own pixels.",
             "properties": {
               "height": {
@@ -7219,10 +7307,10 @@
               }
             },
             "required": [
-              "x",
-              "y",
+              "height",
               "width",
-              "height"
+              "x",
+              "y"
             ],
             "type": "object"
           },
@@ -7272,12 +7360,14 @@
                 "type": "string"
               },
               {
+                "additionalProperties": false,
                 "properties": {
                   "atSec": {
                     "minimum": 0,
                     "type": "number"
                   },
                   "box": {
+                    "additionalProperties": false,
                     "properties": {
                       "h": {
                         "exclusiveMinimum": 0,
@@ -7301,10 +7391,10 @@
                       }
                     },
                     "required": [
-                      "x",
-                      "y",
+                      "h",
                       "w",
-                      "h"
+                      "x",
+                      "y"
                     ],
                     "type": "object"
                   }
@@ -7429,7 +7519,7 @@
       "scopes": []
     }
   ],
-  "version": "a01b8563999a3bdf556cb6a25e31a72f94c51306bf6f8dbad897d9109f653cc0",
+  "version": "3c9ce416f0278ecaaa9ee75b7ab97bb87130fcd44f284456b8e62a44426c2778",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7469,6 +7559,13 @@
       "cover",
       "none"
     ],
+    "CARD_SORTS": [
+      "updatedAt",
+      "createdAt",
+      "scheduledAt",
+      "title",
+      "position"
+    ],
     "CONTENT_PLATFORMS": [
       "youtube",
       "instagram"
@@ -7477,6 +7574,13 @@
       "all",
       "inspiration",
       "brand"
+    ],
+    "CONTENT_SORTS": [
+      "relevance",
+      "outlierScore",
+      "publishedAt",
+      "viewCount",
+      "engagementRate"
     ],
     "DETAIL_LEVELS": [
       "summary",
@@ -7560,6 +7664,11 @@
       "doc",
       "other"
     ],
+    "MEDIA_SORTS": [
+      "createdAt",
+      "fileName",
+      "sizeBytes"
+    ],
     "PICTURE_DETECTORS": [
       "pointer",
       "face"
@@ -7590,6 +7699,11 @@
     "PROJECT_FILTERS": [
       "archived",
       "favorited"
+    ],
+    "PROJECT_SORTS": [
+      "updatedAt",
+      "createdAt",
+      "title"
     ],
     "PROJECT_TYPES": [
       "editor",
@@ -7629,12 +7743,30 @@
       "threads",
       "linkedin"
     ],
+    "SORT_ORDERS": [
+      "asc",
+      "desc"
+    ],
+    "SPACE_SORTS": [
+      "updatedAt",
+      "name",
+      "cardCount"
+    ],
     "STOCK_COLLECTIONS": [
       "photos",
       "videos",
       "gifs",
       "stickers",
       "sounds"
+    ],
+    "STOCK_ORIENTATIONS": [
+      "landscape",
+      "portrait",
+      "square"
+    ],
+    "STYLE_LIBRARY_SORTS": [
+      "updatedAt",
+      "name"
     ],
     "TEMPLATE_COVERAGES": [
       "full",

@@ -1681,7 +1681,7 @@ test('get_media prints an audio item\'s recorded facts, only the ones known, and
 /**
  * get_media reads no clip frames: its items take no window, a video's keyframes are not shown even if a server sent
  * them, and its description points a clip to view. Break-verified: restoring the `frames` and `fromSec` fields on the
- * mediaId item schema turns the first assertion red (zod strips an unknown key, so the server never sees them);
+ * mediaId item schema turns the first assertion red (the item is closed, so the call is refused);
  * restoring the video keyframe sentence in the description turns the last two red.
  */
 test('get_media takes no clip window and points a clip to view', async () => {
@@ -1701,7 +1701,10 @@ test('get_media takes no clip window and points a clip to view', async () => {
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5, frameWidth: 640 }] } })
+  const res = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1' }] } })
+  // The item is a closed object, so a clip window is refused rather than silently dropped.
+  const windowed = await mcp.callTool({ name: 'get_media', arguments: { items: [{ mediaId: 'vid-1', frames: 2, fromSec: 0, toSec: 5, frameWidth: 640 }] } })
+  assert.equal(windowed.isError, true)
   assert.equal((captured as { mediaId: string }[])[0]!.mediaId, 'vid-1')
   assert.equal(res.content.filter((c) => c.type === 'image').length, 0)
   assert.match(res.content[0].text, /\(video: no still available for this view; use the url\)/)

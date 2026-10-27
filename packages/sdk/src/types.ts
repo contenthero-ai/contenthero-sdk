@@ -12,14 +12,19 @@
 import type { LimitAction } from './errors.js'
 import {
   JOB_KINDS,
-  LIST_SORTS,
+  CARD_SORTS,
+  CONTENT_SORTS,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
-  MEDIA_STOCK_ORIENTATIONS,
+  MEDIA_SORTS,
   PLACEMENT_ENDS,
+  PROJECT_SORTS,
   SOCIAL_PLATFORMS,
   SORT_ORDERS,
+  SPACE_SORTS,
   STOCK_COLLECTIONS,
+  STOCK_ORIENTATIONS,
+  STYLE_LIBRARY_SORTS,
 } from './contract.generated.js'
 
 /**
@@ -151,7 +156,14 @@ export interface Paged {
  * person gave, so the server refuses it for creations, which have none. A card's `position` is one stage's own order,
  * top first, so it needs a stage.
  */
-export { LIST_SORTS }
+export const LIST_SORTS = {
+  cards: CARD_SORTS,
+  projects: PROJECT_SORTS,
+  spaces: SPACE_SORTS,
+  styleLibraries: STYLE_LIBRARY_SORTS,
+  content: CONTENT_SORTS,
+  media: MEDIA_SORTS,
+} as const
 
 /** A listing that sorts. */
 export type SortableList = keyof typeof LIST_SORTS
@@ -1761,7 +1773,7 @@ export const MEDIA_STOCK_COLLECTIONS = STOCK_COLLECTIONS
 export type MediaStockCollection = (typeof MEDIA_STOCK_COLLECTIONS)[number]
 
 /** The shapes a stock photo or video read can be narrowed to, in its `orientation`. */
-export { MEDIA_STOCK_ORIENTATIONS }
+export const MEDIA_STOCK_ORIENTATIONS = STOCK_ORIENTATIONS
 export type MediaStockOrientation = (typeof MEDIA_STOCK_ORIENTATIONS)[number]
 
 /** The license a stock item is used under; `attribution` is the credit to show where credit is required. */

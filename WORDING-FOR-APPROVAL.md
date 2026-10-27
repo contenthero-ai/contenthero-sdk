@@ -146,3 +146,10 @@ The SDK, MCP and CLI no longer keep tool text of their own: `packages/sdk/src/to
 ### SDK and CLI source comments (not user-facing)
 
 - `types.ts` and `commands/project.ts` no longer list op names in comments; they point to `get_schema`.
+
+## Group 5b, task (c2): contract gaps and hard cutover
+
+No tool or field description text changed. Behavior and help-text changes a user can see:
+
+- CLI: `project list` and `project create` no longer accept `--surface` (it was a hidden alias of `--type`); the hidden `element` command group (alias of `kling-element`) is removed. Both now fail as unknown.
+- MCP: nested objects in tool inputs (for example the items of `get_media`) are now closed, as the app already treated them, so an unknown key is refused instead of passed through.

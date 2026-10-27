@@ -153,21 +153,6 @@ const MCP_ONLY: Record<string, string> = {
   show_media: 'renders an inline widget in the chat host; a terminal has no equivalent display surface',
 }
 
-/**
- * HIDDEN CLI commands kept for one release window under a previous name, each with the command it stands in for.
- * They are the canonical subcommands registered a second time onto the old parent, so the checks below hold that
- * each one still exists, stays out of help, and takes exactly the canonical command's flags. Closing the window is
- * deleting the alias mount and these lines.
- */
-const DEPRECATED_COMMANDS: Record<string, string> = {
-  // `element` became `kling-element` on 2026-10-04 (the word also named the editor's Elements panel).
-  'element list': 'kling-element list',
-  'element get': 'kling-element get',
-  'element create': 'kling-element create',
-  'element update': 'kling-element update',
-  'element delete': 'kling-element delete',
-}
-
 /** CLI commands with no MCP counterpart, BY DESIGN. */
 const CLI_ONLY: Record<string, string> = {
   'auth login': 'terminal credential storage; an MCP host authenticates the connection itself',
@@ -339,29 +324,15 @@ test('every MCP tool maps to CLI commands or is MCP-only by design, and every CL
   const missingCommands = [...targeted].filter((c) => !leaves.has(c))
   assert.deepEqual(missingCommands, [], 'TOOL_TO_CLI names CLI commands that do not exist')
 
-  const orphanCommands = [...leaves.keys()].filter((c) => !targeted.has(c) && !CLI_ONLY[c] && !DEPRECATED_COMMANDS[c])
+  const orphanCommands = [...leaves.keys()].filter((c) => !targeted.has(c) && !CLI_ONLY[c])
   assert.deepEqual(orphanCommands, [], 'CLI commands with no MCP tool (map a tool to them, or CLI_ONLY with a reason)')
   assert.deepEqual(Object.keys(CLI_ONLY).filter((c) => !leaves.has(c)), [], 'CLI_ONLY names commands that no longer exist')
 })
 
-test('every deprecated CLI command is hidden, and stands in exactly for a command a tool maps to', () => {
-  const leaves = cliLeaves()
-  const targeted = new Set(Object.values(TOOL_TO_CLI).flat())
-  const problems: string[] = []
-  for (const [alias, canonical] of Object.entries(DEPRECATED_COMMANDS)) {
-    const old = leaves.get(alias)
-    const current = leaves.get(canonical)
-    if (!old) problems.push(`${alias}: no such command (the window closed? delete the entry)`)
-    if (!current || !targeted.has(canonical)) problems.push(`${alias}: ${canonical} is not a command any tool maps to`)
-    if (!old || !current) continue
-    if (!old.hidden) problems.push(`${alias}: shown in help, but it is a deprecated alias`)
-    if (current.hidden) problems.push(`${canonical}: hidden, but it is the canonical command`)
-    const flagsOf = (leaf: Leaf) => [...leaf.flags].sort().join(' ')
-    if (flagsOf(old) !== flagsOf(current)) {
-      problems.push(`${alias} takes [${flagsOf(old)}] but ${canonical} takes [${flagsOf(current)}]`)
-    }
-  }
-  assert.deepEqual(problems, [])
+// A hard cutover keeps no old name: no command is hidden from help, so none can stand in for a retired one.
+test('no CLI command is hidden', () => {
+  const hidden = [...cliLeaves()].filter(([, leaf]) => leaf.hidden).map(([name]) => name)
+  assert.deepEqual(hidden, [])
 })
 
 // A copy from a saved version is `project duplicate <projectId> [versionId]`, matched by the naming rules rather than

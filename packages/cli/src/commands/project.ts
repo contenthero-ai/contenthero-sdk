@@ -19,7 +19,7 @@
  * that revision as --expected-revision for safe concurrent edits. All edits require the editor:write scope.
  */
 import { readFileSync } from 'node:fs'
-import { Option, type Command } from 'commander'
+import type { Command } from 'commander'
 import {
   ContentHeroError,
   LIST_SORTS,
@@ -52,11 +52,6 @@ import { emit, keyValues, moreLine, statusCommandFor, table, withMore } from '..
 import { CliError, EXIT } from '../errors.js'
 import { isClear, toFloat, toInt, toJson, toLoudness, withPageFlags, withSortFlags } from '../args.js'
 
-/** `--surface`, the project type's name before cli 0.3.12, still accepted and hidden from help. `--type` wins. */
-function deprecatedTypeAlias(): Option {
-  return new Option('--surface <type>', 'deprecated alias for --type').choices(['editor', 'canvas']).hideHelp()
-}
-
 function parseOps(raw: string): EditorOp[] {
   let parsed: unknown
   try {
@@ -85,7 +80,6 @@ export function registerProject(program: Command): void {
         .description('List projects, both editor + canvas (requires editor:read)')
         .option('--filter <state>', 'archived | favorited (omitted = active)')
         .option('--type <type>', 'editor | canvas (omitted = both)')
-        .addOption(deprecatedTypeAlias())
         .option('--search <text>', 'case-insensitive title search'),
     ),
     LIST_SORTS.projects,
@@ -94,7 +88,7 @@ export function registerProject(program: Command): void {
       const { client, ctx } = makeClient(command)
       const page = await client.listProjects({
         filter: opts.filter as 'archived' | 'favorited' | undefined,
-        type: (opts.type ?? opts.surface) as 'editor' | 'canvas' | undefined,
+        type: opts.type as 'editor' | 'canvas' | undefined,
         search: opts.search as string | undefined,
         sort: opts.sort as ProjectSort | undefined,
         order: opts.order as SortOrder | undefined,
@@ -262,7 +256,6 @@ export function registerProject(program: Command): void {
     .command('create')
     .description('Create a project (requires editor:write)')
     .option('--type <type>', "editor | canvas (default: editor)")
-    .addOption(deprecatedTypeAlias())
     .option('--title <text>', "project title (default: Untitled)")
     .option('--orientation <ratio>', "e.g. 16:9, 9:16, 1:1 (default: 16:9)")
     .option('--width <n>', 'pixel width (default: from orientation)', toInt)
@@ -273,7 +266,7 @@ export function registerProject(program: Command): void {
     .action(async (opts: Record<string, unknown>, command: Command) => {
       const { client, ctx } = makeClient(command)
       const p = await client.createProject({
-        type: (opts.type ?? opts.surface) as 'editor' | 'canvas' | undefined,
+        type: opts.type as 'editor' | 'canvas' | undefined,
         title: opts.title as string | undefined,
         orientation: opts.orientation as string | undefined,
         width: opts.width as number | undefined,

@@ -84,27 +84,6 @@ function tsType(s, where) {
   }
 }
 
-/** The vocabularies the contract carries only as fields of tool inputs, read from the one tool that owns each. */
-const DERIVED = [
-  { name: 'SORT_ORDERS', tool: 'list_projects', field: 'order' },
-  { name: 'MEDIA_STOCK_ORIENTATIONS', tool: 'list_media', field: 'orientation' },
-]
-const LIST_SORT_TOOLS = {
-  cards: 'list_cards',
-  projects: 'list_projects',
-  spaces: 'list_spaces',
-  styleLibraries: 'list_style_libraries',
-  content: 'list_content',
-  media: 'list_media',
-}
-
-function enumOf(doc, tool, field) {
-  const t = doc.tools.find((x) => x.name === tool)
-  const e = t?.inputSchema?.properties?.[field]?.enum
-  if (!Array.isArray(e)) fail(`contract-sync: ${tool}.${field} declares no enum, so the SDK cannot derive its vocabulary from it`)
-  return e
-}
-
 function generate(doc) {
   const names = doc.tools.map((t) => t.name)
   const out = []
@@ -178,14 +157,6 @@ export function toolInputSchema(name: ContractToolName): ContractTool['inputSche
 `)
   out.push('// Vocabularies, by the names the app declares them under.')
   for (const [name, values] of Object.entries(doc.vocabularies)) out.push(`export const ${name} = ${lit(values)} as const`)
-  out.push('\n// Vocabularies the contract carries as the enum of one tool field, read from that field.')
-  for (const d of DERIVED) out.push(`export const ${d.name} = ${lit(enumOf(doc, d.tool, d.field))} as const`)
-  out.push(`
-/** Every field each sortable listing orders by: the enum of that listing's \`sort\` input. */
-export const LIST_SORTS = {
-${Object.entries(LIST_SORT_TOOLS).map(([list, tool]) => `  ${list}: ${lit(enumOf(doc, tool, 'sort'))},`).join('\n')}
-} as const
-`)
   return out.join('\n')
 }
 
