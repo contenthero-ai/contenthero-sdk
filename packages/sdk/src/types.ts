@@ -1910,6 +1910,8 @@ export type MediaBatchItem = ({ url: string } | { mediaId: string }) & { region?
  */
 export interface ResolvedMediaBatchItem {
   ok: boolean
+  /** What a person wrote about this item with update_media. Absent when none; the machine `summary` is separate. */
+  description?: string | null
   /** Where this item opens in the app. Absent for a url that is not one of the account's media items. */
   appUrl?: string
   /** The item's 8-character public id. Absent for a url that is not one of the account's media items. */
@@ -2078,6 +2080,8 @@ export interface SearchMediaResult {
   url: string | null
   /** The vision description of the asset. */
   summary: string | null
+  /** What a person wrote about this item with update_media. */
+  description?: string | null
   tags: string[]
   /** Best cosine relevance of this asset to the query (0..1). */
   relevance: number
@@ -2161,6 +2165,8 @@ export type FolderItem =
       /** The smallest copy kept of an image, when the folder was read with `smallCopies`; as on `MediaSummary`. */
       smallUrl?: string | null
       summary: string | null
+      /** What a person wrote about this item with update_media. */
+      description?: string | null
       isFavorited: boolean
       relevance?: number
     }

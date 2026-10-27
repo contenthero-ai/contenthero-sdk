@@ -136,7 +136,7 @@ export function registerMedia(program: Command): void {
         }
         return withMore(
           table(
-            ['ID', 'FAV', 'TYPE', 'SOURCE', 'KIND', 'NAME/MODEL', 'SIZE', 'PROMPT'],
+            ['ID', 'FAV', 'TYPE', 'SOURCE', 'KIND', 'NAME/MODEL', 'SIZE', 'DESCRIPTION', 'PROMPT'],
             p.media.map((m) => [
               m.mediaId,
               m.isFavorited ? '★' : '',
@@ -145,6 +145,7 @@ export function registerMedia(program: Command): void {
               m.kind ?? '',
               clip(m.name ?? m.fileName ?? m.model, 48),
               m.sizeBytes != null ? describeFileSize(m.sizeBytes) : '',
+              clip(m.description, 48),
               clip(m.prompt, 48),
             ]),
           ),
@@ -180,7 +181,7 @@ export function registerMedia(program: Command): void {
       emit(page, ctx, (p: SearchMediaPage) =>
         withMore(
           table(
-            ['ID', 'KIND', 'REL', 'SCENES', 'SUMMARY'],
+            ['ID', 'KIND', 'REL', 'SCENES', 'DESCRIPTION', 'SUMMARY'],
             p.results.map((r) => [
               r.mediaId ?? '',
               r.kind ?? '',
@@ -188,6 +189,7 @@ export function registerMedia(program: Command): void {
               r.scenes.length
                 ? r.scenes.map((s) => `${(s.startMs / 1000).toFixed(0)}-${(s.endMs / 1000).toFixed(0)}s`).join(' ')
                 : '',
+              clip(r.description, 48),
               clip(r.summary, 48),
             ]),
           ),
