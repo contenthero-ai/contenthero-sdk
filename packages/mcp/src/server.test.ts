@@ -5209,7 +5209,7 @@ test('the template tools are filed with the editor, and reach the template SDK m
   assert.match(got.content[0].text, /```tsx\nexport default \(\) => null\n```/)
   // Its stored preview, for looking at it before placing it.
   assert.match(got.content[0].text, /\npreview: https:\/\/media\.contenthero\.ai\/templates\/2222\/v3\.png\n/)
-  const saved = await mcp.callTool({ name: 'create_template', arguments: { fromItem: { projectId: 'p1', itemId: 'g1' }, category: 'lower-thirds' } })
+  const saved = await mcp.callTool({ name: 'create_template', arguments: { fromItem: { projectId: '11111111-1111-4111-8111-111111111111', itemId: 'g1' }, category: 'lower-thirds' } })
   assert.match(saved.content[0].text, /Saved template "Lower third" .*version 3\.\nWarnings \(it was saved anyway\):\n- interpolate was given keyframes out of order/)
   await mcp.callTool({ name: 'create_template', arguments: { fromTemplateId: row.id, name: 'Mine' } })
   await mcp.callTool({ name: 'update_template', arguments: { templateId: row.id, expectedVersion: 3, props: { title: 'Bye' } } })
@@ -5220,7 +5220,7 @@ test('the template tools are filed with the editor, and reach the template SDK m
     `list ${JSON.stringify({ scope: 'user', kind: 'code', category: ['lower-thirds'], archived: 'only' })}`,
     `list ${JSON.stringify({ kind: 'logo' })}`,
     `get ${row.id}`,
-    `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { itemId: 'g1', projectId: 'p1' } })}`,
+    `create ${JSON.stringify({ category: 'lower-thirds', fromItem: { itemId: 'g1', projectId: '11111111-1111-4111-8111-111111111111' } })}`,
     `create ${JSON.stringify({ name: 'Mine', fromTemplateId: row.id })}`,
     `update ${row.id} {"props":{"title":"Bye"}} {"expectedVersion":3}`,
     `delete ${row.id}`,

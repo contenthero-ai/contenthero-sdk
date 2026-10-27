@@ -915,3 +915,11 @@ test('a written description is printed by get_media, list_media, search_media an
   const folder = body(folderContentsResult({ folder: null, items: [{ type: 'media', mediaId: 'Gen12345', kind: 'image', summary: null, description: d, isFavorited: false }], nextCursor: null } as never))
   assert.match(folder, /the hero bottle, final cut/)
 })
+
+test('an empty media search prints why it is empty when the server says', async () => {
+  const { mediaSearchResult } = await import('./format.js')
+  const out = body(mediaSearchResult({ results: [], nextCursor: null, emptyReason: { code: 'not_indexed', message: 'Nothing is indexed yet.' } } as never))
+  assert.match(out, /No matching media found\./)
+  assert.match(out, /Why empty: Nothing is indexed yet\./)
+  assert.doesNotMatch(body(mediaSearchResult({ results: [], nextCursor: null } as never)), /Why empty/)
+})

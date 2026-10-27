@@ -19,6 +19,7 @@ import {
   MEDIA_STOCK_COLLECTIONS,
   MEDIA_STOCK_ORIENTATIONS,
   describeAudioFacts,
+  describeEmptyReason,
   describeFileSize,
   describeReferences,
   type MediaBatchItem,
@@ -194,7 +195,7 @@ export function registerMedia(program: Command): void {
             ]),
           ),
           p.nextCursor,
-        ),
+        ) + (p.emptyReason ? `\n\n${describeEmptyReason(p.emptyReason).join('\n')}` : ''),
       )
     })
 

@@ -11,20 +11,50 @@
 
 import type { LimitAction } from './errors.js'
 import {
-  JOB_KINDS,
+  ANALYSIS_COPY_RESOLUTIONS,
+  ANALYSIS_GRAINS,
+  ANALYSIS_KINDS,
+  ARCHIVE_ASSET_TYPES,
+  CANVAS_ANCHORS,
+  CANVAS_FITS,
   CARD_SORTS,
+  CONTENT_SCOPES,
   CONTENT_SORTS,
+  DETAIL_LEVELS,
+  FAVORITE_ASSET_TYPES,
+  FOLDER_QUERY_SORTS,
+  FOLDER_QUERY_SOURCES,
+  FOLDER_TYPES,
+  JOB_KINDS,
+  KNOWLEDGE_SOURCE_TYPES,
+  LOGO_COLOR_MODES,
+  LOGO_LAYOUTS,
+  MEDIA_KINDS,
   MEDIA_LIST_SOURCES,
   MEDIA_LIST_TYPES,
   MEDIA_SORTS,
+  PICTURE_DETECTORS,
+  PLACEMENT_DURATIONS,
   PLACEMENT_ENDS,
+  PLACEMENT_RANGE_FITS,
+  POST_PLATFORMS,
+  PROJECT_FILTERS,
   PROJECT_SORTS,
+  PROJECT_TYPES,
+  RENDER_LAYOUTS,
+  SCENE_GRAINS,
   SOCIAL_PLATFORMS,
   SORT_ORDERS,
   SPACE_SORTS,
   STOCK_COLLECTIONS,
   STOCK_ORIENTATIONS,
   STYLE_LIBRARY_SORTS,
+  TEMPLATE_COVERAGES,
+  TEMPLATE_RESIZES,
+  TEMPLATE_SCOPE_FILTERS,
+  TRACKED_ACCOUNT_TYPES,
+  TRANSCRIPT_GRAINS,
+  TRANSCRIPT_GRANULARITIES,
 } from './contract.generated.js'
 
 /**
@@ -222,7 +252,7 @@ export interface SortOptions<F extends string> {
 export type TemplateKind = 'code' | 'shape' | 'emoji' | 'logo'
 
 /** Whose templates: ContentHero's, the caller's own, or both. */
-export type TemplateScope = 'system' | 'user' | 'all'
+export type TemplateScope = (typeof TEMPLATE_SCOPE_FILTERS)[number]
 
 /**
  * A template in a list: everything but its code. ContentHero's (`scope: 'system'`) are read-only; the caller's own
@@ -238,9 +268,9 @@ export interface TemplateSummary {
   /** What it makes: a video, or a shape (with the shape's name); an animated emoji's video names its emoji. */
   skeleton: { type: 'video' | 'shape'; shape?: string; emoji?: string } | null
   /** Its default box: the whole frame, or a fraction of the canvas on each axis. */
-  coverage: 'full' | 'partial'
+  coverage: (typeof TEMPLATE_COVERAGES)[number]
   /** `scale` keeps its proportions in any box; `reflow` lays out again in the box it is given. */
-  resize: 'scale' | 'reflow'
+  resize: (typeof TEMPLATE_RESIZES)[number]
   widthFraction: number | null
   heightFraction: number | null
   /** Its own width over height, for `resize: 'scale'`. */
@@ -318,6 +348,8 @@ export interface TemplateCategoryListResult extends Paged {
  * what it draws, unless it is saved from an item or copied from a template.
  */
 export interface TemplateFields {
+  /** The frame rate its duration counts at. */
+  fps?: number
   name?: string
   category?: string
   description?: string | null
@@ -333,11 +365,11 @@ export interface TemplateFields {
   props?: Record<string, unknown>
   propsSchema?: Record<string, unknown> | null
   durationFrames?: number
-  coverage?: 'full' | 'partial'
+  coverage?: (typeof TEMPLATE_COVERAGES)[number]
   /** Its default box, a fraction of the canvas on each axis, for `coverage: 'partial'`. */
   widthFraction?: number | null
   heightFraction?: number | null
-  resize?: 'scale' | 'reflow'
+  resize?: (typeof TEMPLATE_RESIZES)[number]
   aspect?: number | null
   artboard?: { width: number; height: number; content: { x: number; y: number; width: number; height: number } } | null
   thumbnailUrl?: string | null
@@ -372,8 +404,12 @@ export interface TemplateWriteResult {
  * through `parameters`.
  */
 export interface GenerateRequest {
+  /** A seed, on a model that supports one. */
+  seed?: number
+  /** Voice delivery dials, for a speech model that declares them. */
+  voiceSettings?: { speed?: number; stability?: number; similarity?: number; style?: number; speakerBoost?: boolean }
   /** Media kind. Optional: inferred from the model when omitted; when given, a model of another medium is refused. */
-  contentType?: 'image' | 'video' | 'audio'
+  contentType?: (typeof MEDIA_KINDS)[number]
   /**
    * The work this call asks for, in the registry's words (a model's `kind` in `listModels`). Optional; when given,
    * the server refuses a model that does other work and names the models that do this work, instead of running
@@ -614,7 +650,7 @@ export interface PlacementResult {
   /** 'canvas' when placed as a layer on a slide, 'editor' when placed as a clip on a track: the project's type. */
   projectType?: ProjectType
   /** @deprecated Alias for `projectType`, still emitted for one release window. */
-  surface?: 'canvas' | 'editor'
+  surface?: (typeof PROJECT_TYPES)[number]
   /** Canvas only: the placed layer id (same as itemId) and the resolved target slide. */
   layerId?: string
   slideId?: string
@@ -632,7 +668,7 @@ export interface CostEstimate {
   /** Always true on a cost-preview response. */
   getCost: true
   modelId?: string
-  contentType?: 'image' | 'video' | 'audio'
+  contentType?: (typeof MEDIA_KINDS)[number]
 }
 
 /**
@@ -659,17 +695,17 @@ export type TimelinePlacementIntent =
   | { mode: 'atPlayhead'; durationSeconds?: number }
   /** Swap in place for an existing clip; the new clip inherits its track + start. `duration` keeps the new
    *  clip's own length and ripples ('natural', default) or trims it to the replaced slot ('match'). */
-  | { mode: 'replace'; itemId: string; duration?: 'natural' | 'match' }
+  | { mode: 'replace'; itemId: string; duration?: (typeof PLACEMENT_DURATIONS)[number] }
   /** Fill or cover a time span. `track` selects the track (id / 'overlay' / 'primary'); omitted uses the default. */
-  | { mode: 'range'; startSeconds?: number; endSeconds?: number; track?: string; fit?: 'cover' | 'trim' | 'overwrite' }
+  | { mode: 'range'; startSeconds?: number; endSeconds?: number; track?: string; fit?: (typeof PLACEMENT_RANGE_FITS)[number] }
 
 /** Placement onto a CANVAS design: a layer on a slide at a position + size (6A A8). Flat (no `mode`); all fields
  *  optional. Positions/sizes are design pixels. Omitting `slideId`/`slideIndex` targets the focused slide. */
 export interface CanvasPlacementIntent {
   slideId?: string
   slideIndex?: number
-  fit?: 'contain' | 'cover' | 'none'
-  anchor?: 'center' | 'top-left' | 'top' | 'top-right' | 'left' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right'
+  fit?: (typeof CANVAS_FITS)[number]
+  anchor?: (typeof CANVAS_ANCHORS)[number]
   x?: number
   y?: number
   width?: number
@@ -791,7 +827,7 @@ export interface Generation {
   /** This generation in the app (its first output, or its pending state while it runs). */
   appUrl: string
   status: GenerationStatus
-  contentType: 'image' | 'video' | 'audio'
+  contentType: (typeof MEDIA_KINDS)[number]
   modelId: string
   /**
    * Its outputs in slot order, each with its name, its file once it lands, its links and its previews. A running
@@ -1189,6 +1225,8 @@ export interface Avatar extends AvatarSummary {
  * without them it has nothing to describe. Everything else sharpens the result.
  */
 export interface CreateAvatarRequest {
+  /** A caller-minted id for the first look. */
+  lookOutputId?: string
   /** At least 3 characters. */
   name: string
   age: string
@@ -1499,7 +1537,7 @@ export interface BrandKnowledgeMatch {
 }
 
 /** How a knowledge item is ingested. */
-export type BrandKnowledgeSourceType = 'text' | 'url' | 'youtube' | 'file'
+export type BrandKnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number]
 
 /** Input for `addBrandKnowledge`. */
 export interface AddBrandKnowledgeInput {
@@ -1558,11 +1596,35 @@ export interface BrandKit extends BrandKitSummary {
   brandAccounts: BrandKitAccount[]
   inspirationAccounts: BrandKitAccount[]
   knowledge: BrandKitKnowledge[]
+  /**
+   * What the last import left alone when it linked accounts: those already tracked as the other kind, kept as they
+   * were. Null when it left none.
+   */
+  accountsLinkReport: BrandKitAccountsLinkReport | null
+  /**
+   * Only on the answer to a create or an import that linked accounts: the accounts it asked for that were already
+   * tracked as the other kind. They were left as they were and are not linked to this kit.
+   */
+  accountsKept?: BrandKitKeptAccount[]
+}
+
+/** The accounts a brand kit import kept as they were because they were already tracked as the other kind. */
+export interface BrandKitAccountsLinkReport {
+  kept: BrandKitKeptAccount[]
+}
+
+/** One account a create or import left as it was, because it was already tracked as the other kind. */
+export interface BrandKitKeptAccount {
+  trackedAccountId: string
+  platform: string
+  handleOrUrl?: string
+  /** The kind the account is already tracked as. */
+  keptAs: (typeof TRACKED_ACCOUNT_TYPES)[number]
 }
 
 /** How a logo is laid out, and the colors it is drawn in. */
-export type LogoLayout = 'horizontal' | 'stacked' | 'icon' | 'wordmark'
-export type LogoColorMode = 'full_color' | 'light' | 'dark' | 'grayscale'
+export type LogoLayout = (typeof LOGO_LAYOUTS)[number]
+export type LogoColorMode = (typeof LOGO_COLOR_MODES)[number]
 
 /** A kit's logo, as a full read carries it. Its place among the others is the list's order. */
 export interface BrandKitLogo {
@@ -1659,6 +1721,8 @@ export interface BrandTypography {
 
 /** Identity fields writable via `updateBrandKit` (allow-listed server-side). */
 export interface UpdateBrandKitInput {
+  /** Archive the kit. Not combined with any other field. */
+  archive?: true
   name?: string
   /** The brand's websites, primary first. REPLACES the list; `[]` clears it. Stored only: pass `extract` to import. */
   websiteUrls?: string[]
@@ -1718,7 +1782,8 @@ export interface UpdateBrandKitInput {
 }
 
 /** Fields accepted when creating a brand kit. */
-export interface CreateBrandKitInput extends UpdateBrandKitInput {
+/** A new kit. It cannot be made the default in the same call: `isDefault` is for `updateBrandKit`. */
+export interface CreateBrandKitInput extends Omit<UpdateBrandKitInput, 'isDefault'> {
   /** Optional when a website or a social profile is given: it then defaults to the first site's hostname or the @handle. */
   name?: string
   /** Caller-minted id, so a create can be made idempotent. Must be a UUID. */
@@ -1917,7 +1982,7 @@ export interface MediaSummary {
 export interface GenerationReference {
   /** What the input was to the generation, in the app's words: "Reference 1", "Start frame", "Audio", an element's name. */
   label: string
-  type: 'image' | 'video' | 'audio'
+  type: (typeof MEDIA_KINDS)[number]
   /** Its role (`reference`, `subject`, `first_frame`, `last_frame`, `motion`, `audio`, ...); null on an older row. */
   role: string | null
   /** The file, as a url you can fetch. */
@@ -2019,7 +2084,7 @@ export interface ResolvedMediaBatchItem {
    * ⭐ Resolved from the storage spine, so a raw `{ url }` item carries it too. A consumer needs it to decide
    * whether "generate this again" is a sensible offer: only a creation was ever generated.
    */
-  source: 'creations' | 'uploads' | 'stock' | null
+  source: (typeof FOLDER_QUERY_SOURCES)[number] | null
   /**
    * The model's DISPLAY NAME and brand marks, resolved from the registry.
    *
@@ -2120,7 +2185,7 @@ export interface MediaListResult extends Paged {
 }
 
 /** Media kinds that semantic library search can return / filter by. */
-export type MediaKind = 'image' | 'video' | 'audio'
+export type MediaKind = (typeof MEDIA_KINDS)[number]
 
 /** A scene within a video asset that matched a media search, with its own relevance. */
 export interface SearchMediaScene {
@@ -2169,21 +2234,26 @@ export interface SearchMediaOptions extends PageOptions {
 /** Result of `searchMedia`: a page of matches, most relevant first. */
 export interface SearchMediaPage extends Paged {
   results: SearchMediaResult[]
+  /**
+   * Why the search came back with no rows, when the server can say: the code names the cause and the message says it
+   * in words. Absent when rows came back (and from an older server).
+   */
+  emptyReason?: EmptyReason
 }
 
 // ─── Library folders (Unified Content Library, Phase D) ──────────────────────
 
-export type FolderType = 'manual' | 'smart'
+export type FolderType = (typeof FOLDER_TYPES)[number]
 
 /** The smart-folder query spec = the same filters the library search bar produces. */
 export interface SmartFolderQuery {
   text?: string
   kinds?: MediaKind[]
-  sources?: Array<'creations' | 'uploads' | 'stock'>
+  sources?: Array<(typeof FOLDER_QUERY_SOURCES)[number]>
   facets?: Record<string, string>
   tags?: string[]
   favoritedOnly?: boolean
-  sort?: 'relevance' | 'recent' | 'name'
+  sort?: (typeof FOLDER_QUERY_SORTS)[number]
 }
 
 export interface Folder {
@@ -2545,7 +2615,7 @@ export interface ModelInfo {
   brandColor: string | null
   iconKey: string | null
   description: string | null
-  contentType: 'image' | 'video' | 'audio'
+  contentType: (typeof MEDIA_KINDS)[number]
   kind: ModelKind
   tags: string[]
   /** True for the default model of its content type. */
@@ -2562,15 +2632,7 @@ export interface ModelInfo {
 // ---------------------------------------------------------------------------
 
 /** Platforms a card or one of its posts may target. */
-export type PostPlatform =
-  | 'youtube'
-  | 'instagram'
-  | 'tiktok'
-  | 'facebook'
-  | 'linkedin'
-  | 'x'
-  | 'threads'
-  | 'general'
+export type PostPlatform = (typeof POST_PLATFORMS)[number]
 
 /**
  * 🚨 `CardStatus` IS GONE, AND SO IS THE COLUMN BEHIND IT. A card has no status.
@@ -2880,6 +2942,10 @@ export interface ListStagesOptions extends PageOptions {
  * puts it in its column.
  */
 export interface CreateCardInput extends Placement {
+  /** Working notes on the card. Plain text or markdown. */
+  notes?: string | null
+  /** Cover framing as `{x, y}` percentages. */
+  coverPosition?: { x: number; y: number } | null
   title: string
   platform: PostPlatform
   /** What kind of content the card holds, in a word. */
@@ -2967,10 +3033,12 @@ export type NotesEdit = { append: string } | { find: string; replace: string }
  * it is moving to when `stage` changes too.
  */
 export interface UpdateCardInput extends Placement {
+  /** The card's status. */
+  status?: string
+  /** The card's script, or null to clear it. */
+  script?: string | null
   title?: string
   platform?: PostPlatform
-  /** Archive or restore the card. `status` is untouched because a card no longer has one. */
-  archived?: boolean
   /** A stage id, slug, or name; resolved in the space the card is landing in. */
   stage?: string | null
   /**
@@ -3216,13 +3284,13 @@ export interface ContentScene {
 }
 
 /** What `analyzeContent` makes: `breakdown` (the default), `scenes`, or `video` (the post's video for analysis). */
-export type ContentAnalysisKind = 'breakdown' | 'scenes' | 'video'
+export type ContentAnalysisKind = (typeof ANALYSIS_KINDS)[number]
 
 /**
  * The most detail a post's analysis copy is fetched at, as a ceiling on the video's shorter side: the best the
  * platform offers up to it is downloaded. Only with kind `video`.
  */
-export type ContentVideoResolution = '720p' | '1080p'
+export type ContentVideoResolution = (typeof ANALYSIS_COPY_RESOLUTIONS)[number]
 
 /** What `estimateAnalysisCost` reports: the price, and for kind `video` the detail stored, offered and on offer. */
 export interface ContentAnalysisCostEstimate extends CostEstimate {
@@ -3522,7 +3590,7 @@ export interface TrackedAccountDetail {
 }
 
 /** Which ownership tiers a content read spans. */
-export type ContentScope = 'all' | 'inspiration' | 'brand'
+export type ContentScope = (typeof CONTENT_SCOPES)[number]
 
 /** Options for `listContent`. */
 export interface ListContentOptions extends PageOptions, SortOptions<ContentSort> {
@@ -3569,14 +3637,14 @@ export interface GetContentOptions {
    * `none` (default), `text` for the flat transcript, `segments` for the timed form, or `words` for the segments with
    * each word's own start and end, where the post is word-timed.
    */
-  transcript?: 'none' | 'text' | 'segments' | 'words'
+  transcript?: (typeof TRANSCRIPT_GRAINS)[number]
   /** Segment window, in milliseconds from the start of the media. Implies the `segments` grain. */
   startMs?: number
   endMs?: number
   /** Case-insensitive substring; returns only the segments containing it. Implies the `segments` grain. */
   transcriptSearch?: string
   /** `none` (default) reports availability only; `full` returns every section except `transcriptSegments`. */
-  analysis?: 'none' | 'full'
+  analysis?: (typeof ANALYSIS_GRAINS)[number]
   /** Return only these analysis sections (see `ContentAnalysis.sections` for what exists). */
   analysisSections?: string[]
   /**
@@ -3584,7 +3652,7 @@ export interface GetContentOptions {
    * each scene's range, what happens and what is said. Scenes are descriptions only: a scene's frames come from
    * `view`. `startMs`/`endMs` narrow the scenes (and then do not imply transcript segments).
    */
-  scenes?: 'none' | 'map'
+  scenes?: (typeof SCENE_GRAINS)[number]
   /**
    * Add each downloaded video's cut list (`ContentDetail.video`): the seconds where its picture changes, measured once
    * and free. `startMs`/`endMs` narrow the lists (and then do not imply transcript segments). Each video's state is
@@ -3613,7 +3681,7 @@ export interface AddTrackedAccountsInput {
   /** The accounts to track, in the order they are listed. */
   accounts: TrackAccountInput[]
   /** Which list they join: `inspiration` (the default, the creators watched) or `brand` (the owner's own). */
-  accountType?: 'inspiration' | 'brand'
+  accountType?: (typeof TRACKED_ACCOUNT_TYPES)[number]
   /** Also link each account to this brand kit. */
   brandKitId?: string
 }
@@ -3650,7 +3718,7 @@ export interface AddTrackedAccountsResult {
 /** Options for `listTrackedAccounts`. */
 export interface ListTrackedAccountsOptions extends PageOptions {
   /** Narrow to one tier. Omitted, both come back. */
-  accountType?: 'inspiration' | 'brand'
+  accountType?: (typeof TRACKED_ACCOUNT_TYPES)[number]
   /** Scope to the accounts linked to this brand kit. */
   brandKitId?: string
 }
@@ -3889,20 +3957,10 @@ export interface UpdateStyleLibraryRequest extends StyleLibraryPublishSources {
 // ---------------------------------------------------------------------------
 
 /** The asset types that can be favorited. */
-export type FavoriteAssetType =
-  | 'card'
-  | 'voice'
-  | 'brand_kit'
-  | 'project'
-  | 'inspiration_content'
-  | 'gallery'
-  | 'transition'
-  | 'caption-template'
-  | 'template'
-  | 'space'
+export type FavoriteAssetType = (typeof FAVORITE_ASSET_TYPES)[number]
 
 /** The asset types that can be archived. */
-export type ArchiveAssetType = 'card' | 'brand_kit' | 'brand_kit_section' | 'project' | 'space' | 'template' | 'style_library'
+export type ArchiveAssetType = (typeof ARCHIVE_ASSET_TYPES)[number]
 
 /**
  * The target of a favorite / unfavorite call: a media item by its `mediaId` (one output, `a1B2c3D4-2`, an upload,
@@ -3975,7 +4033,7 @@ export type ArchiveInput = ({ mediaId: string } | { assetType: ArchiveAssetType;
 // ---------------------------------------------------------------------------
 
 /** Which write model a project's composition uses: 2D canvas layers or a 1D editor timeline. */
-export type EditorSurface = 'canvas' | 'editor'
+export type EditorSurface = (typeof PROJECT_TYPES)[number]
 
 /** One op in the shared editor/canvas op vocabulary. Opaque here: shaped by the reducer for the
  *  project's type (canvas layer/slide ops, or timeline clip ops). Every op has an `op` name. */
@@ -4099,7 +4157,7 @@ export interface DocumentFinding {
  * Named `type` since sdk 0.4.16 (2026-09-27). It was `kind`, then `surface`; neither read as what it is.
  * `ProjectKind` and `ProjectSurface` stay as aliases so no import breaks.
  */
-export type ProjectType = 'editor' | 'canvas'
+export type ProjectType = (typeof PROJECT_TYPES)[number]
 /** @deprecated Use `ProjectType`. */
 export type ProjectKind = ProjectType
 /** @deprecated Use `ProjectType`. */
@@ -4114,10 +4172,6 @@ export interface ProjectSummary {
   appUrl: string
   /** 'editor' or 'canvas'. */
   type: string
-  /** @deprecated Alias for `type`, still emitted for one release window. */
-  surface: string
-  /** @deprecated Alias for `type`, still emitted for one release window. */
-  kind: string
   title: string
   orientation: string
   width: number
@@ -4289,7 +4343,7 @@ export function isProjectParts(p: ProjectDetail | ProjectParts): p is ProjectPar
 
 /** Options for `getProject`. */
 export interface GetProjectOptions {
-  detail?: 'summary' | 'full'
+  detail?: (typeof DETAIL_LEVELS)[number]
   fromFrame?: number
   toFrame?: number
   trackId?: string
@@ -4541,7 +4595,7 @@ export type PicturePart =
       remeasuring?: PendingPart | FailedPart
       find?: { query: string; moments: PictureMoment[] } | PictureNotReady
       /** Candidates, best first: for a phrase (`query`), or for a class of thing the file's own scan tracked (`detector`). */
-      where?: { query: string; candidates: PictureCandidate[] } | { detector: 'pointer' | 'face'; candidates: PictureCandidate[] } | PictureNotReady
+      where?: { query: string; candidates: PictureCandidate[] } | { detector: (typeof PICTURE_DETECTORS)[number]; candidates: PictureCandidate[] } | PictureNotReady
       /** One thing followed from its seed: a track per stretch it is seen. */
       track?: { seed: PictureSeed; tracks: PictureTrack[] } | PictureNotReady
       picture?: {
@@ -4582,7 +4636,7 @@ export interface ProjectPictureWindow {
  */
 export type ProjectSourcePart =
   | (Omit<Extract<PicturePart, { status: 'ready' }>, 'picture' | 'nextCursor' | 'where' | 'track'> & {
-      where?: { query: string; candidates: ProjectCandidate[] } | { detector: 'pointer' | 'face'; candidates: ProjectCandidate[] } | PictureNotReady
+      where?: { query: string; candidates: ProjectCandidate[] } | { detector: (typeof PICTURE_DETECTORS)[number]; candidates: ProjectCandidate[] } | PictureNotReady
       /** The seed where it plays (absent when the edit cut that second out), and what it followed. */
       track?: { seed: { box: PictureBox } & Partial<PictureOnFrame>; tracks: ProjectTrack[] } | PictureNotReady
       picture?: ProjectPictureWindow
@@ -4611,7 +4665,7 @@ export type ProjectPicturePart =
   | { status: 'unavailable'; reason: string }
 
 /** The classes of thing a source's own analysis tracks, which `view`'s `detector` takes. */
-export type ViewDetector = 'pointer' | 'face'
+export type ViewDetector = (typeof PICTURE_DETECTORS)[number]
 
 /** What `view`'s `track` takes: a candidate's id from a `where` answer, or a time of the source and a box on its frame (normalized to the frame, inside it). */
 export type ViewTrackInput = string | PictureSeed
@@ -4669,7 +4723,7 @@ export interface ViewInput {
    * `frames` returns each frame as its own image; `sheets` tiles them into contact sheets, an edit's frames numbered and
    * a source's labeled with its second under each tile. Omit to choose by how many fit one response.
    */
-  layout?: 'frames' | 'sheets'
+  layout?: (typeof RENDER_LAYOUTS)[number]
   /**
    * Hear and measure sound: your edit's range mixed as an export mixes it, instead of its picture, by fromFrame and
    * toFrame; or a source's window as it is, by fromSec and toSec, beside any frames asked for. Either is measured the
@@ -4780,13 +4834,9 @@ export interface EditorSelectedItem {
 /** Filters for `listProjects`. */
 export interface ListProjectsInput extends PageOptions, SortOptions<ProjectSort> {
   /** 'archived' -> only archived; 'favorited' -> favorited + not archived; omitted -> not archived. */
-  filter?: 'archived' | 'favorited'
+  filter?: (typeof PROJECT_FILTERS)[number]
   /** Restrict to one type. Omitted returns both. */
   type?: ProjectType
-  /** @deprecated Alias for `type`, accepted for one release window. `type` wins if both are set. */
-  surface?: ProjectType
-  /** @deprecated Alias for `type`, accepted for one release window. `type` wins if both are set. */
-  kind?: ProjectType
   /** Case-insensitive title search. */
   search?: string
 }
@@ -4800,10 +4850,6 @@ export interface ProjectListResult extends Paged {
  *  flow (16:9 landscape, an `editor` project, an empty composition the app lazy-inits). */
 export interface CreateProjectInput {
   type?: ProjectType
-  /** @deprecated Alias for `type`, accepted for one release window. */
-  surface?: ProjectType
-  /** @deprecated Alias for `type`, accepted for one release window. */
-  kind?: ProjectType
   title?: string
   orientation?: string
   width?: number
@@ -4984,6 +5030,8 @@ export interface UndoInput {
 
 /** Input to `redo`. */
 export interface RedoInput {
+  /** A specific revision to re-apply. Omitted, the edit most recently undone. */
+  revision?: number
   /** The revision the caller last saw: the redo is refused with a 409 when the project has moved since. */
   expectedRevision?: number
 }
@@ -5527,7 +5575,7 @@ export interface ProjectTranscriptOptions {
   /** Source-media window in ms (with `endMs`). */
   startMs?: number
   endMs?: number
-  granularity?: 'clip' | 'word'
+  granularity?: (typeof TRANSCRIPT_GRANULARITIES)[number]
   paceThresholdMs?: number
   paddingStartMs?: number
   paddingEndMs?: number
@@ -5543,7 +5591,7 @@ export interface MediaTranscriptOptions {
   startSeconds?: number
   /** Where the window ends, in the recording's own seconds (exclusive). */
   endSeconds?: number
-  granularity?: 'clip' | 'word'
+  granularity?: (typeof TRANSCRIPT_GRANULARITIES)[number]
   /** How many words a page holds (word mode). */
   limit?: number
   /** The `nextCursor` of the page before. */

@@ -1329,7 +1329,7 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
 /** A page of semantic library-search matches: assets ranked by relevance, with matched scene timestamps for video. */
 export function mediaSearchResult(page: SearchMediaPage): CallToolResult {
   const results = page.results
-  if (!results.length) return text('No matching media found.')
+  if (!results.length) return text(lines(['No matching media found.', ...describeEmptyReason(page.emptyReason)]))
   const rows = results.map((r) => {
     const rel = ` | ${Math.round(r.relevance * 100)}%`
     const kindTag = r.kind ? `[${r.kind}]` : '[media]'
@@ -3007,11 +3007,6 @@ const PROJECT_DETAIL_EXPOSURE = {
   id: 'rendered',
   title: 'rendered',
   type: 'rendered',
-  kind: 'omitted: deprecated alias of type, same value',
-  // Added when `surface` joined ProjectDetail (8aecfd0). It went unnoticed because `dist/` is gitignored
-  // and this file typechecks against the BUILT SDK, so a stale dist hid the missing key until the next
-  // rebuild. Same value as `kind`, which is the name it used to have.
-  surface: 'omitted: deprecated alias of type, same value',
   orientation: 'rendered',
   width: 'rendered',
   height: 'rendered',
