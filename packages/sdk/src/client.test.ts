@@ -324,6 +324,29 @@ test('a 409 is a ConflictError carrying each stale section', async () => {
   })
 })
 
+test('a revision conflict surfaces the current revision and the overlap, and is never retried', async () => {
+  const body = {
+    error: 'The project moved on. Nothing was written.',
+    code: 'revision_conflict',
+    expectedRevision: 3,
+    currentRevision: 7,
+    overlap: [{ kind: 'clip', ids: ['c1'], revisions: [5, 6] }],
+  }
+  const { fetch, calls } = stubFetch([{ status: 409, body }, { status: 200, body: { project: { id: 'p1' } } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  await assert.rejects(client.updateProject('p1', { fps: 30, expectedRevision: 3 }), (err: unknown) => {
+    assert.ok(err instanceof ConflictError)
+    assert.equal(err.code, 'revision_conflict')
+    assert.equal(err.expectedRevision, 3)
+    assert.equal(err.currentRevision, 7)
+    assert.deepEqual(err.overlap, [{ kind: 'clip', ids: ['c1'], revisions: [5, 6] }])
+    return true
+  })
+  // A real overlap is the caller's to resolve: one request went out, and the queued success was never reached.
+  assert.equal(calls.length, 1)
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { fps: 30, expectedRevision: 3 })
+})
+
 test('listMedia builds the query string and getMedia encodes the token', async () => {
   const list = stubFetch([{ status: 200, body: { media: [{ id: 'o1', type: 'image', model: 'nb2', prompt: null, status: 'completed', createdAt: 't', variant: 0, url: null, generationSize: 1, isFavorited: false }], nextCursor: null } }])
   const c1 = new ContentHero({ apiKey: 'ch_live_test', fetch: list.fetch, baseUrl: 'https://example.test' })

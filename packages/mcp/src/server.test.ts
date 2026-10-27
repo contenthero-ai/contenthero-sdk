@@ -5699,6 +5699,15 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
   // The settings, changed and reported back as they now stand.
   const set = await call('update_project', { projectId: 'p1', fps: 30, loudness: 'off', magneticTrack: false, linkedTracks: { audio: false }, width: 1080, height: 1920 })
   assert.match(set.content[0].text, /Frame rate: 30 fps\./)
+  // The revision the caller read rides along, the one contract update_timeline and update_canvas share.
+  await call('update_project', { projectId: 'p1', fps: 24, expectedRevision: 9 })
+  assert.ok(calls.includes('update p1 {"fps":24,"expectedRevision":9}'))
+  const tools = (await mcp.listTools()).tools
+  for (const name of ['update_project', 'update_timeline', 'update_canvas']) {
+    const field = (tools.find((t) => t.name === name)!.inputSchema.properties as Record<string, { description?: string }>).expectedRevision
+    assert.ok(field, `${name} takes expectedRevision`)
+    assert.match(field.description ?? '', /nothing since touched what the edit touches/)
+  }
   assert.match(set.content[0].text, /Delivery loudness: -16 LUFS/)
   assert.match(set.content[0].text, /Editing: magnetic main track off, linkage on, reaching media, text tracks\./)
   const read = await call('get_project', { projectId: 'p1' })
@@ -5723,6 +5732,7 @@ test('the project tools reach their SDK methods: fields, settings, copy, version
   assert.deepEqual(calls, [
     'update p1 {"title":"Launch","brandKitId":null,"cover":{"frame":12},"coverPosition":{"x":50,"y":40}}',
     'update p1 {"width":1080,"height":1920,"fps":30,"loudness":"off","magneticTrack":false,"linkedTracks":{"audio":false}}',
+    'update p1 {"fps":24,"expectedRevision":9}',
     'get p1',
     'duplicate p1 {}',
     'duplicate p1 {"versionId":"v1"}',

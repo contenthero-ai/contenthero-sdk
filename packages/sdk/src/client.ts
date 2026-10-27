@@ -2195,7 +2195,9 @@ export class ContentHero {
    * Change a project: rename it, choose its brand kit, choose or frame its cover, and change its settings: its canvas
    * size, and a video project's frame rate, delivery loudness, magnetic main track, linkage and linked tracks. A PATCH:
    * a field left out is left alone, and `brandKitId` / `coverPosition` take `null` to clear them. A setting belongs to
-   * the project: changing one is an edit, so `undo` reverses it and every open editor shows it. Returns the
+   * the project: changing one is an edit, so `undo` reverses it and every open editor shows it. Pass `expectedRevision`
+   * (the contract `applyEditorOps` shares) to guard the settings against a concurrent change: a conflict throws a
+   * ConflictError with `currentRevision` and `overlap`, and nothing is written. Returns the
    * project and its settings as they now stand. Requires the `editor:write` scope.
    */
   async updateProject(projectId: string, input: UpdateProjectInput): Promise<ProjectWithSettings> {
@@ -2291,9 +2293,11 @@ export class ContentHero {
    * atomically. The project's `type` selects the op vocabulary; the ops run through the same reducers the manual
    * UI and in-app agent use. Requires the `editor:write` scope.
    *
-   * Optimistic concurrency: pass `expectedRevision` (from `getProject`) to fail with a 409 ConflictError if
-   * a concurrent edit landed, instead of clobbering it. Returns the new revision and the per-op results (a
-   * bad op is reported, never throws).
+   * Optimistic concurrency: pass `expectedRevision` (from `getProject`), the one contract `updateProject` shares. An
+   * edit built on an older revision applies when no change since touched what it touches (the result's `rebased` says
+   * so), and otherwise throws a 409 ConflictError carrying `currentRevision` and `overlap`, with nothing written. The
+   * client does not retry it: read the project again and redo the edit. Returns the new revision and the per-op
+   * results (a bad op is reported, never throws).
    *
    * Each op is given a client-generated `opId` (uuid) here if it does not already have one, once for this call, so
    * the op has a stable identity from the point of intent: the same ids go out on every retry after a transport

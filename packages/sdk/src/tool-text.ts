@@ -49,6 +49,21 @@ export const VIEW_PICTURE_INPUT_TEXT = {
   cursor: "Read the next page of every list of find, where or picture: pass the answer's nextCursor, with the same other inputs.",
 } as const
 
+/**
+ * The one contract of `expectedRevision` on update_project, update_timeline and update_canvas, said once so the three
+ * tools and the CLI's help cannot drift. The conflict answer is the same shape for all three.
+ */
+export const EXPECTED_REVISION_CONTRACT =
+  'expectedRevision is the project revision you last read, and it means the same on update_project, update_timeline and update_canvas. An edit built on an older revision still applies when no change since touched what it touches. When one did, nothing is written and the answer is a conflict naming the current revision and what overlapped: read the project again and redo the edit. Omit it to apply to the project as it is.'
+
+/** The field text of `expectedRevision` on the three edit tools. */
+export const EXPECTED_REVISION_FIELD =
+  'The project revision you last read, from get_project or the last edit. An older one still applies when nothing since touched what the edit touches; otherwise nothing is written and the conflict names the current revision and what overlapped. Omit to apply to the project as it is.'
+
+/** What `expectedRevision` guards on update_project, which has fields that are not versioned. */
+export const EXPECTED_REVISION_PROJECT_NOTE =
+  ' On update_project it guards the settings in the document; the title, brand kit and cover are not versioned.'
+
 /** `get_project`: read a project, its settings, and its composition, summarized or whole. */
 export function getProjectDescription(audience: ToolTextAudience): string {
   return [
@@ -56,7 +71,7 @@ export function getProjectDescription(audience: ToolTextAudience): string {
     "The summary is each track's id, name, type, whether it is the main track and whether it is muted or hidden, and each clip's id, type, place on the timeline, speed, whether it is disabled and source: a clip plays a file (its assetId, the same id view and get_media take, and the window of the file it plays, in the file's seconds) or code (the project modules it imports). Clips that share an assetId were cut from one recording; a clip's id never says so. For a canvas, the summary is each slide with its layers' ids, types and the start of each text layer's text.",
     "A timeline read can be narrowed to a frame window or one track, and a canvas read to one slide; a narrowed full read carries only the modules its clips import and names the rest. A read that names clipIds, moduleNames, sourceAssetId or modulesIndex returns those parts alone: each clip named as its summary line, or whole with its code and the modules it imports with detail 'full'; each module named with its code; modulesIndex, every module's name, how many clips draw it, whether none does, and its size, without code; and with sourceAssetId and atSec, where moments of a recording play on the timeline: every clip and frame each second lands on, none where it was cut out. A read names parts or narrows the whole, not both.",
     "A project's read also lists the problems its code, modules and geometry hold, of the whole project or of the parts a read names: code reading what a project module does not provide, the compiler's warnings, modules no clip imports, and a zoom that shows a pinned region's own picture outside the pin.",
-    'Pass the returned revision as expectedRevision for an edit that must not overwrite a concurrent change. update_project changes the settings.',
+    'Pass the returned revision as expectedRevision on an edit, so a concurrent change to the same thing is refused rather than overwritten. update_project changes the settings.',
     ...(audience === 'mcp' ? ['Requires the editor:read scope.'] : []),
   ].join(' ')
 }
@@ -69,7 +84,7 @@ export function updateTimelineDescription(audience: ToolTextAudience): string {
     `Read clip, track and transition ids from ${IDS_FROM[audience]}.`,
     'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result reports each operation, with what the compiler found in any code an operation wrote, and what the edit left in the project that may not render as intended, clip by clip.',
     'Prefer an edit the person can review and turn back over one that cannot be reversed, and make a destructive one only when they asked for it. A clip\'s length on the timeline follows its source and its speed: change its speed, not its length.',
-    'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
+    `Project settings change with update_project. ${EXPECTED_REVISION_CONTRACT} Every edit can be undone, and each returns the new revision.`,
     'A retry that repeats the same operation id returns the revision already committed and never applies the batch twice.',
     ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
   ].join(' ')
@@ -82,7 +97,7 @@ export function updateCanvasDescription(audience: ToolTextAudience): string {
     "get_schema kind 'layer' lists every operation with its shape and the rules they all follow; read an operation or a layer type in full by its name before using one you have not read. A code layer imports project modules, which an operation sets or copies from another of your projects.",
     `Read slide and layer ids from ${IDS_FROM[audience]}.`,
     'A batch is ordered and atomic: when any operation is refused, nothing is stored, and the result says which and why. The result also reports what the edit left in the project that may not render as intended, layer by layer.',
-    'Project settings change with update_project. expectedRevision is optional: pass the revision you read to fail on a concurrent change rather than overwrite it. Every edit can be undone, and each returns the new revision.',
+    `Project settings change with update_project. ${EXPECTED_REVISION_CONTRACT} Every edit can be undone, and each returns the new revision.`,
     ...(audience === 'mcp' ? ['Requires the editor:write scope.'] : []),
   ].join(' ')
 }

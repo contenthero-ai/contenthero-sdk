@@ -3903,7 +3903,12 @@ export interface ApplyEditorOpsInput {
   projectId: string
   /** The ops to apply, in order. */
   ops: EditorOp[]
-  /** Optimistic-concurrency token from a prior read. When omitted, the server uses the current revision. */
+  /**
+   * The project revision you last read: the one contract of `updateProject` and `applyEditorOps`. An edit built on an
+   * older revision still applies when no change since touched what it touches, and the result says it was rebased.
+   * When one did, nothing is written and a `ConflictError` carries `currentRevision` and `overlap`: read the project
+   * again and redo the edit; the client never retries it. When omitted, the edit applies to the project as it is.
+   */
   expectedRevision?: number
   /** A short human intent for the edit (attribution + observability). */
   userIntent?: string
@@ -3971,6 +3976,8 @@ export interface ApplyEditorOpsResult {
    * Present only when the batch added any.
    */
   documentWarnings?: DocumentFinding[]
+  /** Present when the edit was built on an older revision and applied anyway: the revision it was built on and the one it was applied over. */
+  rebased?: { fromRevision: number; overRevision: number }
 }
 
 /**
@@ -4763,6 +4770,14 @@ export interface UpdateProjectInput {
   linkage?: boolean
   /** Video projects: which kinds of track linkage reaches; a kind left out is left alone. */
   linkedTracks?: Partial<LinkedTracks>
+  /**
+   * The project revision you last read, the same contract as `applyEditorOps`. It guards the settings in the document
+   * (canvas size, frame rate, loudness, editing): a change built on an older revision applies when no change since
+   * touched the same setting, and otherwise throws a `ConflictError` with `currentRevision` and `overlap`, writing
+   * nothing, the title included. The title, brand kit and cover are fields of the project, not versioned, and it does
+   * not guard them.
+   */
+  expectedRevision?: number
 }
 
 /**

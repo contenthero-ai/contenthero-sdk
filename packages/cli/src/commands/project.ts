@@ -49,6 +49,8 @@ import {
   type ProjectWithSettings,
   type UndoResult,
   type UpdateProjectInput,
+  EXPECTED_REVISION_FIELD,
+  EXPECTED_REVISION_PROJECT_NOTE,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, moreLine, statusCommandFor, table, withMore } from '../output.js'
@@ -309,6 +311,7 @@ export function registerProject(program: Command): void {
     .option('--brand-kit <id>', 'the brand kit to associate, or none to clear it')
     .option('--cover <choice>', 'the cover: auto (follows the composition), frame:<n> (a chosen frame or slide index), or media:<id> (a library image)', toCoverChoice)
     .option('--cover-position <x,y>', 'where the cover is framed, as percentages of its width and height, or none for the default framing')
+    .option('--expected-revision <n>', EXPECTED_REVISION_FIELD + EXPECTED_REVISION_PROJECT_NOTE, toInt)
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {
       const input: UpdateProjectInput = {}
       if (opts.title !== undefined) input.title = opts.title as string
@@ -325,6 +328,8 @@ export function registerProject(program: Command): void {
       if (typeof opts.linkage === 'boolean') input.linkage = opts.linkage
       if (opts.linkedTracks !== undefined) input.linkedTracks = opts.linkedTracks as UpdateProjectInput['linkedTracks']
       if (Object.keys(input).length === 0) throw new CliError('Nothing to change: pass at least one field flag.', EXIT.USAGE)
+      // The revision guards the settings; it is not itself a change, so it joins the input after the check above.
+      if (opts.expectedRevision !== undefined) input.expectedRevision = opts.expectedRevision as number
       const { client, ctx } = makeClient(command)
       const p = await client.updateProject(projectId, input)
       emit(p, ctx, (r: ProjectWithSettings) => `Updated ${r.type} project ${r.id} "${r.title}" (${r.orientation} ${r.width}x${r.height})` + (r.fps ? `\nFrame rate: ${r.fps} fps` : '') + settingsText(r))
@@ -395,13 +400,13 @@ export function registerProject(program: Command): void {
   project
     .command('apply')
     .description(
-      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...) and KEYFRAME ops (add_keyframe, update_keyframe, remove_keyframe, apply_combo). One-shot cleanups: remove_silence, remove_filler_words, extract_audio. Templates: insert_template places one from `template list`, branded with the project\'s brand kit (see `schema get timeline` for shapes). Modules: copy_project_modules copies named modules from another of your projects. Build each item from its type\'s `example`, read with `schema get timeline --name <type>` or `schema get layer --name <type>`; run `project get` first for the current revision and pass it as --expected-revision for safe concurrent edits. Requires editor:write.',
+      'Apply a batch of ops to a project composition. Ops both CREATE (create_clip, insert_track, insert_prebuilt_track, add_transition) and EDIT (move_clip, trim_clip, update_clip, delete_clip, remove_background, disable_ranges, update_transition, remove_transition, ...) and KEYFRAME ops (add_keyframe, update_keyframe, remove_keyframe, apply_combo). One-shot cleanups: remove_silence, remove_filler_words, extract_audio. Templates: insert_template places one from `template list`, branded with the project\'s brand kit (see `schema get timeline` for shapes). Modules: copy_project_modules copies named modules from another of your projects. Build each item from its type\'s `example`, read with `schema get timeline --name <type>` or `schema get layer --name <type>`; run `project get` first for the current revision and pass it as --expected-revision: an edit built on an older revision still applies when nothing since touched what it touches, and otherwise nothing is written and the conflict names the current revision and what overlapped. Requires editor:write.',
     )
     .argument('<projectId>', 'the project id')
     .option('--ops <json>', 'the ops as a JSON array string')
     .option('--ops-file <path>', 'read the ops JSON array from a file')
     .option('--intent <text>', 'a short description of the edit (for attribution)')
-    .option('--expected-revision <n>', 'revision for optimistic concurrency (from `project get`)', toInt)
+    .option('--expected-revision <n>', EXPECTED_REVISION_FIELD, toInt)
     // ⛔ No `--include-render-url` (retired 2026-10-04): an edit must not render and save a cover. See the result with
     // `context --project <id> --render`.
     .action(async (projectId: string, opts: Record<string, unknown>, command: Command) => {

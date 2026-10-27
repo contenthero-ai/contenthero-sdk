@@ -94,12 +94,47 @@ export class ValidationError extends ContentHeroError {
  */
 export class ConflictError extends ContentHeroError {
   readonly conflicts?: Array<Record<string, unknown>>
+  /** Set on a revision conflict (`code` is `revision_conflict`): the revision the edit was built on. */
+  readonly expectedRevision?: number
+  /** Set on a revision conflict: the revision the project is at now. Read the project again, redo the edit on it. */
+  readonly currentRevision?: number
+  /**
+   * Set on a revision conflict: what the changes since touched that the edit also touches, by kind and ids, with the
+   * revisions that touched it. Empty when the edit was refused without a comparison (a revision the project has not
+   * reached, or a race that ended the retries).
+   */
+  readonly overlap?: RevisionOverlap[]
+  /** The machine-readable cause, when the server named one: `revision_conflict`. */
+  readonly code?: string
 
-  constructor(message = 'Conflict', options?: ContentHeroErrorOptions & { conflicts?: Array<Record<string, unknown>> }) {
+  constructor(
+    message = 'Conflict',
+    options?: ContentHeroErrorOptions & {
+      conflicts?: Array<Record<string, unknown>>
+      code?: string
+      expectedRevision?: number
+      currentRevision?: number
+      overlap?: RevisionOverlap[]
+    },
+  ) {
     super(message, options)
     this.name = 'ConflictError'
     this.conflicts = options?.conflicts
+    this.code = options?.code
+    this.expectedRevision = options?.expectedRevision
+    this.currentRevision = options?.currentRevision
+    this.overlap = options?.overlap
   }
+}
+
+/** One group of what an edit and the changes since it was built on both touched. */
+export interface RevisionOverlap {
+  /** What kind of thing: a clip, track, layer, slide, module, or a project setting such as `fps`. */
+  kind: string
+  /** Which ones, for a kind that has many; absent for a kind that is one thing per project. */
+  ids?: string[]
+  /** The revisions since that touched them. */
+  revisions: number[]
 }
 
 /** 404: the referenced generation does not exist (or is not owned by this key). */
@@ -429,6 +464,14 @@ export function errorFromResponse(status: number, body: unknown, meta: ResponseM
       return new ConflictError(message, {
         ...options,
         conflicts: Array.isArray(record?.conflicts) ? (record.conflicts as Array<Record<string, unknown>>) : undefined,
+        ...(record?.code === 'revision_conflict'
+          ? {
+              code: 'revision_conflict',
+              expectedRevision: typeof record.expectedRevision === 'number' ? record.expectedRevision : undefined,
+              currentRevision: typeof record.currentRevision === 'number' ? record.currentRevision : undefined,
+              overlap: Array.isArray(record.overlap) ? (record.overlap as RevisionOverlap[]) : undefined,
+            }
+          : {}),
       })
     case 429:
       return new RateLimitError(message, {
