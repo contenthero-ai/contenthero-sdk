@@ -4,13 +4,15 @@
  * - an audio URL: synchronous, and saved as a studio output referenceable by its outputId (see
  *   `contenthero media`). Metered by the length heard, and `--cost` prices it first from the file's own length; only
  *   a user on their own ElevenLabs key is charged nothing.
+ * - a public video page (`--video-url`: YouTube, Instagram, TikTok, X), read from its captions or audio. Priced flat by
+ *   where the words come from and free once held; `--cost` prices it first.
  * - a tracked post's video (`--content-id`, `--slide` for a carousel's video) once `content analyze --kind video`
  *   has downloaded it, word by word. `--cost` prices it first. A long video runs past one request: this waits by
  *   asking again with the same post, which is free, and exits 4 when it is still running at the end of the wait.
  */
 
 import type { Command } from 'commander'
-import { describeTranscribeCost, describeTranscriptionState, transcriptionSource, type TranscribeCostEstimate, type Transcription } from '@contenthero/sdk'
+import { describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, type LinkTranscription, type TranscribeCostEstimate, type Transcription } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, displayId, emit, keyValues, linkRow } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -22,8 +24,9 @@ const TRANSCRIBE_TIMEOUT_SEC = 600
 export function registerTranscribe(program: Command): void {
   program
     .command('transcribe')
-    .description("Transcribe speech to text: an audio URL, or a tracked post's downloaded video with --content-id (spends credits; price it first with --cost)")
-    .argument('[audioUrl]', 'public URL of the audio to transcribe (or name a post with --content-id)')
+    .description("Transcribe speech to text: an audio URL, a public video page with --video-url, or a tracked post's downloaded video with --content-id (spends credits; price it first with --cost)")
+    .argument('[audioUrl]', 'public URL of the audio to transcribe (or name a video page with --video-url, or a post with --content-id)')
+    .option('--video-url <url>', 'link to a public video page (YouTube, Instagram, TikTok, X) whose spoken words to transcribe')
     .option('--content-id <id>', "the tracked post whose video to transcribe: its id or short id, its link, or the platform's own id for it, once content analyze --kind video has downloaded it")
     .option('--slide <n>', "which video of a carousel post, by the 0-based slide content analyze reports (with --content-id)", toInt)
     .option('--cost', 'show what transcribing costs instead of transcribing (nothing runs, nothing is charged)')
@@ -33,12 +36,24 @@ export function registerTranscribe(program: Command): void {
     .option('--timeout <sec>', `how long to follow a post's transcription (default ${TRANSCRIBE_TIMEOUT_SEC})`, toInt)
     .action(async (audioUrl: string | undefined, opts: Record<string, unknown>, command: Command) => {
       const contentId = (opts.contentId as string | undefined)?.trim()
-      if (!!audioUrl === !!contentId) throw new CliError('Pass exactly one source: an audio URL, or --content-id for a tracked post.', EXIT.USAGE)
-      if (audioUrl && opts.slide !== undefined) throw new CliError("--slide picks a carousel post's video: name the post with --content-id.", EXIT.USAGE)
-      if (contentId && (opts.language !== undefined || opts.diarize)) {
-        throw new CliError("--language and --diarize apply to an audio file; a post's language is detected from its video.", EXIT.USAGE)
+      const videoUrl = (opts.videoUrl as string | undefined)?.trim()
+      if ([audioUrl, videoUrl, contentId].filter(Boolean).length !== 1) {
+        throw new CliError('Pass exactly one source: an audio URL, --video-url for a public video page, or --content-id for a tracked post.', EXIT.USAGE)
+      }
+      if (!contentId && opts.slide !== undefined) throw new CliError("--slide picks a carousel post's video: name the post with --content-id.", EXIT.USAGE)
+      if (!audioUrl && (opts.language !== undefined || opts.diarize)) {
+        throw new CliError("--language and --diarize apply to an audio file; a post's or a video page's language is detected from its speech.", EXIT.USAGE)
       }
       const { client, ctx } = makeClient(command)
+
+      if (videoUrl) {
+        if (opts.cost) {
+          emit(await client.estimateTranscribeCost({ videoUrl }), ctx, (e: TranscribeCostEstimate) => describeTranscribeCost(e))
+          return
+        }
+        emit(await client.transcribe({ videoUrl }), ctx, (t: LinkTranscription) => describeLinkTranscription(t))
+        return
+      }
 
       if (contentId) {
         const post = { contentId, ...(opts.slide !== undefined ? { slide: opts.slide as number } : {}) }

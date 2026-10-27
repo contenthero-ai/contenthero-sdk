@@ -136,6 +136,8 @@ export type {
   CreateElementRequest,
   TranscribeRequest,
   TranscribeAudioRequest,
+  TranscribeLinkRequest,
+  LinkTranscription,
   TranscribePostRequest,
   Transcription,
   CompletedTranscription,
@@ -435,7 +437,7 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, RevisionOverlap, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { PASS_REVISION_LINE, describePartsAsked, describeModulesIndex, chargeSentence, describeAccountIdsNotFound, describeEmptyReason, describeCharge, describeClip, describeDocumentFindings, describeStyleLibraryPins, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, describePicturePart, describeProjectPicture, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeTranscriptionState } from './describe.js'
+export { PASS_REVISION_LINE, describePartsAsked, describeModulesIndex, chargeSentence, describeAccountIdsNotFound, describeEmptyReason, describeCharge, describeClip, describeDocumentFindings, describeStyleLibraryPins, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, describePicturePart, describeProjectPicture, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState } from './describe.js'
 export {
   LIST_STYLE_LIBRARIES_TEXT,
   CREATE_UPLOAD_TEXT,

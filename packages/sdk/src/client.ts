@@ -153,6 +153,9 @@ import type {
   Tag,
   PublishResult,
   TranscribeRequest,
+  TranscribeAudioRequest,
+  TranscribeLinkRequest,
+  LinkTranscription,
   TranscribePostRequest,
   Transcription,
   TranscribeCostEstimate,
@@ -633,10 +636,14 @@ export class ContentHero {
   }
 
   /**
-   * Transcribe speech to text (ElevenLabs Scribe), from one of two sources:
+   * Transcribe speech to text, from one of three sources:
    *
    * - `audioUrl`: an audio file. Synchronous: the transcript comes back inline, with what it cost in `charge` (free
    *   only when the account's own ElevenLabs key covered it). Price it first with `estimateTranscribeCost`.
+   * - `videoUrl`: a public video page (YouTube, Instagram, TikTok, X), read from its captions or audio. Answers a
+   *   `LinkTranscription`: the words with the video's title, channel, view count and length where the platform gives
+   *   them, and what it cost in `charge`. Priced flat by where the words come from, and free once they are held; an
+   *   `unavailable` answer carries `reason` and charges nothing. Price it first with `estimateTranscribeCost`.
    * - `contentId` (and `slide` for a carousel's video): a tracked post's video, word by word, once `analyzeContent`
    *   kind `video` has downloaded it. The post's one video becomes its live transcript, which `getContent` then reads
    *   word-timed; a carousel slide's stays with that slide. Charged once, to whoever asks first, for what was heard;
@@ -644,8 +651,11 @@ export class ContentHero {
    *   answers `status: 'running'`: call this again with the same post to follow it, which is free. A post that
    *   cannot be transcribed is refused with why (a 422 whose body carries its `code`).
    */
-  async transcribe(request: TranscribeRequest): Promise<Transcription> {
-    return this.request<Transcription>('POST', '/api/v1/studio/transcribe', request)
+  async transcribe(request: TranscribeLinkRequest): Promise<LinkTranscription>
+  async transcribe(request: TranscribeAudioRequest | TranscribePostRequest): Promise<Transcription>
+  async transcribe(request: TranscribeRequest): Promise<Transcription | LinkTranscription>
+  async transcribe(request: TranscribeRequest): Promise<Transcription | LinkTranscription> {
+    return this.request<Transcription | LinkTranscription>('POST', '/api/v1/studio/transcribe', request)
   }
 
   /**
@@ -654,11 +664,13 @@ export class ContentHero {
    * key). An audio file whose length cannot be read answers `creditsEstimate: null`: it is priced once transcribed.
    */
   async estimateTranscribeCost(
-    request: Pick<TranscribePostRequest, 'contentId' | 'slide'> | { audioUrl: string },
+    request: Pick<TranscribePostRequest, 'contentId' | 'slide'> | { audioUrl: string } | { videoUrl: string },
   ): Promise<TranscribeCostEstimate> {
     const source = 'audioUrl' in request
       ? { audioUrl: request.audioUrl }
-      : { contentId: request.contentId, ...(request.slide !== undefined ? { slide: request.slide } : {}) }
+      : 'videoUrl' in request
+        ? { videoUrl: request.videoUrl }
+        : { contentId: request.contentId, ...(request.slide !== undefined ? { slide: request.slide } : {}) }
     return this.request<TranscribeCostEstimate>('POST', '/api/v1/studio/transcribe', { ...source, getCost: true })
   }
 

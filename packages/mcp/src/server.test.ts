@@ -1997,6 +1997,29 @@ test('transcribe prices an audio file by its length, and says when it cannot', a
   assert.equal(unknown.content[0].text, "This file's length could not be read, so its price is known only after it is transcribed. Nothing ran and nothing was charged.")
 })
 
+test('transcribe a public video page: priced with getCost, answered with its words and facts, or why none', async () => {
+  const asked = []
+  const mcp = await connect(fakeClient({
+    estimateTranscribeCost: async (req) => (asked.push(['cost', req]), { getCost: true, videoUrl: 'https://youtu.be/x', platform: 'youtube', creditsEstimate: 4 }),
+    transcribe: async (req) => {
+      asked.push(['run', req])
+      return asked.length === 2
+        ? { status: 'completed', videoUrl: 'https://youtu.be/x', platform: 'youtube', title: 'T', channel: 'C', transcript: 'the words', charge: null }
+        : { status: 'unavailable', videoUrl: 'https://youtu.be/x', platform: 'youtube', reason: 'No captions or speech are available for this video.', charge: null }
+    },
+  }))
+  const priced = await mcp.callTool({ name: 'transcribe', arguments: { videoUrl: 'https://youtu.be/x', getCost: true } })
+  assert.match(priced.content[0].text, /^Transcribing this video costs 4 credits/)
+  const done = await mcp.callTool({ name: 'transcribe', arguments: { videoUrl: ' https://youtu.be/x ' } })
+  assert.match(done.content[0].text, /^Transcript of youtube video https:\/\/youtu\.be\/x \(T, C\):\n\nthe words/)
+  const none = await mcp.callTool({ name: 'transcribe', arguments: { videoUrl: 'https://youtu.be/x' } })
+  assert.match(none.content[0].text, /Nothing was charged for it\.$/)
+  assert.deepEqual(asked, [['cost', { videoUrl: 'https://youtu.be/x' }], ['run', { videoUrl: 'https://youtu.be/x' }], ['run', { videoUrl: 'https://youtu.be/x' }]])
+  for (const args of [{ videoUrl: 'https://youtu.be/x', audioUrl: 'https://cdn/a.mp3' }, { videoUrl: 'https://youtu.be/x', diarize: true }, { videoUrl: 'https://youtu.be/x', slide: 0 }]) {
+    assert.equal((await mcp.callTool({ name: 'transcribe', arguments: args })).isError, true, JSON.stringify(args))
+  }
+})
+
 test('transcribe takes exactly one source, and slide only for a post', async () => {
   let called = 0
   const mcp = await connect(fakeClient({ transcribe: async () => { called++; return {} }, estimateTranscribeCost: async () => { called++; return {} } }))

@@ -237,6 +237,21 @@ test('estimateTranscribeCost prices an audio file on the transcribe route', asyn
   assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { audioUrl: 'https://cdn/a.mp3', getCost: true })
 })
 
+test('transcribe reads a public video page by its link, and prices it on the same route', async () => {
+  const { fetch, calls } = stubFetch([
+    { status: 200, body: { getCost: true, creditsEstimate: 4, videoUrl: 'https://youtu.be/x', platform: 'youtube' } },
+    { status: 200, body: { videoUrl: 'https://youtu.be/x', platform: 'youtube', title: 'T', status: 'completed', transcript: 'words', charge: null } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const est = await client.estimateTranscribeCost({ videoUrl: 'https://youtu.be/x' })
+  assert.equal(est.creditsEstimate, 4)
+  assert.deepEqual(JSON.parse(calls[0]?.init?.body as string), { videoUrl: 'https://youtu.be/x', getCost: true })
+  const done = await client.transcribe({ videoUrl: 'https://youtu.be/x' })
+  assert.equal(done.transcript, 'words')
+  assert.equal(calls[1]?.url, 'https://example.test/api/v1/studio/transcribe')
+  assert.deepEqual(JSON.parse(calls[1]?.init?.body as string), { videoUrl: 'https://youtu.be/x' })
+})
+
 test('download reads the save links an id names; 404 and 409 throw their typed errors', async () => {
   const { fetch, calls } = stubFetch([
     { status: 200, body: { files: [{ mediaId: 'Abc12345-1', name: 'cat-1', url: 'https://app.test/api/media/k1?download=cat-1' }, { mediaId: 'Abc12345-2', name: 'cat-2', url: 'https://app.test/api/media/k2?download=cat-2' }] } },

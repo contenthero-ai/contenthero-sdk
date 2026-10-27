@@ -7,7 +7,7 @@
  *   generate_audio    - synchronous (ElevenLabs), no polling
  *   upscale           - smart-wait, image/video upscalers
  *   generate_lip_sync - smart-wait, talking-head lip-sync (portrait + audio/script)
- *   transcribe        - speech-to-text: an audio URL, or a tracked post's downloaded video, word by word
+ *   transcribe        - speech-to-text: an audio URL, a public video page, or a tracked post's downloaded video, word by word
  *   list_avatars / get_avatar - the account's avatars (base look + default voice)
  *   list_voices  / get_voice  - the account's saved voices
  *   list_brand_kits / get_brand_kit - the account's brand kits (full brand context)
@@ -221,6 +221,7 @@ import {
   linkFormatsResult,
   trackedAccountListResult,
   transcriptResult,
+  linkTranscriptResult,
   transcribeCostResult,
   downloadResult,
   voiceListResult,
@@ -2030,13 +2031,14 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       // its own (the route reads the file's length, which costs nothing). A file whose length cannot
       // be read answers a null price that says it is known only once transcribed.
       description:
-        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='words'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
+        "Transcribe speech to text from one source: an audio file by its public URL (audioUrl), a public video page by its link (videoUrl: YouTube, Instagram, TikTok, X), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A video link is priced by where its words come from: nothing when the words are already held, a flat price when the platform has them written, a higher flat price when they must be generated from the audio; it answers with the words, the video's title, channel, view count and length where the platform gives them, and the charge. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='words'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.",
       inputSchema: {
-        audioUrl: z.string().optional().describe('Public URL of the audio file to transcribe. Pass this or contentId.'),
+        audioUrl: z.string().optional().describe('Public URL of the audio file to transcribe. Pass one of audioUrl, videoUrl or contentId.'),
+        videoUrl: z.string().optional().describe('Link to a public video page (YouTube, Instagram, TikTok, X) whose spoken words to transcribe. Pass one of audioUrl, videoUrl or contentId.'),
         contentId: z
           .string()
           .optional()
-          .describe("The tracked post whose video to transcribe: its id or short id, its link, or the platform's own id for it. Its video must be downloaded first with analyze_content kind video. Pass this or audioUrl."),
+          .describe("The tracked post whose video to transcribe: its id or short id, its link, or the platform's own id for it. Its video must be downloaded first with analyze_content kind video. Pass one of audioUrl, videoUrl or contentId."),
         slide: z
           .number()
           .int()
@@ -2054,15 +2056,20 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     async (args, extra) => {
       try {
         const audioUrl = args.audioUrl?.trim()
+        const videoUrl = args.videoUrl?.trim()
         const contentId = args.contentId?.trim()
-        if (!!audioUrl === !!contentId) return errorResult(new Error('Pass exactly one source: audioUrl for an audio file, or contentId for a tracked post.'))
-        if (audioUrl) {
-          if (args.slide !== undefined) return errorResult(new Error("slide picks a carousel post's video: name the post with contentId."))
+        if ([audioUrl, videoUrl, contentId].filter(Boolean).length !== 1) {
+          return errorResult(new Error('Pass exactly one source: audioUrl for an audio file, videoUrl for a public video page, or contentId for a tracked post.'))
         }
-        if (contentId && (args.languageCode !== undefined || args.diarize !== undefined)) {
-          return errorResult(new Error("languageCode and diarize apply to an audio file; a post's language is detected from its video."))
+        if (!contentId && args.slide !== undefined) return errorResult(new Error("slide picks a carousel post's video: name the post with contentId."))
+        if (!audioUrl && (args.languageCode !== undefined || args.diarize !== undefined)) {
+          return errorResult(new Error("languageCode and diarize apply to an audio file; a post's or a video page's language is detected from its speech."))
         }
         const client = await getClient(extra)
+        if (videoUrl) {
+          if (args.getCost) return transcribeCostResult(await client.estimateTranscribeCost({ videoUrl }))
+          return linkTranscriptResult(await client.transcribe({ videoUrl }))
+        }
         if (contentId) {
           const post = { contentId, ...(args.slide !== undefined ? { slide: args.slide } : {}) }
           if (args.getCost) return transcribeCostResult(await client.estimateTranscribeCost(post))

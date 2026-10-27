@@ -974,6 +974,7 @@ export type JobTarget = string | { id: string; kind?: JobKind }
 export interface TranscribeAudioRequest {
   /** Public URL of the audio to transcribe. */
   audioUrl: string
+  videoUrl?: never
   contentId?: never
   slide?: never
   /** Optional ISO language hint (e.g. "en"); auto-detected when omitted. */
@@ -988,6 +989,7 @@ export interface TranscribeAudioRequest {
  */
 export interface TranscribePostRequest {
   audioUrl?: never
+  videoUrl?: never
   /** The tracked post whose video to transcribe. */
   contentId: string
   /** Which video of a carousel post, by its 0-based slide (as `analyzeContent` kind `video` reports it). */
@@ -997,8 +999,43 @@ export interface TranscribePostRequest {
   diarize?: never
 }
 
-/** Request to transcribe speech to text: an audio file by its URL, or a tracked post's downloaded video. */
-export type TranscribeRequest = TranscribeAudioRequest | TranscribePostRequest
+/**
+ * Transcribe a public video page (YouTube, Instagram, TikTok, X) by its link, read from its captions or audio. Priced
+ * flat by where the words come from, and free once they are held; price it first with `estimateTranscribeCost`.
+ */
+export interface TranscribeLinkRequest {
+  /** Link to the public video page whose spoken words to transcribe. */
+  videoUrl: string
+  audioUrl?: never
+  contentId?: never
+  slide?: never
+  languageCode?: never
+  diarize?: never
+}
+
+/** Request to transcribe speech to text: an audio file by its URL, a public video page by its link, or a tracked post's downloaded video. */
+export type TranscribeRequest = TranscribeAudioRequest | TranscribeLinkRequest | TranscribePostRequest
+
+/**
+ * Result of `transcribe` for a video link: `completed` with the words, or `unavailable` with why none could be read
+ * (nothing is charged then). The video's own facts come where the platform gives them.
+ */
+export interface LinkTranscription {
+  status: 'completed' | 'unavailable'
+  videoUrl: string
+  /** The platform the link names. */
+  platform: string
+  /** The words, when `completed`. */
+  transcript?: string
+  /** Why no words could be read, when `unavailable`. */
+  reason?: string
+  title?: string
+  channel?: string
+  viewCount?: number
+  duration?: string
+  /** What the run cost: null when the words were already held. */
+  charge: Charge | null
+}
 
 /** What names the source of a transcription, and what it cost. */
 interface TranscriptionSource {
@@ -1066,6 +1103,10 @@ export interface TranscribeCostEstimate extends Omit<CostEstimate, 'creditsEstim
   slide?: number
   /** The audio file priced, for an audio file. */
   audioUrl?: string
+  /** The video link priced, for a video link. */
+  videoUrl?: string
+  /** The platform the video link names, for a video link. */
+  platform?: string
   /** The audio file's measured length in seconds; null when it could not be read. */
   durationSeconds?: number | null
   /** Why there is no price, when there is none. */

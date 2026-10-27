@@ -68,3 +68,55 @@ Reason: the sentence named the removed tools.
 Reason: an agent that lost its state mid-upload can finish, because sign_upload_parts now also lists the parts the store already holds (the tool reads the server's record; no new tool, no change to any approved tool description). The line is added to the sign_upload_parts result, first, only when the store holds at least one part:
 
 - sign_upload_parts result: "The store already holds N part(s) of this upload, which need no sending again and go into complete_upload exactly as listed: part 1 ETag X; part 3 ETag Y." (N, the part numbers and the ETags are the server's, printed as received.)
+
+
+# Group 5b: transcribe takes a public video link (2026-10-27)
+
+Status: for approval. Reason for all of it: `transcribe` now reads a public video page (`videoUrl`) through the one link implementation (lib/api/link-transcript.ts), and the in-app link tool `get_transcript` retires.
+
+## Tool text changes
+
+### transcribe (MCP description, written once in the agent tool contract, read by the MCP and the in-app tool)
+
+Before:
+
+> Transcribe speech to text from one source: an audio file by its public URL (audioUrl), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='words'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.
+
+After:
+
+> Transcribe speech to text from one source: an audio file by its public URL (audioUrl), a public video page by its link (videoUrl: YouTube, Instagram, TikTok, X), or a tracked post's video (contentId, with slide for a carousel's video) once analyze_content kind video has downloaded it. SPENDS CREDITS, metered by the length heard. Pass getCost to see the price first: nothing runs and nothing is charged. A post is priced from its stored copy's length and an audio file from its own; a file whose length cannot be read is priced only once it is transcribed, and the preview says so. A file run on the account's own ElevenLabs key costs nothing. A video link is priced by where its words come from: nothing when the words are already held, a flat price when the platform has them written, a higher flat price when they must be generated from the audio; it answers with the words, the video's title, channel, view count and length where the platform gives them, and the charge. A post is transcribed word by word: its one video becomes the post's transcript, which get_content then returns word-timed with transcript='words'; a carousel slide's words stay with that slide. A post is charged once, to whoever asks first, for what was heard, and is free once its words exist or are being made. A long video returns running: call this again with the same contentId and slide to follow it, which is free.
+
+### transcribe parameters
+
+- audioUrl. Before: "Public URL of the audio file to transcribe. Pass this or contentId." After: "Public URL of the audio file to transcribe. Pass one of audioUrl, videoUrl or contentId."
+- contentId. Before: "... Its video must be downloaded first with analyze_content kind video. Pass this or audioUrl." After: "... Its video must be downloaded first with analyze_content kind video. Pass one of audioUrl, videoUrl or contentId."
+- videoUrl (new). "Link to a public video page (YouTube, Instagram, TikTok, X) whose spoken words to transcribe. Pass one of audioUrl, videoUrl or contentId."
+
+### CLI
+
+- `contenthero transcribe` description. Before: "Transcribe speech to text: an audio URL, or a tracked post's downloaded video with --content-id (spends credits; price it first with --cost)". After: "Transcribe speech to text: an audio URL, a public video page with --video-url, or a tracked post's downloaded video with --content-id (spends credits; price it first with --cost)".
+- New option `--video-url <url>`: "link to a public video page (YouTube, Instagram, TikTok, X) whose spoken words to transcribe".
+- Source argument. Before: "public URL of the audio to transcribe (or name a post with --content-id)". After: "public URL of the audio to transcribe (or name a video page with --video-url, or a post with --content-id)".
+
+### In-app tools (the chat agent)
+
+- transcribe: the in-app text is now the contract's (above); it was a hand-written copy that said "the user's own ElevenLabs key" and "This waits a while for a long video; one still running at the end returns running: ...". The contract text says "the account's own ElevenLabs key" and drops the waiting sentence.
+- get_transcript: the old in-app tool (read a public link through the transcript provider, metadata-only mode) retires. The name now belongs to the MCP's tool (projectId or mediaId, with a source-seconds window), so the chat agent reads the same text the MCP serves (contract tool get_transcript, unchanged).
+- discover_social tool text, last sentence. Before: names get_transcript for a discovered video's spoken words. After: "To get the spoken words of a discovered video, chain with transcribe, passing its link as videoUrl."
+- Video link answer wording (SDK describe.ts, used by MCP and CLI), new: cost "Transcribing this video costs N credits, a flat price set by where its words come from. Nothing ran and nothing was charged." or "The words of this video are already held: transcribing it costs 0 credits. Nothing ran and nothing was charged."; answer "Transcript of <platform> video <url> (<title>, <channel>, <views> views, <length>):" then the words; no words "No transcript for <platform> video <url>: <reason> Nothing was charged for it."
+
+## Mechanical prompt edits
+
+Migration 20261027102704_tool_transcribe_reads_video_links.sql in the app (not applied; the lead applies it). Rename and accuracy only. Prompt row: agent_prompts.slug = researcher_system. Each replacement was checked to occur once in the development database.
+
+1. Before: `gathering URLs to pass to get_transcript.` After: `gathering URLs to pass to transcribe as videoUrl.`
+2. Before: `**get_transcript** - Retrieves transcripts from video content. YouTube URLs use the YouTube Data API for metadata plus Supadata for transcript text. Non-YouTube URLs (Instagram, TikTok, Twitter/X) use Supadata directly. Supports metadata-only mode when a transcript is not needed. Use for: analyzing what a creator says in a video, extracting talking points, understanding spoken content structure.` After: `**transcribe** - Transcribes the speech of a public video from its link, passed as videoUrl (YouTube, Instagram, TikTok, Twitter/X). Pass getCost to see the price first. Use for: analyzing what a creator says in a video, extracting talking points, understanding spoken content structure.`
+3. Before: `then chain get_transcript for spoken content` After: `then chain transcribe for spoken content`
+4. Before: `- Video content or what a creator said: get_transcript` After: `- Video content or what a creator said: transcribe with videoUrl`
+5. Before: `then get_transcript (extract what they said in top posts)` After: `then transcribe (extract what they said in top posts)`
+6. Before: `Use metadata-only mode for get_transcript when transcript text is not needed.` After: `Pass getCost to transcribe to see its price before spending it.` (the metadata-only mode no longer exists; getCost is the nearest accurate statement of the same cost-awareness. If this reads as a new instruction, drop the sentence instead: say so.)
+7. Before: `without calling get_transcript` After: `without calling transcribe`
+
+Assignments (agent_tool_assignments, not prompt text): transcribe is enabled for every agent that had the old link tool (remixer, video_producer, strategist, researcher, video_editor); the new get_transcript (project or media words) is enabled for every agent that has get_project. Both only keep what each agent could already do.
+
+Code-only text edits, same kind: chat history verb for get_transcript "Fetched transcript" becomes "Read transcript" (the tool now reads stored words). ChatPanel's silent-tool list, lib/api/media.ts, lib/api/projects.ts, lib/editor/*, and the media-transcripts route already name the MCP's get_transcript and stay.
