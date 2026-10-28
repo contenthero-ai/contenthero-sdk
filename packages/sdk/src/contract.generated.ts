@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "4c25bbd9e0741c45c468c876b16dc39ff7d0ec48f1cb84b94f5e8de177706ef5"
+export const AGENT_CONTRACT_VERSION = "7219143146038a72a123b7640255beae51371d78f1b9ddcb4326ded9e2edb6fd"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -1735,7 +1735,7 @@ export const AGENT_CONTRACT = {
     },
     {
       "description": {
-        "mcp": "Begin uploading local files as library media. Takes each file's name, type and size in bytes, and answers for each an upload target, which is a temporary write permission and not a media address. A single target: PUT the whole file to its url with exactly its headers. A multipart target: the file goes in parts of the size it states, each signed with sign_upload_parts; PUT each part to its url and keep the ETag header of the store's answer. Then call complete_upload once for the batch. The finished media is referenced by its outputId in generate_* and on a card via update_card. For a file already at a public address, use import. Requires the library:write scope."
+        "mcp": "Begin uploading local files as library media. Takes each file's name, type and size in bytes, and answers for each an upload target, which is a temporary write permission and not a media address. A single target: PUT the whole file to its url with exactly its headers. A multipart target: the file goes in parts of the size it states, each signed with sign_upload_parts; PUT each part to its url and keep the ETag header of the store's answer. Then call complete_upload once for the batch. The finished media is referenced by its outputId in generate_* and on a card via update_card. Besides images, video, audio and documents, it takes JSON data files (up to 50 MB) and 3D models: binary glTF (.glb, up to 500 MB) or a self-contained .gltf (buffers and images inline as data: URIs, up to 50 MB). For a file already at a public address, use import. Requires the library:write scope."
       },
       "group": "media",
       "inputSchema": {
@@ -1822,7 +1822,7 @@ export const AGENT_CONTRACT = {
     },
     {
       "description": {
-        "mcp": "Finish uploads once their bytes were sent. Takes each file's outputId and, for a multipart file, the number and ETag of every part, exactly as the store answered. Finish a batch together, so the person sees it as one card. Publishes each file and answers its outputId and URL. Finishing twice answers the same media. Requires the library:write scope."
+        "mcp": "Finish uploads once their bytes were sent. Takes each file's outputId and, for a multipart file, the number and ETag of every part, exactly as the store answered. Finish a batch together, so the person sees it as one card. Publishes each file and answers its outputId and URL. Finishing twice answers the same media. A .glb or JSON file that is malformed, or a .gltf that points at separate files, is refused here and not kept. Requires the library:write scope."
       },
       "group": "media",
       "inputSchema": {
@@ -7517,7 +7517,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "4c25bbd9e0741c45c468c876b16dc39ff7d0ec48f1cb84b94f5e8de177706ef5",
+  "version": "7219143146038a72a123b7640255beae51371d78f1b9ddcb4326ded9e2edb6fd",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
