@@ -17,7 +17,7 @@ import { buildServer } from './server.js'
 
 export { buildServer, registerTools } from './server.js'
 export { MEDIA_HOST, SERVER_INFO, SERVER_INSTRUCTIONS } from './server.js'
-export type { BuildServerOptions, RegisterToolsOptions, GetClient } from './server.js'
+export type { BuildServerOptions, RegisterToolsOptions, GetClient, ToolExtra } from './server.js'
 export { TOOL_GROUPS, assertGroupsCoverTools, groupedToolNames } from './groups.js'
 export type { ToolGroup } from './groups.js'
 

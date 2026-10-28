@@ -32,7 +32,8 @@
  */
 
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import type { CallToolResult, Implementation, Tool, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, Implementation, ServerNotification, ServerRequest, Tool, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 /**
  * ⚠️⚠️ **THE CONSTANTS ONLY, NOT THE `./server` HELPERS, AND THAT IS DELIBERATE.**
@@ -963,8 +964,19 @@ function renders(progress: string) {
  * operation). **Render nothing in that case. Do not substitute `modelId`**, which is the mistake above.
  */
 
-/** Resolve a per-call client. `extra` is the MCP tool handler's call context. */
-export type GetClient = (extra?: unknown) => ContentHero | Promise<ContentHero>
+/**
+ * The MCP tool handler's call context: the request's `authInfo`, its abort signal, its id. A tool hands this, and only
+ * this, to `getClient`, so the hosted server can bind the call to the caller's identity.
+ *
+ * ⚠️ Typed, never `unknown`. A handler that named its first parameter `extra` got the tool's ARGS there (the SDK calls
+ * `(args, extra)` whenever a tool has an input schema, and every tool here has one), passed them on, and the hosted
+ * get_account answered "Not authenticated." while every other tool worked (2026-10-28). With this type, passing args
+ * fails `tsc`.
+ */
+export type ToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>
+
+/** Resolve a per-call client from the handler's call context. */
+export type GetClient = (extra: ToolExtra) => ContentHero | Promise<ContentHero>
 
 export interface RegisterToolsOptions {
   /** Resolve the backend client for a given call (identity bound inside it). */
@@ -1137,7 +1149,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // the zod that validates a call, so the listing equals the contract field by field.
   const listed: Tool[] = []
   type ToolConfig = { title: string; annotations: ToolAnnotations; _meta?: Record<string, unknown> }
-  type ToolExtra = unknown
   const tool = <N extends ContractToolName>(
     name: N,
     config: ToolConfig,
@@ -3206,7 +3217,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
       title: 'Get Account',
       annotations: READ,
     },
-    async (extra) => {
+    async (_args, extra) => {
       try {
         const client = await getClient(extra)
         return accountResult(await client.getAccount())
