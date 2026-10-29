@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "7219143146038a72a123b7640255beae51371d78f1b9ddcb4326ded9e2edb6fd"
+export const AGENT_CONTRACT_VERSION = "445b9f3d5ec43f66956aadd13e37648c4dfc207dd4476ddd729916e1bc798a5a"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -1735,7 +1735,7 @@ export const AGENT_CONTRACT = {
     },
     {
       "description": {
-        "mcp": "Begin uploading local files as library media. Takes each file's name, type and size in bytes, and answers for each an upload target, which is a temporary write permission and not a media address. A single target: PUT the whole file to its url with exactly its headers. A multipart target: the file goes in parts of the size it states, each signed with sign_upload_parts; PUT each part to its url and keep the ETag header of the store's answer. Then call complete_upload once for the batch. The finished media is referenced by its outputId in generate_* and on a card via update_card. Besides images, video, audio and documents, it takes JSON data files (up to 50 MB) and 3D models: binary glTF (.glb, up to 500 MB) or a self-contained .gltf (buffers and images inline as data: URIs, up to 50 MB). For a file already at a public address, use import. Requires the library:write scope."
+        "mcp": "Begin uploading local files as library media. Takes each file's name, type and size in bytes, and answers for each an upload target, which is a temporary write permission and not a media address. A single target: PUT the whole file to its url with exactly its headers. A multipart target: the file goes in parts of the size it states, each signed with sign_upload_parts; PUT each part to its url and keep the ETag header of the store's answer. Then call complete_upload once for the batch. The finished media is referenced by its outputId in generate_* and on a card via update_card. Besides images, video, audio and documents, it takes JSON data files and 3D models: binary glTF (.glb) or a self-contained .gltf (buffers and images inline as data: URIs). For a file already at a public address, use import. Requires the library:write scope."
       },
       "group": "media",
       "inputSchema": {
@@ -7517,7 +7517,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "7219143146038a72a123b7640255beae51371d78f1b9ddcb4326ded9e2edb6fd",
+  "version": "445b9f3d5ec43f66956aadd13e37648c4dfc207dd4476ddd729916e1bc798a5a",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
