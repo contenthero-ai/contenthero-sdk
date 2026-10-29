@@ -2804,6 +2804,32 @@ test("get_content reports each video's state, and cuts adds its cut list", async
   assert.match(tools.find((t) => t.name === 'get_content').description, /Each of the post's videos is reported with its state; once analyze_content kind video has downloaded one, cuts adds where its picture changes\./)
 })
 
+/**
+ * get_content names a post's slides in order with their media ids, and a view of an image slide says its image is
+ * attached. Break-verified: dropping describeContentSlides from inspirationContentResult turns the first assertion red;
+ * dropping the image branch of clipSection, the second.
+ */
+test('get_content lists the post slides, and an image slide view says its image is attached', async () => {
+  const slides = [
+    { order: 0, type: 'image', mediaId: 'm0' },
+    { order: 1, type: 'video', mediaId: null },
+  ]
+  const clip = { contentId: 'c1', slide: 0, type: 'image', layout: 'frames', page: 1, pages: 1, keyframes: [{ dataUrl: 'data:image/png;base64,iVBORw0KGgo=' }] }
+  const mcp = await connect(
+    fakeClient({
+      getContent: async () => ({ title: 'x', hashtags: [], analysis: { status: 'absent' }, slides }),
+      view: async () => ({ clip }),
+    }),
+  )
+  const res = await mcp.callTool({ name: 'get_content', arguments: { contentId: 'c1' } })
+  assert.match(res.content[0].text, /slide 0: image, media m0\n {2}slide 1: video/)
+  const seen = await mcp.callTool({ name: 'view', arguments: { contentId: 'c1', slide: 0 } })
+  const all = seen.content.map((c) => c.text ?? '').join('\n')
+  assert.match(all, /its image \(slide 0\)/)
+  assert.match(all, /The slide's image is attached below\./)
+  assert.ok(seen.content.some((c) => c.type === 'image'))
+})
+
 const AUDIO_SOUND = {
   atSec: 1.2, endSec: 1.6, stem: 'other', levelDb: -18, riseDb: 14, vsVoiceDb: 3,
   descriptors: { attackMs: 4, decayMs: 180, peakDb: -9, centroidHz: { start: 5200, peak: 4100, end: 2600 }, bandwidthHz: 3100, flatness: 0.62, pitchHz: null, lowBandShare: 0.08, stereoWidth: 0.4 },

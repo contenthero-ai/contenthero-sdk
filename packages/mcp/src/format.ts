@@ -140,7 +140,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2692,6 +2692,7 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
       ...analysisLines(c.id, c.analysis),
       ...scenesLines(c.id, c.scenes, c.shortId || c.id),
       ...postVideoLines(c.video),
+      ...describeContentSlides(c.slides),
       exactData ? EXACT_VALUES_POINTER : null,
     ]),
   )
@@ -3244,7 +3245,9 @@ function clipSection(
     lines.push(
       sheeted
         ? `${spent.admitted.length} contact sheet(s) of the source are attached below, in order, each tile labeled with its second in the source.`
-        : `${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`,
+        : clip.type === 'image'
+          ? "The slide's image is attached below."
+          : `${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`,
     )
   }
   if (spent.dropped > 0) lines.push(keyframesNotShown(spent.dropped))

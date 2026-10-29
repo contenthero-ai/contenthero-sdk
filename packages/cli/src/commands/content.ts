@@ -41,7 +41,7 @@ import type {
   AddTrackedAccountsResult,
   TrackAccountInput,
 } from '@contenthero/sdk'
-import { LIST_SORTS, TRACKABLE_PLATFORMS } from '@contenthero/sdk'
+import { LIST_SORTS, TRACKABLE_PLATFORMS, describeContentSlides } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, linkRow, table, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -368,6 +368,8 @@ export function registerContent(program: Command): void {
         if (c.analysis) out += `\n\n${analysisText(post, c.analysis)}`
         if (c.scenes) out += `\n\n${scenesText(c.scenes, post)}`
         if (c.video) out += `\n\n${postVideosText(c.video)}`
+        const slides = describeContentSlides(c.slides)
+        if (slides.length) out += `\n\n${slides.join('\n')}`
         return out
       })
     })

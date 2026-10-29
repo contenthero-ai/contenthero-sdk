@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
+import type { AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentSlide, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -202,8 +202,12 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
   const length = typeof clip.durationSeconds === 'number' ? ` (${clip.durationSeconds.toFixed(2)}s long)` : ''
   const post = typeof clip.contentId === 'string' ? clip.contentId : null
   const slide = typeof clip.slide === 'number' ? ` (slide ${clip.slide})` : ''
+  // An image slide is read whole, so there is no window to say.
+  const image = post !== null && clip.type === 'image'
   const lines = [
-    post !== null
+    image
+      ? `Tracked post ${post}, its image${slide}`
+      : post !== null
       ? `Tracked post ${post}, its video${slide}${length}${window}`
       : `Raw source clip${typeof clip.type === 'string' ? ` (${clip.type})` : ''}${length}${window}: ${String(clip.url ?? '')}`,
   ]
@@ -226,10 +230,22 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
   if (error && typeof error === 'object' && !Array.isArray(error)) {
     const { code, message } = error as { code?: unknown; message?: unknown }
     lines.push(
-      `${post !== null ? "The post's video" : 'The clip'} could not be read. ${typeof code === 'string' ? code : 'clip_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`,
+      `${image ? "The post's image" : post !== null ? "The post's video" : 'The clip'} could not be read. ${typeof code === 'string' ? code : 'clip_failed'}${typeof message === 'string' && message ? `: ${message}` : ''}`,
     )
   }
   return lines
+}
+
+/**
+ * A post's slides in words, one line each: the position `view` takes as `slide`, the type and the media id. Empty for a
+ * post that stores none (or an older server), so a surface prints nothing for it.
+ */
+export function describeContentSlides(slides: ContentSlide[] | undefined): string[] {
+  if (!slides?.length) return []
+  return [
+    'slides (view reads an image slide with contentId and slide):',
+    ...slides.map((s) => `  slide ${s.order}: ${s.type}${s.mediaId ? `, media ${s.mediaId}` : ''}`),
+  ]
 }
 
 /**
