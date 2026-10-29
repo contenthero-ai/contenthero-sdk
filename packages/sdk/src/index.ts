@@ -258,6 +258,7 @@ export type {
   ContentSummary,
   ContentDetail,
   ContentAnalysis,
+  JobWait,
   ContentAnalysisResult,
   ContentAnalysisKind,
   ContentAnalysisCostEstimate,
@@ -436,7 +437,7 @@ export {
 } from './errors.js'
 export type { ContentHeroErrorOptions, LimitAction, LimitCode, RevisionOverlap, SubmittedJob } from './errors.js'
 export type { WaitCall } from './describe.js'
-export { PASS_REVISION_LINE, describePartsAsked, describeModulesIndex, chargeSentence, describeAccountIdsNotFound, describeEmptyReason, describeCharge, describeClip, describeContentSlides, describeDocumentFindings, describeStyleLibraryPins, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, describePicturePart, describeProjectPicture, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState } from './describe.js'
+export { PASS_REVISION_LINE, describePartsAsked, describeModulesIndex, chargeSentence, describeAccountIdsNotFound, describeEmptyReason, describeCharge, describeClip, describeContentSlides, describeJobWait, describeDocumentFindings, describeStyleLibraryPins, describeFinding, describeCodeWarnings, describeContentVideo, describeContentVideoCuts, contentVideosPending, describeVideoCostDetail, describeAudioMap, isNewerAudioMap, NEWER_FORMAT_LINE, KNOWN_AUDIO_MAP_VERSION, describeAudioMapSummary, describeSegmentWords, describeWordTiming, describeAudioMapWindow, describeContentVideoWindow, describeAudioMapSound, describeEvidenceSheet, contentVideoLabel, describeCrop, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describePending, describeAdjusted, describeReserved, describeScope, describeSoundMeasurement, describeSourceSound, describePicturePart, describeProjectPicture, withCodeWarnings, withExportLoudness, transcriptionSource, itemHandle, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState } from './describe.js'
 export * from './contract.generated.js'
 export { contractField, contractChoices, optionFromContract } from './contract.js'
 export { UPLOAD_PART_CONCURRENCY, UPLOAD_ATTEMPTS, UPLOAD_RETRY_DELAY_MS } from './upload.js'

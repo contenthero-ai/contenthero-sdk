@@ -140,7 +140,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -934,6 +934,11 @@ export function jobStatusRow(status: JobStatusResult): string {
   if (status.progress !== null && status.progress !== undefined) parts.push(`progress: ${Math.round(status.progress * 100)}%`)
   if (status.steps?.length) {
     parts.push(`steps: ${status.steps.map((st) => `${st.name} ${st.state}${st.reason ? ` (${st.reason})` : ''}`).join(', ')}`)
+  }
+  // A post's analysis or scenes also says where it stands in the queue (an older server omits it).
+  if (status.kind === 'content' || status.kind === 'scenes') {
+    const wait = describeJobWait(status.detail.status === 'running' ? status.detail.wait : undefined)
+    if (wait) parts.push(`wait: ${wait}`)
   }
   if (status.appUrl) parts.push(status.appUrl)
   const unfinished = status.state !== 'settled' && status.state !== 'failed'

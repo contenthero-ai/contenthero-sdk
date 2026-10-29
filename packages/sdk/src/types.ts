@@ -940,6 +940,21 @@ export function statusTargetOf(status: { id: string; kind: JobKind }): { id: str
  */
 export type JobState = 'queued' | 'processing' | 'applying' | 'settled' | 'failed'
 
+/**
+ * Where a post's analysis or scenes job stands while it is unfinished (`detail.wait` of a `content` or `scenes` status,
+ * and `wait` of a `running` analysis or scenes). Optional: an older server omits it.
+ */
+export interface JobWait {
+  /** `queued`: no worker has the job yet (waiting its turn, or deferred). `running`: a worker has it. */
+  phase: 'queued' | 'running'
+  /** What a deferred job waits on. Absent when it is not deferred. */
+  waitingFor?: string
+  /** How many jobs are served before it. APPROXIMATE: later arrivals can go first. Absent when it is not claimable now, or running. */
+  jobsAhead?: number
+  /** The slowest tenth of what this kind recently took to finish, in seconds. Absent when the kind has no finished job on record. */
+  typicalSeconds?: number
+}
+
 /** One named step of a job that runs in stages (a brand kit's website read and its analysis). */
 export interface JobStep {
   name: string
@@ -3248,12 +3263,13 @@ export interface ContentVideos {
 
 /**
  * Whether a post's scenes (its scene map) exist. `complete` when stored, `running` while
- * being prepared, `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
+ * being prepared; `wait` says whether a worker has it yet, how many jobs are ahead (approximate), and what it waits for,
+ * `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
  * them (`reason` says why: no video, or longer than the 4-hour limit), `absent` when none was asked for.
  */
 export type ContentScenes =
   | { status: 'complete'; sceneCount: number; detail?: ContentScenesDetail }
-  | { status: 'running' }
+  | { status: 'running'; wait?: JobWait }
   | { status: 'failed'; error: string }
   | { status: 'unavailable'; reason: string }
   | { status: 'absent' }
@@ -3556,10 +3572,13 @@ export interface ContentScenesResult {
  */
 export interface ContentAnalysis {
   /**
-   * `complete` when stored, `running` while one is being made, `failed` when the last run gave up (`error`
-   * says why), `absent` when none was asked for. `analyzeContent` creates one.
+   * `complete` when stored, `running` while one is being made; `wait` says whether a worker has it yet, how many jobs
+   * are ahead (approximate), and what it waits for, `failed` when the last run gave up (`error` says why), `absent`
+   * when none was asked for. `analyzeContent` creates one.
    */
   status: 'complete' | 'running' | 'failed' | 'absent'
+  /** Only when `running`: where the job stands. Absent from an older server. */
+  wait?: JobWait
   /** Only when `failed`. */
   error?: string
   analyzedAt?: string

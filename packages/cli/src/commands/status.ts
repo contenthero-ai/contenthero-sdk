@@ -10,12 +10,17 @@
  */
 
 import { Option, type Command } from 'commander'
-import { JOB_KINDS, statusTargetOf, type JobKind, type JobStatusResult } from '@contenthero/sdk'
+import { JOB_KINDS, describeJobWait, statusTargetOf, type ContentAnalysis, type ContentScenes, type JobKind, type JobStatusResult, type JobWait } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { emit, keyValues, statusCommandFor } from '../output.js'
 import { generationHuman, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { EXIT } from '../errors.js'
 import { toInt } from '../args.js'
+
+/** The queue wait a post's analysis or scenes detail carries, when it is unfinished. */
+function waitOf(detail: ContentAnalysis | ContentScenes): JobWait | undefined {
+  return detail.status === 'running' ? detail.wait : undefined
+}
 
 /** One job for a person: a generation keeps its own rendering, every other kind its state, progress and steps. */
 export function statusHuman(s: JobStatusResult): string {
@@ -29,6 +34,9 @@ export function statusHuman(s: JobStatusResult): string {
   if (s.reason) pairs.push(['Reason', s.reason])
   if (s.progress !== null && s.progress !== undefined) pairs.push(['Progress', `${Math.round(s.progress * 100)}%`])
   for (const step of s.steps ?? []) pairs.push([`Step ${step.name}`, step.reason ? `${step.state} (${step.reason})` : step.state])
+  // A post's analysis or scenes also says where it stands in the queue (an older server omits it).
+  const wait = s.kind === 'content' || s.kind === 'scenes' ? describeJobWait(waitOf(s.detail)) : null
+  if (wait) pairs.push(['Wait', wait])
   if (s.appUrl) pairs.push(['App', s.appUrl])
   if (s.state !== 'settled' && s.state !== 'failed') {
     pairs.push(['Next', statusCommandFor([statusTargetOf(s)])])

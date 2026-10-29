@@ -1,4 +1,4 @@
-import type { AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentSlide, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
+import type { JobWait, AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentSlide, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -234,6 +234,20 @@ export function describeClip(clip: Record<string, unknown> | null | undefined): 
     )
   }
   return lines
+}
+
+/**
+ * Where an unfinished post analysis or scenes job stands, in words: queued or processing, how many jobs are ahead
+ * (approximate), what a deferred job waits for, and the typical time when the kind has finished jobs on record. Null
+ * when the server sent no wait (an older server), so a surface prints nothing for it.
+ */
+export function describeJobWait(wait: JobWait | null | undefined): string | null {
+  if (!wait) return null
+  const parts: string[] = [wait.phase === 'queued' ? 'queued, no worker has it yet' : 'processing, a worker has it']
+  if (wait.jobsAhead !== undefined) parts.push(`${wait.jobsAhead} job${wait.jobsAhead === 1 ? '' : 's'} ahead (approximate)`)
+  if (wait.waitingFor) parts.push(`waiting for ${wait.waitingFor}`)
+  if (wait.typicalSeconds !== undefined) parts.push(`typical time ${wait.typicalSeconds}s`)
+  return parts.join(', ')
 }
 
 /**

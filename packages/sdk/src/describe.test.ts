@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -606,5 +606,20 @@ test('a post names its slides by position, type and media id, and an image slide
   assert.deepEqual(
     describeClip({ contentId: 'p1', slide: 2, type: 'image', error: { code: 'slide_not_readable', message: 'Gone.' } }),
     ['Tracked post p1, its image (slide 2)', "The post's image could not be read. slide_not_readable: Gone."],
+  )
+})
+
+// Break-verified: dropping the jobsAhead or waitingFor clause turns the matching assertion red.
+test('a post job says whether a worker has it, how many jobs are ahead, what it waits for and its typical time', () => {
+  assert.equal(describeJobWait(undefined), null)
+  assert.equal(describeJobWait({ phase: 'running' }), 'processing, a worker has it')
+  assert.equal(describeJobWait({ phase: 'queued', jobsAhead: 1 }), 'queued, no worker has it yet, 1 job ahead (approximate)')
+  assert.equal(
+    describeJobWait({ phase: 'queued', jobsAhead: 4, typicalSeconds: 90 }),
+    'queued, no worker has it yet, 4 jobs ahead (approximate), typical time 90s',
+  )
+  assert.equal(
+    describeJobWait({ phase: 'queued', waitingFor: 'the post video copy' }),
+    'queued, no worker has it yet, waiting for the post video copy',
   )
 })
