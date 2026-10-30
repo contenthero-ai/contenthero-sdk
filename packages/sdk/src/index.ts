@@ -25,6 +25,8 @@ export type {
   MediaListType,
 } from './types.js'
 export { AnswerTally } from './answers.js'
+export { outlierFormatGroup, headlineMetric, secondaryMetric, compactCount, formatMetric, formatMetricExact } from './engagement.js'
+export type { OutlierFormatGroup, HeadlineMetric, HeadlineMetricKind, HeadlineMetricInput } from './engagement.js'
 export type { ClientIdentity, ContentHeroOptions, FetchLike, ResponseEvent, ResponseListener } from './client.js'
 export type {
   References,

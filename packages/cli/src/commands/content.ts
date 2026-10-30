@@ -41,7 +41,7 @@ import type {
   AddTrackedAccountsResult,
   TrackAccountInput,
 } from '@contenthero/sdk'
-import { LIST_SORTS, TRACKABLE_PLATFORMS, describeContentSlides } from '@contenthero/sdk'
+import { LIST_SORTS, TRACKABLE_PLATFORMS, describeContentSlides, formatMetric, headlineMetric, secondaryMetric } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { costRows, emit, keyValues, linkRow, table, displayId, statusCommand, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
@@ -65,12 +65,13 @@ export function trackedAccountsTable(rows: TrackedAccount[]): string {
 /** A table of tracked content. */
 export function outliersTable(rows: ContentSummary[]): string {
   return table(
-    ['ID', 'PLATFORM', 'SCORE', 'VIEWS', 'TITLE'],
+    ['ID', 'PLATFORM', 'SCORE', 'COUNT', 'TITLE'],
     rows.map((o) => [
       displayId(o),
       o.platform ?? '',
       o.outlierScore != null ? o.outlierScore.toFixed(1) : '',
-      o.viewCount ?? '',
+      // The format's own count: likes for images and carousels, views for motion.
+      formatMetric(headlineMetric(o)) ?? '',
       (o.title ?? '').replace(/\s+/g, ' ').slice(0, 50),
     ]),
   )
@@ -333,12 +334,14 @@ export function registerContent(program: Command): void {
         audioMap: opts.audioMap ? true : undefined,
       })
       emit(item, ctx, (c: ContentDetail) => {
+        // Views only when they are a real count: an image or carousel stores 0 views because it has none.
+        const views = [headlineMetric(c), secondaryMetric(c)].find((m) => m?.kind === 'views')
         const pairs: Array<[string, string | number]> = [
           ['Title', c.title ?? ''],
           ['Creator', c.sourceCreator ?? ''],
           ['Platform', c.platform ?? ''],
           ['Outlier score', c.outlierScore != null ? c.outlierScore.toFixed(2) : ''],
-          ['Views', c.viewCount ?? ''],
+          ...(views ? [['Views', views.count] as [string, number]] : []),
           ['Likes', c.likeCount ?? ''],
           ['Comments', c.commentCount ?? ''],
         ]
