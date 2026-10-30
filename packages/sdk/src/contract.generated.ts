@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "56e754600c934e66d6ed6d3373ab2a9af122ee2e54562c5c6a1393bd703d8741"
+export const AGENT_CONTRACT_VERSION = "ca48da75c8105b30d57b9061e218043eb1d6486f3b1180f6a031defaae115ddd"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -57,7 +57,7 @@ export const AGENT_CONTRACT = {
             "x-dynamic": true
           },
           "avatarId": {
-            "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model.",
+            "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model. Either its short id or its UUID.",
             "type": "string"
           },
           "getCost": {
@@ -2101,7 +2101,7 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "folderId": {
-            "description": "The folder id to update.",
+            "description": "The folder id to update. Either its short id or its UUID.",
             "type": "string"
           },
           "folderIds": {
@@ -2384,7 +2384,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "folderId": {
-            "description": "The folder id to delete.",
+            "description": "The folder id to delete. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -2590,7 +2590,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "avatarId": {
-            "description": "The avatar id from list_avatars.",
+            "description": "The avatar id from list_avatars. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -2680,7 +2680,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "avatarId": {
-            "description": "The avatar id from list_avatars.",
+            "description": "The avatar id from list_avatars. Either its short id or its UUID.",
             "type": "string"
           },
           "beforeId": {
@@ -2783,7 +2783,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "avatarId": {
-            "description": "The avatar id from list_avatars.",
+            "description": "The avatar id from list_avatars. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -2877,7 +2877,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "klingElementId": {
-            "description": "The Kling element id.",
+            "description": "The Kling element id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -2959,7 +2959,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "klingElementId": {
-            "description": "The Kling element id.",
+            "description": "The Kling element id. Either its short id or its UUID.",
             "type": "string"
           },
           "name": {
@@ -2984,7 +2984,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "klingElementId": {
-            "description": "The Kling element id.",
+            "description": "The Kling element id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3058,7 +3058,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "spaceId": {
-            "description": "The space id.",
+            "description": "The space id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3118,7 +3118,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "spaceId": {
-            "description": "The space id to update.",
+            "description": "The space id to update. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3141,7 +3141,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "spaceId": {
-            "description": "The space id to delete.",
+            "description": "The space id to delete. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3275,7 +3275,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "stageId": {
-            "description": "The stage id to update, from list_stages.",
+            "description": "The stage id to update, from list_stages. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3303,7 +3303,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "stageId": {
-            "description": "The stage id to delete, from list_stages.",
+            "description": "The stage id to delete, from list_stages. Either its short id or its UUID.",
             "type": "string"
           },
           "targetStageId": {
@@ -3394,7 +3394,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "tag": {
-            "description": "Only cards carrying this tag.",
+            "description": "Only cards carrying this tag: its short id, its UUID, or a word in its name.",
             "type": "string"
           }
         },
@@ -3412,7 +3412,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "cardId": {
-            "description": "The card id from list_cards.",
+            "description": "The card id from list_cards. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3578,7 +3578,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "cardId": {
-            "description": "The card id.",
+            "description": "The card id. Either its short id or its UUID.",
             "type": "string"
           },
           "cardIds": {
@@ -3802,7 +3802,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "tagId": {
-            "description": "The tag id (from list_tags).",
+            "description": "The tag id (from list_tags). Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3826,7 +3826,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "tagId": {
-            "description": "The tag id (from list_tags).",
+            "description": "The tag id (from list_tags). Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3850,7 +3850,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "cardId": {
-            "description": "The card id to publish.",
+            "description": "The card id to publish. Either its short id or its UUID.",
             "type": "string"
           },
           "platform": {
@@ -3911,7 +3911,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "accountId": {
-            "description": "The connected account id from list_connected_accounts.",
+            "description": "The connected account id from list_connected_accounts. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -3964,7 +3964,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "The brand kit id from list_brand_kits.",
+            "description": "The brand kit id from list_brand_kits. Either its short id or its UUID.",
             "type": "string"
           },
           "detail": {
@@ -4417,7 +4417,7 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "brandKitId": {
-            "description": "The brand kit id.",
+            "description": "The brand kit id. Either its short id or its UUID.",
             "type": "string"
           },
           "extract": {
@@ -4648,7 +4648,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "The brand kit id.",
+            "description": "The brand kit id. Either its short id or its UUID.",
             "type": "string"
           },
           "cursor": {
@@ -4681,11 +4681,11 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "The brand kit id.",
+            "description": "The brand kit id. Either its short id or its UUID.",
             "type": "string"
           },
           "knowledgeId": {
-            "description": "The knowledge item id (from list_brand_knowledge or search_brand_knowledge).",
+            "description": "The knowledge item id (from list_brand_knowledge or search_brand_knowledge). Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -4709,7 +4709,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "The brand kit id.",
+            "description": "The brand kit id. Either its short id or its UUID.",
             "type": "string"
           },
           "fileData": {
@@ -4771,11 +4771,11 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "The brand kit id.",
+            "description": "The brand kit id. Either its short id or its UUID.",
             "type": "string"
           },
           "knowledgeId": {
-            "description": "The knowledge item id to remove.",
+            "description": "The knowledge item id to remove. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -4799,7 +4799,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "brandKitId": {
-            "description": "The brand kit id (from list_brand_kits / get_brand_kit).",
+            "description": "The brand kit id (from list_brand_kits / get_brand_kit). Either its short id or its UUID.",
             "type": "string"
           },
           "limit": {
@@ -4951,7 +4951,7 @@ export const AGENT_CONTRACT = {
             "type": "boolean"
           },
           "projectId": {
-            "description": "The project id to read.",
+            "description": "The project id to read. Either its short id or its UUID.",
             "type": "string"
           },
           "slideId": {
@@ -5221,7 +5221,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           },
           "title": {
@@ -5254,7 +5254,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "projectId": {
-            "description": "The project id to copy.",
+            "description": "The project id to copy. Either its short id or its UUID.",
             "type": "string"
           },
           "versionId": {
@@ -5287,7 +5287,7 @@ export const AGENT_CONTRACT = {
             "type": "boolean"
           },
           "projectId": {
-            "description": "The project id to permanently delete.",
+            "description": "The project id to permanently delete. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -5348,7 +5348,7 @@ export const AGENT_CONTRACT = {
             "type": "integer"
           },
           "projectId": {
-            "description": "The project to export.",
+            "description": "The project to export. Either its short id or its UUID.",
             "type": "string"
           },
           "quality": {
@@ -5403,7 +5403,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "exportId": {
-            "description": "The export id returned by export.",
+            "description": "The export id returned by export. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -5436,7 +5436,7 @@ export const AGENT_CONTRACT = {
             "type": "integer"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -5469,7 +5469,7 @@ export const AGENT_CONTRACT = {
             "type": "integer"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -5496,7 +5496,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -5519,7 +5519,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           },
           "versionId": {
@@ -5551,7 +5551,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           },
           "versionId": {
@@ -5580,7 +5580,7 @@ export const AGENT_CONTRACT = {
         "additionalProperties": false,
         "properties": {
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           },
           "versionId": {
@@ -5614,7 +5614,7 @@ export const AGENT_CONTRACT = {
             "type": "integer"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           },
           "revision": {
@@ -5649,7 +5649,7 @@ export const AGENT_CONTRACT = {
             "type": "integer"
           },
           "projectId": {
-            "description": "The project id.",
+            "description": "The project id. Either its short id or its UUID.",
             "type": "string"
           }
         },
@@ -5700,7 +5700,7 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "projectId": {
-            "description": "The editor project id.",
+            "description": "The editor project id. Either its short id or its UUID.",
             "type": "string"
           },
           "userIntent": {
@@ -5757,7 +5757,7 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "projectId": {
-            "description": "The canvas project id.",
+            "description": "The canvas project id. Either its short id or its UUID.",
             "type": "string"
           },
           "userIntent": {
@@ -7517,7 +7517,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "56e754600c934e66d6ed6d3373ab2a9af122ee2e54562c5c6a1393bd703d8741",
+  "version": "ca48da75c8105b30d57b9061e218043eb1d6486f3b1180f6a031defaae115ddd",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
