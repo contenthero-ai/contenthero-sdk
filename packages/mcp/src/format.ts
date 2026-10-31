@@ -140,7 +140,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -934,6 +934,11 @@ export function jobStatusRow(status: JobStatusResult): string {
   if (status.progress !== null && status.progress !== undefined) parts.push(`progress: ${Math.round(status.progress * 100)}%`)
   if (status.steps?.length) {
     parts.push(`steps: ${status.steps.map((st) => `${st.name} ${st.state}${st.reason ? ` (${st.reason})` : ''}`).join(', ')}`)
+  }
+  // A post's analysis or scenes also says where it stands in the queue (an older server omits it).
+  if (status.kind === 'content' || status.kind === 'scenes') {
+    const wait = describeJobWait(status.detail.status === 'running' ? status.detail.wait : undefined)
+    if (wait) parts.push(`wait: ${wait}`)
   }
   if (status.appUrl) parts.push(status.appUrl)
   const unfinished = status.state !== 'settled' && status.state !== 'failed'
@@ -2388,8 +2393,9 @@ export function cardResult(p: CardDetail): CallToolResult {
           ? [
               insp.creator ?? insp.handle,
               insp.outlierScore != null ? `${Number(insp.outlierScore).toFixed(1)}x` : null,
-              insp.viewCount != null ? `${compactNum(insp.viewCount)} views` : null,
-              insp.likeCount != null ? `${compactNum(insp.likeCount)} likes` : null,
+              // The format's own count first (likes for images and carousels, views for motion), the other only when real.
+              formatMetric(headlineMetric(insp)),
+              formatMetric(secondaryMetric(insp)),
               insp.durationSeconds != null ? `${insp.durationSeconds}s` : null,
               insp.publishedAt ? insp.publishedAt.slice(0, 10) : null,
               [insp.hasTranscript ? 'transcript' : null, insp.hasBreakdown ? 'breakdown' : null]
@@ -2610,8 +2616,9 @@ function outlierLine(o: ContentSummary): string {
   const score = o.outlierScore != null ? `${o.outlierScore.toFixed(1)}x` : 'n/a'
   const creator = o.sourceCreator || (o.accountHandle ? `@${o.accountHandle}` : '')
   const length = o.durationSeconds != null ? ` | ${o.durationSeconds}s` : ''
+  const count = formatMetric(headlineMetric(o))
   const link = o.url ? ` | ${o.url}` : ''
-  return `- [${score}] ${o.title ?? '(untitled)'}${creator ? ` | ${creator}` : ''} | ${compactNum(o.viewCount)} views${length} (${idOf(o)})${link}`
+  return `- [${score}] ${o.title ?? '(untitled)'}${creator ? ` | ${creator}` : ''} ${count ? ` | ${count}` : ''}${length} (${idOf(o)})${link}`
 }
 
 /** A page of tracked content, in the order it was asked for. */
@@ -2677,13 +2684,20 @@ function transcriptLines(t: NonNullable<ContentDetail['transcript']>): string[] 
 /** One tracked post in full, with its transcript when it was asked for. */
 export function inspirationContentResult(c: ContentDetail): CallToolResult {
   const exactData = contentExactData(c)
-  const stats = `${compactNum(c.viewCount)} views, ${compactNum(c.likeCount)} likes, ${compactNum(c.commentCount)} comments`
+  // The format's own count first; a static post's stored 0 views is no count, so it is left out.
+  const stats = [
+    formatMetric(headlineMetric(c)),
+    formatMetric(secondaryMetric(c)),
+    c.commentCount != null ? `${compactNum(c.commentCount)} comments` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
   const score = c.outlierScore != null ? `${c.outlierScore.toFixed(1)}x outlier` : null
   const result = text(
     lines([
       `${c.title ?? '(untitled)'} (${idOf(c)})`,
       `${c.platform ?? '?'} ${c.contentType ?? ''} | ${c.sourceCreator ?? c.accountHandle ?? ''}`.trim(),
-      `${stats}${score ? ` | ${score}` : ''}`,
+      [stats, score].filter(Boolean).join(' | ') || null,
       c.url ? `url: ${c.url}` : null,
       c.publishedAt ? `published: ${c.publishedAt}` : null,
       c.hashtags.length ? `hashtags: ${c.hashtags.join(' ')}` : null,
@@ -2692,6 +2706,7 @@ export function inspirationContentResult(c: ContentDetail): CallToolResult {
       ...analysisLines(c.id, c.analysis),
       ...scenesLines(c.id, c.scenes, c.shortId || c.id),
       ...postVideoLines(c.video),
+      ...describeContentSlides(c.slides),
       exactData ? EXACT_VALUES_POINTER : null,
     ]),
   )
@@ -3244,7 +3259,9 @@ function clipSection(
     lines.push(
       sheeted
         ? `${spent.admitted.length} contact sheet(s) of the source are attached below, in order, each tile labeled with its second in the source.`
-        : `${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`,
+        : clip.type === 'image'
+          ? "The slide's image is attached below."
+          : `${spent.admitted.length} keyframe(s) of the source are attached below, in order, each labeled with its time in the source.`,
     )
   }
   if (spent.dropped > 0) lines.push(keyframesNotShown(spent.dropped))

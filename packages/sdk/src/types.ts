@@ -940,6 +940,21 @@ export function statusTargetOf(status: { id: string; kind: JobKind }): { id: str
  */
 export type JobState = 'queued' | 'processing' | 'applying' | 'settled' | 'failed'
 
+/**
+ * Where a post's analysis or scenes job stands while it is unfinished (`detail.wait` of a `content` or `scenes` status,
+ * and `wait` of a `running` analysis or scenes). Optional: an older server omits it.
+ */
+export interface JobWait {
+  /** `queued`: no worker has the job yet (waiting its turn, or deferred). `running`: a worker has it. */
+  phase: 'queued' | 'running'
+  /** What a deferred job waits on. Absent when it is not deferred. */
+  waitingFor?: string
+  /** How many jobs are served before it. APPROXIMATE: later arrivals can go first. Absent when it is not claimable now, or running. */
+  jobsAhead?: number
+  /** The slowest tenth of what this kind recently took to finish, in seconds. Absent when the kind has no finished job on record. */
+  typicalSeconds?: number
+}
+
 /** One named step of a job that runs in stages (a brand kit's website read and its analysis). */
 export interface JobStep {
   name: string
@@ -3222,6 +3237,20 @@ export interface ContentDetail extends ContentSummary {
    * and its audio map window when asked for `audioMap`. Absent on older servers.
    */
   video?: ContentVideos
+  /**
+   * The post's slides in order: each one's `mediaId`, its type and its position. `view` takes the position as `slide`
+   * and returns an image slide's image. Empty for a post that stores no slides. Absent on older servers.
+   */
+  slides?: ContentSlide[]
+}
+
+/** One slide of a carousel or image post, as `getContent` reports it. */
+export interface ContentSlide {
+  /** The slide's position, which `view` takes as `slide`. */
+  order: number
+  type: 'image' | 'video'
+  /** The slide's file as every media read names it. Null for a slide whose file is not a stored item. */
+  mediaId: string | null
 }
 
 /** A post's videos, as `analyzeContent` kind `video` and `getContent` report them. */
@@ -3234,12 +3263,13 @@ export interface ContentVideos {
 
 /**
  * Whether a post's scenes (its scene map) exist. `complete` when stored, `running` while
- * being prepared, `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
+ * being prepared; `wait` says whether a worker has it yet, how many jobs are ahead (approximate), and what it waits for,
+ * `failed` when the last run gave up (`error` says why), `unavailable` when the post cannot have
  * them (`reason` says why: no video, or longer than the 4-hour limit), `absent` when none was asked for.
  */
 export type ContentScenes =
   | { status: 'complete'; sceneCount: number; detail?: ContentScenesDetail }
-  | { status: 'running' }
+  | { status: 'running'; wait?: JobWait }
   | { status: 'failed'; error: string }
   | { status: 'unavailable'; reason: string }
   | { status: 'absent' }
@@ -3542,10 +3572,13 @@ export interface ContentScenesResult {
  */
 export interface ContentAnalysis {
   /**
-   * `complete` when stored, `running` while one is being made, `failed` when the last run gave up (`error`
-   * says why), `absent` when none was asked for. `analyzeContent` creates one.
+   * `complete` when stored, `running` while one is being made; `wait` says whether a worker has it yet, how many jobs
+   * are ahead (approximate), and what it waits for, `failed` when the last run gave up (`error` says why), `absent`
+   * when none was asked for. `analyzeContent` creates one.
    */
   status: 'complete' | 'running' | 'failed' | 'absent'
+  /** Only when `running`: where the job stands. Absent from an older server. */
+  wait?: JobWait
   /** Only when `failed`. */
   error?: string
   analyzedAt?: string
@@ -4442,12 +4475,13 @@ export interface LiveViewResult {
  *   `rendered` and its sound measurement here.
  * - `clip`: a source (`assetId`, `mediaUrl` or `contentId`): `{ url | contentId and slide?, type, fromSec?, toSec?,
  *   durationSeconds?, layout?, page?, pages?, sampled?: { count, atSec? }, adjusted?, pixels?: { width, height,
- *   pixelsPerSourcePixel, region? }, missingAtSec?, keyframes?: [{ atSec, dataUrl }], sheets?: [{ atSec: number[],
+ *   pixelsPerSourcePixel, region? }, missingAtSec?, keyframes?: [{ atSec?, dataUrl }], sheets?: [{ atSec: number[],
  *   columns, rows, width, height, dataUrl }], keyframeError?, sound?, audioMap?, sheet?, picture?, error?: { code,
  *   message } }`. Its frames come in pages, each image naming its seconds; `sampled.count` is how many were drawn across
  *   every page (`sampled.atSec` only on a page whose frames could not be read). `sound`, `audioMap` and `sheet` are the
  *   sound part: present only when `sound` was asked, over the window named, on the first page. A post is named by its
- *   `contentId` (and `slide`) in place of a `url`.
+ *   `contentId` (and `slide`) in place of a `url`. An image slide of a carousel comes back as `type: 'image'` with its one
+ *   image in `keyframes` (no `atSec`), at the `width` asked.
  * - `picture` (and `clip.picture` for a source): the picture analysis asked by `find`, `where` and `picture`
  *   (`PicturePart`, `ProjectPicturePart`), or why there is none yet.
  */

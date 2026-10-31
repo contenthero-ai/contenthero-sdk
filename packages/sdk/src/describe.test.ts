@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -582,4 +582,44 @@ test('describeRenderFailure: a busy render is a pause with its wait, not a failu
 test('describeEmptyReason says the server reason for an empty search, and nothing when there is none', () => {
   assert.deepEqual(describeEmptyReason({ code: 'noMatch', message: 'Nothing matched.' }), ['Why empty: Nothing matched.'])
   assert.deepEqual(describeEmptyReason(undefined), [])
+})
+
+// Break-verified: dropping the mediaId from `describeContentSlides` turns the first assertion red; letting an image slide
+// fall into the video wording turns the describeClip assertions red.
+test('a post names its slides by position, type and media id, and an image slide reads as an image', () => {
+  assert.deepEqual(describeContentSlides(undefined), [])
+  assert.deepEqual(describeContentSlides([]), [])
+  assert.deepEqual(
+    describeContentSlides([
+      { order: 0, type: 'image', mediaId: 'abc123' },
+      { order: 1, type: 'video', mediaId: null },
+    ]),
+    [
+      'slides (view reads an image slide with contentId and slide):',
+      '  slide 0: image, media abc123',
+      '  slide 1: video',
+    ],
+  )
+  assert.deepEqual(describeClip({ contentId: 'p1', slide: 0, type: 'image', layout: 'frames', page: 1, pages: 1 }), [
+    'Tracked post p1, its image (slide 0)',
+  ])
+  assert.deepEqual(
+    describeClip({ contentId: 'p1', slide: 2, type: 'image', error: { code: 'slide_not_readable', message: 'Gone.' } }),
+    ['Tracked post p1, its image (slide 2)', "The post's image could not be read. slide_not_readable: Gone."],
+  )
+})
+
+// Break-verified: dropping the jobsAhead or waitingFor clause turns the matching assertion red.
+test('a post job says whether a worker has it, how many jobs are ahead, what it waits for and its typical time', () => {
+  assert.equal(describeJobWait(undefined), null)
+  assert.equal(describeJobWait({ phase: 'running' }), 'processing, a worker has it')
+  assert.equal(describeJobWait({ phase: 'queued', jobsAhead: 1 }), 'queued, no worker has it yet, 1 job ahead (approximate)')
+  assert.equal(
+    describeJobWait({ phase: 'queued', jobsAhead: 4, typicalSeconds: 90 }),
+    'queued, no worker has it yet, 4 jobs ahead (approximate), typical time 90s',
+  )
+  assert.equal(
+    describeJobWait({ phase: 'queued', waitingFor: 'the post video copy' }),
+    'queued, no worker has it yet, waiting for the post video copy',
+  )
 })
