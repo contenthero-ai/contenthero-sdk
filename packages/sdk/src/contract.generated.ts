@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "ca48da75c8105b30d57b9061e218043eb1d6486f3b1180f6a031defaae115ddd"
+export const AGENT_CONTRACT_VERSION = "5684028e2847e62fbe04d7cef581c1716b22f7b52f7fe3af3aa611e1105e2a6b"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -634,12 +634,141 @@ export const AGENT_CONTRACT = {
     },
     {
       "description": {
-        "mcp": "Generate audio: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project's timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing."
+        "mcp": "Generate audio: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Music takes either a prompt or a compositionPlan: the song section by section, each chunk with its lyrics, length and styles. withTimestamps returns the sung words with their times, and storeForInpainting keeps the song so a later plan can reuse stretches of it and rewrite one section. Optionally pass projectId to place the generated audio onto that editor project's timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing."
       },
       "group": "generate",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "compositionPlan": {
+            "additionalProperties": false,
+            "description": "Music only, instead of prompt: the song section by section. Its length is the sum of its chunks, so durationSeconds is not sent with it.",
+            "properties": {
+              "chunks": {
+                "description": "The song in order: chunks the model writes, and stretches kept from earlier songs.",
+                "items": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "conditionStrength": {
+                          "description": "How strongly the chunk follows conditioningRef.",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh"
+                          ],
+                          "type": "string"
+                        },
+                        "conditioningRef": {
+                          "additionalProperties": false,
+                          "description": "Earlier music this chunk should sound like.",
+                          "properties": {
+                            "endMs": {
+                              "description": "Where the stretch ends in that song, in milliseconds (exclusive).",
+                              "maximum": 9007199254740991,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "source": {
+                              "description": "The output id of an earlier music generation of yours (its short id or UUID).",
+                              "type": "string"
+                            },
+                            "startMs": {
+                              "description": "Where the stretch starts in that song, in milliseconds.",
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "endMs",
+                            "source",
+                            "startMs"
+                          ],
+                          "type": "object"
+                        },
+                        "contextAdherence": {
+                          "description": "How closely the chunk follows the chunks around it. Defaults to high.",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                          ],
+                          "type": "string"
+                        },
+                        "durationMs": {
+                          "description": "Length of the chunk in milliseconds. The provider enforces it exactly.",
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "negativeStyles": {
+                          "description": "Styles and musical directions to keep out of this chunk.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "positiveStyles": {
+                          "description": "Styles and musical directions present in this chunk, in English. The first chunk sets the genre and tone of the song.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "text": {
+                          "description": "The chunk: an optional section name in square brackets first (e.g. [Verse 1]), then the lyric lines, with inline directions in curly braces (e.g. {spoken}).",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "durationMs",
+                        "positiveStyles",
+                        "text"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "description": "A stretch of an earlier song kept as it is. To edit one section of a song, keep the stretches around it as audio chunks and write the new section as a generation chunk.",
+                      "properties": {
+                        "endMs": {
+                          "description": "Where the stretch ends in that song, in milliseconds (exclusive).",
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "description": "The output id of an earlier music generation of yours (its short id or UUID).",
+                          "type": "string"
+                        },
+                        "startMs": {
+                          "description": "Where the stretch starts in that song, in milliseconds.",
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "endMs",
+                        "source",
+                        "startMs"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "chunks"
+            ],
+            "type": "object"
+          },
           "durationSeconds": {
             "description": "For music / sfx: length in seconds.",
             "type": "number"
@@ -846,7 +975,7 @@ export const AGENT_CONTRACT = {
             "type": "string"
           },
           "prompt": {
-            "description": "For music / sfx: what to generate.",
+            "description": "For music / sfx: what to generate. For music, send a prompt or a compositionPlan, not both.",
             "type": "string"
           },
           "promptInfluence": {
@@ -854,6 +983,16 @@ export const AGENT_CONTRACT = {
             "maximum": 1,
             "minimum": 0,
             "type": "number"
+          },
+          "seed": {
+            "description": "For music with a compositionPlan: a seed, so the same plan gives a more consistent result. Not taken with a prompt.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "storeForInpainting": {
+            "description": "Music only: keep the song with the provider so a later compositionPlan can reuse stretches of it, which is how one section is edited.",
+            "type": "boolean"
           },
           "text": {
             "description": "For a speech model: the words to speak. Read the model's promptGuide with get_model before writing directions into it.",
@@ -866,6 +1005,10 @@ export const AGENT_CONTRACT = {
           "voiceName": {
             "description": "For TTS: human-readable voice name (display only).",
             "type": "string"
+          },
+          "withTimestamps": {
+            "description": "Music only: also return the sung words with their start and end times, and save them as the song's transcript.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7517,7 +7660,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "ca48da75c8105b30d57b9061e218043eb1d6486f3b1180f6a031defaae115ddd",
+  "version": "5684028e2847e62fbe04d7cef581c1716b22f7b52f7fe3af3aa611e1105e2a6b",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7810,7 +7953,7 @@ export type ContractToolName = (typeof CONTRACT_TOOL_NAMES)[number]
 export interface ToolInputs {
   generate_image: { aspectRatio?: string; avatarId?: string; getCost?: boolean; modelId: string; numImages?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceImages?: Array<string>; resolution?: string }
   generate_video: { aspectRatio?: string; audioEnabled?: boolean; duration?: number; endFrame?: string; getCost?: boolean; inputMode?: string; keepInputLength?: boolean; klingElements?: Array<{ description?: string; images?: Array<string>; klingElementId?: string; name?: string }>; modelId: string; multiShot?: boolean; negativePrompt?: string; numGenerations?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceAudio?: Array<string>; referenceImages?: Array<string>; referenceVideos?: Array<string>; resolution?: string; shots?: Array<{ duration: number; prompt: string }>; startFrame?: string }
-  generate_audio: { durationSeconds?: number; getCost?: boolean; modelId: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; promptInfluence?: number; text?: string; voiceId?: string; voiceName?: string }
+  generate_audio: { compositionPlan?: { chunks: Array<{ conditionStrength?: "low" | "medium" | "high" | "xhigh"; conditioningRef?: { endMs: number; source: string; startMs: number }; contextAdherence?: "low" | "medium" | "high"; durationMs: number; negativeStyles?: Array<string>; positiveStyles: Array<string>; text: string } | { endMs: number; source: string; startMs: number }> }; durationSeconds?: number; getCost?: boolean; modelId: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; promptInfluence?: number; seed?: number; storeForInpainting?: boolean; text?: string; voiceId?: string; voiceName?: string; withTimestamps?: boolean }
   generate_board: { avatarId?: string; boardName?: string; boardType: string; getCost?: boolean; numImages?: number; prompt?: string; referenceImages?: Array<string> }
   generate_lip_sync: { audioDurationSeconds?: number; audioUrl?: string; getCost?: boolean; imageUrl: string; modelId: string; motionPrompt?: string; resolution?: string; script?: string; voiceId?: string; voiceName?: string }
   upscale: { durationSeconds?: number; factor: string; getCost?: boolean; modelId: string; sourceUrl: string }

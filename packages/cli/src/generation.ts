@@ -66,6 +66,9 @@ function resultHuman(r: GenerateResult): string {
   pairs.push(...costRows(r.charge))
   // Each output by its media id, the name to pass back; nothing is numbered by position (7.44).
   for (const o of r.outputs ?? []) pairs.push([o.mediaId, o.url ?? o.status])
+  // A song's extras: the words are many, so the table counts them and --json carries each with its times.
+  if (r.storedForInpainting) pairs.push(['Stored for inpainting', 'yes'])
+  if (r.wordTimestamps?.length) pairs.push(['Sung words', `${r.wordTimestamps.length} (each with its times in --json)`])
   if (r.status === 'processing') {
     pairs.push(['Next', statusCommand([{ id: r.outputId, shortId: r.shortId, kind: 'output' }])])
   }

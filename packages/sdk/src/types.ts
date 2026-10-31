@@ -55,6 +55,7 @@ import {
   TRACKED_ACCOUNT_TYPES,
   TRANSCRIPT_GRAINS,
   TRANSCRIPT_GRANULARITIES,
+  type ToolInput,
 } from './contract.generated.js'
 
 /**
@@ -395,8 +396,14 @@ export interface TemplateWriteResult {
  * through `parameters`.
  */
 export interface GenerateRequest {
-  /** A seed, on a model that supports one. */
+  /** A seed, on a model that supports one. On music, taken only with a `compositionPlan`. */
   seed?: number
+  /** Music only, instead of `prompt`: the song section by section. Its shape is the agent contract's. */
+  compositionPlan?: ToolInput<'generate_audio'>['compositionPlan']
+  /** Music only: also return the sung words with their times (`GenerateResult.wordTimestamps`). */
+  withTimestamps?: boolean
+  /** Music only: keep the song with the provider so a later `compositionPlan` can reuse stretches of it. */
+  storeForInpainting?: boolean
   /** Voice delivery dials, for a speech model that declares them. */
   voiceSettings?: { speed?: number; stability?: number; similarity?: number; style?: number; speakerBoost?: boolean }
   /** Media kind. Optional: inferred from the model when omitted; when given, a model of another medium is refused. */
@@ -628,6 +635,17 @@ export interface GenerateResult {
   /** Where the asset is being placed (present only when `projectId` was supplied). Lets a caller chain further
    *  ops onto the placed clip/layer without a view hop, and see any placement warnings. */
   placement?: PlacementResult
+  /** Music sent with `withTimestamps`: the sung words with their start and end times, in milliseconds. */
+  wordTimestamps?: MusicWordTimestamp[]
+  /** Music sent with `storeForInpainting`: true when the provider kept the song for a later plan to reuse. */
+  storedForInpainting?: boolean
+}
+
+/** One sung word of a song and when it is sung. */
+export interface MusicWordTimestamp {
+  word: string
+  startMs: number
+  endMs: number
 }
 
 /** The outcome of a one-call placement (present on a generate result when `projectId` was supplied). The ids are

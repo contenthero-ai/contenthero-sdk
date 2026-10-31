@@ -195,3 +195,47 @@ One media item across the four reads, and the last aliases gone. The contract ca
 - Removed, the last deprecated aliases (hard cutover): `surface` on the timeline and canvas schema reads and their indexes (use `projectType`); card asset `assetId` (read `contentId`, `projectId`, or the new `outputId` for a generation, each the same name the write takes); the upload answer's top-level `uploadUrl`, `uploadHeaders`, `storagePath` and `expiresAt` (read `upload`); the route `/api/v1/elements` (use `/api/v1/kling-elements`); the SDK methods `listElements`, `getElement`, `createElement`, `updateElement`, `deleteElement` and types `Element`, `ReferenceElement`, `CreateElementRequest` (use the Kling-named ones). The CLI `element` command and `--element` flag were already refused. The CLI `card get` ID column now shows the content, project or output id of the asset.
 
 No other tool or field description text changed.
+
+## Wording for approval: music composition plans
+
+Status: approved by Taylan on 2026-10-31. Agent contract 5684028e2847 (app commit fac93a9a13). Only generate_audio changed; every other tool, input and closed value set is unchanged. The texts below are verbatim as the synced contract carries them.
+
+### generate_audio description
+
+Before: "Generate audio: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Optionally pass projectId to place the generated audio onto that editor project's timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing."
+
+After: "Generate audio: speech (TTS), music, or a sound effect. Returns the audio URL directly (synchronous, no polling). Music takes either a prompt or a compositionPlan: the song section by section, each chunk with its lyrics, length and styles. withTimestamps returns the sung words with their times, and storeForInpainting keeps the song so a later plan can reuse stretches of it and rewrite one section. Optionally pass projectId to place the generated audio onto that editor project's timeline in the same call, controlled by an optional placement; omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing."
+
+### Changed input
+
+- `prompt`. Before: "For music / sfx: what to generate." After: "For music / sfx: what to generate. For music, send a prompt or a compositionPlan, not both."
+
+### New inputs
+
+- `compositionPlan`: "Music only, instead of prompt: the song section by section. Its length is the sum of its chunks, so durationSeconds is not sent with it."
+- `compositionPlan.chunks`: "The song in order: chunks the model writes, and stretches kept from earlier songs."
+- A generation chunk (written by the model):
+  - `text`: "The chunk: an optional section name in square brackets first (e.g. [Verse 1]), then the lyric lines, with inline directions in curly braces (e.g. {spoken})."
+  - `durationMs`: "Length of the chunk in milliseconds. The provider enforces it exactly."
+  - `positiveStyles`: "Styles and musical directions present in this chunk, in English. The first chunk sets the genre and tone of the song."
+  - `negativeStyles`: "Styles and musical directions to keep out of this chunk."
+  - `contextAdherence`: "How closely the chunk follows the chunks around it. Defaults to high."
+  - `conditioningRef`: "Earlier music this chunk should sound like."
+    - `source`: "The output id of an earlier music generation of yours (its short id or UUID)."
+    - `startMs`: "Where the stretch starts in that song, in milliseconds."
+    - `endMs`: "Where the stretch ends in that song, in milliseconds (exclusive)."
+  - `conditionStrength`: "How strongly the chunk follows conditioningRef."
+- An audio chunk: "A stretch of an earlier song kept as it is. To edit one section of a song, keep the stretches around it as audio chunks and write the new section as a generation chunk."
+  - `source`: "The output id of an earlier music generation of yours (its short id or UUID)."
+  - `startMs`: "Where the stretch starts in that song, in milliseconds."
+  - `endMs`: "Where the stretch ends in that song, in milliseconds (exclusive)."
+- `seed`: "For music with a compositionPlan: a seed, so the same plan gives a more consistent result. Not taken with a prompt."
+- `withTimestamps`: "Music only: also return the sung words with their start and end times, and save them as the song's transcript."
+- `storeForInpainting`: "Music only: keep the song with the provider so a later compositionPlan can reuse stretches of it, which is how one section is edited."
+
+### Clients (forwarding the new inputs)
+
+The sync alone listed the new inputs without sending them: the MCP's generate_audio handler builds its request field by field, so the four inputs would have been dropped. They are now forwarded by the SDK (`GenerateRequest.compositionPlan`, `withTimestamps`, `storeForInpainting`, with `seed` as before), the MCP and the CLI, and the answer's new fields are read (`GenerateResult.wordTimestamps`, `storedForInpainting`).
+
+- MCP result, new lines (only when the answer carries them): "Stored for inpainting: a later compositionPlan can reuse stretches of this song by its outputId." and "Sung words (N, start to end in seconds):" followed by one line per word, for example "1.20 to 1.45 Hello". The structured result also carries `wordTimestamps` and `storedForInpainting`.
+- CLI `generate audio`, new flags whose help is the contract text above: `--composition-plan <json>`, `--seed <n>`, `--with-timestamps`, `--store-for-inpainting`. The human table adds the rows "Stored for inpainting: yes" and "Sung words: N (each with its times in --json)".

@@ -16,7 +16,7 @@
  */
 
 import { Option, type Command } from 'commander'
-import type { GenerateRequest, GenerateBoardRequest } from '@contenthero/sdk'
+import { optionFromContract, type GenerateRequest, type GenerateBoardRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
@@ -57,6 +57,9 @@ function placementFields(opts: Record<string, unknown>): Pick<GenerateRequest, '
     playheadFrame: opts.playhead as number | undefined,
   }
 }
+
+/** A music flag's words, read from the agent contract's generate_audio input it mirrors. */
+const music = (input: string): string => optionFromContract('generate_audio', input).description
 
 export function registerGenerate(program: Command): void {
   const generate = program
@@ -169,6 +172,10 @@ export function registerGenerate(program: Command): void {
       .option('--voice-name <name>', 'for TTS: human-readable voice name (display only)')
       .option('--duration <seconds>', 'for music / sfx: length in seconds', toFloat)
       .option('--prompt-influence <0-1>', 'for sfx: how literally to follow the prompt', toFloat)
+      .option('--composition-plan <json>', music('compositionPlan'), toJson)
+      .option('--seed <n>', music('seed'), toInt)
+      .option('--with-timestamps', music('withTimestamps'))
+      .option('--store-for-inpainting', music('storeForInpainting'))
       .option('--cost', 'estimate the credit cost instead of generating'),
   )
     .action(async (opts: Record<string, unknown>, command: Command) => {
@@ -183,6 +190,10 @@ export function registerGenerate(program: Command): void {
         voiceName: opts.voiceName as string | undefined,
         durationSeconds: opts.duration as number | undefined,
         promptInfluence: opts.promptInfluence as number | undefined,
+        compositionPlan: opts.compositionPlan as GenerateRequest['compositionPlan'],
+        seed: opts.seed as number | undefined,
+        withTimestamps: opts.withTimestamps === true ? true : undefined,
+        storeForInpainting: opts.storeForInpainting === true ? true : undefined,
         ...placementFields(opts),
       })
       // Audio is synchronous: no waiting, so wait is irrelevant.

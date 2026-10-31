@@ -984,6 +984,39 @@ test('generate_audio returns the audio URL synchronously', async () => {
   assert.match(urlsIn(res), /https:\/\/cdn\/a\.mp3/)
 })
 
+test('generate_audio forwards a composition plan, its seed, timestamps and storing, and prints the sung words', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generate: async (req) => {
+        captured = req
+        return {
+          outputId: 'gen1', status: 'settled', outputs: outs(['https://cdn/a.mp3']),
+          wordTimestamps: [{ word: 'Hello', startMs: 1200, endMs: 1450 }],
+          storedForInpainting: true,
+        }
+      },
+    }),
+  )
+  const compositionPlan = {
+    chunks: [
+      { text: '[Verse 1]\nHello', durationMs: 10000, positiveStyles: ['lofi'] },
+      { source: 'Abc12345', startMs: 0, endMs: 5000 },
+    ],
+  }
+  const res = await mcp.callTool({
+    name: 'generate_audio',
+    arguments: { modelId: 'elevenlabs-music', compositionPlan, seed: 7, withTimestamps: true, storeForInpainting: true },
+  })
+  assert.deepEqual(captured.compositionPlan, compositionPlan)
+  assert.equal(captured.seed, 7)
+  assert.equal(captured.withTimestamps, true)
+  assert.equal(captured.storeForInpainting, true)
+  const out = (res.content as Array<{ text: string }>)[0]!.text
+  assert.match(out, /^1\.20 to 1\.45 Hello$/m)
+  assert.match(out, /^Stored for inpainting/m)
+})
+
 test('a limit refusal comes back as an isError result: the message as written, then the ranked ways out', async () => {
   const mcp = await connect(
     fakeClient({

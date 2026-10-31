@@ -682,10 +682,28 @@ export function pendingResult(
  * would be worse than a chip that renders nothing. Audio has no shape, so `displayAspect` is genuinely
  * null rather than unknown.
  */
+/**
+ * What a song adds to its answer: whether the provider kept it for a later plan, and its sung words with their times.
+ * The words are printed, not only carried in the structured data, because the times are what a caller lays captions
+ * or a later plan's chunk boundaries on.
+ */
+function musicLines(result: GenerateResult | EditAudioResult): string[] {
+  const lines: string[] = []
+  if ('storedForInpainting' in result && result.storedForInpainting) {
+    lines.push('Stored for inpainting: a later compositionPlan can reuse stretches of this song by its outputId.')
+  }
+  const words = 'wordTimestamps' in result ? result.wordTimestamps : undefined
+  if (words?.length) {
+    const s = (ms: number) => (ms / 1000).toFixed(2)
+    lines.push(`Sung words (${words.length}, start to end in seconds):`, ...words.map((w) => `${s(w.startMs)} to ${s(w.endMs)} ${w.word}`))
+  }
+  return lines
+}
+
 export function audioResult(result: GenerateResult | EditAudioResult): CallToolResult {
   const landed = landedOutputs(result)
   const header = `Done. Audio generated (outputId ${jobName({ id: result.outputId, shortId: result.shortId, appUrl: result.appUrl })}):`
-  const prose = [header, ...outputLines(result), chargeLine(result.charge)]
+  const prose = [header, ...outputLines(result), ...musicLines(result), chargeLine(result.charge)]
     .filter((l): l is string => !!l)
     .join('\n')
   if (!landed.length) return text(prose)
@@ -693,6 +711,8 @@ export function audioResult(result: GenerateResult | EditAudioResult): CallToolR
     content: [{ type: 'text', text: prose }],
     structuredContent: {
       ...chargeData(result.charge),
+      ...('wordTimestamps' in result && result.wordTimestamps && { wordTimestamps: result.wordTimestamps }),
+      ...('storedForInpainting' in result && result.storedForInpainting && { storedForInpainting: true }),
       ...mediaWidgetData({
         outputId: result.outputId,
         contentType: 'audio',
