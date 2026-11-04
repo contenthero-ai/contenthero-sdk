@@ -108,6 +108,15 @@ export function toJson(value: string): unknown {
   }
 }
 
+/** Collect a repeatable option whose every value is a JSON object. */
+export function collectJson(value: string, previous: object[] = []): object[] {
+  const parsed = toJson(value)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CliError(`Expected a JSON object, got "${value}".`, EXIT.USAGE)
+  }
+  return [...previous, parsed]
+}
+
 /**
  * A social profile named on the command line: a full profile url (which states its platform), or `platform:handle`
  * (a bare handle cannot say whether it is instagram or youtube). The form `brand-kit` accounts and `tracked-account add`

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `generate video --inline-kling-element <json>` (repeatable) defines a Kling element in the call, including its `video` or `voice`; saved ones keep `--kling-element`.
+- `model get` prints input modes (marking exclusive ones) and the input rules a model declares, in the SDK's shared words.
+
 ## 0.3.33
 
 - `template list`: `--kind logo` lists logos, and `--search` also matches a logo's other names.

@@ -5205,6 +5205,29 @@ test('the Kling element tools reach the Kling element SDK methods, by klingEleme
   ])
 })
 
+test('generate_video forwards an inline Kling element made of a video, and one with a voice, and advertises both fields', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generate: async (req) => {
+        captured = req
+        return { outputId: 'g', status: 'processing' }
+      },
+    }),
+  )
+  const klingElements = [
+    { name: 'dancer', video: 'https://cdn/dancer.mp4' },
+    { name: 'host', images: ['https://cdn/host.png'], voice: 'https://cdn/host.mp3' },
+  ]
+  const res = await mcp.callTool({ name: 'generate_video', arguments: { modelId: 'm', prompt: '@dancer and @host', klingElements } })
+  assert.ok(!res.isError, JSON.stringify(res.content))
+  assert.deepEqual(captured.references?.klingElements, klingElements)
+  const { tools } = await mcp.listTools()
+  const item = tools.find((t) => t.name === 'generate_video').inputSchema.properties.klingElements.items.properties
+  assert.equal(item.video.type, 'string')
+  assert.equal(item.voice.type, 'string')
+})
+
 test('generate_video forwards klingElements alone: the deprecated elements and elementId aliases are gone', async () => {
   let captured
   const mcp = await connect(

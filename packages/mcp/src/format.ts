@@ -140,7 +140,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeInputModes, describeInputRules, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2157,25 +2157,6 @@ export function modelListResult(models: ModelInfo[]): CallToolResult {
 }
 
 type ShotKind = 'single' | 'auto' | 'custom'
-type InputModeCap = { id: string; label: string; inputTypes: string[]; shotKinds?: ShotKind[]; keepsInputLength?: boolean }
-
-/**
- * A model's input modes, each with what it takes, the shots it narrows to and whether it keeps the source's length.
- * Empty for a model without modes. Every value is the registry's; only the framing is written here.
- */
-function inputModeLines(m: ModelInfo): string[] {
-  const modes = cap(m, 'inputModes')?.modes as InputModeCap[] | undefined
-  if (!Array.isArray(modes) || !modes.length) return []
-  return [
-    '  Input modes (inputMode on generate_video picks one; without it, the attached inputs decide):',
-    ...modes.map((md) => {
-      const parts = [md.inputTypes.join(', ')]
-      if (md.shotKinds?.length) parts.push(`shots: ${md.shotKinds.join(', ')}`)
-      if (md.keepsInputLength) parts.push("output keeps the source video's length")
-      return `    ${md.id} (${md.label}): ${parts.join('; ')}`
-    }),
-  ]
-}
 
 /** The shot kinds a model offers and how to ask for each, with the written-shot limits from the registry. */
 function shotLines(m: ModelInfo): string[] {
@@ -2230,7 +2211,7 @@ export function modelResult(m: ModelInfo): CallToolResult {
       Array.isArray(cap(m, 'inputTypes')) && cap(m, 'inputTypes').length
         ? `  input types: ${cap(m, 'inputTypes').join(', ')}`
         : null,
-      ...inputModeLines(m),
+      ...describeInputModes(m.capabilities).map((l) => `  ${l}`),
       res?.supported?.length
         ? `  resolution: ${res.supported.join(', ')}${res.default ? ` (default ${res.default})` : ''}`
         : null,
@@ -2243,6 +2224,7 @@ export function modelResult(m: ModelInfo): CallToolResult {
       gen ? `  generations: ${gen.min}-${gen.max} (default ${gen.default})` : null,
       ...refLines.map((l) => `  ${l}`),
       ...describeInputLimits(m.capabilities).map((l) => `  ${l}`),
+      ...describeInputRules(m.capabilities).map((l) => `  ${l}`),
       ...shotLines(m),
       enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
       ...promptReferenceLines(m.promptReferences),

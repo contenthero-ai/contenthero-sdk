@@ -20,9 +20,21 @@ import { optionFromContract, type GenerateRequest, type GenerateBoardRequest } f
 import { makeClient } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
-import { collect, toFloat, toInt, toJson } from '../args.js'
+import { collect, collectJson, toFloat, toInt, toJson } from '../args.js'
 
 
+
+/** The Kling elements of one call: saved ones by id, then the ones defined in the call. Undefined when there are none. */
+export function klingElementsFrom(
+  saved: string[] | undefined,
+  inline: object[] | undefined,
+): NonNullable<GenerateRequest['references']>['klingElements'] | undefined {
+  const all = [
+    ...(saved ?? []).map((klingElementId) => ({ klingElementId })),
+    ...((inline ?? []) as NonNullable<GenerateRequest['references']>['klingElements'] & object[]),
+  ]
+  return all.length > 0 ? all : undefined
+}
 
 /** Add the shared async flags to a waitable generate command. */
 function addRunFlags(cmd: Command): Command {
@@ -118,6 +130,7 @@ export function registerGenerate(program: Command): void {
       .option('--ref-video <urlOrId>', 'reference video (URL or output id); repeatable', collect)
       .option('--ref-audio <urlOrId>', 'reference audio (URL or output id); repeatable', collect)
       .option('--kling-element <id>', 'saved Kling element id (Kling 3.0, @name in prompt); repeatable', collect)
+      .option('--inline-kling-element <json>', 'define a Kling element in the call: a JSON object with name and any of description, images, video, voice (each a URL or output id; model get says what the model takes); repeatable', collectJson)
       .option('--multi-shot', 'multi-shot with the cuts planned by the model, on a model whose shots include auto (model get); to write each shot yourself, pass --shots instead')
       .option('--shots <json>', 'write each shot yourself, on a model whose shots include custom: JSON array of { prompt, duration } objects', toJson)
       .option('--input-mode <id>', 'the input mode, by id from model get; omit to let the attached inputs decide'),
@@ -151,9 +164,7 @@ export function registerGenerate(program: Command): void {
         images: opts.ref as string[] | undefined,
         videos: opts.refVideo as string[] | undefined,
         audio: opts.refAudio as string[] | undefined,
-        klingElements: (opts.klingElement as string[] | undefined)?.map((klingElementId) => ({
-          klingElementId,
-        })),
+        klingElements: klingElementsFrom(opts.klingElement as string[] | undefined, opts.inlineKlingElement as object[] | undefined),
       }),
       ...placementFields(opts),
     })

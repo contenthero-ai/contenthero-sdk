@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `generate_video` accepts `klingElements[].video` and `klingElements[].voice` (from the synced contract).
+- `get_model` prints the registry's Kling 4.0 fields: keyframe, voice and video subject counts, the shared input budget, the video limits, the frame count by duration, the name rules, whether input modes are exclusive, and declared settings. The words come from the SDK, shared with the CLI.
+
 ## 0.4.43
 
 - `list_templates` wording: logos are listed only with kind logo, search finds a logo by name or alias, a logo's id is its slug.

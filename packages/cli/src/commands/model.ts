@@ -11,7 +11,7 @@ import type { Command } from 'commander'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { describeInputLimits, type ModelInfo } from '@contenthero/sdk'
+import { describeInputLimits, describeInputModes, describeInputRules, type ModelInfo } from '@contenthero/sdk'
 
 const CONTENT_TYPES = ['image', 'video', 'audio'] as const
 type ContentType = (typeof CONTENT_TYPES)[number]
@@ -97,6 +97,12 @@ export function registerModel(program: Command): void {
           ...(refMax > 0 ? [['Max references', refMax] as [string, number]] : []),
           ...(describeInputLimits(model.capabilities).length
             ? [['Input limits', describeInputLimits(model.capabilities).join('; ')] as [string, string]]
+            : []),
+          ...(describeInputRules(model.capabilities).length
+            ? [['Input rules', describeInputRules(model.capabilities).join('; ')] as [string, string]]
+            : []),
+          ...(describeInputModes(model.capabilities).length
+            ? [['Input modes', describeInputModes(model.capabilities).slice(1).map((l) => l.trim()).join('; ')] as [string, string]]
             : []),
           ...(gen ? [['Generations', `${gen.min}-${gen.max} (default ${gen.default})`] as [string, string]] : []),
           ...(enabledFeatures.length ? [['Features', enabledFeatures.join(', ')] as [string, string]] : []),

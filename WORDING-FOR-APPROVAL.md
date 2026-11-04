@@ -239,3 +239,35 @@ The sync alone listed the new inputs without sending them: the MCP's generate_au
 
 - MCP result, new lines (only when the answer carries them): "Stored for inpainting: a later compositionPlan can reuse stretches of this song by its outputId." and "Sung words (N, start to end in seconds):" followed by one line per word, for example "1.20 to 1.45 Hello". The structured result also carries `wordTimestamps` and `storedForInpainting`.
 - CLI `generate audio`, new flags whose help is the contract text above: `--composition-plan <json>`, `--seed <n>`, `--with-timestamps`, `--store-for-inpainting`. The human table adds the rows "Stored for inpainting: yes" and "Sung words: N (each with its times in --json)".
+
+
+# Group 6: Kling 4.0 inputs on the developer surface (2026-11-04)
+
+Status: PROPOSED, awaiting Taylan. Reason for all of it: Kling 4.0 takes video subjects, a voice for a subject, keyframes, named voices and a keep-original-sound setting, and get_model and `model get` must say what a model declares. Nothing below states a number or limit another system owns: every count, length and pattern printed is read from the model's registry entry at call time.
+
+## Contract text (written in the app's agent contract, vendored here by contract:sync)
+
+- `klingElements[].video`: "Inline Kling element made of one video instead of images: a URL or a previous output id. Only for models that take video subjects."
+- `klingElements[].voice`: "Inline Kling element: an audio file the subject speaks with, a URL or a previous output id. Only for a subject made of images, on models that take it."
+
+## CLI help
+
+- `generate video --inline-kling-element <json>`: "define a Kling element in the call: a JSON object with name and any of description, images, video, voice (each a URL or output id; model get says what the model takes); repeatable". Reason: the CLI had no way to express an inline element, which is where `video` and `voice` live.
+- Error for a value that is not an object: "Expected a JSON object, got \"<value>\"."
+
+## get_model and `model get` lines (shared, written once in packages/sdk/src/describe.ts; the numbers are the registry's)
+
+- Input modes heading and line (new): "A request carries the inputs of one mode only; mixing modes is refused." Reason: states the registry's `inputModes.exclusive`.
+- "keyframes: up to N", "voices: up to N", "video subjects: up to N" (from maxKeyframes, maxVoices, maxVideoElements).
+- "shared input budget: N in all (each counts: imageRef 1, ...)" (from inputQuota).
+- "videos in all (reference videos and video subjects): up to N" (inputLimits.videoInputsMax).
+- "reference videos: each A to Bs" (inputLimits.referenceVideoSec).
+- "video subjects: a single shot of A to Bs, shortest side at least N px" (inputLimits.subjectVideo).
+- "frames (first, middle and last together) by duration: from As up to N, ..." (frameCountByDuration).
+- "names of subjects and voices (one namespace): a name is <the registry's rule>; up to N characters; a description up to N" (namedInputs).
+- "reserved names, taken by the model's own tags: <patterns>" (namedInputs.reservedNamePatterns).
+- "setting <key> (<label>): toggle, default <value> (applies while a reference video is attached)" (declared settings).
+
+## Not yet written (waiting for the app contract to declare them)
+
+Flat generate_video inputs `keyframes`, `voices`, `keepOriginalSound` and their CLI flags and help text. Their wording comes from the contract, as the other inputs' does.

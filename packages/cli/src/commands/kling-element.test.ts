@@ -101,3 +101,26 @@ test('help shows kling-element and --kling-element, never the deprecated spellin
   assert.match(videoHelp, /--kling-element <id>/)
   assert.doesNotMatch(videoHelp, /--element <id>/)
 })
+
+test('generate video --inline-kling-element sends an element defined in the call, with its video or its voice, after the saved ones', async () => {
+  const r = await run('generate', 'video', '@dancer and @host', '-m', 'kling-4.0', '--cost',
+    '--kling-element', 'Kling001',
+    '--inline-kling-element', '{"name":"dancer","video":"https://cdn/dancer.mp4"}',
+    '--inline-kling-element', '{"name":"host","images":["https://cdn/host.png"],"voice":"https://cdn/host.mp3"}')
+  const references = r.body?.references as Record<string, unknown>
+  assert.deepEqual(references.klingElements, [
+    { klingElementId: 'Kling001' },
+    { name: 'dancer', video: 'https://cdn/dancer.mp4' },
+    { name: 'host', images: ['https://cdn/host.png'], voice: 'https://cdn/host.mp3' },
+  ])
+})
+
+test('--inline-kling-element refuses what is not a JSON object', async () => {
+  await assert.rejects(run('generate', 'video', 'p', '-m', 'kling-4.0', '--cost', '--inline-kling-element', '["x"]'), /Expected a JSON object/)
+  await assert.rejects(run('generate', 'video', 'p', '-m', 'kling-4.0', '--cost', '--inline-kling-element', 'nope'), /Expected valid JSON/)
+})
+
+test('help for generate video shows --inline-kling-element', () => {
+  const video = buildProgram().commands.find((c) => c.name() === 'generate')!.commands.find((c) => c.name() === 'video')!
+  assert.match(video.helpInformation(), /--inline-kling-element <json>/)
+})
