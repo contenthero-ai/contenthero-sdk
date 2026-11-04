@@ -309,6 +309,14 @@
                 "name": {
                   "description": "Inline Kling element: reference it in the prompt as @name.",
                   "type": "string"
+                },
+                "video": {
+                  "description": "Inline Kling element made of one video instead of images: a URL or a previous output id. Only for models that take video subjects.",
+                  "type": "string"
+                },
+                "voice": {
+                  "description": "Inline Kling element: an audio file the subject speaks with, a URL or a previous output id. Only for a subject made of images, on models that take it.",
+                  "type": "string"
                 }
               },
               "type": "object"
@@ -7617,7 +7625,7 @@
       "scopes": []
     }
   ],
-  "version": "5684028e2847e62fbe04d7cef581c1716b22f7b52f7fe3af3aa611e1105e2a6b",
+  "version": "a657665e4d6430df9d9b71b7851892607e136d23a0c1c42b9302bf021b4c3089",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
