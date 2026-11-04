@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Contract sync: `klingElements[].video` and `klingElements[].voice` on `generate_video`.
+- `References.keyframes` and `References.voices` (`ReferenceVoice`: name and audio), `ReferenceKlingElement.video` and `.voice`.
+- `describeInputModes` (marks modes the registry declares exclusive), `describeInputRules` (keyframes, voices, video subjects, shared input budget, frame count by duration, name rules, declared settings) and, in `describeInputLimits`, the video pool, the reference video length and what a video subject must be. One wording for the MCP and the CLI.
+
 ## 0.4.36
 
 - `TemplateKind` and the `listTemplates` search wording: logos by kind, a logo found by any of its names, a logo's id is its slug.

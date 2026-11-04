@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeInputModes, describeInputRules, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -622,4 +622,50 @@ test('a post job says whether a worker has it, how many jobs are ahead, what it 
     describeJobWait({ phase: 'queued', waitingFor: 'the post video copy' }),
     'queued, no worker has it yet, waiting for the post video copy',
   )
+})
+
+test('describeInputLimits also states the video pool, the reference video length and what a video subject must be', () => {
+  assert.deepEqual(
+    describeInputLimits({ inputLimits: { videoInputsMax: 5, referenceVideoSec: { min: 2, max: 30 }, subjectVideo: { minSec: 3, maxSec: 8, minShortSidePx: 700 } } }),
+    [
+      'videos in all (reference videos and video subjects): up to 5',
+      'reference videos: each 2 to 30s',
+      'video subjects: a single shot of 3 to 8s, shortest side at least 700 px',
+    ],
+  )
+  assert.deepEqual(describeInputLimits({ inputLimits: { subjectVideo: { minSec: 3, maxSec: 8 } } }), ['video subjects: a single shot of 3 to 8s'])
+})
+
+test('describeInputModes marks exclusive modes and is empty for a model without modes', () => {
+  const caps = { inputModes: { exclusive: true, modes: [{ id: 'a', label: 'A', inputTypes: ['startFrame'] }] } }
+  assert.deepEqual(describeInputModes(caps), [
+    'Input modes (inputMode on generate_video picks one; without it, the attached inputs decide):',
+    '  A request carries the inputs of one mode only; mixing modes is refused.',
+    '  a (A): startFrame',
+  ])
+  assert.deepEqual(describeInputModes({ inputModes: { modes: [{ id: 'a', label: 'A', inputTypes: ['x'] }] } }).length, 2)
+  assert.deepEqual(describeInputModes({}), [])
+})
+
+test('describeInputRules words each declared count, the quota, the frame table, the name rules and the settings', () => {
+  assert.deepEqual(
+    describeInputRules({
+      maxKeyframes: 8, maxVoices: 3, maxVideoElements: 3,
+      inputQuota: { total: 15, costs: { imageRef: 1 } },
+      frameCountByDuration: [{ fromDuration: 3, maxFrames: 4 }],
+      namedInputs: { nameRule: 'letters', nameMaxChars: 20, reservedNamePatterns: ['^a$'] },
+      settings: [{ key: 'keepOriginalSound', label: 'Keep', control: 'toggle', default: false }],
+    }),
+    [
+      'keyframes: up to 8',
+      'voices: up to 3',
+      'video subjects: up to 3',
+      'shared input budget: 15 in all (each counts: imageRef 1)',
+      'frames (first, middle and last together) by duration: from 3s up to 4',
+      'names of subjects and voices (one namespace): a name is letters; up to 20 characters',
+      "reserved names, taken by the model's own tags: ^a$",
+      'setting keepOriginalSound (Keep): toggle, default false',
+    ],
+  )
+  assert.deepEqual(describeInputRules({}), [])
 })

@@ -78,12 +78,24 @@ export interface References {
   startFrame?: string
   /** Last frame for video models that accept one (URL or output id). */
   endFrame?: string
+  /** Middle frames between the first and last frame, in order, for models that take them (URL or output id). They need a startFrame. */
+  keyframes?: string[]
+  /** Named voices, each addressable in the prompt as @name, on models that take them. */
+  voices?: ReferenceVoice[]
   /**
    * Kling elements (Kling 3.0), each addressable in the prompt as @name. Requires
    * a startFrame alongside them. See get_model's promptReferences for which models
    * support them.
    */
   klingElements?: ReferenceKlingElement[]
+}
+
+/** A named voice in a generation: the audio the model speaks it with. */
+export interface ReferenceVoice {
+  /** The voice name, addressed in the prompt as @name. */
+  name: string
+  /** The audio file (URL or output id). */
+  audio: string
 }
 
 /**
@@ -100,6 +112,10 @@ export interface ReferenceKlingElement {
   description?: string
   /** Inline: supporting image URLs or output-id tokens for this Kling element. */
   images?: string[]
+  /** Inline: one video instead of images (URL or output id), on models that take video subjects. */
+  video?: string
+  /** Inline: an audio file the subject speaks with (URL or output id); for a subject made of images, on models that take it. */
+  voice?: string
 }
 
 /**

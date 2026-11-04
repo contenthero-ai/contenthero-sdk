@@ -58,6 +58,80 @@ export function describeInputLimits(capabilities: Record<string, unknown> | null
   if (l.audioTotalMaxSec != null) out.push(`audio references: up to ${l.audioTotalMaxSec}s together`)
   if (l.videoTotalMaxSec != null) out.push(`video references: up to ${l.videoTotalMaxSec}s together`)
   if (l.videoPlusOutputMaxSec != null) out.push(`video references plus output: up to ${l.videoPlusOutputMaxSec}s together`)
+  const lim = (capabilities?.inputLimits ?? {}) as Record<string, unknown>
+  if (typeof lim.videoInputsMax === 'number') out.push(`videos in all (reference videos and video subjects): up to ${lim.videoInputsMax}`)
+  const ref = lim.referenceVideoSec as { min?: number; max?: number } | undefined
+  if (ref && ref.min != null && ref.max != null) out.push(`reference videos: each ${ref.min} to ${ref.max}s`)
+  const sub = lim.subjectVideo as { minSec?: number; maxSec?: number; minShortSidePx?: number } | undefined
+  if (sub && sub.minSec != null && sub.maxSec != null) {
+    out.push(
+      `video subjects: a single shot of ${sub.minSec} to ${sub.maxSec}s${sub.minShortSidePx != null ? `, shortest side at least ${sub.minShortSidePx} px` : ''}`,
+    )
+  }
+  return out
+}
+
+type InputModeCap = { id: string; label: string; inputTypes: string[]; shotKinds?: string[]; keepsInputLength?: boolean }
+
+/**
+ * A model's input modes, one line each (what it takes, the shots it narrows to, whether it keeps the source's length),
+ * under a heading that says how a mode is chosen. When the registry marks the modes exclusive, one more line says a
+ * request carries the inputs of one mode only. Empty for a model without modes. Every value is the registry's; the
+ * MCP's get_model and the CLI's `model get` share these words.
+ */
+export function describeInputModes(capabilities: Record<string, unknown> | null | undefined): string[] {
+  const block = capabilities?.inputModes as { modes?: InputModeCap[]; exclusive?: boolean } | undefined
+  const modes = block?.modes
+  if (!Array.isArray(modes) || !modes.length) return []
+  return [
+    'Input modes (inputMode on generate_video picks one; without it, the attached inputs decide):',
+    ...(block?.exclusive ? ['  A request carries the inputs of one mode only; mixing modes is refused.'] : []),
+    ...modes.map((md) => {
+      const parts = [md.inputTypes.join(', ')]
+      if (md.shotKinds?.length) parts.push(`shots: ${md.shotKinds.join(', ')}`)
+      if (md.keepsInputLength) parts.push("output keeps the source video's length")
+      return `  ${md.id} (${md.label}): ${parts.join('; ')}`
+    }),
+  ]
+}
+
+/**
+ * The input counts and rules a model declares beyond its reference buckets: keyframes, voices, video subjects, the
+ * shared quota, the frame count by duration, the rules a name must meet and the model's own settings. One line each,
+ * empty for a model that declares none. The numbers and patterns are the registry's; only the words live here.
+ */
+export function describeInputRules(capabilities: Record<string, unknown> | null | undefined): string[] {
+  const c = (capabilities ?? {}) as Record<string, unknown>
+  const out: string[] = []
+  if (typeof c.maxKeyframes === 'number') out.push(`keyframes: up to ${c.maxKeyframes}`)
+  if (typeof c.maxVoices === 'number') out.push(`voices: up to ${c.maxVoices}`)
+  if (typeof c.maxVideoElements === 'number') out.push(`video subjects: up to ${c.maxVideoElements}`)
+  const quota = c.inputQuota as { total?: number; costs?: Record<string, number> } | undefined
+  if (quota && typeof quota.total === 'number') {
+    const costs = Object.entries(quota.costs ?? {}).map(([k, v]) => `${k} ${v}`).join(', ')
+    out.push(`shared input budget: ${quota.total} in all${costs ? ` (each counts: ${costs})` : ''}`)
+  }
+  const table = c.frameCountByDuration as Array<{ fromDuration: number; maxFrames: number }> | undefined
+  if (Array.isArray(table) && table.length) {
+    out.push(`frames (first, middle and last together) by duration: ${table.map((t) => `from ${t.fromDuration}s up to ${t.maxFrames}`).join(', ')}`)
+  }
+  const named = c.namedInputs as { nameRule?: string; nameMaxChars?: number; descriptionMaxChars?: number; reservedNamePatterns?: string[] } | undefined
+  if (named) {
+    const parts = [
+      named.nameRule ? `a name is ${named.nameRule}` : null,
+      named.nameMaxChars != null ? `up to ${named.nameMaxChars} characters` : null,
+      named.descriptionMaxChars != null ? `a description up to ${named.descriptionMaxChars}` : null,
+    ].filter(Boolean)
+    if (parts.length) out.push(`names of subjects and voices (one namespace): ${parts.join('; ')}`)
+    if (named.reservedNamePatterns?.length) out.push(`reserved names, taken by the model's own tags: ${named.reservedNamePatterns.join(', ')}`)
+  }
+  const settings = c.settings as Array<{ key: string; label?: string; control?: string; default?: unknown; appliesWhen?: string }> | undefined
+  if (Array.isArray(settings)) {
+    for (const s of settings) {
+      const when = s.appliesWhen === 'referenceVideo' ? ' (applies while a reference video is attached)' : s.appliesWhen === 'speech' ? ' (applies to spoken output)' : ''
+      out.push(`setting ${s.key}${s.label ? ` (${s.label})` : ''}: ${s.control ?? 'value'}, default ${String(s.default)}${when}`)
+    }
+  }
   return out
 }
 
