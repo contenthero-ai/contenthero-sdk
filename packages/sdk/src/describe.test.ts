@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeInputModes, describeInputRules, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
+import { NEWER_FORMAT_LINE, describeModulesIndex, describeAudioFacts, describeContentVideoWindow, contentVideosPending, describeVideoCostDetail, describeAudioMap, describeAudioMapSummary, describeAudioMapWindow, describePicturePart, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, describeContentVideo, describeCrop, describeDocumentFindings, describeStyleLibraryPins, describeEmptyReason, describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, describeEditorOps, describeExportLoudness, describeLoudness, describeRenderFailure, describeRenderProgress, describeAdjusted, describeScope, describeSoundMeasurement, describeSourceSound, withExportLoudness } from './describe.js'
 import type { ApplyEditorOpsResult } from './types.js'
 
 /**
@@ -668,4 +668,16 @@ test('describeInputRules words each declared count, the quota, the frame table, 
     ],
   )
   assert.deepEqual(describeInputRules({}), [])
+})
+
+test('describePromptReferenceTags lists the tag of each input that has one, with its count when more than one', () => {
+  assert.deepEqual(
+    describePromptReferenceTags([
+      { for: 'image', token: '@image_N', max: 10 },
+      { for: 'startFrame', token: '@first_frame', max: 1 },
+      { for: 'audio', token: null, max: 2 },
+    ]),
+    ['@image_N (up to 10)', '@first_frame'],
+  )
+  assert.deepEqual(describePromptReferenceTags(undefined), [])
 })

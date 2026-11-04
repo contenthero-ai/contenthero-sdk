@@ -86,3 +86,10 @@ test('a model that declares none of the Kling 4.0 fields prints none of their li
   const text = textOf(modelResult(model({ inputTypes: ['startFrame'] })))
   assert.doesNotMatch(text, /keyframes:|voices:|shared input budget|reserved names|setting /)
 })
+
+test('get_model prints the tags the registry declares for each input, from the shared printer', () => {
+  const m = { ...model({}), promptReferences: { scheme: 'named_tag', honored: true, instruction: 'x', inputs: [
+    { for: 'image', token: '@image_N', max: 10 }, { for: 'startFrame', token: '@first_frame', max: 1 },
+  ] } } as unknown as Parameters<typeof modelResult>[0]
+  assert.match(textOf(modelResult(m)), /tokens: @image_N \(up to 10\), @first_frame/)
+})

@@ -5228,6 +5228,32 @@ test('generate_video forwards an inline Kling element made of a video, and one w
   assert.equal(item.voice.type, 'string')
 })
 
+test('generate_video forwards keyframes and voices into references and keepOriginalSound into parameters', async () => {
+  let captured
+  const mcp = await connect(
+    fakeClient({
+      generate: async (req) => {
+        captured = req
+        return { outputId: 'g', status: 'processing' }
+      },
+    }),
+  )
+  const voices = [{ name: 'host', audio: 'https://cdn/host.mp3' }]
+  const res = await mcp.callTool({
+    name: 'generate_video',
+    arguments: { modelId: 'm', prompt: 'p', startFrame: 'https://cdn/s.png', keyframes: ['https://cdn/k1.png', 'abc123-2'], voices, keepOriginalSound: true },
+  })
+  assert.ok(!res.isError, JSON.stringify(res.content))
+  assert.deepEqual(captured.references.keyframes, ['https://cdn/k1.png', 'abc123-2'])
+  assert.deepEqual(captured.references.voices, voices)
+  assert.equal(captured.parameters.keepOriginalSound, true)
+  await mcp.callTool({ name: 'generate_video', arguments: { modelId: 'm', prompt: 'p', keepOriginalSound: false } })
+  assert.equal(captured.parameters.keepOriginalSound, false)
+  await mcp.callTool({ name: 'generate_video', arguments: { modelId: 'm', prompt: 'p' } })
+  assert.equal(captured.parameters, undefined)
+  assert.equal(captured.references, undefined)
+})
+
 test('generate_video forwards klingElements alone: the deprecated elements and elementId aliases are gone', async () => {
   let captured
   const mcp = await connect(

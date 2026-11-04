@@ -18,7 +18,7 @@ const CAPS = {
 before(async () => {
   server = createServer((_req, res) => {
     res.setHeader('content-type', 'application/json')
-    res.end(JSON.stringify({ modelId: 'm', displayName: 'M', contentType: 'video', kind: 'generate', tags: [], capabilities: CAPS }))
+    res.end(JSON.stringify({ modelId: 'm', displayName: 'M', contentType: 'video', kind: 'generate', tags: [], capabilities: CAPS, promptReferences: { scheme: 'named_tag', honored: true, instruction: 'x', inputs: [{ for: 'image', token: '@image_N', max: 10 }, { for: 'startFrame', token: '@first_frame', max: 1 }] } }))
   })
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -41,4 +41,5 @@ test('model get prints the input rules, the exclusive modes and the video limits
   assert.match(out, /setting keepOriginalSound \(Keep original sound\): toggle, default false \(applies while a reference video is attached\)/)
   assert.match(out, /A request carries the inputs of one mode only; mixing modes is refused\./)
   assert.match(out, /reference videos: each 2 to 30s/)
+  assert.match(out, /@image_N \(up to 10\), @first_frame/)
 })

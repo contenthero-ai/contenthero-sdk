@@ -71,6 +71,15 @@ export function describeInputLimits(capabilities: Record<string, unknown> | null
   return out
 }
 
+/**
+ * The tags a model binds in the prompt, one entry per input that has one ("image @image_N (up to 10)"), read from
+ * `promptReferences.inputs` as the registry declares them. Empty when no input has a tag. The MCP's get_model and the
+ * CLI's `model get` share it, so a tag the registry adds shows on both without a copy.
+ */
+export function describePromptReferenceTags(inputs: ReadonlyArray<{ for: string; token: string | null; max: number }> | null | undefined): string[] {
+  return (inputs ?? []).filter((i) => i.token).map((i) => `${i.token}${i.max > 1 ? ` (up to ${i.max})` : ''}`)
+}
+
 type InputModeCap = { id: string; label: string; inputTypes: string[]; shotKinds?: string[]; keepsInputLength?: boolean }
 
 /**

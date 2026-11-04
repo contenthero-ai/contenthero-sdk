@@ -1284,6 +1284,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (wantMultiShot) parameters.multiShot = true
         if (klingMultiShot) parameters.shots = args.shots
         if (args.inputMode) parameters.inputMode = args.inputMode
+        if (args.keepOriginalSound !== undefined) parameters.keepOriginalSound = args.keepOriginalSound
         const request = compact<GenerateRequest>({
           contentType: 'video',
           kind: 'generate',
@@ -1300,9 +1301,11 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           references: buildReferences({
             startFrame: args.startFrame,
             endFrame: args.endFrame,
+            keyframes: args.keyframes,
             images: args.referenceImages,
             videos: args.referenceVideos,
             audio: args.referenceAudio,
+            voices: args.voices,
             klingElements: args.klingElements,
           }),
           projectId: args.projectId,

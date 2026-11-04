@@ -108,6 +108,18 @@ export function toJson(value: string): unknown {
   }
 }
 
+/**
+ * Collect a repeatable `--voice name:audio`: the name is everything before the first colon, the audio a URL or output
+ * id (a URL holds colons of its own, so only the first one splits).
+ */
+export function toVoice(value: string, previous: Array<{ name: string; audio: string }> = []): Array<{ name: string; audio: string }> {
+  const at = value.indexOf(':')
+  const name = at > 0 ? value.slice(0, at).trim() : ''
+  const audio = at > 0 ? value.slice(at + 1).trim() : ''
+  if (!name || !audio) throw new CliError(`Expected name:audio (the voice name, a colon, then a URL or output id), got "${value}".`, EXIT.USAGE)
+  return [...previous, { name, audio }]
+}
+
 /** Collect a repeatable option whose every value is a JSON object. */
 export function collectJson(value: string, previous: object[] = []): object[] {
   const parsed = toJson(value)

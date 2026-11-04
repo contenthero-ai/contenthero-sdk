@@ -140,7 +140,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeInputModes, describeInputRules, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -2288,10 +2288,7 @@ export function platformResult(p: PlatformSchema): CallToolResult {
 /** Render the reference-addressing guidance (how to tag references in the prompt). */
 function promptReferenceLines(pr: ModelInfo['promptReferences']): Array<string | null> {
   if (!pr || pr.scheme === 'none') return []
-  const tokens = pr.inputs
-    .filter((i) => i.token)
-    .map((i) => `${i.token}${i.max > 1 ? ` (up to ${i.max})` : ''}`)
-    .join(', ')
+  const tokens = describePromptReferenceTags(pr.inputs).join(', ')
   return [
     '',
     `Referencing (${pr.scheme}${pr.honored ? ', bound' : ', positional'}):`,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Contract sync (fdfb327513b5): `generate_video` `keyframes`, `voices` and `keepOriginalSound`.
+- `describePromptReferenceTags`: the registry's prompt tags, one wording for the MCP and the CLI.
 - Contract sync: `klingElements[].video` and `klingElements[].voice` on `generate_video`.
 - `References.keyframes` and `References.voices` (`ReferenceVoice`: name and audio), `ReferenceKlingElement.video` and `.voice`.
 - `describeInputModes` (marks modes the registry declares exclusive), `describeInputRules` (keyframes, voices, video subjects, shared input budget, frame count by duration, name rules, declared settings) and, in `describeInputLimits`, the video pool, the reference video length and what a video subject must be. One wording for the MCP and the CLI.

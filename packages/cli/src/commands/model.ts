@@ -11,7 +11,7 @@ import type { Command } from 'commander'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { describeInputLimits, describeInputModes, describeInputRules, type ModelInfo } from '@contenthero/sdk'
+import { describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, type ModelInfo } from '@contenthero/sdk'
 
 const CONTENT_TYPES = ['image', 'video', 'audio'] as const
 type ContentType = (typeof CONTENT_TYPES)[number]
@@ -108,6 +108,9 @@ export function registerModel(program: Command): void {
           ...(enabledFeatures.length ? [['Features', enabledFeatures.join(', ')] as [string, string]] : []),
           ...(model.promptReferences && model.promptReferences.scheme !== 'none'
             ? [['Referencing', `${model.promptReferences.scheme}: ${model.promptReferences.instruction}`] as [string, string]]
+            : []),
+          ...(model.promptReferences && describePromptReferenceTags(model.promptReferences.inputs).length
+            ? [['Reference tags', describePromptReferenceTags(model.promptReferences.inputs).join(', ')] as [string, string]]
             : []),
           ...(model.boardTypes?.length
             ? [['Board types', model.boardTypes.map((t) => `${t.boardType} (${t.summary})`).join(', ')] as [string, string]]

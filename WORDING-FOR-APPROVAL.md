@@ -268,6 +268,21 @@ Status: PROPOSED, awaiting Taylan. Reason for all of it: Kling 4.0 takes video s
 - "reserved names, taken by the model's own tags: <patterns>" (namedInputs.reservedNamePatterns).
 - "setting <key> (<label>): toggle, default <value> (applies while a reference video is attached)" (declared settings).
 
-## Not yet written (waiting for the app contract to declare them)
+## Flat generate_video inputs (contract text, written in the app, vendored by contract:sync)
 
-Flat generate_video inputs `keyframes`, `voices`, `keepOriginalSound` and their CLI flags and help text. Their wording comes from the contract, as the other inputs' does.
+- `keyframes`: "Middle frames between the first and last frame, in order, for models that take them (URL or output id). They need a startFrame."
+- `voices`: "Named voices, each addressable in the prompt as @name, on models that take them."
+  - `voices[].name`: "The voice name, addressed in the prompt as @name. It must follow the model's naming rules (get_model)."
+  - `voices[].audio`: "The audio file the model speaks this voice with (URL or output id)."
+- `keepOriginalSound`: "On a model that offers it, with a reference video: keep that video's own sound in the result. get_model lists the model's settings and when each applies."
+
+## CLI help for them
+
+- `--keyframe <urlOrId>`: "middle frame between the first and last, in order (URL or output id); repeatable; needs --start-frame"
+- `--voice <name:urlOrId>`: "a named voice, addressed in the prompt as @name, with the audio it speaks with (URL or output id); repeatable"
+- `--keep-original-sound`: "on a model that offers it, with a reference video: keep that video's own sound in the result"
+- Error for a malformed voice: "Expected name:audio (the voice name, a colon, then a URL or output id), got \"<value>\"."
+
+## Reference tags in `model get`
+
+- Row "Reference tags" (CLI), same list as the MCP's "tokens:" line: each tag the registry declares, with "(up to N)" when more than one. Written once in `describePromptReferenceTags`.

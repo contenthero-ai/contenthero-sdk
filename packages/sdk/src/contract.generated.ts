@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "a657665e4d6430df9d9b71b7851892607e136d23a0c1c42b9302bf021b4c3089"
+export const AGENT_CONTRACT_VERSION = "fdfb327513b5a4aa13e5df619173f710fd3f4895113645af50371167c6fa99fb"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -329,8 +329,19 @@ export const AGENT_CONTRACT = {
             "description": "Video edit only, on models that offer it: keep the input video's full length instead of a set duration. Charged for that length.",
             "type": "boolean"
           },
+          "keepOriginalSound": {
+            "description": "On a model that offers it, with a reference video: keep that video's own sound in the result. get_model lists the model's settings and when each applies.",
+            "type": "boolean"
+          },
+          "keyframes": {
+            "description": "Middle frames between the first and last frame, in order, for models that take them (URL or output id). They need a startFrame.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "klingElements": {
-            "description": "Kling elements: each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Only for models that take them (get_model promptReferences, named_tag scheme). Requires a startFrame.",
+            "description": "Kling elements: each is a saved Kling element ({ klingElementId }) or an inline group ({ name, description, images }), addressable in the prompt as @name. Only for models that take them (get_model promptReferences, named_tag scheme). A name must follow the naming rules get_model gives for the model; whether a startFrame is required or refused beside them follows the input modes get_model describes.",
             "items": {
               "additionalProperties": false,
               "properties": {
@@ -630,6 +641,28 @@ export const AGENT_CONTRACT = {
           "startFrame": {
             "description": "First frame: an image URL or a previous output id (e.g. \"<id>-2\") to chain (e.g. animate an image you just generated).",
             "type": "string"
+          },
+          "voices": {
+            "description": "Named voices, each addressable in the prompt as @name, on models that take them.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "audio": {
+                  "description": "The audio file the model speaks this voice with (URL or output id).",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "The voice name, addressed in the prompt as @name. It must follow the model's naming rules (get_model).",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "audio",
+                "name"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -7668,7 +7701,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "a657665e4d6430df9d9b71b7851892607e136d23a0c1c42b9302bf021b4c3089",
+  "version": "fdfb327513b5a4aa13e5df619173f710fd3f4895113645af50371167c6fa99fb",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7960,7 +7993,7 @@ export type ContractToolName = (typeof CONTRACT_TOOL_NAMES)[number]
 /** The input of every tool, as the contract declares it. */
 export interface ToolInputs {
   generate_image: { aspectRatio?: string; avatarId?: string; getCost?: boolean; modelId: string; numImages?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceImages?: Array<string>; resolution?: string }
-  generate_video: { aspectRatio?: string; audioEnabled?: boolean; duration?: number; endFrame?: string; getCost?: boolean; inputMode?: string; keepInputLength?: boolean; klingElements?: Array<{ description?: string; images?: Array<string>; klingElementId?: string; name?: string; video?: string; voice?: string }>; modelId: string; multiShot?: boolean; negativePrompt?: string; numGenerations?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceAudio?: Array<string>; referenceImages?: Array<string>; referenceVideos?: Array<string>; resolution?: string; shots?: Array<{ duration: number; prompt: string }>; startFrame?: string }
+  generate_video: { aspectRatio?: string; audioEnabled?: boolean; duration?: number; endFrame?: string; getCost?: boolean; inputMode?: string; keepInputLength?: boolean; keepOriginalSound?: boolean; keyframes?: Array<string>; klingElements?: Array<{ description?: string; images?: Array<string>; klingElementId?: string; name?: string; video?: string; voice?: string }>; modelId: string; multiShot?: boolean; negativePrompt?: string; numGenerations?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceAudio?: Array<string>; referenceImages?: Array<string>; referenceVideos?: Array<string>; resolution?: string; shots?: Array<{ duration: number; prompt: string }>; startFrame?: string; voices?: Array<{ audio: string; name: string }> }
   generate_audio: { compositionPlan?: { chunks: Array<{ conditionStrength?: "low" | "medium" | "high" | "xhigh"; conditioningRef?: { endMs: number; source: string; startMs: number }; contextAdherence?: "low" | "medium" | "high"; durationMs: number; negativeStyles?: Array<string>; positiveStyles: Array<string>; text: string } | { endMs: number; source: string; startMs: number }> }; durationSeconds?: number; getCost?: boolean; modelId: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; promptInfluence?: number; seed?: number; storeForInpainting?: boolean; text?: string; voiceId?: string; voiceName?: string; withTimestamps?: boolean }
   generate_board: { avatarId?: string; boardName?: string; boardType: string; getCost?: boolean; numImages?: number; prompt?: string; referenceImages?: Array<string> }
   generate_lip_sync: { audioDurationSeconds?: number; audioUrl?: string; getCost?: boolean; imageUrl: string; modelId: string; motionPrompt?: string; resolution?: string; script?: string; voiceId?: string; voiceName?: string }

@@ -20,7 +20,7 @@ import { optionFromContract, type GenerateRequest, type GenerateBoardRequest } f
 import { makeClient } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
-import { collect, collectJson, toFloat, toInt, toJson } from '../args.js'
+import { collect, collectJson, toVoice, toFloat, toInt, toJson } from '../args.js'
 
 
 
@@ -126,9 +126,12 @@ export function registerGenerate(program: Command): void {
       .option('--negative <text>', 'what to avoid (models that support it)')
       .option('--start-frame <urlOrId>', 'first frame (image URL or output id)')
       .option('--end-frame <urlOrId>', 'last frame (image URL or output id)')
+      .option('--keyframe <urlOrId>', 'middle frame between the first and last, in order (URL or output id); repeatable; needs --start-frame', collect)
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
       .option('--ref-video <urlOrId>', 'reference video (URL or output id); repeatable', collect)
       .option('--ref-audio <urlOrId>', 'reference audio (URL or output id); repeatable', collect)
+      .option('--voice <name:urlOrId>', 'a named voice, addressed in the prompt as @name, with the audio it speaks with (URL or output id); repeatable', toVoice)
+      .option('--keep-original-sound', "on a model that offers it, with a reference video: keep that video's own sound in the result")
       .option('--kling-element <id>', 'saved Kling element id (Kling 3.0, @name in prompt); repeatable', collect)
       .option('--inline-kling-element <json>', 'define a Kling element in the call: a JSON object with name and any of description, images, video, voice (each a URL or output id; model get says what the model takes); repeatable', collectJson)
       .option('--multi-shot', 'multi-shot with the cuts planned by the model, on a model whose shots include auto (model get); to write each shot yourself, pass --shots instead')
@@ -142,6 +145,7 @@ export function registerGenerate(program: Command): void {
     const parameters: Record<string, unknown> = {}
     if (wantMultiShot) parameters.multiShot = true
     if (typeof opts.inputMode === 'string') parameters.inputMode = opts.inputMode
+    if (opts.keepOriginalSound === true) parameters.keepOriginalSound = true
     if (klingMultiShot) parameters.shots = shots
     const request = compact<GenerateRequest>({
       contentType: 'video',
@@ -161,6 +165,8 @@ export function registerGenerate(program: Command): void {
       references: references({
         startFrame: opts.startFrame as string | undefined,
         endFrame: opts.endFrame as string | undefined,
+        keyframes: opts.keyframe as string[] | undefined,
+        voices: opts.voice as Array<{ name: string; audio: string }> | undefined,
         images: opts.ref as string[] | undefined,
         videos: opts.refVideo as string[] | undefined,
         audio: opts.refAudio as string[] | undefined,

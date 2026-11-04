@@ -124,3 +124,27 @@ test('help for generate video shows --inline-kling-element', () => {
   const video = buildProgram().commands.find((c) => c.name() === 'generate')!.commands.find((c) => c.name() === 'video')!
   assert.match(video.helpInformation(), /--inline-kling-element <json>/)
 })
+
+test('generate video --keyframe, --voice and --keep-original-sound each reach the request body', async () => {
+  const r = await run('generate', 'video', '@host talks', '-m', 'kling-4.0', '--cost',
+    '--start-frame', 'https://cdn/s.png',
+    '--keyframe', 'https://cdn/k1.png', '--keyframe', 'abc123-2',
+    '--voice', 'host:https://cdn/host.mp3', '--voice', 'narrator:def456',
+    '--keep-original-sound')
+  const references = r.body?.references as Record<string, unknown>
+  assert.deepEqual(references.keyframes, ['https://cdn/k1.png', 'abc123-2'])
+  assert.deepEqual(references.voices, [{ name: 'host', audio: 'https://cdn/host.mp3' }, { name: 'narrator', audio: 'def456' }])
+  assert.deepEqual(r.body?.parameters, { keepOriginalSound: true })
+})
+
+test('without the Kling 4.0 flags the request carries none of their fields', async () => {
+  const r = await run('generate', 'video', 'p', '-m', 'kling-4.0', '--cost')
+  assert.equal(r.body?.references, undefined)
+  assert.equal(r.body?.parameters, undefined)
+})
+
+test('--voice needs a name, a colon and the audio', async () => {
+  for (const bad of ['host', ':https://cdn/a.mp3', 'host:']) {
+    await assert.rejects(run('generate', 'video', 'p', '-m', 'kling-4.0', '--cost', '--voice', bad), /Expected name:audio/)
+  }
+})
