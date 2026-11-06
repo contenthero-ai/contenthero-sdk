@@ -1967,3 +1967,39 @@ test('video controls serialize through submission and cost preview without defau
     }
   }
 })
+
+test('lip sync sources and voice fields serialize unchanged for submission and preview', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { creditsEstimate: 1 } }])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  for (const source of [{ images: ['portrait'] }, { videos: ['source-video'] }]) {
+    for (const voice of [{ references: { ...source, audio: ['speech'] }, durationSeconds: 4.2 }, { references: source, text: 'Hello', voiceId: 'voice', voiceName: 'Speaker' }]) {
+      const request: import('./types.js').GenerateRequest = { modelId: 'declared-model', contentType: 'video', kind: 'lip-sync', prompt: 'Smile', resolution: '720p', ...voice }
+      for (const cost of [false, true]) {
+        if (cost) await client.estimateCost(request)
+        else await client.generate(request)
+        const { outputId, getCost, ...body } = JSON.parse(String(calls.at(-1)?.init?.body))
+        assert.equal(getCost, cost ? true : undefined)
+        assert.deepEqual(body, request)
+      }
+    }
+  }
+})
+
+test('lip sync missing and wrong source refusals preserve server text on both paths', async () => {
+  const cases = [
+    { references: undefined, message: "model 'video-model' requires a base video in references.videos" },
+    { references: { images: ['portrait'] }, message: "model 'video-model' dubs a video and does not accept an image; pass a video URL in references.videos" },
+  ]
+  for (const { references, message } of cases) {
+    const { fetch } = stubFetch([{ status: 400, body: { error: message } }])
+    const client = new ContentHero({ apiKey: 'k', fetch })
+    const request = { modelId: 'video-model', kind: 'lip-sync' as const, references, text: 'Hello', voiceId: 'voice' }
+    for (const cost of [false, true]) {
+      await assert.rejects(cost ? client.estimateCost(request) : client.generate(request), (err: unknown) => {
+        assert.ok(err instanceof ValidationError)
+        assert.equal(err.message, message)
+        return true
+      })
+    }
+  }
+})

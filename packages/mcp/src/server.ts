@@ -1523,7 +1523,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           resolution: args.resolution,
           durationSeconds: args.audioDurationSeconds,
           references: buildReferences({
-            images: [args.imageUrl],
+            images: args.imageUrl ? [args.imageUrl] : undefined,
+            videos: args.referenceVideos,
             audio: args.audioUrl ? [args.audioUrl] : undefined,
           }),
         })

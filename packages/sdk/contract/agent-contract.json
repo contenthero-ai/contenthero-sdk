@@ -612,7 +612,7 @@
             "type": "array"
           },
           "referenceVideos": {
-            "description": "Reference videos: each a URL or a previous output id to chain.",
+            "description": "Video references (URL or output id).",
             "items": {
               "type": "string"
             },
@@ -1131,7 +1131,7 @@
     },
     {
       "description": {
-        "mcp": "Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
+        "mcp": "Synchronize speech to a portrait image or an existing video, according to the selected model. get_model declares which source the model takes: imageUrl for a portrait or referenceVideos for a video. Provide that source plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
       },
       "group": "generate",
       "inputSchema": {
@@ -1150,7 +1150,7 @@
             "type": "boolean"
           },
           "imageUrl": {
-            "description": "The portrait to animate (the speaking subject): an image URL or a previous output id (e.g. \"<id>-1\") to chain.",
+            "description": "The portrait to animate, as an image URL or a previous output id. Required for models that take an image; get_model declares the source the model takes.",
             "type": "string"
           },
           "modelId": {
@@ -1161,6 +1161,13 @@
           "motionPrompt": {
             "description": "Optional motion / expression hint for the animation.",
             "type": "string"
+          },
+          "referenceVideos": {
+            "description": "Video references (URL or output id).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "resolution": {
             "description": "e.g. 480p, 720p, 1080p. Model-dependent.",
@@ -1181,7 +1188,6 @@
           }
         },
         "required": [
-          "imageUrl",
           "modelId"
         ],
         "type": "object"
@@ -7720,7 +7726,7 @@
       "scopes": []
     }
   ],
-  "version": "72ba5e33922c5c3bacb3ac8cd963b56235b1cd2ba262269697e04398fb5adb4f",
+  "version": "1bd0add25e44d65854e8803c7809dbe5154d668d7989af5bb7bf1db5f1ede14a",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

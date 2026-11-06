@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "72ba5e33922c5c3bacb3ac8cd963b56235b1cd2ba262269697e04398fb5adb4f"
+export const AGENT_CONTRACT_VERSION = "1bd0add25e44d65854e8803c7809dbe5154d668d7989af5bb7bf1db5f1ede14a"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -655,7 +655,7 @@ export const AGENT_CONTRACT = {
             "type": "array"
           },
           "referenceVideos": {
-            "description": "Reference videos: each a URL or a previous output id to chain.",
+            "description": "Video references (URL or output id).",
             "items": {
               "type": "string"
             },
@@ -1174,7 +1174,7 @@ export const AGENT_CONTRACT = {
     },
     {
       "description": {
-        "mcp": "Animate a portrait image so the subject speaks. Provide imageUrl (the face) plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
+        "mcp": "Synchronize speech to a portrait image or an existing video, according to the selected model. get_model declares which source the model takes: imageUrl for a portrait or referenceVideos for a video. Provide that source plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
       },
       "group": "generate",
       "inputSchema": {
@@ -1193,7 +1193,7 @@ export const AGENT_CONTRACT = {
             "type": "boolean"
           },
           "imageUrl": {
-            "description": "The portrait to animate (the speaking subject): an image URL or a previous output id (e.g. \"<id>-1\") to chain.",
+            "description": "The portrait to animate, as an image URL or a previous output id. Required for models that take an image; get_model declares the source the model takes.",
             "type": "string"
           },
           "modelId": {
@@ -1204,6 +1204,13 @@ export const AGENT_CONTRACT = {
           "motionPrompt": {
             "description": "Optional motion / expression hint for the animation.",
             "type": "string"
+          },
+          "referenceVideos": {
+            "description": "Video references (URL or output id).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "resolution": {
             "description": "e.g. 480p, 720p, 1080p. Model-dependent.",
@@ -1224,7 +1231,6 @@ export const AGENT_CONTRACT = {
           }
         },
         "required": [
-          "imageUrl",
           "modelId"
         ],
         "type": "object"
@@ -7763,7 +7769,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "72ba5e33922c5c3bacb3ac8cd963b56235b1cd2ba262269697e04398fb5adb4f",
+  "version": "1bd0add25e44d65854e8803c7809dbe5154d668d7989af5bb7bf1db5f1ede14a",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -8058,7 +8064,7 @@ export interface ToolInputs {
   generate_video: { aspectRatio?: string; audioEnabled?: boolean; draft?: boolean; duration?: number; endFrame?: string; getCost?: boolean; inputMode?: string; keepInputLength?: boolean; keepOriginalSound?: boolean; keyframes?: Array<string>; klingElements?: Array<{ description?: string; images?: Array<string>; klingElementId?: string; name?: string; video?: string; voice?: string }>; modelId: string; multiShot?: boolean; negativePrompt?: string; numGenerations?: number; outputFormat?: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceAudio?: Array<string>; referenceImages?: Array<string>; referenceVideos?: Array<string>; resolution?: string; returnLastFrame?: boolean; shots?: Array<{ duration: number; prompt: string }>; startFrame?: string; upgradeFromOutputId?: string; upgradeSlot?: number; voices?: Array<{ audio: string; name: string }> }
   generate_audio: { compositionPlan?: { chunks: Array<{ conditionStrength?: "low" | "medium" | "high" | "xhigh"; conditioningRef?: { endMs: number; source: string; startMs: number }; contextAdherence?: "low" | "medium" | "high"; durationMs: number; negativeStyles?: Array<string>; positiveStyles: Array<string>; text: string } | { endMs: number; source: string; startMs: number }> }; durationSeconds?: number; getCost?: boolean; modelId: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; promptInfluence?: number; seed?: number; storeForInpainting?: boolean; text?: string; voiceId?: string; voiceName?: string; withTimestamps?: boolean }
   generate_board: { avatarId?: string; boardName?: string; boardType: string; getCost?: boolean; numImages?: number; prompt?: string; referenceImages?: Array<string> }
-  generate_lip_sync: { audioDurationSeconds?: number; audioUrl?: string; getCost?: boolean; imageUrl: string; modelId: string; motionPrompt?: string; resolution?: string; script?: string; voiceId?: string; voiceName?: string }
+  generate_lip_sync: { audioDurationSeconds?: number; audioUrl?: string; getCost?: boolean; imageUrl?: string; modelId: string; motionPrompt?: string; referenceVideos?: Array<string>; resolution?: string; script?: string; voiceId?: string; voiceName?: string }
   upscale: { durationSeconds?: number; factor: string; getCost?: boolean; modelId: string; sourceUrl: string }
   edit_audio: { clipIds?: Array<string>; durationSeconds?: number; getCost?: boolean; inPlace?: boolean; modelId?: string; operation?: "isolate" | "enhance" | "split"; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string }; playheadFrame?: number; projectId?: string; sourceUrl?: string }
   transcribe: { audioUrl?: string; contentId?: string; diarize?: boolean; getCost?: boolean; languageCode?: string; slide?: number; videoUrl?: string }

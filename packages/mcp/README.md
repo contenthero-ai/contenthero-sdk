@@ -73,4 +73,4 @@ Discover the model declaration before generating. Model lists and details includ
 
 `generate_video` accepts `draft`, `upgradeFromOutputId`, `upgradeSlot`, `outputFormat` and `returnLastFrame`. Draft and upgrade output options map to the API parameters bag. Source identifiers remain top level. Pass `getCost` to preview the same request without generating.
 
-The current lip sync tool contract requires a portrait and declares no video input. Video dubbing models can appear in discovery, but their required video cannot be supplied through this tool until the app contract exposes it.
+For `generate_lip_sync`, read `get_model` first. Supply `imageUrl` for a model declaring `singleImage`, or `referenceVideos` for a model declaring `singleVideo`. Add `audioUrl`, or `script` with `voiceId`. Pass `getCost` to preview the same request. The server validates the source required by the model.

@@ -134,7 +134,13 @@ export function describeInputRules(capabilities: Record<string, unknown> | null 
     if (parts.length) out.push(`names of subjects and voices (one namespace): ${parts.join('; ')}`)
     if (named.reservedNamePatterns?.length) out.push(`reserved names, taken by the model's own tags: ${named.reservedNamePatterns.join(', ')}`)
   }
-  if (Array.isArray(c.inputTypes)) out.push(`inputs: ${c.inputTypes.join(', ')}`)
+  if (Array.isArray(c.inputTypes)) {
+    out.push(`inputs: ${c.inputTypes.join(', ')}`)
+    if (c.kind === 'lip-sync') {
+      if (c.inputTypes.includes('singleImage')) out.push('visual source: imageUrl (portrait)')
+      if (c.inputTypes.includes('singleVideo')) out.push('visual source: referenceVideos (video)')
+    }
+  }
   const upgrade = c.draftUpgrade as ModelCapabilities['draftUpgrade']
   if (upgrade) out.push(`draft upgrade: ${upgrade.resolution}; available for ${upgrade.validForSeconds}s after creation`)
   const settings = c.settings as ModelCapabilities['settings']

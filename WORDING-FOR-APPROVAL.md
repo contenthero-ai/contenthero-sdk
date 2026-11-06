@@ -359,3 +359,48 @@ SDK request comments added:
 3. "Enable the model's declared Draft setting and resolution."
 4. "Output format for a draft upgrade, validated by the server."
 5. "Also return the last frame of a draft upgrade."
+
+
+## Lip sync video sources
+
+Status: approved by Taylan in advance on November 6, 2026, as recorded in the brief.
+
+The MCP tool description and CLI command description read the canonical contract verbatim:
+
+> Synchronize speech to a portrait image or an existing video, according to the selected model. get_model declares which source the model takes: imageUrl for a portrait or referenceVideos for a video. Provide that source plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress.
+
+The changed image description, new video input, and CLI option descriptions read the following canonical text. The video description also replaces generate_video.referenceVideos text because both tools now reuse the REST declaration.
+
+1. `modelId` (`--model`): "The model id: a lip-sync model. list_models (contentType video) names them; get_model gives one model's resolutions and inputs."
+2. `imageUrl` (`--image`): "The portrait to animate, as an image URL or a previous output id. Required for models that take an image; get_model declares the source the model takes."
+3. `referenceVideos` (`--ref-video`): "Video references (URL or output id)."
+4. `audioUrl` (`--audio`): "An existing speech clip: an audio URL or a previous output id. Use this OR script + voiceId."
+5. `script` (`--script`): "Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl. Before writing directions into the script, read the speech model's promptGuide with get_model."
+6. `voiceId` (`--voice`): "The voice to speak the script (list_voices names them; required with script)."
+7. `voiceName` (`--voice-name`): "Human-readable voice name (display only)."
+8. `motionPrompt` (`--motion`): "Optional motion / expression hint for the animation."
+9. `resolution` (`--resolution`): "e.g. 480p, 720p, 1080p. Model-dependent."
+10. `audioDurationSeconds` (`--audio-duration`): "Length of audioUrl in seconds (audio mode only; improves cost accuracy)."
+
+Reason: the source depends on the model; CLI help now shares the contract wording for every lip sync input. Existing voice and resolution meanings remain the contract meanings.
+
+Shared discovery additions, conditional on kind lip sync and the declared inputTypes:
+
+1. "visual source: imageUrl (portrait)" for singleImage.
+2. "visual source: referenceVideos (video)" for singleVideo.
+
+Reason: callers can identify the tool field from the model declaration on list and detail surfaces. No model identifier or limit is embedded.
+
+SDK References.videos comment:
+
+> Video references, including a source video for lip sync (URL or output id).
+
+Reason: the shared REST reference bucket also carries the source video.
+
+Package guide replacements:
+
+1. sdk: For lip sync, read the model declaration first. Supply a portrait in `references.images` when it declares `singleImage`, or a source video in `references.videos` when it declares `singleVideo`. Supply existing speech in `references.audio`, or use `text` with `voiceId`. `estimateCost` previews the same request. The server validates the source required by the model.
+2. mcp: For `generate_lip_sync`, read `get_model` first. Supply `imageUrl` for a model declaring `singleImage`, or `referenceVideos` for a model declaring `singleVideo`. Add `audioUrl`, or `script` with `voiceId`. Pass `getCost` to preview the same request. The server validates the source required by the model.
+3. cli: For `generate lip-sync`, read `model get` first. Supply `--image` for a model declaring `singleImage`, or `--ref-video` for a model declaring `singleVideo`. Add `--audio`, or `--script` with `--voice`. Pass `--cost` to preview the same request. The server validates the source required by the model.
+
+Reason: the app contract now exposes the video source, so the previous blocked feature note no longer applies.

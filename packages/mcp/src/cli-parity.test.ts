@@ -204,7 +204,7 @@ const ALIASES: Record<string, Record<string, string>> = {
   generate_board: { boardType: '--type', boardName: '--name' },
   generate_video: { audioEnabled: '--audio', negativePrompt: '--negative', referenceVideos: '--ref-video', referenceAudio: '--ref-audio' },
   edit_audio: { clipIds: '--clips' },
-  generate_lip_sync: { motionPrompt: '--motion' },
+  generate_lip_sync: { motionPrompt: '--motion', referenceVideos: '--ref-video' },
   create_avatar: { defaultVoiceId: '--voice' },
   update_avatar: { defaultVoiceId: '--voice' },
   create_brand_kit: { brandColors: '--color', typography: '--title-font' },

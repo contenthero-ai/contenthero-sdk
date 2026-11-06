@@ -4,7 +4,7 @@
  *   generate video     text-to-video, frame conditioning, references
  *   generate audio     ElevenLabs TTS / music / sfx (synchronous)
  *   generate board     a Reference Board (dense multi-panel sheet)
- *   generate lip-sync  animate a portrait to speak
+ *   generate lip-sync  synchronize speech to a portrait or video
  *
  * Request shaping mirrors the MCP intent tools so the CLI, SDK, and MCP submit
  * identical payloads. Shared async flags (--cost / --wait / --no-wait /
@@ -16,7 +16,7 @@
  */
 
 import { Option, type Command } from 'commander'
-import { optionFromContract, type GenerateRequest, type GenerateBoardRequest } from '@contenthero/sdk'
+import { toolDescription, optionFromContract, type GenerateRequest, type GenerateBoardRequest } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { CliError, EXIT } from '../errors.js'
@@ -75,6 +75,8 @@ const image = (input: string): string => optionFromContract('generate_image', in
 
 /** A music flag's words, read from the agent contract's generate_audio input it mirrors. */
 const music = (input: string): string => optionFromContract('generate_audio', input).description
+
+const lipSync = (input: string): string => optionFromContract('generate_lip_sync', input).description
 
 export function registerGenerate(program: Command): void {
   const generate = program
@@ -282,16 +284,17 @@ export function registerGenerate(program: Command): void {
   addRunFlags(
     generate
       .command('lip-sync')
-      .description('Animate a portrait so the subject speaks (image + audio or script)')
-      .requiredOption('-m, --model <id>', 'lip-sync model id (see `contenthero model list --type video`)')
-      .requiredOption('--image <urlOrId>', 'portrait to animate (image URL or output id)')
-      .option('--audio <urlOrId>', 'existing speech clip (audio URL or output id). Use this OR --script + --voice')
-      .option('--script <text>', 'text for the subject to speak (requires --voice)')
-      .option('--voice <id>', 'ElevenLabs voice id to speak the script')
-      .option('--voice-name <name>', 'human-readable voice name (display only)')
-      .option('--motion <text>', 'optional motion / expression hint')
-      .option('--resolution <res>', 'resolution, e.g. 480p, 720p, 1080p (model-dependent)')
-      .option('--audio-duration <seconds>', 'length of --audio in seconds (improves cost accuracy)', toFloat),
+      .description(toolDescription('generate_lip_sync'))
+      .requiredOption('-m, --model <id>', lipSync('modelId'))
+      .option('--image <urlOrId>', lipSync('imageUrl'))
+      .option('--ref-video <urlOrId>', lipSync('referenceVideos'), collect)
+      .option('--audio <urlOrId>', lipSync('audioUrl'))
+      .option('--script <text>', lipSync('script'))
+      .option('--voice <id>', lipSync('voiceId'))
+      .option('--voice-name <name>', lipSync('voiceName'))
+      .option('--motion <text>', lipSync('motionPrompt'))
+      .option('--resolution <res>', lipSync('resolution'))
+      .option('--audio-duration <seconds>', lipSync('audioDurationSeconds'), toFloat),
   ).action(async (opts: Record<string, unknown>, command: Command) => {
     if (!opts.audio && !(opts.script && opts.voice)) {
       throw new CliError(
@@ -311,7 +314,8 @@ export function registerGenerate(program: Command): void {
       resolution: opts.resolution as string | undefined,
       durationSeconds: opts.audioDuration as number | undefined,
       references: references({
-        images: [opts.image as string],
+        images: opts.image ? [opts.image as string] : undefined,
+        videos: opts.refVideo as string[] | undefined,
         audio: opts.audio ? [opts.audio as string] : undefined,
       }),
     })

@@ -143,4 +143,4 @@ Discover the model declaration before generating. Model lists and details includ
 
 `generate video` accepts `--draft`, `--upgrade-from-output-id`, `--upgrade-slot`, `--output-format` and `--return-last-frame`. Omit the prompt and shot settings for an upgrade. Omitting the slot selects the first output. Add `--cost` to preview the same request without generating.
 
-The current lip sync tool contract requires a portrait and declares no video input. Video dubbing models can appear in discovery, but their required video cannot be supplied through this tool until the app contract exposes it.
+For `generate lip-sync`, read `model get` first. Supply `--image` for a model declaring `singleImage`, or `--ref-video` for a model declaring `singleVideo`. Add `--audio`, or `--script` with `--voice`. Pass `--cost` to preview the same request. The server validates the source required by the model.

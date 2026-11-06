@@ -6600,3 +6600,64 @@ test('video discovery prints declared toggles, upgrades, modes and video inputs 
     }
   } finally { await mcp.close() }
 })
+
+test('lip sync forwards image or video sources and every voice field on submission and preview', async () => {
+  for (const cost of [false, true]) {
+    for (const [source, references] of [
+      [{ imageUrl: 'portrait' }, { images: ['portrait'] }],
+      [{ referenceVideos: ['source-video'] }, { videos: ['source-video'] }],
+    ]) {
+      for (const [voice, expected] of [
+        [{ audioUrl: 'speech', audioDurationSeconds: 4.2 }, { durationSeconds: 4.2, references: { ...references, audio: ['speech'] } }],
+        [{ script: 'Hello', voiceId: 'voice', voiceName: 'Speaker' }, { text: 'Hello', voiceId: 'voice', voiceName: 'Speaker', references }],
+      ]) {
+        let captured
+        let called
+        const mcp = await connect(fakeClient({
+          generate: async request => { called = 'generate'; captured = request; return { outputId: 'lip', status: 'processing' } },
+          estimateCost: async request => { called = 'estimateCost'; captured = request; return { creditsEstimate: 1 } },
+        }))
+        try {
+          const result = await mcp.callTool({ name: 'generate_lip_sync', arguments: { modelId: 'declared-model', ...source, ...voice, motionPrompt: 'Smile', resolution: '720p', getCost: cost } })
+          assert.ok(!result.isError, JSON.stringify(result))
+          assert.equal(called, cost ? 'estimateCost' : 'generate')
+          assert.deepEqual(captured, { contentType: 'video', kind: 'lip-sync', modelId: 'declared-model', prompt: 'Smile', resolution: '720p', ...expected })
+        } finally { await mcp.close() }
+      }
+    }
+  }
+})
+
+test('lip sync server refusals retain missing or wrong source text on both paths', async () => {
+  for (const [source, message] of [
+    [{}, "model 'video-model' requires a base video in references.videos"],
+    [{ imageUrl: 'portrait' }, "model 'video-model' dubs a video and does not accept an image; pass a video URL in references.videos"],
+  ]) {
+    for (const cost of [false, true]) {
+      let reached = false
+      const refuse = async () => { reached = true; throw new ValidationError(message) }
+      const mcp = await connect(fakeClient({ generate: refuse, estimateCost: refuse }))
+      try {
+        const result = await mcp.callTool({ name: 'generate_lip_sync', arguments: { modelId: 'video-model', audioUrl: 'speech', ...source, getCost: cost } })
+        assert.ok(reached)
+        assert.equal(result.isError, true)
+        assert.equal(result.content.find(c => c.type === 'text')?.text, message)
+      } finally { await mcp.close() }
+    }
+  }
+})
+
+test('lip sync discovery prints the declared visual source on list and detail', async () => {
+  const models = ['singleImage', 'singleVideo'].map((input, i) => ({ ...cap(`discovered-${i}`, 'video', 'lip-sync', 'video'), capabilities: { kind: 'lip-sync', inputTypes: [input] } }))
+  const mcp = await connect(fakeClient({ listModels: async () => models, getModel: async id => models.find(m => m.modelId === id) }))
+  try {
+    const list = await mcp.callTool({ name: 'list_models', arguments: {} })
+    for (const [i, expected] of ['visual source: imageUrl (portrait)', 'visual source: referenceVideos (video)'].entries()) {
+      const detail = await mcp.callTool({ name: 'get_model', arguments: { modelId: models[i].modelId } })
+      for (const result of [list, detail]) {
+        assert.ok(!result.isError, JSON.stringify(result))
+        assert.ok(result.content.some(c => c.type === 'text' && c.text.includes(expected)))
+      }
+    }
+  } finally { await mcp.close() }
+})

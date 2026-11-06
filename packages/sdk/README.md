@@ -140,4 +140,4 @@ Discover the model declaration before generating. Model lists and details includ
 
 Use `parameters.draft` to request Draft. Upgrade with `upgradeFromOutputId` and optional `upgradeSlot`; omitting the slot selects the first output. Set upgrade output options through `parameters.outputFormat` and `parameters.returnLastFrame`. The top level `outputFormat` remains the image output control. `estimateCost` accepts the same request and runs nothing.
 
-The current lip sync tool contract requires a portrait and declares no video input. Video dubbing models can appear in discovery, but their required video cannot be supplied through this tool until the app contract exposes it.
+For lip sync, read the model declaration first. Supply a portrait in `references.images` when it declares `singleImage`, or a source video in `references.videos` when it declares `singleVideo`. Supply existing speech in `references.audio`, or use `text` with `voiceId`. `estimateCost` previews the same request. The server validates the source required by the model.

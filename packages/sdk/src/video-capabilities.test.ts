@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { ContentHero } from './client.js'
 import { describeInputRules } from './describe.js'
+import { toolInputSchema } from './contract.generated.js'
 
 const { models } = JSON.parse(readFileSync(new URL('./fixtures/video-controls.json', import.meta.url), 'utf8'))
 
@@ -17,4 +18,21 @@ test('SDK discovery preserves video declarations and describes declared upgrade 
       assert.match(text, /draft upgrade: 1080p; available for 604800s/)
     } else assert.match(text, /inputs: singleVideo, singleAudio, voiceId/)
   }
+})
+
+test('lip sync visual source wording follows declarations without model identifiers', () => {
+  for (const [input, expected] of [['singleImage', 'visual source: imageUrl (portrait)'], ['singleVideo', 'visual source: referenceVideos (video)']]) {
+    assert.ok(describeInputRules({ kind: 'lip-sync', inputTypes: [input] }).includes(expected))
+    assert.ok(!describeInputRules({ kind: 'generate', inputTypes: [input] }).includes(expected))
+  }
+  assert.ok(!describeInputRules({ kind: 'lip-sync' }).some(line => line.startsWith('visual source:')))
+})
+
+
+test('lip sync contract keeps model as the sole required input and reuses the video schema', () => {
+  const lip = toolInputSchema('generate_lip_sync')
+  assert.deepEqual(lip.required, ['modelId'])
+  assert.equal(lip.additionalProperties, false)
+  assert.deepEqual(lip.properties.referenceVideos, toolInputSchema('generate_video').properties.referenceVideos)
+  assert.equal(lip.properties.imageUrl.type, 'string')
 })

@@ -70,8 +70,8 @@ import {
 export interface References {
   /** Image references / image-to-image inputs (URL or output id). */
   images?: string[]
-  /** Video references, e.g. video-to-video models (URL or output id). */
-  videos?: string[]
+  /** Video references, including a source video for lip sync (URL or output id). */
+  videos?: ToolInput<'generate_lip_sync'>['referenceVideos']
   /** Audio references, e.g. lip-sync custom audio input (URL or output id). */
   audio?: string[]
   /** First frame for video models that accept one (URL or output id). */
