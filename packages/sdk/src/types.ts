@@ -438,8 +438,16 @@ export interface GenerateRequest {
   // Typed core (image / video)
   aspectRatio?: string
   resolution?: string
-  /** Quality mode for models that expose it separately (e.g. GPT Image). */
-  quality?: string
+  /** Quality mode declared by the model. */
+  quality?: ToolInput<'generate_image'>['quality']
+  /** Output format declared by the model. */
+  outputFormat?: ToolInput<'generate_image'>['outputFormat']
+  /** GIF frame count declared by the model. */
+  frameCount?: ToolInput<'generate_image'>['frameCount']
+  /** GIF frame duration in milliseconds. */
+  frameDurationMs?: ToolInput<'generate_image'>['frameDurationMs']
+  /** GIF frame pixel size declared by the model. */
+  frameSize?: ToolInput<'generate_image'>['frameSize']
   /** Number of images to produce (image models). */
   numImages?: number
   /** Number of variations to produce (video models). */
@@ -459,7 +467,7 @@ export interface GenerateRequest {
   references?: References
 
   /** Model-specific parameters passed through to the provider (long tail). */
-  parameters?: Record<string, unknown>
+  parameters?: Record<string, unknown> & { background?: ToolInput<'generate_image'>['background'] }
 
   // Audio (ElevenLabs)
   /** Text to speak (text-to-speech). */
@@ -2613,6 +2621,8 @@ export type ModelKind = 'generate' | 'upscale' | 'lip-sync' | 'voice'
  * validated server-side; the fields below are the stable ones clients reason
  * about.
  */
+interface ModelChoice { supported: string[]; default?: string; locked?: boolean; lockedValue?: string }
+
 export interface ModelCapabilities {
   kind: ModelKind
   outputType: 'image' | 'video' | 'audio' | 'text' | 'voice'
@@ -2623,6 +2633,29 @@ export interface ModelCapabilities {
    * beyond its request shape.
    */
   promptGuide?: string
+  quality?: ModelChoice
+  outputFormat?: ModelChoice
+  background?: ModelChoice
+  settings?: Array<{
+    key: string; label: string; shortLabel?: string; info?: string
+    appliesWhen?: 'speech' | 'referenceVideo' | 'gif'
+  } & (
+    { control: 'select'; default: string; options: Array<{ value: string; label: string }>; allowCustom?: boolean }
+    | { control: 'slider'; default: number; min: number; max: number; step: number; display?: string }
+    | { control: 'toggle'; default: boolean; resolutionWhenEnabled?: string }
+  )>
+  imageOutput?: {
+    editFormats: string[]
+    transparentFormats: string[]
+    gif?: {
+      frameCountKey: string; frameDurationKey: string; frameSizeKey?: string
+      sheet?: {
+        maxSide: number; maxPixels: number; maxAspect: number; multiple: number
+        packings: Array<{ min: number; max: number; columns: number; rows: number }>
+      }
+    }
+  }
+  modelParams?: Record<string, unknown>
   [key: string]: unknown
 }
 

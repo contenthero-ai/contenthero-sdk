@@ -129,3 +129,9 @@ contenthero schema get commands generate image  # just one command
 `4` timeout (the work was accepted but did not finish in time), `5` a limit refused it (credits, the monthly
 spend cap, storage, a plan limit; nothing ran and nothing was charged). In JSON mode a limit error also carries its
 `code` and ranked `actions`.
+
+## Image controls and discovery
+
+The existing `generate image` command accepts `--quality`, `--output-format`, `--background`, `--frame-count`, `--frame-duration-ms`, and `--frame-size`. Read `model list` and `model get <id>` for the selected model's current choices, defaults, conditions, format compatibility, and GIF sheet rules. `--json` retains the complete discovery response.
+
+The CLI reads the selected model when `--frame-count` is supplied, sending a number for a slider control and a string for a select control. Frame duration is an integer in milliseconds. Send GIF controls only with GIF output. Omitted flags stay omitted. Use `--cost` to preview the same request without generating. The server owns model validation and its refusal text is preserved.

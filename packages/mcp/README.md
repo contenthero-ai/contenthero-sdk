@@ -61,3 +61,7 @@ Images return in one turn (~15s). Video either returns inline or hands back an `
 ## How it works
 
 This server is a thin wrapper over [`@contenthero/sdk`](https://www.npmjs.com/package/@contenthero/sdk), which talks to the ContentHero `/api/v1` surface. Your API key resolves your account server-side; the server never sends a user id. Pricing is computed server-side.
+
+## Image controls and discovery
+
+The existing `generate_image` tool accepts `quality`, `outputFormat`, `background`, `frameCount`, `frameDurationMs`, and `frameSize`. Read `list_models` and `get_model` for each model's current choices, defaults, setting conditions, reference and transparency formats, and GIF sheet rules. Use numeric or string frame counts according to the declared control. Send GIF fields only for GIF output. `getCost` previews the same request without generating. Server refusals retain their specific message.

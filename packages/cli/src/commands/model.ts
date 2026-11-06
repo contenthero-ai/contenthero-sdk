@@ -48,8 +48,8 @@ export function registerModel(program: Command): void {
       const models = await client.listModels({ contentType: opts.type as ContentType | undefined })
       emit(models, ctx, (rows: ModelInfo[]) =>
         table(
-          ['MODEL', 'TYPE', 'KIND', 'NAME'],
-          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName]),
+          ['MODEL', 'TYPE', 'KIND', 'NAME', 'CONTROLS'],
+          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, describeInputRules(m.capabilities).join('; ')]),
         ),
       )
     })

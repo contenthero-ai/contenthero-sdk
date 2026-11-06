@@ -1,4 +1,4 @@
-import type { JobWait, AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentSlide, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
+import type { ModelCapabilities, JobWait, AccountIdNotFound, EmptyReason, AudioFacts, PlanLimitRefusal, ApplyEditorOpsResult, AudioMapAnswer, AudioMapSound, AudioMapSummary, AudioMapWindow, EvidenceSheet, Charge, CodeDiagnostic, ContentAnalysisCostEstimate, ContentVideo, ContentSlide, ContentVideoCuts, ContentVideos, DocumentFinding, EditorOpResult, ExportLoudness, GenerationReference, JobKind, Loudness, MediaShare, PictureNotReady, PicturePart, ProjectPartName, ProjectPicturePart, ProjectReadScope, ModuleIndexEntry, ProjectStyleLibrary, ProjectShare, ProjectSourcePart, ResolvedMediaBatchItem, TranscribeCostEstimate, Transcription, LinkTranscription } from './types.js'
 import { statusTarget } from './types.js'
 import type { LimitError } from './errors.js'
 
@@ -134,13 +134,34 @@ export function describeInputRules(capabilities: Record<string, unknown> | null 
     if (parts.length) out.push(`names of subjects and voices (one namespace): ${parts.join('; ')}`)
     if (named.reservedNamePatterns?.length) out.push(`reserved names, taken by the model's own tags: ${named.reservedNamePatterns.join(', ')}`)
   }
-  const settings = c.settings as Array<{ key: string; label?: string; control?: string; default?: unknown; appliesWhen?: string }> | undefined
+  const settings = c.settings as ModelCapabilities['settings']
   if (Array.isArray(settings)) {
     for (const s of settings) {
-      const when = s.appliesWhen === 'referenceVideo' ? ' (applies while a reference video is attached)' : s.appliesWhen === 'speech' ? ' (applies to spoken output)' : ''
-      out.push(`setting ${s.key}${s.label ? ` (${s.label})` : ''}: ${s.control ?? 'value'}, default ${String(s.default)}${when}`)
+      const when = s.appliesWhen === 'referenceVideo' ? ' (applies while a reference video is attached)' : s.appliesWhen === 'speech' ? ' (applies to spoken output)' : s.appliesWhen === 'gif' ? ' (applies to GIF output)' : s.appliesWhen ? ` (applies when ${s.appliesWhen})` : ''
+      const choices = s.control === 'select' ? `; options: ${s.options.map(o => `${o.value} (${o.label})`).join(', ')}${s.allowCustom !== undefined ? `; custom values: ${s.allowCustom ? 'allowed' : 'refused'}` : ''}` : ''
+      const range = s.control === 'slider' ? `; range: ${s.min} to ${s.max}; step: ${s.step}` : ''
+      out.push(`setting ${s.key}${s.label ? ` (${s.label})` : ''}: ${s.control ?? 'value'}, default ${String(s.default)}${when}${choices}${range}`)
     }
   }
+  for (const key of ['quality', 'outputFormat', 'background'] as const) {
+    const choice = c[key] as ModelCapabilities[typeof key]
+    if (choice) out.push(`${key}: ${choice.supported.join(', ')}${choice.default !== undefined ? ` (default ${choice.default})` : ''}${choice.locked ? `; locked${choice.lockedValue !== undefined ? ` to ${choice.lockedValue}` : ''}` : ''}`)
+  }
+  const image = c.imageOutput as ModelCapabilities['imageOutput']
+  if (image) {
+    out.push(`formats with reference images: ${image.editFormats.join(', ')}`)
+    out.push(`formats with transparent background: ${image.transparentFormats.join(', ')}`)
+    const gif = image.gif
+    if (gif) {
+      out.push(`GIF fields: frame count ${gif.frameCountKey}; frame duration ${gif.frameDurationKey}${gif.frameSizeKey ? `; frame size ${gif.frameSizeKey}` : ''}`)
+      if (gif.sheet) {
+        const sheet = gif.sheet
+        out.push(`GIF sprite sheet: side at most ${sheet.maxSide} px; at most ${sheet.maxPixels} pixels; aspect at most ${sheet.maxAspect}; frame dimensions a multiple of ${sheet.multiple}`)
+        out.push(`GIF sheet packings (columns and rows may swap): ${sheet.packings.map(p => `${p.min} to ${p.max} frames: ${p.columns} x ${p.rows}`).join('; ')}`)
+      }
+    }
+  }
+  if (c.modelParams) out.push(`model defaults: ${JSON.stringify(c.modelParams)}`)
   return out
 }
 

@@ -2146,7 +2146,7 @@ export function modelListResult(models: ModelInfo[]): CallToolResult {
   const rows = models.map((m) => {
     const summary = capabilitySummary(m)
     const def = m.isDefault ? ' [default]' : ''
-    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind}${summary ? ` | ${summary}` : ''}`
+    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind}${summary ? ` | ${summary}` : ''}${describeInputRules(m.capabilities).map(l => `\n  ${l}`).join('')}`
   })
   return text(
     [

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ContentHero, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS, SORT_ORDERS, toolDescription, AGENT_CONTRACT, AGENT_CONTRACT_VERSION } from '@contenthero/sdk'
+import { ContentHero, ValidationError, GenerationTimeoutError, InsufficientCreditsError, LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS, SORT_ORDERS, toolDescription, AGENT_CONTRACT, AGENT_CONTRACT_VERSION } from '@contenthero/sdk'
 import { buildServer, attachmentsFor, MEDIA_HOST } from './server.js'
 import { completedResult } from './format.js'
 import { createHash } from 'node:crypto'
@@ -6485,4 +6485,72 @@ test('the SDK exports the contract version, and it is the vendored file\'s', () 
   const vendored = JSON.parse(readFileSync(new URL('../../sdk/contract/agent-contract.json', import.meta.url), 'utf8')) as { version: string }
   assert.equal(AGENT_CONTRACT_VERSION, vendored.version)
   assert.equal(AGENT_CONTRACT.version, vendored.version)
+})
+
+test('generate_image forwards every image control for submission and cost preview', async () => {
+  const requests: unknown[] = []
+  const mcp = await connect(fakeClient({
+    generate: async request => { requests.push(request); return { outputId: 'gen1', status: 'processing' } },
+    estimateCost: async request => { requests.push(request); return { creditsEstimate: 1 } },
+  }))
+  try {
+    for (const frameCount of [9, 'auto', '16']) {
+      const args = { modelId: 'gpt-image-2', quality: 'medium', outputFormat: 'gif', background: 'auto', frameCount, frameDurationMs: 200, frameSize: '512x512' }
+      for (const getCost of [false, true]) {
+        const res = await mcp.callTool({ name: 'generate_image', arguments: { ...args, getCost } })
+        assert.ok(!res.isError, JSON.stringify(res))
+        const { background, ...rest } = args
+        assert.deepEqual(requests.at(-1), { ...rest, contentType: 'image', kind: 'generate', parameters: { background } })
+      }
+    }
+  } finally { await mcp.close() }
+})
+
+test('generate_image validates each new field using the contract schema', async () => {
+  const mcp = await connect(fakeClient())
+  try {
+    for (const [key, value] of Object.entries({ quality: 1, outputFormat: true, background: 1, frameCount: 2.5, frameDurationMs: '200', frameSize: 512 })) {
+      const result = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'gpt-image-2', [key]: value } })
+      assert.equal(result.isError, true, key)
+    }
+  } finally { await mcp.close() }
+})
+
+test('image discovery prints app capability fixtures on both tools', async () => {
+  const fixture = JSON.parse(readFileSync(new URL('../../sdk/src/fixtures/gpt-image-2-6.json', import.meta.url), 'utf8'))
+  const models = fixture.models.map(m => ({ ...cap(m.modelId, 'image', 'generate', 'image'), capabilities: m.capabilities }))
+  const mcp = await connect(fakeClient({ listModels: async () => models, getModel: async id => models.find(m => m.modelId === id) }))
+  try {
+    const list = await mcp.callTool({ name: 'list_models', arguments: { contentType: 'image' } })
+    assert.match(JSON.stringify(list.content), /GIF sprite sheet/)
+    for (const model of models) {
+      const result = await mcp.callTool({ name: 'get_model', arguments: { modelId: model.modelId } })
+      const text = JSON.stringify(result.content)
+      assert.match(text, /formats with reference images/)
+      assert.match(text, /applies to GIF output/)
+      if (model.capabilities.modelParams) assert.match(text, /model defaults/)
+    }
+  } finally { await mcp.close() }
+})
+
+test('image refusals retain the server wording in MCP results', async () => {
+  const message = 'GIF frame size and frame count exceed the sprite sheet limits'
+  const mcp = await connect(fakeClient({ generate: async () => { throw new ValidationError(message) } }))
+  try {
+    const result = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'gpt-image-2', outputFormat: 'gif', frameSize: '1024x1024' } })
+    assert.equal(result.isError, true)
+    assert.ok(JSON.stringify(result.content).includes(message))
+  } finally { await mcp.close() }
+})
+
+test('legacy MCP image requests contain no new control defaults', async () => {
+  const seen: unknown[] = []
+  const mcp = await connect(fakeClient({ generate: async request => { seen.push(request); return { outputId: 'gen1', status: 'processing' } } }))
+  try {
+    for (const modelId of ['nano-banana-2', 'gpt-image-2']) {
+      const result = await mcp.callTool({ name: 'generate_image', arguments: { modelId, prompt: 'a cat', resolution: '1K' } })
+      assert.ok(!result.isError)
+      assert.deepEqual(seen.at(-1), { contentType: 'image', kind: 'generate', modelId, prompt: 'a cat', resolution: '1K' })
+    }
+  } finally { await mcp.close() }
 })

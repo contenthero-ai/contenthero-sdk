@@ -286,3 +286,49 @@ Status: PROPOSED, awaiting Taylan. Reason for all of it: Kling 4.0 takes video s
 ## Reference tags in `model get`
 
 - Row "Reference tags" (CLI), same list as the MCP's "tokens:" line: each tag the registry declares, with "(up to N)" when more than one. Written once in `describePromptReferenceTags`.
+
+
+## GPT Image controls
+
+Status: approved by Taylan 2026-11-06.
+
+The existing generate_image tool description is unchanged. MCP input descriptions and CLI flag help read the same contract text.
+
+### Parameters
+
+1. `quality`: "Quality mode, for models that expose it separately. Validated per model."
+
+   Reason: Exposes the model quality declaration without copying its choices.
+
+2. `outputFormat`: "Output format declared by the model, subject to its input and background restrictions."
+
+   Reason: Exposes the model format declaration and its compatibility rules.
+
+3. `background`: "Background handling declared by the model, subject to output format compatibility."
+
+   Reason: Exposes background handling through the existing parameters path.
+
+4. `frameCount`: "GIF frame count declared by the model. Available only for GIF output."
+
+   Reason: Exposes GIF frame counts as the model declares them.
+
+5. `frameDurationMs`: "GIF frame duration in milliseconds, subject to the model limits."
+
+   Reason: Names the unit while the model owns the range and step.
+
+6. `frameSize`: "GIF frame pixel size, subject to the model sprite sheet limits."
+
+   Reason: Leaves dimension and sheet rules with the model declaration.
+
+### Discovery output
+
+Reason: the shared formatter lets MCP and CLI callers discover the model declaration before submission. Every substituted value comes from discovery.
+
+1. Setting detail adds "; options: VALUE (LABEL), ...", "; custom values: allowed" or "; custom values: refused", "; range: MIN to MAX; step: STEP", and " (applies to GIF output)" when declared.
+2. Selectable fields: "KEY: VALUES (default DEFAULT)" and, when declared, "; locked to VALUE".
+3. "formats with reference images: VALUES" and "formats with transparent background: VALUES".
+4. "GIF fields: frame count KEY; frame duration KEY; frame size KEY". Frame size is omitted when absent.
+5. "GIF sprite sheet: side at most MAX px; at most MAX pixels; aspect at most MAX; frame dimensions a multiple of MULTIPLE".
+6. "GIF sheet packings (columns and rows may swap): MIN to MAX frames: COLUMNS x ROWS; ...".
+7. "model defaults: JSON".
+8. CLI model list adds the column "CONTROLS" using these same lines. MCP list_models also includes these lines.

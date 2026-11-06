@@ -126,3 +126,9 @@ new ContentHero({
   fetch: customFetch,                  // optional, defaults to global fetch
 })
 ```
+
+## Image controls and discovery
+
+Use `listModels()` and `getModel(modelId)` before constructing image requests. `GenerateRequest` accepts `quality`, `outputFormat`, `frameCount`, `frameDurationMs`, and `frameSize`. Set background through `parameters.background`. Omitted controls stay omitted. `frameCount` accepts a number or string according to the model declaration.
+
+Read `capabilities.settings` for select options, string defaults, custom value support, slider bounds and steps, and `appliesWhen`. GIF controls apply only to GIF output. Read `outputFormat`, `background`, and `imageOutput` for format choices, reference and transparency compatibility, GIF field names, and sprite sheet rules. `modelParams` contains model defaults, not user controls. The server validates requests against the current registry and returns its specific refusal text. `estimateCost` accepts the same request without generating.

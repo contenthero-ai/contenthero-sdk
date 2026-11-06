@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "fdfb327513b5a4aa13e5df619173f710fd3f4895113645af50371167c6fa99fb"
+export const AGENT_CONTRACT_VERSION = "72ba5e33922c5c3bacb3ac8cd963b56235b1cd2ba262269697e04398fb5adb4f"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -60,6 +60,36 @@ export const AGENT_CONTRACT = {
             "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model. Either its short id or its UUID.",
             "type": "string"
           },
+          "background": {
+            "description": "Background handling declared by the model, subject to output format compatibility.",
+            "type": "string",
+            "x-dynamic": true
+          },
+          "frameCount": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "x-dynamic": true
+              }
+            ],
+            "description": "GIF frame count declared by the model. Available only for GIF output."
+          },
+          "frameDurationMs": {
+            "description": "GIF frame duration in milliseconds, subject to the model limits.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "frameSize": {
+            "description": "GIF frame pixel size, subject to the model sprite sheet limits.",
+            "type": "string",
+            "x-dynamic": true
+          },
           "getCost": {
             "description": "Return the credit cost estimate instead of generating (nothing runs, nothing is charged).",
             "type": "boolean"
@@ -74,6 +104,11 @@ export const AGENT_CONTRACT = {
             "maximum": 4,
             "minimum": 1,
             "type": "integer"
+          },
+          "outputFormat": {
+            "description": "Output format declared by the model, subject to its input and background restrictions.",
+            "type": "string",
+            "x-dynamic": true
           },
           "placement": {
             "anyOf": [
@@ -271,6 +306,11 @@ export const AGENT_CONTRACT = {
             "description": "Describe the image to generate. Required for most models; optional for a few that can run from references alone.",
             "type": "string"
           },
+          "quality": {
+            "description": "Quality mode, for models that expose it separately. Validated per model.",
+            "type": "string",
+            "x-dynamic": true
+          },
           "referenceImages": {
             "description": "References for image-to-image / editing. Each may be a URL or a previous output id (e.g. \"<id>\" or \"<id>-2\") to chain from an earlier generation.",
             "items": {
@@ -307,6 +347,10 @@ export const AGENT_CONTRACT = {
           },
           "audioEnabled": {
             "description": "Generate audio (only for models that support it).",
+            "type": "boolean"
+          },
+          "draft": {
+            "description": "Enable Draft on a model that declares the setting. Its declared resolution applies.",
             "type": "boolean"
           },
           "duration": {
@@ -395,6 +439,10 @@ export const AGENT_CONTRACT = {
             "maximum": 4,
             "minimum": 1,
             "type": "integer"
+          },
+          "outputFormat": {
+            "description": "Output format for a draft upgrade, validated by the server.",
+            "type": "string"
           },
           "placement": {
             "anyOf": [
@@ -618,6 +666,10 @@ export const AGENT_CONTRACT = {
             "type": "string",
             "x-dynamic": true
           },
+          "returnLastFrame": {
+            "description": "Also return the last frame of a draft upgrade.",
+            "type": "boolean"
+          },
           "shots": {
             "description": "Multi-shot mode with per-shot prompts, on a model that takes them (get_model gives its shot limits): an ordered list of shots, each with its own prompt and duration in seconds. When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only.",
             "items": {
@@ -641,6 +693,16 @@ export const AGENT_CONTRACT = {
           "startFrame": {
             "description": "First frame: an image URL or a previous output id (e.g. \"<id>-2\") to chain (e.g. animate an image you just generated).",
             "type": "string"
+          },
+          "upgradeFromOutputId": {
+            "description": "Upgrade a completed draft output owned by the caller. The model must declare draftUpgrade. Shot settings are inherited and cannot change.",
+            "type": "string"
+          },
+          "upgradeSlot": {
+            "description": "The output slot of the source draft. Omitted selects the first output.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "voices": {
             "description": "Named voices, each addressable in the prompt as @name, on models that take them.",
@@ -7701,7 +7763,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "fdfb327513b5a4aa13e5df619173f710fd3f4895113645af50371167c6fa99fb",
+  "version": "72ba5e33922c5c3bacb3ac8cd963b56235b1cd2ba262269697e04398fb5adb4f",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -7992,8 +8054,8 @@ export type ContractToolName = (typeof CONTRACT_TOOL_NAMES)[number]
 
 /** The input of every tool, as the contract declares it. */
 export interface ToolInputs {
-  generate_image: { aspectRatio?: string; avatarId?: string; getCost?: boolean; modelId: string; numImages?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceImages?: Array<string>; resolution?: string }
-  generate_video: { aspectRatio?: string; audioEnabled?: boolean; duration?: number; endFrame?: string; getCost?: boolean; inputMode?: string; keepInputLength?: boolean; keepOriginalSound?: boolean; keyframes?: Array<string>; klingElements?: Array<{ description?: string; images?: Array<string>; klingElementId?: string; name?: string; video?: string; voice?: string }>; modelId: string; multiShot?: boolean; negativePrompt?: string; numGenerations?: number; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceAudio?: Array<string>; referenceImages?: Array<string>; referenceVideos?: Array<string>; resolution?: string; shots?: Array<{ duration: number; prompt: string }>; startFrame?: string; voices?: Array<{ audio: string; name: string }> }
+  generate_image: { aspectRatio?: string; avatarId?: string; background?: string; frameCount?: number | string; frameDurationMs?: number; frameSize?: string; getCost?: boolean; modelId: string; numImages?: number; outputFormat?: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; quality?: string; referenceImages?: Array<string>; resolution?: string }
+  generate_video: { aspectRatio?: string; audioEnabled?: boolean; draft?: boolean; duration?: number; endFrame?: string; getCost?: boolean; inputMode?: string; keepInputLength?: boolean; keepOriginalSound?: boolean; keyframes?: Array<string>; klingElements?: Array<{ description?: string; images?: Array<string>; klingElementId?: string; name?: string; video?: string; voice?: string }>; modelId: string; multiShot?: boolean; negativePrompt?: string; numGenerations?: number; outputFormat?: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; referenceAudio?: Array<string>; referenceImages?: Array<string>; referenceVideos?: Array<string>; resolution?: string; returnLastFrame?: boolean; shots?: Array<{ duration: number; prompt: string }>; startFrame?: string; upgradeFromOutputId?: string; upgradeSlot?: number; voices?: Array<{ audio: string; name: string }> }
   generate_audio: { compositionPlan?: { chunks: Array<{ conditionStrength?: "low" | "medium" | "high" | "xhigh"; conditioningRef?: { endMs: number; source: string; startMs: number }; contextAdherence?: "low" | "medium" | "high"; durationMs: number; negativeStyles?: Array<string>; positiveStyles: Array<string>; text: string } | { endMs: number; source: string; startMs: number }> }; durationSeconds?: number; getCost?: boolean; modelId: string; placement?: { mode: "append" } | { durationSeconds?: number; mode: "at"; startSeconds?: number; track?: string } | { durationSeconds?: number; mode: "atPlayhead" } | { duration?: "natural" | "match"; itemId: string; mode: "replace" } | { endSeconds?: number; fit?: "cover" | "trim" | "overwrite"; mode: "range"; startSeconds?: number; track?: string } | { anchor?: "center" | "top-left" | "top" | "top-right" | "left" | "right" | "bottom-left" | "bottom" | "bottom-right"; asBackground?: boolean; fit?: "contain" | "cover" | "none"; height?: number; slideId?: string; slideIndex?: number; width?: number; x?: number; y?: number }; playheadFrame?: number; projectId?: string; prompt?: string; promptInfluence?: number; seed?: number; storeForInpainting?: boolean; text?: string; voiceId?: string; voiceName?: string; withTimestamps?: boolean }
   generate_board: { avatarId?: string; boardName?: string; boardType: string; getCost?: boolean; numImages?: number; prompt?: string; referenceImages?: Array<string> }
   generate_lip_sync: { audioDurationSeconds?: number; audioUrl?: string; getCost?: boolean; imageUrl: string; modelId: string; motionPrompt?: string; resolution?: string; script?: string; voiceId?: string; voiceName?: string }

@@ -70,6 +70,9 @@ function placementFields(opts: Record<string, unknown>): Pick<GenerateRequest, '
   }
 }
 
+/** An image flag's words, read from the canonical tool input. */
+const image = (input: string): string => optionFromContract('generate_image', input).description
+
 /** A music flag's words, read from the agent contract's generate_audio input it mirrors. */
 const music = (input: string): string => optionFromContract('generate_audio', input).description
 
@@ -87,6 +90,12 @@ export function registerGenerate(program: Command): void {
       .requiredOption('-m, --model <id>', 'image model id (see `contenthero model list --type image`)')
       .option('--aspect <ratio>', 'aspect ratio, e.g. 16:9, 1:1, 9:16')
       .option('--resolution <res>', 'resolution, e.g. 1K, 2K, 4K (model-dependent)')
+      .option('--quality <quality>', image('quality'))
+      .option('--output-format <format>', image('outputFormat'))
+      .option('--background <background>', image('background'))
+      .option('--frame-count <count>', image('frameCount'))
+      .option('--frame-duration-ms <milliseconds>', image('frameDurationMs'), toInt)
+      .option('--frame-size <size>', image('frameSize'))
       // ⛔ NO `--mode`. It picked a paid TIER (flux pro/flex, kontext pro/max) that the registry
       // now names with its own model id, so `-m flux-2-flex` says what `--mode flex` used to.
       // See .claude/plans/model-id-tier-convention-v1.md in the app repo.
@@ -95,6 +104,13 @@ export function registerGenerate(program: Command): void {
       .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)'),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
+    let frameCount = opts.frameCount as GenerateRequest['frameCount']
+    if (frameCount !== undefined) {
+      const { capabilities } = await client.getModel(opts.model as string)
+      const key = capabilities.imageOutput?.gif?.frameCountKey
+      const setting = capabilities.settings?.find(s => s.key === key)
+      if (setting?.control === 'slider') frameCount = toInt(String(frameCount))
+    }
     const request = compact<GenerateRequest>({
       contentType: 'image',
       kind: 'generate',
@@ -102,6 +118,12 @@ export function registerGenerate(program: Command): void {
       prompt,
       aspectRatio: opts.aspect as string | undefined,
       resolution: opts.resolution as string | undefined,
+      quality: opts.quality as GenerateRequest['quality'],
+      outputFormat: opts.outputFormat as GenerateRequest['outputFormat'],
+      parameters: opts.background === undefined ? undefined : { background: opts.background as string },
+      frameCount,
+      frameDurationMs: opts.frameDurationMs as GenerateRequest['frameDurationMs'],
+      frameSize: opts.frameSize as GenerateRequest['frameSize'],
       numImages: opts.num as number | undefined,
       references: references({ images: opts.ref as string[] | undefined }),
       avatarId: opts.avatar as string | undefined,

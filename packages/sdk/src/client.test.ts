@@ -1900,3 +1900,49 @@ test('searchBrandKnowledge sends the query under the name the route reads', asyn
   assert.equal(url.searchParams.get('query'), 'tone of voice')
   assert.equal(url.searchParams.has('q'), false)
 })
+
+test('image controls serialize without changing names or values', async () => {
+  const { fetch, calls } = stubFetch([{ status: 202, body: { outputId: 'image', status: 'processing' } }])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  for (const frameCount of [9, 'auto', '16']) {
+    const request = { modelId: 'image-model', quality: 'medium', outputFormat: 'gif', parameters: { background: 'auto' }, frameCount, frameDurationMs: 200, frameSize: '512x512' }
+    await client.generate(request)
+    const { outputId, ...body } = JSON.parse(String(calls.at(-1)?.init?.body))
+    assert.ok(outputId)
+    assert.deepEqual(body, request)
+  }
+})
+
+test('image validation refusals preserve the server message', async () => {
+  const messages = [
+    'Output format GIF is unavailable with reference images',
+    'Output format SVG is unavailable with reference images',
+    'Transparent background is unavailable for JPEG; choose an output format that supports transparency',
+    'GIF frame size and frame count exceed the sprite sheet limits',
+    'frameCount is available only for GIF output',
+    'frameSize must be a string',
+    'Frame duration must be from 20 to 2000 in steps of 10',
+    "Quality 'auto' is not supported by 'image-model'",
+    "model 'image-model' does not support frameSize",
+  ]
+  const { fetch } = stubFetch(messages.map(error => ({ status: 400, body: { error } })))
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  for (const message of messages) {
+    await assert.rejects(client.generate({ modelId: 'image-model' }), (err: unknown) => {
+      assert.ok(err instanceof ValidationError)
+      assert.equal(err.message, message)
+      return true
+    })
+  }
+})
+
+test('existing image requests retain their body without image control defaults', async () => {
+  const { fetch, calls } = stubFetch([{ status: 202, body: { outputId: 'image', status: 'processing' } }])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  for (const modelId of ['gpt-image-1.5', 'gpt-image-2', 'gpt-image-2.5-sunburst', 'nano-banana-2']) {
+    const request = { modelId, prompt: 'a cat', resolution: '1K', references: { images: ['https://cdn.test/ref.png'] } }
+    await client.generate(request)
+    const { outputId, ...body } = JSON.parse(String(calls.at(-1)?.init?.body))
+    assert.deepEqual(body, request)
+  }
+})

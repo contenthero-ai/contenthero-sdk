@@ -1,0 +1,497 @@
+{
+  "source": "contenthero-app/supabase/migrations/20261106172835_gpt_image_2_6.sql",
+  "sourceSha256": "df97bca1c06d8fe64a98c265f694b425b43988fc4dd53bd2c36974b918f3fadd",
+  "models": [
+    {
+      "modelId": "gpt-image-2.6-sunburst",
+      "capabilities": {
+        "kind": "generate",
+        "outputType": "image",
+        "promptMode": "required",
+        "promptMaxChars": 32000,
+        "inputTypes": [
+          "imageRef"
+        ],
+        "promptReferences": {
+          "scheme": "numbered_prose",
+          "honored": true
+        },
+        "features": {
+          "edit": true,
+          "recreate": true
+        },
+        "generations": {
+          "min": 1,
+          "max": 4,
+          "default": 4
+        },
+        "maxImageRefs": 16,
+        "background": {
+          "supported": [
+            "auto",
+            "transparent",
+            "opaque"
+          ],
+          "default": "auto"
+        },
+        "outputFormat": {
+          "supported": [
+            "png",
+            "jpeg",
+            "webp",
+            "gif",
+            "svg"
+          ],
+          "default": "png"
+        },
+        "settings": [
+          {
+            "key": "quality",
+            "label": "Quality",
+            "control": "select",
+            "default": "medium",
+            "options": [
+              {
+                "value": "low",
+                "label": "Low"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "high",
+                "label": "High"
+              },
+              {
+                "value": "xhigh",
+                "label": "Extra high"
+              },
+              {
+                "value": "max",
+                "label": "Max"
+              }
+            ]
+          },
+          {
+            "key": "frameCount",
+            "label": "Frame count",
+            "control": "slider",
+            "default": 9,
+            "appliesWhen": "gif",
+            "min": 2,
+            "max": 16,
+            "step": 1
+          },
+          {
+            "key": "frameDurationMs",
+            "label": "Frame duration",
+            "control": "slider",
+            "default": 200,
+            "min": 20,
+            "max": 2000,
+            "step": 10,
+            "appliesWhen": "gif"
+          },
+          {
+            "key": "frameSize",
+            "label": "Frame size",
+            "control": "select",
+            "allowCustom": true,
+            "default": "512x512",
+            "appliesWhen": "gif",
+            "options": [
+              {
+                "value": "288x288",
+                "label": "288x288"
+              },
+              {
+                "value": "384x384",
+                "label": "384x384"
+              },
+              {
+                "value": "512x288",
+                "label": "512x288"
+              },
+              {
+                "value": "288x512",
+                "label": "288x512"
+              },
+              {
+                "value": "512x512",
+                "label": "512x512"
+              },
+              {
+                "value": "768x768",
+                "label": "768x768"
+              }
+            ]
+          }
+        ],
+        "imageOutput": {
+          "editFormats": [
+            "png",
+            "jpeg",
+            "webp"
+          ],
+          "transparentFormats": [
+            "png",
+            "webp"
+          ],
+          "gif": {
+            "frameCountKey": "frameCount",
+            "frameDurationKey": "frameDurationMs",
+            "frameSizeKey": "frameSize",
+            "sheet": {
+              "maxSide": 3840,
+              "maxPixels": 8294400,
+              "maxAspect": 3,
+              "multiple": 16,
+              "packings": [
+                {
+                  "min": 2,
+                  "max": 8,
+                  "columns": 4,
+                  "rows": 2
+                },
+                {
+                  "min": 9,
+                  "max": 9,
+                  "columns": 3,
+                  "rows": 3
+                },
+                {
+                  "min": 10,
+                  "max": 12,
+                  "columns": 4,
+                  "rows": 3
+                },
+                {
+                  "min": 13,
+                  "max": 16,
+                  "columns": 4,
+                  "rows": 4
+                }
+              ]
+            }
+          }
+        },
+        "resolution": {
+          "supported": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "1K"
+        },
+        "modelParams": {
+          "complexity": "high",
+          "svgModel": "gpt-5.6-luna"
+        }
+      }
+    },
+    {
+      "modelId": "gpt-image-2.6-flare",
+      "capabilities": {
+        "kind": "generate",
+        "outputType": "image",
+        "promptMode": "required",
+        "promptMaxChars": 32000,
+        "inputTypes": [
+          "imageRef"
+        ],
+        "promptReferences": {
+          "scheme": "numbered_prose",
+          "honored": true
+        },
+        "features": {
+          "edit": true,
+          "recreate": true
+        },
+        "generations": {
+          "min": 1,
+          "max": 4,
+          "default": 4
+        },
+        "maxImageRefs": 16,
+        "background": {
+          "supported": [
+            "auto",
+            "transparent",
+            "opaque"
+          ],
+          "default": "auto"
+        },
+        "outputFormat": {
+          "supported": [
+            "png",
+            "jpeg",
+            "webp",
+            "gif",
+            "svg"
+          ],
+          "default": "png"
+        },
+        "settings": [
+          {
+            "key": "quality",
+            "label": "Quality",
+            "control": "select",
+            "default": "medium",
+            "options": [
+              {
+                "value": "low",
+                "label": "Low"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "high",
+                "label": "High"
+              },
+              {
+                "value": "xhigh",
+                "label": "Extra high"
+              },
+              {
+                "value": "max",
+                "label": "Max"
+              }
+            ]
+          },
+          {
+            "key": "frameCount",
+            "label": "Frame count",
+            "control": "slider",
+            "default": 9,
+            "appliesWhen": "gif",
+            "min": 2,
+            "max": 16,
+            "step": 1
+          },
+          {
+            "key": "frameDurationMs",
+            "label": "Frame duration",
+            "control": "slider",
+            "default": 200,
+            "min": 20,
+            "max": 2000,
+            "step": 10,
+            "appliesWhen": "gif"
+          },
+          {
+            "key": "frameSize",
+            "label": "Frame size",
+            "control": "select",
+            "allowCustom": true,
+            "default": "512x512",
+            "appliesWhen": "gif",
+            "options": [
+              {
+                "value": "288x288",
+                "label": "288x288"
+              },
+              {
+                "value": "384x384",
+                "label": "384x384"
+              },
+              {
+                "value": "512x288",
+                "label": "512x288"
+              },
+              {
+                "value": "288x512",
+                "label": "288x512"
+              },
+              {
+                "value": "512x512",
+                "label": "512x512"
+              },
+              {
+                "value": "768x768",
+                "label": "768x768"
+              }
+            ]
+          }
+        ],
+        "imageOutput": {
+          "editFormats": [
+            "png",
+            "jpeg",
+            "webp"
+          ],
+          "transparentFormats": [
+            "png",
+            "webp"
+          ],
+          "gif": {
+            "frameCountKey": "frameCount",
+            "frameDurationKey": "frameDurationMs",
+            "frameSizeKey": "frameSize",
+            "sheet": {
+              "maxSide": 3840,
+              "maxPixels": 8294400,
+              "maxAspect": 3,
+              "multiple": 16,
+              "packings": [
+                {
+                  "min": 2,
+                  "max": 8,
+                  "columns": 4,
+                  "rows": 2
+                },
+                {
+                  "min": 9,
+                  "max": 9,
+                  "columns": 3,
+                  "rows": 3
+                },
+                {
+                  "min": 10,
+                  "max": 12,
+                  "columns": 4,
+                  "rows": 3
+                },
+                {
+                  "min": 13,
+                  "max": 16,
+                  "columns": 4,
+                  "rows": 4
+                }
+              ]
+            }
+          }
+        },
+        "resolution": {
+          "supported": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "1K"
+        },
+        "modelParams": {
+          "complexity": "high",
+          "svgModel": "gpt-5.6-luna"
+        }
+      }
+    },
+    {
+      "modelId": "gpt-image-2.6-economy",
+      "capabilities": {
+        "kind": "generate",
+        "outputType": "image",
+        "promptMode": "required",
+        "promptMaxChars": 20000,
+        "inputTypes": [
+          "imageRef"
+        ],
+        "promptReferences": {
+          "scheme": "numbered_prose",
+          "honored": true
+        },
+        "features": {
+          "edit": true,
+          "recreate": true
+        },
+        "generations": {
+          "min": 1,
+          "max": 4,
+          "default": 4
+        },
+        "maxImageRefs": 16,
+        "background": {
+          "supported": [
+            "auto",
+            "transparent",
+            "opaque"
+          ],
+          "default": "auto"
+        },
+        "outputFormat": {
+          "supported": [
+            "png",
+            "gif"
+          ],
+          "default": "png"
+        },
+        "settings": [
+          {
+            "key": "frameCount",
+            "label": "Frame count",
+            "control": "select",
+            "default": "auto",
+            "appliesWhen": "gif",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Auto"
+              },
+              {
+                "value": "4",
+                "label": "4"
+              },
+              {
+                "value": "9",
+                "label": "9"
+              },
+              {
+                "value": "16",
+                "label": "16"
+              },
+              {
+                "value": "25",
+                "label": "25"
+              },
+              {
+                "value": "36",
+                "label": "36"
+              },
+              {
+                "value": "64",
+                "label": "64"
+              }
+            ]
+          },
+          {
+            "key": "frameDurationMs",
+            "label": "Frame duration",
+            "control": "slider",
+            "default": 200,
+            "min": 20,
+            "max": 2000,
+            "step": 10,
+            "appliesWhen": "gif"
+          }
+        ],
+        "imageOutput": {
+          "editFormats": [
+            "png"
+          ],
+          "transparentFormats": [
+            "png"
+          ],
+          "gif": {
+            "frameCountKey": "frameCount",
+            "frameDurationKey": "frameDurationMs"
+          }
+        },
+        "aspectRatio": {
+          "supported": [
+            "auto",
+            "21:9",
+            "16:9",
+            "3:2",
+            "4:3",
+            "1:1",
+            "2:3",
+            "9:16"
+          ],
+          "default": "auto"
+        }
+      }
+    }
+  ]
+}
