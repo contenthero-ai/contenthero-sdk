@@ -332,3 +332,30 @@ Reason: the shared formatter lets MCP and CLI callers discover the model declara
 6. "GIF sheet packings (columns and rows may swap): MIN to MAX frames: COLUMNS x ROWS; ...".
 7. "model defaults: JSON".
 8. CLI model list adds the column "CONTROLS" using these same lines. MCP list_models also includes these lines.
+
+## Video controls
+
+Status: approved by Taylan 2026-11-06.
+
+MCP parameter descriptions and CLI flag help read the existing canonical contract. No tool description changed.
+
+1. `draft`: "Enable Draft on a model that declares the setting. Its declared resolution applies."
+2. `upgradeFromOutputId`: "Upgrade a completed draft output owned by the caller. The model must declare draftUpgrade. Shot settings are inherited and cannot change."
+3. `upgradeSlot`: "The output slot of the source draft. Omitted selects the first output."
+4. `outputFormat`: "Output format for a draft upgrade, validated by the server."
+5. `returnLastFrame`: "Also return the last frame of a draft upgrade."
+
+Discovery output additions, with values supplied by the model declaration:
+
+1. "inputs: VALUES".
+2. "draft upgrade: RESOLUTION; available for SECONDSs after creation".
+3. Setting details add "; resolution when enabled: RESOLUTION" for a toggle that declares it.
+4. Model lists include the existing input mode descriptions already used by model details.
+
+SDK request comments added:
+
+1. "Upgrade a completed draft owned by the caller. Shot settings are inherited and cannot change."
+2. "Source draft output slot. Omitted selects the first output."
+3. "Enable the model's declared Draft setting and resolution."
+4. "Output format for a draft upgrade, validated by the server."
+5. "Also return the last frame of a draft upgrade."

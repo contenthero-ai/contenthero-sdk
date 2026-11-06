@@ -1291,10 +1291,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         if (klingMultiShot) parameters.shots = args.shots
         if (args.inputMode) parameters.inputMode = args.inputMode
         if (args.keepOriginalSound !== undefined) parameters.keepOriginalSound = args.keepOriginalSound
+        if (args.draft !== undefined) parameters.draft = args.draft
+        if (args.outputFormat !== undefined) parameters.outputFormat = args.outputFormat
+        if (args.returnLastFrame !== undefined) parameters.returnLastFrame = args.returnLastFrame
         const request = compact<GenerateRequest>({
           contentType: 'video',
           kind: 'generate',
           modelId: args.modelId,
+          upgradeFromOutputId: args.upgradeFromOutputId,
+          upgradeSlot: args.upgradeSlot,
           prompt: klingMultiShot ? args.prompt ?? args.shots!.map((s) => s.prompt).join(' ') : args.prompt,
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,

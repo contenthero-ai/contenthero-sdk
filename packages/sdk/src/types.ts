@@ -435,6 +435,11 @@ export interface GenerateRequest {
   /** Text prompt. Required for image/video and for music/sfx audio. */
   prompt?: string
 
+  /** Upgrade a completed draft owned by the caller. Shot settings are inherited and cannot change. */
+  upgradeFromOutputId?: ToolInput<'generate_video'>['upgradeFromOutputId']
+  /** Source draft output slot. Omitted selects the first output. */
+  upgradeSlot?: ToolInput<'generate_video'>['upgradeSlot']
+
   // Typed core (image / video)
   aspectRatio?: string
   resolution?: string
@@ -467,7 +472,15 @@ export interface GenerateRequest {
   references?: References
 
   /** Model-specific parameters passed through to the provider (long tail). */
-  parameters?: Record<string, unknown> & { background?: ToolInput<'generate_image'>['background'] }
+  parameters?: Record<string, unknown> & {
+    background?: ToolInput<'generate_image'>['background']
+    /** Enable the model's declared Draft setting and resolution. */
+    draft?: ToolInput<'generate_video'>['draft']
+    /** Output format for a draft upgrade, validated by the server. */
+    outputFormat?: ToolInput<'generate_video'>['outputFormat']
+    /** Also return the last frame of a draft upgrade. */
+    returnLastFrame?: ToolInput<'generate_video'>['returnLastFrame']
+  }
 
   // Audio (ElevenLabs)
   /** Text to speak (text-to-speech). */
@@ -2633,6 +2646,8 @@ export interface ModelCapabilities {
    * beyond its request shape.
    */
   promptGuide?: string
+  inputTypes?: string[]
+  draftUpgrade?: { providerModelId: string; resolution: string; validForSeconds: number }
   quality?: ModelChoice
   outputFormat?: ModelChoice
   background?: ModelChoice

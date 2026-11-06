@@ -142,6 +142,11 @@ export function registerGenerate(program: Command): void {
       .option('--aspect <ratio>', 'aspect ratio, e.g. 16:9, 9:16')
       .option('--resolution <res>', 'resolution, e.g. 720p, 1080p, 4K (model-dependent)')
       .option('--duration <seconds>', 'clip length in seconds (model-dependent)', toFloat)
+      .option('--draft', optionFromContract('generate_video', 'draft').description)
+      .option('--upgrade-from-output-id <id>', optionFromContract('generate_video', 'upgradeFromOutputId').description)
+      .option('--upgrade-slot <slot>', optionFromContract('generate_video', 'upgradeSlot').description, toInt)
+      .option('--output-format <format>', optionFromContract('generate_video', 'outputFormat').description)
+      .option('--return-last-frame', optionFromContract('generate_video', 'returnLastFrame').description)
       .option('--keep-input-length', "keep the input video's full length (video edit only)")
       .option('--audio', 'enable generated audio (models that support it)')
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
@@ -168,11 +173,16 @@ export function registerGenerate(program: Command): void {
     if (wantMultiShot) parameters.multiShot = true
     if (typeof opts.inputMode === 'string') parameters.inputMode = opts.inputMode
     if (opts.keepOriginalSound === true) parameters.keepOriginalSound = true
+    if (opts.draft !== undefined) parameters.draft = opts.draft
+    if (opts.outputFormat !== undefined) parameters.outputFormat = opts.outputFormat
+    if (opts.returnLastFrame !== undefined) parameters.returnLastFrame = opts.returnLastFrame
     if (klingMultiShot) parameters.shots = shots
     const request = compact<GenerateRequest>({
       contentType: 'video',
       kind: 'generate',
       modelId: opts.model as string,
+      upgradeFromOutputId: opts.upgradeFromOutputId as GenerateRequest['upgradeFromOutputId'],
+      upgradeSlot: opts.upgradeSlot as GenerateRequest['upgradeSlot'],
       prompt: klingMultiShot ? (prompt ?? shots!.map((s) => s.prompt).join(' ')) : prompt,
       aspectRatio: opts.aspect as string | undefined,
       resolution: opts.resolution as string | undefined,

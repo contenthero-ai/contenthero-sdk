@@ -6554,3 +6554,49 @@ test('legacy MCP image requests contain no new control defaults', async () => {
     }
   } finally { await mcp.close() }
 })
+
+test('video controls forward through submission and cost preview while existing requests stay unchanged', async () => {
+  const requests: unknown[] = []
+  const mcp = await connect(fakeClient({
+    generate: async request => { requests.push(request); return { outputId: 'video', status: 'processing' } },
+    estimateCost: async request => { requests.push(request); return { creditsEstimate: 1 } },
+  }))
+  try {
+    for (const controls of [
+      { draft: true }, { draft: false },
+      { upgradeFromOutputId: 'draft', upgradeSlot: 0, outputFormat: 'mov', returnLastFrame: true },
+      { upgradeFromOutputId: 'draft', upgradeSlot: 1, returnLastFrame: false },
+      { prompt: 'a bird', duration: 4, startFrame: 'image' },
+    ]) {
+      const { draft, outputFormat, returnLastFrame, startFrame, ...top } = controls
+      const parameters = Object.fromEntries(Object.entries({ draft, outputFormat, returnLastFrame }).filter(([, v]) => v !== undefined))
+      for (const getCost of [false, true]) {
+        const result = await mcp.callTool({ name: 'generate_video', arguments: { modelId: 'video', ...controls, getCost } })
+        assert.ok(!result.isError, JSON.stringify(result))
+        assert.deepEqual(requests.at(-1), {
+          modelId: 'video', contentType: 'video', kind: 'generate', ...top,
+          ...(Object.keys(parameters).length ? { parameters } : {}),
+          ...(startFrame ? { references: { startFrame } } : {}),
+        })
+      }
+    }
+  } finally { await mcp.close() }
+})
+
+test('video discovery prints declared toggles, upgrades, modes and video inputs on both tools', async () => {
+  const fixture = JSON.parse(readFileSync(new URL('../../sdk/src/fixtures/video-controls.json', import.meta.url), 'utf8'))
+  const models = fixture.models.map(m => ({ ...cap(m.modelId, 'video', m.capabilities.kind, 'video'), capabilities: m.capabilities }))
+  const mcp = await connect(fakeClient({ listModels: async () => models, getModel: async id => models.find(m => m.modelId === id) }))
+  try {
+    const list = JSON.stringify((await mcp.callTool({ name: 'list_models', arguments: {} })).content)
+    assert.match(list, /resolution when enabled: 480p/)
+    assert.match(list, /draft upgrade: 1080p/)
+    assert.match(list, /singleVideo/)
+    assert.match(list, /Voiceover/)
+    for (const model of models) {
+      const text = JSON.stringify((await mcp.callTool({ name: 'get_model', arguments: { modelId: model.modelId } })).content)
+      if (model.capabilities.draftUpgrade) assert.match(text, /draft upgrade: 1080p/)
+      else { assert.match(text, /singleVideo/); assert.match(text, /Voiceover/) }
+    }
+  } finally { await mcp.close() }
+})

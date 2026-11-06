@@ -1,0 +1,195 @@
+{
+  "sources": [
+    {
+      "path": "contenthero-app/supabase/migrations/20261105090000_seedance_draft_and_upgrade.sql",
+      "sha256": "8cb57e61a996ae3b4bbed103ea63e1252b381bcac1860032d951e4c3fcf2fb65"
+    },
+    {
+      "path": "contenthero-app/supabase/migrations/20261105043043_lip_sync_omnihuman_and_volcengine.sql",
+      "sha256": "39a1a2c5d959a286411f96e094e13eadd690de1a4dae1f82d4f21ffb25985ba1"
+    }
+  ],
+  "note": "Seedance contains only the capability additions in the cited migration. Volcengine contains its full capability declaration.",
+  "models": [
+    {
+      "modelId": "seedance-2-5",
+      "capabilities": {
+        "kind": "generate",
+        "outputType": "video",
+        "promptMode": "required",
+        "settings": [
+          {
+            "key": "draft",
+            "label": "Draft",
+            "control": "toggle",
+            "default": false,
+            "resolutionWhenEnabled": "480p",
+            "info": "Generate a draft that can be rendered again at the upgrade resolution."
+          }
+        ],
+        "draftUpgrade": {
+          "providerModelId": "bytedance/seedance-2-5-draft",
+          "resolution": "1080p",
+          "validForSeconds": 604800
+        },
+        "promptMaxChars": 20480
+      },
+      "kind": "generate"
+    },
+    {
+      "modelId": "volcengine-video-lip-sync",
+      "capabilities": {
+        "kind": "lip-sync",
+        "outputType": "video",
+        "promptMode": "none",
+        "inputTypes": [
+          "singleVideo",
+          "singleAudio",
+          "voiceId"
+        ],
+        "inputModes": {
+          "selector": "explicit",
+          "default": "script",
+          "modes": [
+            {
+              "id": "script",
+              "label": "Script",
+              "inputTypes": [
+                "voiceId"
+              ],
+              "usesScript": true
+            },
+            {
+              "id": "voiceover",
+              "label": "Voiceover",
+              "inputTypes": [
+                "singleAudio"
+              ]
+            }
+          ]
+        },
+        "inputPlaceholders": {
+          "singleVideo": {
+            "title": "Source Video",
+            "subtitle": "Video of the speaker to dub"
+          },
+          "singleAudio": {
+            "title": "Voiceover",
+            "subtitle": "Speech to sync"
+          }
+        },
+        "inputLimits": {
+          "audioMinDurationSec": 1,
+          "audioMinDurationExclusive": true,
+          "audioMaxDurationSec": 240,
+          "audioMaxDurationByQuality": {
+            "lite": 240,
+            "basic": 210
+          },
+          "audioFormats": [
+            "wav",
+            "mp3",
+            "m4a",
+            "aac"
+          ]
+        },
+        "audio": {
+          "supported": true,
+          "alwaysOn": true
+        },
+        "quality": {
+          "default": "lite",
+          "supported": [
+            "lite",
+            "basic"
+          ]
+        },
+        "duration": {
+          "mode": "range",
+          "min": 1,
+          "max": 240,
+          "default": 5
+        },
+        "generations": {
+          "min": 1,
+          "max": 1,
+          "default": 1
+        },
+        "features": {
+          "recreate": true
+        },
+        "voice": {},
+        "settings": [
+          {
+            "key": "voiceSettings.stability",
+            "label": "Stability",
+            "info": "Higher is consistent. Lower is more expressive and varies per take.",
+            "control": "slider",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "default": 0.5,
+            "display": "percent",
+            "appliesWhen": "speech"
+          },
+          {
+            "key": "voiceSettings.similarity",
+            "label": "Similarity",
+            "info": "How closely it matches the original voice. Raise if a clone drifts.",
+            "control": "slider",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "default": 0.75,
+            "display": "percent",
+            "appliesWhen": "speech"
+          },
+          {
+            "key": "separateVocal",
+            "label": "Separate vocals",
+            "shortLabel": "Vocals",
+            "info": "Isolate the voice from background music or noise in the audio track before syncing.",
+            "control": "toggle",
+            "default": false
+          },
+          {
+            "key": "openScenedet",
+            "label": "Scene detection",
+            "shortLabel": "Scenes",
+            "info": "Detect scene cuts and multiple speakers in Basic mode.",
+            "control": "toggle",
+            "default": false
+          },
+          {
+            "key": "alignAudio",
+            "label": "Loop video to audio",
+            "shortLabel": "Loop video",
+            "info": "Loop the source video when the audio track is longer than the video in Lite mode.",
+            "control": "toggle",
+            "default": true
+          },
+          {
+            "key": "alignAudioReverse",
+            "label": "Ping pong loop",
+            "shortLabel": "Ping pong",
+            "info": "Alternate forward and reverse playback when looping the video in Lite mode.",
+            "control": "toggle",
+            "default": false
+          },
+          {
+            "key": "templStartSeconds",
+            "label": "Video start offset",
+            "shortLabel": "Start",
+            "info": "Start time in seconds within the source video template in Lite mode.",
+            "control": "slider",
+            "min": 0,
+            "max": 60,
+            "step": 0.5,
+            "default": 0
+          }
+        ]
+      },
+      "kind": "lip-sync"
+    }
+  ]
+}

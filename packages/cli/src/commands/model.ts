@@ -49,7 +49,7 @@ export function registerModel(program: Command): void {
       emit(models, ctx, (rows: ModelInfo[]) =>
         table(
           ['MODEL', 'TYPE', 'KIND', 'NAME', 'CONTROLS'],
-          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, describeInputRules(m.capabilities).join('; ')]),
+          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, [...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities)].join('; ')]),
         ),
       )
     })

@@ -132,3 +132,12 @@ new ContentHero({
 Use `listModels()` and `getModel(modelId)` before constructing image requests. `GenerateRequest` accepts `quality`, `outputFormat`, `frameCount`, `frameDurationMs`, and `frameSize`. Set background through `parameters.background`. Omitted controls stay omitted. `frameCount` accepts a number or string according to the model declaration.
 
 Read `capabilities.settings` for select options, string defaults, custom value support, slider bounds and steps, and `appliesWhen`. GIF controls apply only to GIF output. Read `outputFormat`, `background`, and `imageOutput` for format choices, reference and transparency compatibility, GIF field names, and sprite sheet rules. `modelParams` contains model defaults, not user controls. The server validates requests against the current registry and returns its specific refusal text. `estimateCost` accepts the same request without generating.
+
+
+## Video draft controls
+
+Discover the model declaration before generating. Model lists and details include accepted inputs, input modes, the declared Draft resolution, and upgrade resolution and availability when declared. Upgrade a completed draft owned by the caller while it remains available. Shot settings are inherited and cannot change. The server enforces ownership, completion, expiration and whether the selected draft output already has an upgrade.
+
+Use `parameters.draft` to request Draft. Upgrade with `upgradeFromOutputId` and optional `upgradeSlot`; omitting the slot selects the first output. Set upgrade output options through `parameters.outputFormat` and `parameters.returnLastFrame`. The top level `outputFormat` remains the image output control. `estimateCost` accepts the same request and runs nothing.
+
+The current lip sync tool contract requires a portrait and declares no video input. Video dubbing models can appear in discovery, but their required video cannot be supplied through this tool until the app contract exposes it.

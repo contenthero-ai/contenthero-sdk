@@ -1946,3 +1946,24 @@ test('existing image requests retain their body without image control defaults',
     assert.deepEqual(body, request)
   }
 })
+
+test('video controls serialize through submission and cost preview without defaults', async () => {
+  const { fetch, calls } = stubFetch([{ status: 200, body: { creditsEstimate: 1 } }])
+  const client = new ContentHero({ apiKey: 'k', fetch })
+  const requests: import('./types.js').GenerateRequest[] = [
+    { modelId: 'video', parameters: { draft: true } },
+    { modelId: 'video', parameters: { draft: false } },
+    { modelId: 'video', upgradeFromOutputId: 'draft', upgradeSlot: 0, parameters: { outputFormat: 'mov', returnLastFrame: true } },
+    { modelId: 'video', upgradeFromOutputId: 'draft', upgradeSlot: 1, parameters: { returnLastFrame: false } },
+    { modelId: 'video', prompt: 'a bird', duration: 4, references: { startFrame: 'image' } },
+  ]
+  for (const request of requests) {
+    for (const cost of [false, true]) {
+      if (cost) await client.estimateCost(request)
+      else await client.generate(request)
+      const { outputId, getCost, ...body } = JSON.parse(String(calls.at(-1)?.init?.body))
+      assert.equal(getCost, cost ? true : undefined)
+      assert.deepEqual(body, request)
+    }
+  }
+})

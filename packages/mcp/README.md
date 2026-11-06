@@ -65,3 +65,12 @@ This server is a thin wrapper over [`@contenthero/sdk`](https://www.npmjs.com/pa
 ## Image controls and discovery
 
 The existing `generate_image` tool accepts `quality`, `outputFormat`, `background`, `frameCount`, `frameDurationMs`, and `frameSize`. Read `list_models` and `get_model` for each model's current choices, defaults, setting conditions, reference and transparency formats, and GIF sheet rules. Use numeric or string frame counts according to the declared control. Send GIF fields only for GIF output. `getCost` previews the same request without generating. Server refusals retain their specific message.
+
+
+## Video draft controls
+
+Discover the model declaration before generating. Model lists and details include accepted inputs, input modes, the declared Draft resolution, and upgrade resolution and availability when declared. Upgrade a completed draft owned by the caller while it remains available. Shot settings are inherited and cannot change. The server enforces ownership, completion, expiration and whether the selected draft output already has an upgrade.
+
+`generate_video` accepts `draft`, `upgradeFromOutputId`, `upgradeSlot`, `outputFormat` and `returnLastFrame`. Draft and upgrade output options map to the API parameters bag. Source identifiers remain top level. Pass `getCost` to preview the same request without generating.
+
+The current lip sync tool contract requires a portrait and declares no video input. Video dubbing models can appear in discovery, but their required video cannot be supplied through this tool until the app contract exposes it.

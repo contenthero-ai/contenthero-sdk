@@ -135,3 +135,12 @@ spend cap, storage, a plan limit; nothing ran and nothing was charged). In JSON 
 The existing `generate image` command accepts `--quality`, `--output-format`, `--background`, `--frame-count`, `--frame-duration-ms`, and `--frame-size`. Read `model list` and `model get <id>` for the selected model's current choices, defaults, conditions, format compatibility, and GIF sheet rules. `--json` retains the complete discovery response.
 
 The CLI reads the selected model when `--frame-count` is supplied, sending a number for a slider control and a string for a select control. Frame duration is an integer in milliseconds. Send GIF controls only with GIF output. Omitted flags stay omitted. Use `--cost` to preview the same request without generating. The server owns model validation and its refusal text is preserved.
+
+
+## Video draft controls
+
+Discover the model declaration before generating. Model lists and details include accepted inputs, input modes, the declared Draft resolution, and upgrade resolution and availability when declared. Upgrade a completed draft owned by the caller while it remains available. Shot settings are inherited and cannot change. The server enforces ownership, completion, expiration and whether the selected draft output already has an upgrade.
+
+`generate video` accepts `--draft`, `--upgrade-from-output-id`, `--upgrade-slot`, `--output-format` and `--return-last-frame`. Omit the prompt and shot settings for an upgrade. Omitting the slot selects the first output. Add `--cost` to preview the same request without generating.
+
+The current lip sync tool contract requires a portrait and declares no video input. Video dubbing models can appear in discovery, but their required video cannot be supplied through this tool until the app contract exposes it.

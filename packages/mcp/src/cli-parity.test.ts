@@ -272,15 +272,7 @@ const EXPRESSED_BY_STRUCTURE: Record<string, Record<string, string>> = {
  * re-query, project create could not take a brand kit, and project get / apply could not ask for a preview still);
  * all 12 closed the same day. Empty is the goal; a new entry needs a reason and a plan to close it.
  */
-const KNOWN_GAPS: Record<string, Record<string, string>> = {
-  generate_video: {
-    draft: 'The synced app contract also adds video controls outside this image brief. Follow up by exposing video draft requests in the CLI.',
-    outputFormat: 'The synced app contract also adds video controls outside this image brief. Follow up by exposing video output format in the CLI.',
-    returnLastFrame: 'The synced app contract also adds video controls outside this image brief. Follow up by exposing the last frame control in the CLI.',
-    upgradeFromOutputId: 'The synced app contract also adds video controls outside this image brief. Follow up by exposing video upgrade requests in the CLI.',
-    upgradeSlot: 'The synced app contract also adds video controls outside this image brief. Follow up by exposing video upgrade slot selection in the CLI.',
-  },
-}
+const KNOWN_GAPS: Record<string, Record<string, string>> = {}
 
 async function mcpTools(): Promise<Map<string, string[]>> {
   const server = await buildServer({ getClient: () => ({ listModels: async () => [] }) as never })
