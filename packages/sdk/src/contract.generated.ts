@@ -39,7 +39,7 @@ export interface AgentContract {
   version: string
 }
 
-export const AGENT_CONTRACT_VERSION = "1bd0add25e44d65854e8803c7809dbe5154d668d7989af5bb7bf1db5f1ede14a"
+export const AGENT_CONTRACT_VERSION = "1108c7a376f9f8279f1bb9983cca896ae13cb4a5f26fa89fe5ea1ff3d94facbf"
 
 export const AGENT_CONTRACT = {
   "tools": [
@@ -86,7 +86,7 @@ export const AGENT_CONTRACT = {
             "type": "integer"
           },
           "frameSize": {
-            "description": "GIF frame pixel size, subject to the model sprite sheet limits.",
+            "description": "GIF frame size from the model declared presets, subject to its sprite sheet limits.",
             "type": "string",
             "x-dynamic": true
           },
@@ -7769,7 +7769,7 @@ export const AGENT_CONTRACT = {
       "scopes": []
     }
   ],
-  "version": "1bd0add25e44d65854e8803c7809dbe5154d668d7989af5bb7bf1db5f1ede14a",
+  "version": "1108c7a376f9f8279f1bb9983cca896ae13cb4a5f26fa89fe5ea1ff3d94facbf",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
