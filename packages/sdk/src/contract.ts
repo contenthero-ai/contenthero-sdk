@@ -1,6 +1,6 @@
 /**
  * Reads of the agent contract (`contract.generated.ts`) that the CLI and the MCP share, so a field's allowed values and
- * its words are read one way. The contract is declared by the app and vendored here; nothing in this file restates it.
+ * its words are read one way. The contract is declared by the app and emitted into this package as the contract artifact; nothing in this file restates it.
  */
 import { AGENT_CONTRACT, type ContractSchema, type ContractToolName } from './contract.generated.js'
 

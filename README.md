@@ -36,6 +36,13 @@ console.log(result.outputUrls)
 
 Get an API key in the ContentHero app under Developer settings.
 
+## About this repository
+
+This repository is a read-only mirror of the public packages. The source of truth is ContentHero's private monorepo, and
+every change to these folders is copied here automatically. Install from npm, as shown above. The packages use workspace
+versions that only resolve inside the monorepo, so `npm install` in a clone of this repository will not work. Bug reports
+and questions are welcome as issues; pull requests cannot be merged here.
+
 ## License
 
 MIT

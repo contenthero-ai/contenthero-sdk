@@ -1,6 +1,6 @@
 {
   "name": "@contenthero/mcp",
-  "version": "0.4.50",
+  "version": "0.4.51",
   "description": "Official ContentHero MCP server. Generate images, video, and audio from any MCP client (Claude Code, Claude Desktop, etc.) using your ContentHero API key.",
   "type": "module",
   "bin": {
@@ -16,7 +16,6 @@
     "build": "node widget/guard.mjs && tsc --noEmit -p widget/tsconfig.json && node widget/build.mjs && tsc --emitDeclarationOnly && node build-server.mjs",
     "clean": "rm -rf dist",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "prepublishOnly": "npm run contract:check --prefix ../.. && npm run clean && npm run build",
     "verify:inline": "node scripts/verify-inline-media.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs"
   },
@@ -43,20 +42,20 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@contenthero/sdk": "^0.4.43",
+    "@contenthero/sdk": "workspace:^",
     "@modelcontextprotocol/ext-apps": "2.0.0",
-    "@modelcontextprotocol/sdk": "1.32.0",
+    "@modelcontextprotocol/sdk": "catalog:",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@contenthero-ai/brand-ui": "0.1.2",
+    "@contenthero-ai/brand-ui": "workspace:*",
     "@lobehub/icons": "5.10.0",
-    "@types/node": "^24.19.1",
-    "@types/react": "19.2.2",
-    "@types/react-dom": "19.2.1",
-    "esbuild": "0.28.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "esbuild": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "tsx": "^4.22.3"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@contenthero/cli",
-  "version": "0.3.40",
+  "version": "0.3.41",
   "description": "Official ContentHero CLI. Generate media, run the content pipeline, and read your brand/research context from the terminal or any agent shell. Rides the @contenthero/sdk kernel.",
   "type": "module",
   "bin": {
@@ -15,8 +15,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "NO_COLOR=1 tsx --test \"src/**/*.test.ts\"",
-    "prepublishOnly": "npm run contract:check --prefix ../.. && npm run clean && npm run build"
+    "test": "NO_COLOR=1 tsx --test \"src/**/*.test.ts\""
   },
   "publishConfig": {
     "access": "public"
@@ -41,12 +40,12 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@contenthero/sdk": "^0.4.43",
+    "@contenthero/sdk": "workspace:^",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "@types/node": "^24.19.1",
+    "@types/node": "catalog:",
     "tsx": "^4.22.3"
   }
 }

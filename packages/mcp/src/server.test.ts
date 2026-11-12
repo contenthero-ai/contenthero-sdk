@@ -6481,10 +6481,10 @@ test('listTools equals the agent contract, tool by tool and field by field, and 
   }
 })
 
-test('the SDK exports the contract version, and it is the vendored file\'s', () => {
-  const vendored = JSON.parse(readFileSync(new URL('../../sdk/contract/agent-contract.json', import.meta.url), 'utf8')) as { version: string }
-  assert.equal(AGENT_CONTRACT_VERSION, vendored.version)
-  assert.equal(AGENT_CONTRACT.version, vendored.version)
+test('the SDK exports the contract version, and it is the artifact\'s', () => {
+  const artifact = JSON.parse(readFileSync(new URL('../../sdk/contract/agent-contract.json', import.meta.url), 'utf8')) as { version: string }
+  assert.equal(AGENT_CONTRACT_VERSION, artifact.version)
+  assert.equal(AGENT_CONTRACT.version, artifact.version)
 })
 
 test('generate_image forwards every image control for submission and cost preview', async () => {

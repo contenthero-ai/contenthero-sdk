@@ -17,7 +17,7 @@
  * ⭐ It has already caught two different failures on the same line of work: a private dependency that
  * could not be installed, and a duplicate shebang from bundling that made the binary unparseable.
  *
- * Usage: npm run verify:tarball -w @contenthero/mcp
+ * Usage: pnpm --filter @contenthero/mcp run verify:tarball (packs with pnpm, which rewrites workspace: ranges)
  */
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
@@ -29,7 +29,7 @@ const PKG = dirname(dirname(fileURLToPath(import.meta.url)))
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', ...opts })
 
 for (const f of readdirSync(PKG)) if (f.endsWith('.tgz')) rmSync(join(PKG, f))
-run('npm', ['pack'], { cwd: PKG, stdio: 'pipe' })
+run('pnpm', ['pack'], { cwd: PKG, stdio: 'pipe' })
 const tgz = readdirSync(PKG).find((f) => f.endsWith('.tgz'))
 if (!tgz) { console.error('verify:tarball: npm pack produced nothing'); process.exit(1) }
 

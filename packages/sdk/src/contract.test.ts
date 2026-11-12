@@ -5,20 +5,20 @@ import * as sdk from './index.js'
 import { AGENT_CONTRACT, AGENT_CONTRACT_VERSION, toolDescription } from './contract.generated.js'
 import { contractChoices, optionFromContract } from './contract.js'
 
-const vendored = JSON.parse(readFileSync(new URL('../contract/agent-contract.json', import.meta.url), 'utf8')) as {
+const artifact = JSON.parse(readFileSync(new URL('../contract/agent-contract.json', import.meta.url), 'utf8')) as {
   version: string
   vocabularies: Record<string, readonly string[]>
 }
 
-test('the SDK carries the vendored contract version', () => {
-  assert.equal(AGENT_CONTRACT_VERSION, vendored.version)
-  assert.equal(AGENT_CONTRACT.version, vendored.version)
+test('the SDK carries the version of the contract artifact', () => {
+  assert.equal(AGENT_CONTRACT_VERSION, artifact.version)
+  assert.equal(AGENT_CONTRACT.version, artifact.version)
 })
 
 test('every SDK export sharing a contract vocabulary name holds the contract values', () => {
   const exported = sdk as unknown as Record<string, unknown>
   let shared = 0
-  for (const [name, values] of Object.entries(vendored.vocabularies)) {
+  for (const [name, values] of Object.entries(artifact.vocabularies)) {
     if (!(name in exported)) continue
     shared += 1
     assert.deepEqual([...(exported[name] as string[])], [...values], name)

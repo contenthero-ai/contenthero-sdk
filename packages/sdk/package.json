@@ -1,6 +1,6 @@
 {
   "name": "@contenthero/sdk",
-  "version": "0.4.43",
+  "version": "0.4.44",
   "description": "Official ContentHero SDK. Programmatic media generation (image, video, audio) on the ContentHero Studio API. The shared kernel the ContentHero MCP and CLI sit on.",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,10 +20,12 @@
     "README.md"
   ],
   "scripts": {
+    "generate": "node scripts/generate-contract.mjs",
+    "prebuild": "node scripts/generate-contract.mjs",
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "tsx --test \"src/**/*.test.ts\"",
-    "prepublishOnly": "npm run contract:check --prefix ../.. && npm run clean && npm run build"
+    "pretest": "node scripts/generate-contract.mjs",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "publishConfig": {
     "access": "public"
@@ -48,7 +50,7 @@
   "license": "MIT",
   "private": false,
   "devDependencies": {
-    "@types/node": "^24.19.1",
+    "@types/node": "catalog:",
     "tsx": "^4.22.3"
   }
 }
