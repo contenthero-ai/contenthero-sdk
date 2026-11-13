@@ -23,7 +23,6 @@ test('every top-level command group is registered', () => {
     'account',
     'model',
     'generate',
-    'upscale',
     'transcribe',
     'download',
     'status',
@@ -63,11 +62,10 @@ test('status is one top-level command over ids, with wait folded into a flag and
   assert.equal(cmd.registeredArguments[0]?.variadic, true)
 })
 
-test('generate exposes the five generation subcommands', () => {
+test('generate exposes one subcommand per medium, and the retired operation commands are gone', () => {
   const subs = subcommands('generate')
-  for (const n of ['image', 'video', 'audio', 'board', 'lip-sync']) {
-    assert.ok(subs.includes(n), `generate is missing: ${n}`)
-  }
+  assert.deepEqual([...subs].sort(), ['audio', 'image', 'video'])
+  assert.equal(buildProgram().commands.some((c) => c.name() === 'upscale'), false, 'upscale is a model of generate image or video')
 })
 
 test('card exposes its verbs, with posts and assets folded into update', () => {
@@ -157,12 +155,12 @@ test('universal status verbs are registered, each taking --off and naming media 
   }
 })
 
-test('generate image and board expose --avatar, so a generation can file itself against an avatar', () => {
+test('generate image exposes --avatar, so a generation can file itself against an avatar', () => {
   // The API has accepted `avatarId` on both endpoints since avatar looks landed. No client advertised it,
   // so generating a new LOOK for a character had no path outside the browser. That gap is invisible from
   // either side alone: the server looks complete and the CLI looks internally consistent.
   const generate = buildProgram().commands.find((c) => c.name() === 'generate')!
-  for (const name of ['image', 'board']) {
+  for (const name of ['image']) {
     const cmd = generate.commands.find((c) => c.name() === name)
     assert.ok(cmd, `generate ${name} is registered`)
     assert.ok(

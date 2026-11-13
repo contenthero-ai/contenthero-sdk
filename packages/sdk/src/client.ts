@@ -216,6 +216,13 @@ export interface ContentHeroOptions {
    */
   apiKey?: string
   /**
+   * An OAuth access token the caller already holds, sent as the Bearer in place of an API key. For a server acting on
+   * behalf of a person who signed in with OAuth (the hosted MCP): the token is the credential, so no API key is
+   * created or revealed. Exactly one of `apiKey` and `accessToken` may be given; the environment key is ignored when
+   * a token is passed.
+   */
+  accessToken?: string
+  /**
    * API base URL. Falls back to `CONTENTHERO_BASE_URL`, then the production
    * host. Override for self-hosted or preview environments.
    */
@@ -264,7 +271,8 @@ const WRITE_RETRY_BASE_MS = 250
 const JITTER_MS = 250
 
 export class ContentHero {
-  private readonly apiKey: string
+  /** The Bearer credential: an API key, or an OAuth access token (`ContentHeroOptions.accessToken`). */
+  private readonly credential: string
   /**
    * The resolved API base url: explicit option, then CONTENTHERO_BASE_URL, then the stored config, then
    * production.
@@ -287,10 +295,13 @@ export class ContentHero {
   private static readonly ACTIVITY_DEBOUNCE_MS = 10_000
 
   constructor(options: ContentHeroOptions = {}) {
-    const apiKey = options.apiKey ?? readEnv('CONTENTHERO_API_KEY')
-    if (!apiKey) {
+    if (options.apiKey && options.accessToken) {
+      throw new Error('Pass either { apiKey } or { accessToken }, not both.')
+    }
+    const credential = options.accessToken ?? options.apiKey ?? readEnv('CONTENTHERO_API_KEY')
+    if (!credential) {
       throw new Error(
-        'A ContentHero API key is required. Pass { apiKey } or set CONTENTHERO_API_KEY.',
+        'A ContentHero credential is required. Pass { apiKey } or { accessToken }, or set CONTENTHERO_API_KEY.',
       )
     }
     const fetchImpl = options.fetch ?? (globalThis.fetch as FetchLike | undefined)
@@ -299,7 +310,7 @@ export class ContentHero {
         'No fetch implementation found. Use Node 20+ or pass a custom fetch via { fetch }.',
       )
     }
-    this.apiKey = apiKey
+    this.credential = credential
     this.baseUrl = (options.baseUrl ?? readEnv('CONTENTHERO_BASE_URL') ?? DEFAULT_BASE_URL).replace(
       /\/+$/,
       '',
@@ -2522,7 +2533,7 @@ export class ContentHero {
   private async request<T>(method: string, path: string, body?: unknown, init: { signal?: AbortSignal } = {}): Promise<T> {
     const headers: Record<string, string> = {
       ...this.identityHeaders,
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${this.credential}`,
       Accept: 'application/json',
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json'

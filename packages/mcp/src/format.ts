@@ -78,6 +78,7 @@ import type {
   JobStatus,
   JobStatusResult,
   GenerationOutput,
+  OutputLayer,
   GenerateResult,
   EditAudioResult,
   MediaListResult,
@@ -140,7 +141,7 @@ import type {
   BrandImportOutcome,
   AudioMapAnswer,
   EvidenceSheet,} from '@contenthero/sdk'
-import { ContentHeroError, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
+import { ContentHeroError, matchingToolSentence, operationInputs, toolForModel, headlineMetric, secondaryMetric, formatMetric, describeStyleLibraryPins, describeAccountIdsNotFound, describeEmptyReason, statusTarget, statusTargetOf, LimitError, RateLimitError, ServiceUnavailableError, chargeSentence, describeAudioMap, describeContentVideoWindow, describeEvidenceSheet, describeClip, describeContentSlides, describeJobWait, contentVideoLabel, describeCodeWarnings, describeContentVideo, describeVideoCostDetail, contentVideosPending, describeCrop, describeDocumentFindings, describePartsAsked, describeModulesIndex, PASS_REVISION_LINE, describeEditorOps, describeExportLoudness, describeExportShareLink, describeFileSize, describeAudioFacts, describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, describeLimit, describeLoudness, describeMediaShare, describeProjectShare, describeProjectShareLink, describeReferences, describeRenderFailure, describeRenderProgress, describeAdjusted, describeSoundMeasurement, describeSourceSound, describeSegmentWords, describeWordTiming, describeAudioMapSummary, describePicturePart, describeProjectPicture, isProjectParts, describeReserved, describeScope, describeTranscribeCost, describeLinkTranscription, describeTranscriptionState, transcriptionSource, itemHandle, importedMediaFrom, withCodeWarnings, withExportLoudness } from '@contenthero/sdk'
 
 export function text(body: string, isError = false): CallToolResult {
   return { content: [{ type: 'text', text: body }], isError }
@@ -409,9 +410,18 @@ function landedOutputs(gen: { outputs?: GenerationOutput[] }): Array<GenerationO
   return (gen.outputs ?? []).filter((o): o is GenerationOutput & { url: string } => typeof o.url === 'string' && o.url.length > 0)
 }
 
-/** An output's name in a line: its media id, and which stem it is when it is one of a split's. */
+/** Where a layer separation's output sits: the base, or a part by name with its box in the base image's pixels. */
+function layerPlace(l: OutputLayer): string {
+  if (!l.box) return 'base'
+  const { x, y, width, height } = l.box
+  return `${l.name ?? 'layer'}, box x ${x} y ${y} width ${width} height ${height}`
+}
+
+/** An output's name in a line: its media id, and which stem it is, or where it sits, when it is one of a split's or a layer set's. */
 function outputName(o: GenerationOutput): string {
-  return o.stem ? `${o.mediaId} (${o.stem})` : o.mediaId
+  if (o.stem) return `${o.mediaId} (${o.stem})`
+  if (o.layer) return `${o.mediaId} (${layerPlace(o.layer)})`
+  return o.mediaId
 }
 
 /** One line per output: its media id and file (and link), or its status when it produced nothing. */
@@ -1075,7 +1085,7 @@ export function avatarResult(a: Avatar): CallToolResult {
   return text(
     lines([
       `${a.name} (${idOf(a)})${a.isDefault ? ' [default]' : ''}`,
-      `image (base look, use as imageUrl for generate_lip_sync): ${a.imageUrl ?? 'none'}`,
+      `image (base look, use as a referenceImages portrait for a lip sync model of generate_video): ${a.imageUrl ?? 'none'}`,
       `default voice (use as voiceId): ${a.defaultVoiceId ?? 'none'}`,
       a.description ? `description: ${a.description}` : null,
       traits ? `traits: ${traits}` : null,
@@ -2146,7 +2156,8 @@ export function modelListResult(models: ModelInfo[]): CallToolResult {
   const rows = models.map((m) => {
     const summary = capabilitySummary(m)
     const def = m.isDefault ? ' [default]' : ''
-    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind}${summary ? ` | ${summary}` : ''}${[...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities)].map(l => `\n  ${l}`).join('')}`
+    const boards = m.boardTypes?.length ? ` | board types: ${m.boardTypes.map((t) => t.boardType).join(', ')}` : ''
+    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind} | ${toolForModel(m) ?? 'no tool'}${boards}${summary ? ` | ${summary}` : ''}${[...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities)].map(l => `\n  ${l}`).join('')}`
   })
   return text(
     [
@@ -2229,10 +2240,12 @@ export function modelResult(m: ModelInfo): CallToolResult {
       enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
       ...promptReferenceLines(m.promptReferences),
       ...(m.boardTypes?.length
-        ? ['', 'Board types (generate_board boardType):', ...m.boardTypes.map((t) => `  ${t.boardType}: ${t.summary}`)]
+        ? ['', 'Board types (boardType, on generate_image):', ...m.boardTypes.map((t) => `  ${t.boardType}: ${t.summary}`)]
         : []),
       '',
-      "Build the request within this shape, preview cost with the matching generate tool's getCost option, then run it.",
+      matchingToolSentence(m),
+      operationInputs(m) ? `Takes: ${operationInputs(m)!.join(', ')}.` : null,
+      'Build the request within this shape, preview cost with that tool\'s getCost option, then run it.',
     ]),
   )
 }

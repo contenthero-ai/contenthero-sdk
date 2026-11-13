@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `medium` module: `planMediumCall`, `toolForModel`, `isBoardModel`, `matchingToolSentence`, `operationInputs`, `HOMES` and `MODEL_KINDS`. One planner for the MCP and the CLI: the model's registry kind decides the request, and fields a kind does not take are refused with a model-specific error. `ModelInfo.kind` also reads `background-removal` and `layer-separation`.
+- Contract sync: `generate_image` `upscaleFactor`, `boardType` and `boardName`; `generate_video` `upscaleFactor`, `sourceDurationSeconds`, `script`, `voiceId`, `voiceName` and `audioDurationSeconds`. The `generate_board`, `upscale` and `generate_lip_sync` tools are gone from the contract.
 - Contract sync (fdfb327513b5): `generate_video` `keyframes`, `voices` and `keepOriginalSound`.
 - `describePromptReferenceTags`: the registry's prompt tags, one wording for the MCP and the CLI.
 - Contract sync: `klingElements[].video` and `klingElements[].voice` on `generate_video`.

@@ -19,7 +19,7 @@ import {
   ServiceUnavailableError,
 } from './errors.js'
 import type { FetchLike } from './client.js'
-import type { ListProjectsInput } from './types.js'
+import type { ListProjectsInput, OutputLayer } from './types.js'
 import { LIST_SORTS, MEDIA_LIST_SOURCES, MEDIA_STOCK_COLLECTIONS, MEDIA_STOCK_ORIENTATIONS } from './types.js'
 
 /** Build a fetch stub that replays a queue of [status, body] responses and records calls. */
@@ -51,6 +51,28 @@ function asStatus(gen: { outputId: string; status: string; error?: string | null
 
 test('constructor requires an api key', () => {
   assert.throws(() => new ContentHero({ apiKey: undefined, fetch: (async () => new Response()) as FetchLike }))
+})
+
+test('constructor refuses both an api key and an access token', () => {
+  assert.throws(
+    () => new ContentHero({ apiKey: 'ch_live_test', accessToken: 'tok', fetch: (async () => new Response()) as FetchLike }),
+    /either/,
+  )
+})
+
+test('an access token is sent as the bearer, and the environment key is ignored beside it', async () => {
+  const previous = process.env.CONTENTHERO_API_KEY
+  process.env.CONTENTHERO_API_KEY = 'ch_live_from_env'
+  try {
+    const { fetch, calls } = stubFetch([{ status: 200, body: { models: [] } }])
+    const client = new ContentHero({ accessToken: 'oauth-token', fetch, baseUrl: 'https://example.test' })
+    await client.listModels().catch(() => undefined)
+    const headers = calls[0]?.init?.headers as Record<string, string>
+    assert.equal(headers.Authorization, 'Bearer oauth-token')
+  } finally {
+    if (previous === undefined) delete process.env.CONTENTHERO_API_KEY
+    else process.env.CONTENTHERO_API_KEY = previous
+  }
 })
 
 test('generate posts to the right path with bearer auth', async () => {
@@ -409,6 +431,16 @@ test('generateAndWait polls until completed', async () => {
   const gen = await client.generateAndWait({ modelId: 'nano-banana-2', prompt: 'a cat' }, { pollIntervalMs: 1 })
   assert.equal(gen.status, 'settled')
   assert.deepEqual(gen.outputs.map((o) => o.url), ['https://cdn/x.png'])
+})
+
+test('a layer separation output carries its place on the output', async () => {
+  const layer: OutputLayer = { z: 1, name: 'part', size: { width: 4, height: 4 }, box: { x: 1, y: 2, width: 3, height: 4 } }
+  const { fetch } = stubFetch([
+    { status: 200, body: { outputId: 'gen9', status: 'settled', contentType: 'image', modelId: 'm', outputs: [{ mediaId: 'Gen00009-2', status: 'succeeded', url: 'https://cdn/y.png', appUrl: 'https://app/media/Gen00009-2', layer }], error: null, createdAt: 't', completedAt: 't2' } },
+  ])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch })
+  const gen = await client.getGeneration('gen9')
+  assert.deepEqual(gen.outputs[0]?.layer, layer)
 })
 
 test('generateAndWait throws GenerationFailedError on a failed terminal state', async () => {

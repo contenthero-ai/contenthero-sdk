@@ -20,6 +20,7 @@ import {
   editorOpsResult,
   transcriptResult,
   transcribeCostResult,
+  modelListResult,
 } from './format.js'
 
 /** A generation's outputs from their urls, in slot order, named the way the server names them (7.44). */
@@ -863,6 +864,49 @@ test("a finished split's outputs are named by their stem", () => {
   )
   assert.match(out, /sp1-1 \(vocals\)/)
   assert.match(out, /sp1-4 \(other\)/)
+})
+
+test("a layer separation's outputs name where each sits in the base image", () => {
+  const size = { width: 100, height: 80 }
+  const layers = [
+    { z: 0, name: null, size, box: null },
+    { z: 1, name: 'lamp', size, box: { x: 10, y: 20, width: 30, height: 40 } },
+  ]
+  const out = body(
+    completedResult({
+      outputId: 'ls1',
+      appUrl: 'https://app/media/ls1',
+      status: 'settled',
+      contentType: 'image',
+      modelId: 'layers-model',
+      outputs: layers.map((layer, i) => ({
+        mediaId: `ls1-${i + 1}`,
+        status: 'succeeded',
+        url: `https://cdn/ls1-${i + 1}.png`,
+        appUrl: `https://app/media/ls1-${i + 1}`,
+        layer,
+      })),
+    }),
+  )
+  assert.match(out, /ls1-1 \(base\)/)
+  assert.match(out, /ls1-2 \(lamp, box x 10 y 20 width 30 height 40\)/)
+})
+
+test('list_models names the tool of each audio model and the board types of the board pipeline', () => {
+  const caps = (outputType: string) => ({ kind: 'generate', inputTypes: [], outputType })
+  const base = { brandColor: null, iconKey: null, description: null, tags: [] }
+  const out = body(
+    modelListResult([
+      { ...base, modelId: 'iso', displayName: 'Iso', contentType: 'audio', kind: 'voice', editOperation: 'isolate', capabilities: caps('audio') },
+      { ...base, modelId: 'stt', displayName: 'Stt', contentType: 'audio', kind: 'generate', capabilities: caps('text') },
+      { ...base, modelId: 'vc', displayName: 'Vc', contentType: 'audio', kind: 'voice', editOperation: 'change_voice', capabilities: caps('audio') },
+      { ...base, modelId: 'boards', displayName: 'Boards', contentType: 'image', kind: 'generate', capabilities: caps('image'), boardTypes: [{ boardType: 'alpha', label: 'A', summary: 's' }, { boardType: 'beta', label: 'B', summary: 's' }] },
+    ] as never),
+  )
+  assert.match(out, /iso \(Iso\) \| voice \| edit_audio/)
+  assert.match(out, /stt \(Stt\) \| generate \| transcribe/)
+  assert.match(out, /vc \(Vc\) \| voice \| no tool/)
+  assert.match(out, /boards \(Boards\) \| generate \| generate_image \| board types: alpha, beta/)
 })
 
 /** Outside a tool call there is no answer to hand over, so errorResult reports a fault as it always did. */

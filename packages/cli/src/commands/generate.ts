@@ -1,25 +1,32 @@
 /**
  * `contenthero generate <type>` - the generation hero path.
- *   generate image     text-to-image / image-to-image
- *   generate video     text-to-video, frame conditioning, references
+ *   generate image     everything the Studio image picker runs: generation, upscale, background removal,
+ *                      layer separation, Reference Boards
+ *   generate video     everything the Studio video picker runs: generation, lip-sync, upscale, background removal
  *   generate audio     ElevenLabs TTS / music / sfx (synchronous)
- *   generate board     a Reference Board (dense multi-panel sheet)
- *   generate lip-sync  synchronize speech to a portrait or video
  *
- * Request shaping mirrors the MCP intent tools so the CLI, SDK, and MCP submit
- * identical payloads. Shared async flags (--cost / --wait / --no-wait /
+ * The model's registry kind decides what runs, resolved at call time and planned by the SDK's `planMediumCall`,
+ * the same function the MCP tools use, so the CLI, SDK, and MCP submit identical payloads and refuse the same
+ * fields. Shared async flags (--cost / --wait / --no-wait /
  * --timeout) come from runOptions; audio is synchronous so it only takes --cost.
  *
- * `--avatar` on `image` and `board` files the result against an avatar. The API has accepted this since the
+ * `--avatar` on `image` files the result against an avatar. The API has accepted this since the
  * avatar work landed and no client exposed it, so generating a new LOOK for a character had no path outside
  * the browser even though the server was ready for one.
  */
 
 import { Option, type Command } from 'commander'
-import { toolDescription, optionFromContract, type GenerateRequest, type GenerateBoardRequest } from '@contenthero/sdk'
-import { makeClient } from '../context.js'
+import {
+  optionFromContract,
+  getMediumModel,
+  planMediumCall,
+  type ContentHero,
+  type GenerateRequest,
+  type MediumInput,
+  type ModelInfo,
+} from '@contenthero/sdk'
+import { makeClient, type Context } from '../context.js'
 import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
-import { CliError, EXIT } from '../errors.js'
 import { collect, collectJson, toVoice, toFloat, toInt, toJson } from '../args.js'
 
 
@@ -73,15 +80,40 @@ function placementFields(opts: Record<string, unknown>): Pick<GenerateRequest, '
 /** An image flag's words, read from the canonical tool input. */
 const image = (input: string): string => optionFromContract('generate_image', input).description
 
+/** A video flag's words, read from the canonical tool input. */
+const video = (input: string): string => optionFromContract('generate_video', input).description
+
 /** A music flag's words, read from the agent contract's generate_audio input it mirrors. */
 const music = (input: string): string => optionFromContract('generate_audio', input).description
 
-const lipSync = (input: string): string => optionFromContract('generate_lip_sync', input).description
+/** Drop the keys a flag left unset, so the SDK planner sees only what the caller passed. */
+function given<T extends object>(obj: T): T {
+  return compact(obj)
+}
+
+/**
+ * Run one image or video call. The model is asked for at call time, the SDK plans the call from its kind, and the
+ * plan picks the route: a plain generation submits the request built by the caller, an operation submits the
+ * planned request, a board runs the board pipeline.
+ */
+async function runMedium(
+  client: ContentHero,
+  ctx: Context,
+  medium: 'image' | 'video',
+  model: ModelInfo,
+  input: MediumInput,
+  generateRequest: GenerateRequest,
+  run: RunOptions,
+): Promise<void> {
+  const plan = planMediumCall(model, medium, input)
+  if (plan.route === 'board') return runBoard(client, ctx, plan.request, run)
+  return runGeneration(client, ctx, plan.route === 'operation' ? plan.request : generateRequest, run)
+}
 
 export function registerGenerate(program: Command): void {
   const generate = program
     .command('generate')
-    .description('Generate media: image, video, audio, board, or lip-sync')
+    .description('Generate media: image, video, or audio. Each runs every operation its models offer (see `contenthero model get <id>`)')
 
   // -- generate image -------------------------------------------------------
   addPlacementFlags(addRunFlags(
@@ -103,14 +135,17 @@ export function registerGenerate(program: Command): void {
       // See .claude/plans/model-id-tier-convention-v1.md in the app repo.
       .option('-n, --num <count>', 'number of variations (1-4)', toInt)
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
-      .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)'),
+      .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)')
+      .option('--upscale-factor <factor>', image('upscaleFactor'))
+      .option('--type <boardType>', image('boardType'))
+      .option('--name <name>', image('boardName')),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
+    const model = await getMediumModel(client, opts.model as string, 'image')
     let frameCount = opts.frameCount as GenerateRequest['frameCount']
     if (frameCount !== undefined) {
-      const { capabilities } = await client.getModel(opts.model as string)
-      const key = capabilities.imageOutput?.gif?.frameCountKey
-      const setting = capabilities.settings?.find(s => s.key === key)
+      const key = model.capabilities.imageOutput?.gif?.frameCountKey
+      const setting = model.capabilities.settings?.find(s => s.key === key)
       if (setting?.control === 'slider') frameCount = toInt(String(frameCount))
     }
     const request = compact<GenerateRequest>({
@@ -131,7 +166,27 @@ export function registerGenerate(program: Command): void {
       avatarId: opts.avatar as string | undefined,
       ...placementFields(opts),
     })
-    await runGeneration(client, ctx, request, runOptions(opts))
+    const input = given<MediumInput>({
+      prompt,
+      aspectRatio: opts.aspect as string | undefined,
+      resolution: opts.resolution as string | undefined,
+      quality: opts.quality as MediumInput['quality'],
+      outputFormat: opts.outputFormat as MediumInput['outputFormat'],
+      background: opts.background as MediumInput['background'],
+      frameCount: opts.frameCount as MediumInput['frameCount'],
+      frameDurationMs: opts.frameDurationMs as number | undefined,
+      frameSize: opts.frameSize as MediumInput['frameSize'],
+      numImages: opts.num as number | undefined,
+      referenceImages: opts.ref as string[] | undefined,
+      avatarId: opts.avatar as string | undefined,
+      upscaleFactor: opts.upscaleFactor as string | undefined,
+      boardType: opts.type as MediumInput['boardType'],
+      boardName: opts.name as string | undefined,
+      projectId: opts.project as string | undefined,
+      placement: opts.placement as MediumInput['placement'],
+      playheadFrame: opts.playhead as number | undefined,
+    })
+    await runMedium(client, ctx, 'image', model, input, request, runOptions(opts))
   })
 
   // -- generate video -------------------------------------------------------
@@ -165,9 +220,16 @@ export function registerGenerate(program: Command): void {
       .option('--inline-kling-element <json>', 'define a Kling element in the call: a JSON object with name and any of description, images, video, voice (each a URL or output id; model get says what the model takes); repeatable', collectJson)
       .option('--multi-shot', 'multi-shot with the cuts planned by the model, on a model whose shots include auto (model get); to write each shot yourself, pass --shots instead')
       .option('--shots <json>', 'write each shot yourself, on a model whose shots include custom: JSON array of { prompt, duration } objects', toJson)
-      .option('--input-mode <id>', 'the input mode, by id from model get; omit to let the attached inputs decide'),
+      .option('--input-mode <id>', 'the input mode, by id from model get; omit to let the attached inputs decide')
+      .option('--upscale-factor <factor>', video('upscaleFactor'))
+      .option('--source-duration <seconds>', video('sourceDurationSeconds'), toFloat)
+      .option('--script <text>', video('script'))
+      .option('--voice-id <id>', video('voiceId'))
+      .option('--voice-name <name>', video('voiceName'))
+      .option('--audio-duration <seconds>', video('audioDurationSeconds'), toFloat),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
+    const model = await getMediumModel(client, opts.model as string, 'video')
     const shots = opts.shots as Array<{ prompt: string; duration: number }> | undefined
     const klingMultiShot = Array.isArray(shots) && shots.length > 0
     const wantMultiShot = klingMultiShot || opts.multiShot === true
@@ -208,7 +270,43 @@ export function registerGenerate(program: Command): void {
       }),
       ...placementFields(opts),
     })
-    await runGeneration(client, ctx, request, runOptions(opts))
+    const input = given<MediumInput>({
+      prompt,
+      aspectRatio: opts.aspect as string | undefined,
+      resolution: opts.resolution as string | undefined,
+      duration: opts.duration as number | undefined,
+      draft: opts.draft as MediumInput['draft'],
+      upgradeFromOutputId: opts.upgradeFromOutputId as MediumInput['upgradeFromOutputId'],
+      upgradeSlot: opts.upgradeSlot as MediumInput['upgradeSlot'],
+      outputFormat: opts.outputFormat as MediumInput['outputFormat'],
+      returnLastFrame: opts.returnLastFrame as MediumInput['returnLastFrame'],
+      keepInputLength: opts.keepInputLength === true ? true : undefined,
+      audioEnabled: opts.audio === true ? true : undefined,
+      numGenerations: opts.num as number | undefined,
+      negativePrompt: opts.negative as string | undefined,
+      startFrame: opts.startFrame as string | undefined,
+      endFrame: opts.endFrame as string | undefined,
+      keyframes: opts.keyframe as string[] | undefined,
+      voices: opts.voice as MediumInput['voices'],
+      referenceImages: opts.ref as string[] | undefined,
+      referenceVideos: opts.refVideo as string[] | undefined,
+      referenceAudio: opts.refAudio as string[] | undefined,
+      keepOriginalSound: opts.keepOriginalSound === true ? true : undefined,
+      klingElements: request.references?.klingElements as MediumInput['klingElements'],
+      multiShot: opts.multiShot === true ? true : undefined,
+      shots: klingMultiShot ? shots : undefined,
+      inputMode: opts.inputMode as string | undefined,
+      upscaleFactor: opts.upscaleFactor as string | undefined,
+      sourceDurationSeconds: opts.sourceDuration as number | undefined,
+      script: opts.script as string | undefined,
+      voiceId: opts.voiceId as string | undefined,
+      voiceName: opts.voiceName as string | undefined,
+      audioDurationSeconds: opts.audioDuration as number | undefined,
+      projectId: opts.project as string | undefined,
+      placement: opts.placement as MediumInput['placement'],
+      playheadFrame: opts.playhead as number | undefined,
+    })
+    await runMedium(client, ctx, 'video', model, input, request, runOptions(opts))
   })
 
   // -- generate audio (synchronous) -----------------------------------------
@@ -254,71 +352,4 @@ export function registerGenerate(program: Command): void {
         timeoutSec: DEFAULT_TIMEOUT_SEC,
       })
     })
-
-  // -- generate board -------------------------------------------------------
-  addRunFlags(
-    generate
-      .command('board')
-      .description('Generate a Reference Board (dense multi-panel reference sheet, 3:4 / 4K)')
-      .argument('[prompt]', 'subject description (required when no --ref is given)')
-      .requiredOption('-t, --type <type>', 'board type (`contenthero model get reference-boards` lists them)')
-      .option('--ref <urlOrId>', 'source image (URL or output id); repeatable', collect)
-      .option('-n, --num <count>', 'number of board variations (1-4)', toInt)
-      .option('--name <name>', 'optional board name')
-      .option('--avatar <id>', 'associate the board with this avatar (see `contenthero avatar list`)'),
-  ).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
-    // Not validated here: the server's list is the only one, and it refuses an unknown type by naming the valid ones.
-    const { client, ctx } = makeClient(command)
-    const request = compact<GenerateBoardRequest>({
-      boardType: opts.type as string,
-      prompt,
-      referenceImages: opts.ref as string[] | undefined,
-      numImages: opts.num as number | undefined,
-      boardName: opts.name as string | undefined,
-      avatarId: opts.avatar as string | undefined,
-    })
-    await runBoard(client, ctx, request, runOptions(opts))
-  })
-
-  // -- generate lip-sync ----------------------------------------------------
-  addRunFlags(
-    generate
-      .command('lip-sync')
-      .description(toolDescription('generate_lip_sync'))
-      .requiredOption('-m, --model <id>', lipSync('modelId'))
-      .option('--image <urlOrId>', lipSync('imageUrl'))
-      .option('--ref-video <urlOrId>', lipSync('referenceVideos'), collect)
-      .option('--audio <urlOrId>', lipSync('audioUrl'))
-      .option('--script <text>', lipSync('script'))
-      .option('--voice <id>', lipSync('voiceId'))
-      .option('--voice-name <name>', lipSync('voiceName'))
-      .option('--motion <text>', lipSync('motionPrompt'))
-      .option('--resolution <res>', lipSync('resolution'))
-      .option('--audio-duration <seconds>', lipSync('audioDurationSeconds'), toFloat),
-  ).action(async (opts: Record<string, unknown>, command: Command) => {
-    if (!opts.audio && !(opts.script && opts.voice)) {
-      throw new CliError(
-        'Provide a voice source: either --audio <urlOrId>, or --script <text> together with --voice <id>.',
-        EXIT.USAGE,
-      )
-    }
-    const { client, ctx } = makeClient(command)
-    const request = compact<GenerateRequest>({
-      contentType: 'video',
-      kind: 'lip-sync',
-      modelId: opts.model as string,
-      prompt: opts.motion as string | undefined,
-      text: opts.script as string | undefined,
-      voiceId: opts.voice as string | undefined,
-      voiceName: opts.voiceName as string | undefined,
-      resolution: opts.resolution as string | undefined,
-      durationSeconds: opts.audioDuration as number | undefined,
-      references: references({
-        images: opts.image ? [opts.image as string] : undefined,
-        videos: opts.refVideo as string[] | undefined,
-        audio: opts.audio ? [opts.audio as string] : undefined,
-      }),
-    })
-    await runGeneration(client, ctx, request, runOptions(opts))
-  })
 }

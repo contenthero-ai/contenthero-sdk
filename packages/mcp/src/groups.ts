@@ -30,10 +30,9 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
     slug: 'generate',
     title: 'Generate',
     blurb:
-      'Create images, video, audio and boards, upscale them, and check what any background job is doing.',
+      'Create images, video and audio, run every operation a model offers (upscale, background removal, lip-sync, layers, boards), and check what any background job is doing.',
     tools: [
-      'generate_image', 'generate_video', 'generate_audio', 'generate_board',
-      'generate_lip_sync', 'upscale', 'edit_audio', 'transcribe',
+      'generate_image', 'generate_video', 'generate_audio', 'edit_audio', 'transcribe',
       'get_status',
       'list_models', 'get_model',
     ],

@@ -83,12 +83,28 @@ function exportJob(status: 'completed' | 'rendering'): Record<string, unknown> {
   }
 }
 
+/** The registry's answer for each model a case names: its medium, its operation, and the board types of the board pipeline. */
+const MODELS: Record<string, { contentType: string; kind: string; boardTypes?: unknown[] }> = {
+  'test-image': { contentType: 'image', kind: 'generate' },
+  'test-video': { contentType: 'video', kind: 'generate' },
+  'test-lip-sync': { contentType: 'video', kind: 'lip-sync' },
+  'test-upscale': { contentType: 'image', kind: 'upscale' },
+  'test-background-removal': { contentType: 'image', kind: 'background-removal' },
+  'test-layers': { contentType: 'image', kind: 'layer-separation' },
+  'test-board': { contentType: 'image', kind: 'generate', boardTypes: [{ boardType: 'character', summary: 'a character sheet' }] },
+}
+function modelNamed(modelId: string): Record<string, unknown> {
+  const model = MODELS[modelId]
+  if (!model) throw new Error(`The fake server has no model ${modelId}`)
+  return { modelId, displayName: modelId, tags: [], capabilities: {}, ...model }
+}
+
 /** The fake server: each route answers as the app does, finished or still running. */
 function server(path: Path) {
   const done = path === 'finished'
   return (method: string, url: URL, body: Record<string, unknown>): unknown => {
     const p = url.pathname
-    if (method === 'GET' && p.startsWith('/api/v1/models/')) return { id: 'test-model', contentType: 'image', kind: 'upscale', capabilities: {} }
+    if (method === 'GET' && p.startsWith('/api/v1/models/')) return modelNamed(decodeURIComponent(p.split('/').pop() as string))
     if (method === 'POST' && p === '/api/v1/studio/generate') {
       if (body.contentType === 'audio') return { ...generation('settled', 'audio'), status: 'settled' }
       return { outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, status: 'processing' }
@@ -201,12 +217,14 @@ interface Case {
 }
 
 const CASES: Case[] = [
-  { tool: 'generate_image', args: { modelId: 'test-model', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
-  { tool: 'generate_video', args: { modelId: 'test-model', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
-  { tool: 'generate_lip_sync', args: { modelId: 'test-model', imageUrl: 'https://media.contenthero.ai/f.png', audioUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
-  { tool: 'upscale', args: { modelId: 'test-model', sourceUrl: 'https://media.contenthero.ai/a.png', factor: '2x' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'generate_image', args: { modelId: 'test-image', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'generate_video', args: { modelId: 'test-video', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'generate_video', args: { modelId: 'test-lip-sync', referenceImages: ['https://media.contenthero.ai/f.png'], referenceAudio: ['https://media.contenthero.ai/a.mp3'] }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'generate_image', args: { modelId: 'test-upscale', referenceImages: ['https://media.contenthero.ai/a.png'], upscaleFactor: '2x' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'generate_image', args: { modelId: 'test-background-removal', referenceImages: ['https://media.contenthero.ai/a.png'] }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
+  { tool: 'generate_image', args: { modelId: 'test-layers', referenceImages: ['https://media.contenthero.ai/a.png'] }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'generate_audio', args: { modelId: 'test-model', text: 'hello' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished'] },
-  { tool: 'generate_board', args: { boardType: 'character', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
+  { tool: 'generate_image', args: { modelId: 'test-board', boardType: 'character', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'edit_audio', args: { operation: 'enhance', sourceUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'edit_audio', args: { projectId: 'p1', inPlace: true }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'import', args: { url: 'https://example.com/a.png' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },

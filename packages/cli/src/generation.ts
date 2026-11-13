@@ -1,9 +1,9 @@
 /**
  * Shared generation plumbing: submit a request, optionally preflight its cost,
  * optionally block until it finishes, and render the result. Used by the
- * `generate`, `upscale`, and `status` commands so they behave identically.
+ * `generate` and `status` commands so they behave identically.
  *
- * Async contract (mirrors the SDK / MCP): image, video, and upscale return
+ * Async contract (mirrors the SDK / MCP): image and video (every operation of the medium) return
  * `processing`; audio returns `settled` inline. With --wait (the default) we
  * poll to a terminal state; on timeout we emit the outputId and set exit 4 so
  * the caller can keep polling and still script around it.

@@ -24,6 +24,8 @@ export type {
   MediaStockLicense,
   MediaListType,
 } from './types.js'
+export { MODEL_KINDS, HOMES, getMediumModel, toolForModel, isBoardModel, matchingToolSentence, operationInputs, planMediumCall } from './medium.js'
+export type { Medium, MediumTool, MediumInput, MediumPlan } from './medium.js'
 export { AnswerTally } from './answers.js'
 export { outlierFormatGroup, headlineMetric, secondaryMetric, compactCount, formatMetric, formatMetricExact } from './engagement.js'
 export type { OutlierFormatGroup, HeadlineMetric, HeadlineMetricKind, HeadlineMetricInput } from './engagement.js'
@@ -43,6 +45,7 @@ export type {
   EditAudioOperation,
   Generation,
   GenerationOutput,
+  OutputLayer,
   GenerationStatus,
   JobKind,
   JobState,

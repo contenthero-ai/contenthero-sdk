@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { optionFromContract, toolDescription, ValidationError } from '@contenthero/sdk'
+import { optionFromContract, ValidationError } from '@contenthero/sdk'
 import { buildProgram } from '../program.js'
 
 let server: Server
@@ -20,7 +20,10 @@ before(async () => {
   server = createServer((req, res) => {
     res.setHeader('content-type', 'application/json')
     if (req.method === 'GET') {
-      res.end(JSON.stringify(req.url === '/api/v1/models' ? { models } : models.find(m => req.url?.endsWith(m.modelId))))
+      // A model asked for by id that the catalog does not list is a lip-sync model of that id, so each case can name its own.
+      const id = decodeURIComponent((req.url ?? '').split('/').pop() ?? '')
+      const lipSync = { modelId: id, displayName: id, contentType: 'video', kind: 'lip-sync', tags: [], capabilities: { kind: 'lip-sync' } }
+      res.end(JSON.stringify(req.url === '/api/v1/models' ? { models } : models.find(m => m.modelId === id) ?? lipSync))
       return
     }
     let raw = ''
@@ -49,14 +52,14 @@ async function read(...args: string[]): Promise<string> {
 test('lip sync flags forward all fields for both visual sources and voice sources on both paths', async () => {
   for (const cost of [false, true]) {
     for (const [source, references] of [
-      [['--image', 'portrait'], { images: ['portrait'] }],
+      [['--ref', 'portrait'], { images: ['portrait'] }],
       [['--ref-video', 'source-video'], { videos: ['source-video'] }],
     ] as const) {
       for (const [voice, fields] of [
-        [['--audio', 'speech', '--audio-duration', '4.2'], { references: { ...references, audio: ['speech'] }, durationSeconds: 4.2 }],
-        [['--script', 'Hello', '--voice', 'voice', '--voice-name', 'Speaker'], { references, text: 'Hello', voiceId: 'voice', voiceName: 'Speaker' }],
+        [['--ref-audio', 'speech', '--audio-duration', '4.2'], { references: { ...references, audio: ['speech'] }, durationSeconds: 4.2 }],
+        [['--script', 'Hello', '--voice-id', 'voice', '--voice-name', 'Speaker'], { references, text: 'Hello', voiceId: 'voice', voiceName: 'Speaker' }],
       ] as const) {
-        await run('generate', 'lip-sync', '--model', 'declared-model', ...source, ...voice, '--motion', 'Smile', '--resolution', '720p', cost ? '--cost' : '--no-wait')
+        await run('generate', 'video', 'Smile', '--model', 'declared-model', ...source, ...voice, '--resolution', '720p', cost ? '--cost' : '--no-wait')
         const { outputId, getCost, ...body } = seen.at(-1)!
         assert.equal(getCost, cost ? true : undefined)
         assert.deepEqual(body, { contentType: 'video', kind: 'lip-sync', modelId: 'declared-model', prompt: 'Smile', resolution: '720p', ...fields })
@@ -66,15 +69,15 @@ test('lip sync flags forward all fields for both visual sources and voice source
 })
 
 test('existing minimal portrait request retains its body', async () => {
-  await run('generate', 'lip-sync', '--model', 'portrait-model', '--image', 'portrait', '--audio', 'speech', '--no-wait')
+  await run('generate', 'video', '--model', 'portrait-model', '--ref', 'portrait', '--ref-audio', 'speech', '--no-wait')
   const { outputId, ...body } = seen.at(-1)!
   assert.deepEqual(body, { contentType: 'video', kind: 'lip-sync', modelId: 'portrait-model', references: { images: ['portrait'], audio: ['speech'] } })
 })
 
 test('missing and wrong visual sources reach the server and preserve its refusal', async () => {
   for (const cost of [false, true]) {
-    for (const [model, source] of [['missing', []], ['wrong', ['--image', 'portrait']]] as const) {
-      await assert.rejects(run('generate', 'lip-sync', '--model', model, ...source, '--audio', 'speech', cost ? '--cost' : '--no-wait'), (err: unknown) => {
+    for (const [model, source] of [['missing', []], ['wrong', ['--ref', 'portrait']]] as const) {
+      await assert.rejects(run('generate', 'video', '--model', model, ...source, '--ref-audio', 'speech', cost ? '--cost' : '--no-wait'), (err: unknown) => {
         assert.ok(err instanceof ValidationError)
         assert.equal(err.message, refusals[model])
         return true
@@ -85,18 +88,25 @@ test('missing and wrong visual sources reach the server and preserve its refusal
 })
 
 test('repeatable video references and mixed sources are forwarded for server validation', async () => {
-  await run('generate', 'lip-sync', '--model', 'declared-model', '--ref-video', 'first', '--ref-video', 'second', '--image', 'portrait', '--audio', 'speech', '--no-wait')
+  await run('generate', 'video', '--model', 'declared-model', '--ref-video', 'first', '--ref-video', 'second', '--ref', 'portrait', '--ref-audio', 'speech', '--no-wait')
   assert.deepEqual(seen.at(-1)!.references, { images: ['portrait'], videos: ['first', 'second'], audio: ['speech'] })
 })
 
-test('lip sync help reads every parameter description from the contract', () => {
-  const command = buildProgram().commands.find(c => c.name() === 'generate')!.commands.find(c => c.name() === 'lip-sync')!
-  assert.equal(command.description(), toolDescription('generate_lip_sync'))
-  for (const [flag, input] of Object.entries({ model: 'modelId', image: 'imageUrl', refVideo: 'referenceVideos', audio: 'audioUrl', script: 'script', voice: 'voiceId', voiceName: 'voiceName', motion: 'motionPrompt', resolution: 'resolution', audioDuration: 'audioDurationSeconds' })) {
+test('generate video help reads the lip-sync parameter descriptions from the contract', () => {
+  const command = buildProgram().commands.find(c => c.name() === 'generate')!.commands.find(c => c.name() === 'video')!
+  for (const [flag, input] of Object.entries({ script: 'script', voiceId: 'voiceId', voiceName: 'voiceName', audioDuration: 'audioDurationSeconds' })) {
     const option = command.options.find(o => o.attributeName() === flag)!
-    assert.equal(option.description, optionFromContract('generate_lip_sync', input).description)
-    if (flag === 'image') assert.equal(option.mandatory, false)
+    assert.equal(option.description, optionFromContract('generate_video', input).description)
   }
+})
+
+test('a lip-sync model refuses a field its kind does not take, naming the model', async () => {
+  await assert.rejects(run('generate', 'video', '--model', 'declared-model', '--ref', 'portrait', '--ref-audio', 'speech', '--aspect', '16:9', '--no-wait'), (err: unknown) => {
+    assert.ok(err instanceof ValidationError)
+    assert.match(err.message, /declared-model/)
+    assert.match(err.message, /aspectRatio/)
+    return true
+  })
 })
 
 test('lip sync discovery states each visual source in list and detail and preserves JSON', async () => {

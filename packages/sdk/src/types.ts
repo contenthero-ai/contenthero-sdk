@@ -71,7 +71,7 @@ export interface References {
   /** Image references / image-to-image inputs (URL or output id). */
   images?: string[]
   /** Video references, including a source video for lip sync (URL or output id). */
-  videos?: ToolInput<'generate_lip_sync'>['referenceVideos']
+  videos?: ToolInput<'generate_video'>['referenceVideos']
   /** Audio references, e.g. lip-sync custom audio input (URL or output id). */
   audio?: string[]
   /** First frame for video models that accept one (URL or output id). */
@@ -627,6 +627,20 @@ export interface GenerationOutput {
   visionUrl?: string | null
   /** Which stem this output is (`vocals`, `drums`, `bass` or `other`), for an `editAudio` split; absent for every other output. */
   stem?: AudioStem
+  /** Where this output sits in a layer separation's set; absent for every other output. */
+  layer?: OutputLayer
+}
+
+/** One output of a layer separation: what it is and where it sits in the base image. */
+export interface OutputLayer {
+  /** Paint order: 0 is the base, higher sits above. */
+  z: number
+  /** The part, as the model named it; null for the base. */
+  name: string | null
+  /** The output file's own pixel size. A part's file can be larger than its box. */
+  size: { width: number; height: number }
+  /** The part's box in the BASE image's pixels; null for the base, which fills the frame. */
+  box: { x: number; y: number; width: number; height: number } | null
 }
 
 /**
@@ -2626,7 +2640,8 @@ export interface ImportedMedia {
 }
 
 /** The operation a model performs within its content type. */
-export type ModelKind = 'generate' | 'upscale' | 'lip-sync' | 'voice'
+export type { ModelKind } from './medium.js'
+import type { ModelKind } from './medium.js'
 
 /**
  * A model's capability surface, as advertised by the discovery endpoint. Typed
@@ -2690,6 +2705,9 @@ export interface PromptReferences {
 }
 
 /** A model in the discovery catalog returned by `listModels` / `getModel`. */
+/** What the registry says an audio model does, beyond generating (`model_providers.edit_operation`). */
+export type ModelEditOperation = 'isolate' | 'enhance' | 'split' | 'change_voice'
+
 export interface ModelInfo {
   modelId: string
   displayName: string
@@ -2708,6 +2726,11 @@ export interface ModelInfo {
   description: string | null
   contentType: (typeof MEDIA_KINDS)[number]
   kind: ModelKind
+  /**
+   * The audio operation the registry assigns this model (`isolate`, `enhance`, `split` or `change_voice`); null for
+   * every model with none. It names the agent tool of an audio model that is not a plain generation.
+   */
+  editOperation?: ModelEditOperation | null
   tags: string[]
   /** True for the default model of its content type. */
   isDefault?: boolean

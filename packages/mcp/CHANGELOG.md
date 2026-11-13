@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- BREAKING: one generate tool per medium, no aliases. `generate_image` and `generate_video` run every model of their medium by the model's registry kind: generate, upscale, background removal, layer separation, lip sync and (image) reference boards. Removed `generate_board`, `upscale` and `generate_lip_sync` (110 tools to 107). Sources go in `referenceImages`, `referenceVideos` and `referenceAudio`. `get_model` and `list_models` name the tool that runs each model.
 - `generate_video` accepts `keyframes`, `voices` and `keepOriginalSound`, sent as `references.keyframes`, `references.voices` and `parameters.keepOriginalSound`.
 - `generate_video` accepts `klingElements[].video` and `klingElements[].voice` (from the synced contract).
 - `get_model` prints the registry's Kling 4.0 fields: keyframe, voice and video subject counts, the shared input budget, the video limits, the frame count by duration, the name rules, whether input modes are exclusive, and declared settings. The words come from the SDK, shared with the CLI.

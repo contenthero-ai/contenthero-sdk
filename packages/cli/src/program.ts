@@ -18,7 +18,6 @@ import { registerKlingElement } from './commands/kling-element.js'
 import { registerTemplate } from './commands/template.js'
 import { registerStyleLibrary } from './commands/style-library.js'
 import { registerGenerate } from './commands/generate.js'
-import { registerUpscale } from './commands/upscale.js'
 import { registerAudio } from './commands/audio.js'
 import { registerTranscribe } from './commands/transcribe.js'
 import { registerDownload } from './commands/download.js'
@@ -65,7 +64,6 @@ export function buildProgram(): Command {
   registerTemplate(program)
   registerStyleLibrary(program)
   registerGenerate(program)
-  registerUpscale(program)
   registerAudio(program)
   registerTranscribe(program)
   registerDownload(program)

@@ -34,6 +34,15 @@ before(async () => {
     req.on('data', (c) => (raw += c))
     req.on('end', () => {
       const url = new URL(req.url ?? '/', 'http://x')
+      // The generate commands ask the registry what a model does before they submit; answer that read with a
+      // plain generation model and keep it out of the recorded requests.
+      if (req.method === 'GET' && /^\/api\/v1\/models\/[^/]+$/.test(url.pathname)) {
+        const modelId = decodeURIComponent(url.pathname.split('/').pop() ?? '')
+        const contentType = /^(kling|wan|seedance|veo)/.test(modelId) ? 'video' : 'image'
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ modelId, displayName: modelId, contentType, kind: 'generate', tags: [], capabilities: {} }))
+        return
+      }
       seen.push({ method: req.method ?? '', path: url.pathname, body: raw ? JSON.parse(raw) : null })
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ ...ROW, klingElements: [ROW], deleted: true, creditsEstimate: 1 }))

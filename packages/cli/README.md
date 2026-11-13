@@ -68,9 +68,8 @@ contenthero status "$ID" --timeout 300
 # Chain: feed a previous output id straight in as a reference (URL or output id)
 contenthero generate video "slow zoom in" --model <videoModelId> --start-frame "$ID"
 
-# Audio (synchronous) and upscaling
+# Audio (synchronous)
 contenthero generate audio --model <audioModelId> --text "Hello there" --voice <voiceId>
-contenthero upscale "$ID" --model <upscaleModelId> --factor 2x
 ```
 
 Exit code 4 means a render was accepted but did not finish before the timeout. The
@@ -143,4 +142,4 @@ Discover the model declaration before generating. Model lists and details includ
 
 `generate video` accepts `--draft`, `--upgrade-from-output-id`, `--upgrade-slot`, `--output-format` and `--return-last-frame`. Omit the prompt and shot settings for an upgrade. Omitting the slot selects the first output. Add `--cost` to preview the same request without generating.
 
-For `generate lip-sync`, read `model get` first. Supply `--image` for a model declaring `singleImage`, or `--ref-video` for a model declaring `singleVideo`. Add `--audio`, or `--script` with `--voice`. Pass `--cost` to preview the same request. The server validates the source required by the model.
+`generate image` and `generate video` run every model of their medium, and the model decides the work: upscale, background removal, layer separation and lip sync included. Read `model get` first, which names the command and the inputs the model takes. For a lip-sync model on `generate video`, supply `--ref` for a model declaring `singleImage`, or `--ref-video` for a model declaring `singleVideo`. Add `--ref-audio`, or `--script` with `--voice-id`. Sources for upscale, background removal and layer separation go in `--ref` or `--ref-video` the same way. Pass `--cost` to preview the same request. The server validates the source required by the model.

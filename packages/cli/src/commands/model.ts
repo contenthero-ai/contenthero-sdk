@@ -11,7 +11,7 @@ import type { Command } from 'commander'
 import { makeClient } from '../context.js'
 import { emit, keyValues, table } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, type ModelInfo } from '@contenthero/sdk'
+import { describeInputLimits, describeInputModes, describePromptReferenceTags, describeInputRules, toolForModel, type ModelInfo } from '@contenthero/sdk'
 
 const CONTENT_TYPES = ['image', 'video', 'audio'] as const
 type ContentType = (typeof CONTENT_TYPES)[number]
@@ -49,7 +49,7 @@ export function registerModel(program: Command): void {
       emit(models, ctx, (rows: ModelInfo[]) =>
         table(
           ['MODEL', 'TYPE', 'KIND', 'NAME', 'CONTROLS'],
-          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, [...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities)].join('; ')]),
+          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, [...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities), ...(m.boardTypes?.length ? [`board types: ${m.boardTypes.map((t) => t.boardType).join(', ')}`] : [])].join('; ')]),
         ),
       )
     })
@@ -80,6 +80,7 @@ export function registerModel(program: Command): void {
           ['Name', model.displayName],
           ['Type', model.contentType],
           ['Operation', model.kind],
+          ['Run with', runWith(model)],
           ...(model.isDefault ? [['Default', 'yes'] as [string, string]] : []),
           ...(model.tags.length ? [['Tags', model.tags.join(', ')] as [string, string]] : []),
           ...(model.description ? [['Description', model.description] as [string, string]] : []),
@@ -118,4 +119,11 @@ export function registerModel(program: Command): void {
         ])
       })
     })
+}
+
+/** The command that runs a model, read from the SDK's one table of which tool runs which kind. */
+function runWith(model: ModelInfo): string {
+  const tool = toolForModel(model)
+  if (!tool) return 'no command runs it'
+  return tool === 'edit_audio' ? 'contenthero audio (see `contenthero audio --help`)' : `contenthero ${tool.replace('_', ' ')}`
 }

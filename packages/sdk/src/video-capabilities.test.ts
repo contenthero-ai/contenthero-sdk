@@ -29,10 +29,11 @@ test('lip sync visual source wording follows declarations without model identifi
 })
 
 
-test('lip sync contract keeps model as the sole required input and reuses the video schema', () => {
-  const lip = toolInputSchema('generate_lip_sync')
-  assert.deepEqual(lip.required, ['modelId'])
-  assert.equal(lip.additionalProperties, false)
-  assert.deepEqual(lip.properties.referenceVideos, toolInputSchema('generate_video').properties.referenceVideos)
-  assert.equal(lip.properties.imageUrl.type, 'string')
+test('the video tool takes every lip-sync input, reusing one reference schema', () => {
+  const video = toolInputSchema('generate_video')
+  assert.deepEqual(video.required, ['modelId'])
+  assert.equal(video.additionalProperties, false)
+  for (const field of ['referenceImages', 'referenceVideos', 'referenceAudio', 'script', 'voiceId', 'voiceName', 'audioDurationSeconds']) {
+    assert.ok(video.properties[field], `generate_video takes ${field}`)
+  }
 })

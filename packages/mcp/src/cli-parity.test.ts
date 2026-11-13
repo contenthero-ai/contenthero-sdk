@@ -38,12 +38,9 @@ type Leaf = { path: string; flags: Set<string>; hidden: boolean }
 /** MCP tool -> the CLI command(s) that together express it. */
 const TOOL_TO_CLI: Record<string, string[]> = {
   generate_image: ['generate image'],
-  generate_board: ['generate board'],
   generate_video: ['generate video'],
   generate_audio: ['generate audio'],
   edit_audio: ['audio isolate', 'audio enhance', 'audio enhance-clips', 'audio split', 'audio split-clips'],
-  upscale: ['upscale'],
-  generate_lip_sync: ['generate lip-sync'],
   transcribe: ['transcribe'],
   list_avatars: ['avatar list'],
   get_avatar: ['avatar get'],
@@ -201,10 +198,9 @@ const NAMING_RULES: Array<(input: string, tool: string) => string[]> = [
 
 /** Genuine one-off names: tool -> input -> the flag or positional that expresses it. */
 const ALIASES: Record<string, Record<string, string>> = {
-  generate_board: { boardType: '--type', boardName: '--name' },
-  generate_video: { audioEnabled: '--audio', negativePrompt: '--negative', referenceVideos: '--ref-video', referenceAudio: '--ref-audio' },
+  generate_image: { boardType: '--type', boardName: '--name' },
+  generate_video: { audioEnabled: '--audio', negativePrompt: '--negative', referenceVideos: '--ref-video', referenceAudio: '--ref-audio', sourceDurationSeconds: '--source-duration', audioDurationSeconds: '--audio-duration' },
   edit_audio: { clipIds: '--clips' },
-  generate_lip_sync: { motionPrompt: '--motion', referenceVideos: '--ref-video' },
   create_avatar: { defaultVoiceId: '--voice' },
   update_avatar: { defaultVoiceId: '--voice' },
   create_brand_kit: { brandColors: '--color', typography: '--title-font' },

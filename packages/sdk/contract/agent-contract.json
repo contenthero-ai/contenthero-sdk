@@ -2,7 +2,7 @@
   "tools": [
     {
       "description": {
-        "mcp": "Generate one or more images from a text prompt (optionally image-to-image with reference images). Waits for the result and returns the image URLs. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
+        "mcp": "Run any image model of the Studio picker. The model's operation decides the work: generation from a prompt (optionally image-to-image with reference images), upscaling, background removal, layer separation, or a reference board. get_model names the operation and the inputs the model takes; a field the model's operation does not take is refused, never ignored. Sources for upscaling, background removal and layer separation go in referenceImages. Generation, upscaling and background removal return at once with an outputId; get_status waits for the render. A reference board waits for its result and, when it is still rendering, returns an outputId to read with get_status. A layer separation result carries every output (the base and each layer) with its position. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
       },
       "group": "generate",
       "inputSchema": {
@@ -14,13 +14,21 @@
             "x-dynamic": true
           },
           "avatarId": {
-            "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model. Either its short id or its UUID.",
+            "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model. Either its short id or its UUID. On a reference board model it associates the board with that avatar instead.",
             "type": "string"
           },
           "background": {
             "description": "Background handling declared by the model, subject to output format compatibility.",
             "type": "string",
             "x-dynamic": true
+          },
+          "boardName": {
+            "description": "Optional name for the board.",
+            "type": "string"
+          },
+          "boardType": {
+            "description": "One of the board types listed by get_model('reference-boards').",
+            "type": "string"
           },
           "frameCount": {
             "anyOf": [
@@ -52,7 +60,7 @@
             "type": "boolean"
           },
           "modelId": {
-            "description": "The model id. list_models (contentType image) names every image model and what each is for; get_model gives one model's options and prompt guide.",
+            "description": "The model id. list_models (contentType image) names every image model, its operation and what it is for; get_model gives one model's options, inputs and prompt guide.",
             "type": "string",
             "x-dynamic": true
           },
@@ -269,7 +277,7 @@
             "x-dynamic": true
           },
           "referenceImages": {
-            "description": "References for image-to-image / editing. Each may be a URL or a previous output id (e.g. \"<id>\" or \"<id>-2\") to chain from an earlier generation.",
+            "description": "References for image-to-image or editing, and the source image of an upscaling, background removal, layer separation or reference board model. Each may be a URL or a previous output id (e.g. \"<id>\" or \"<id>-2\") to chain from an earlier generation.",
             "items": {
               "type": "string"
             },
@@ -277,6 +285,11 @@
           },
           "resolution": {
             "description": "e.g. 1K, 2K, 4K. get_model lists the resolutions a model takes; validated per model.",
+            "type": "string",
+            "x-dynamic": true
+          },
+          "upscaleFactor": {
+            "description": "Upscale factor, for an upscale model. Validated per model.",
             "type": "string",
             "x-dynamic": true
           }
@@ -291,7 +304,7 @@
     },
     {
       "description": {
-        "mcp": "Generate a video from a text prompt (optionally from a start/end frame or reference images/videos/audio). Returns at once with an outputId; get_status waits for the render. Some models choose an input mode by which references you pass (a startFrame with an optional endFrame, or references alone); get_model describes each model's modes. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
+        "mcp": "Run any video model of the Studio picker. The model's operation decides the work: generation from a prompt (optionally from a start/end frame or reference images/videos/audio), lip sync of a portrait or a video to speech, upscaling, or background removal. get_model names the operation and the inputs the model takes; a field the model's operation does not take is refused, never ignored. Sources for upscaling and background removal go in referenceVideos. A lip sync model takes its portrait in referenceImages or its video in referenceVideos, as get_model declares, plus speech from referenceAudio (one clip) or script with voiceId. Returns at once with an outputId; get_status waits for the render. Some models choose an input mode by which references you pass (a startFrame with an optional endFrame, or references alone); get_model describes each model's modes. Optionally pass projectId to place the generated video onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
       },
       "group": "generate",
       "inputSchema": {
@@ -301,6 +314,10 @@
             "description": "e.g. 16:9, 9:16. Validated per model.",
             "type": "string",
             "x-dynamic": true
+          },
+          "audioDurationSeconds": {
+            "description": "For a lip sync model with referenceAudio: the length of that clip in seconds, which improves cost accuracy.",
+            "type": "number"
           },
           "audioEnabled": {
             "description": "Generate audio (only for models that support it).",
@@ -379,7 +396,7 @@
             "type": "array"
           },
           "modelId": {
-            "description": "The model id. list_models (contentType video) names every video model and what each is for; get_model gives one model's options, input modes and prompt guide.",
+            "description": "The model id. list_models (contentType video) names every video model, its operation and what it is for; get_model gives one model's options, input modes and prompt guide.",
             "type": "string",
             "x-dynamic": true
           },
@@ -594,18 +611,18 @@
             "type": "string"
           },
           "prompt": {
-            "description": "Describe the video to generate. Required for most models; optional for some (e.g. motion-control), where it is an auxiliary motion hint.",
+            "description": "Describe the video to generate. Required for most models; optional for some, where it is an auxiliary motion hint. On a lip sync model it is the optional motion or expression hint.",
             "type": "string"
           },
           "referenceAudio": {
-            "description": "Reference audio (audio-driven video): each a URL or a previous output id. Only used by models that accept audio references; get_model says which do.",
+            "description": "Reference audio (audio-driven video): each a URL or a previous output id. Only used by models that accept audio references; get_model says which do. On a lip sync model, the one existing speech clip.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "referenceImages": {
-            "description": "Reference images: each a URL or a previous output id to chain.",
+            "description": "Reference images: each a URL or a previous output id to chain. On a lip sync model that takes an image, the one portrait to animate.",
             "items": {
               "type": "string"
             },
@@ -627,6 +644,10 @@
             "description": "Also return the last frame of a draft upgrade.",
             "type": "boolean"
           },
+          "script": {
+            "description": "For a lip sync model: text for the subject to speak, synthesized to speech. Requires voiceId; use this or referenceAudio. Before writing directions into the script, read the speech model's promptGuide with get_model.",
+            "type": "string"
+          },
           "shots": {
             "description": "Multi-shot mode with per-shot prompts, on a model that takes them (get_model gives its shot limits): an ordered list of shots, each with its own prompt and duration in seconds. When provided, the video runs in multi-shot mode; only startFrame attaches as an image (it becomes the first frame of shot 1), all other shots are text-only.",
             "items": {
@@ -647,6 +668,10 @@
             },
             "type": "array"
           },
+          "sourceDurationSeconds": {
+            "description": "For an upscaling or background removal model: the length of the source video in seconds, used for pricing. Required by those models.",
+            "type": "number"
+          },
           "startFrame": {
             "description": "First frame: an image URL or a previous output id (e.g. \"<id>-2\") to chain (e.g. animate an image you just generated).",
             "type": "string"
@@ -660,6 +685,19 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
+          },
+          "upscaleFactor": {
+            "description": "Upscale factor, for an upscale model. Validated per model.",
+            "type": "string",
+            "x-dynamic": true
+          },
+          "voiceId": {
+            "description": "For a lip sync model: the voice that speaks the script (list_voices names them).",
+            "type": "string"
+          },
+          "voiceName": {
+            "description": "For a lip sync model: human-readable voice name (display only).",
+            "type": "string"
           },
           "voices": {
             "description": "Named voices, each addressable in the prompt as @name, on models that take them.",
@@ -1081,162 +1119,6 @@
     },
     {
       "description": {
-        "mcp": "Generate a Reference Board: a dense multi-panel reference sheet (3:4, 4K) built from a source image and/or a written description, used to keep a subject on-model across later generations (feed the board back in as a referenceImage). Provide referenceImages and/or a prompt (at least one is required). Waits up to ~40s; boards render slowly (minutes), so it usually returns an outputId to poll with get_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
-      },
-      "group": "generate",
-      "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "avatarId": {
-            "description": "Optional avatar id from list_avatars. Associate the board with that avatar, so a character sheet built for an avatar stays filed against it.",
-            "type": "string"
-          },
-          "boardName": {
-            "description": "Optional name for the board.",
-            "type": "string"
-          },
-          "boardType": {
-            "description": "One of the board types listed by get_model('reference-boards').",
-            "type": "string"
-          },
-          "getCost": {
-            "description": "Return the credit cost estimate instead of generating (nothing runs, nothing is charged).",
-            "type": "boolean"
-          },
-          "numImages": {
-            "description": "Number of board variations (1-4). Defaults to 1.",
-            "maximum": 4,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "prompt": {
-            "description": "Describe the subject or how you will use the board. Required when no referenceImages are given (text-only boards); otherwise optional context (the source image leads).",
-            "type": "string"
-          },
-          "referenceImages": {
-            "description": "Source images the board is built from: each a URL or a previous output id (e.g. \"<id>\" or \"<id>-2\") to chain from an earlier generation.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "boardType"
-        ],
-        "type": "object"
-      },
-      "name": "generate_board",
-      "scopes": []
-    },
-    {
-      "description": {
-        "mcp": "Synchronize speech to a portrait image or an existing video, according to the selected model. get_model declares which source the model takes: imageUrl for a portrait or referenceVideos for a video. Provide that source plus a voice source: either audioUrl (an existing speech clip) or script + voiceId (we synthesize the speech). Optional motionPrompt nudges expression/motion. Returns at once with an outputId; get_status waits for the render. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
-      },
-      "group": "generate",
-      "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "audioDurationSeconds": {
-            "description": "Length of audioUrl in seconds (audio mode only; improves cost accuracy).",
-            "type": "number"
-          },
-          "audioUrl": {
-            "description": "An existing speech clip: an audio URL or a previous output id. Use this OR script + voiceId.",
-            "type": "string"
-          },
-          "getCost": {
-            "description": "Return the credit cost estimate instead of generating (nothing runs, nothing is charged).",
-            "type": "boolean"
-          },
-          "imageUrl": {
-            "description": "The portrait to animate, as an image URL or a previous output id. Required for models that take an image; get_model declares the source the model takes.",
-            "type": "string"
-          },
-          "modelId": {
-            "description": "The model id: a lip-sync model. list_models (contentType video) names them; get_model gives one model's resolutions and inputs.",
-            "type": "string",
-            "x-dynamic": true
-          },
-          "motionPrompt": {
-            "description": "Optional motion / expression hint for the animation.",
-            "type": "string"
-          },
-          "referenceVideos": {
-            "description": "Video references (URL or output id).",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "resolution": {
-            "description": "e.g. 480p, 720p, 1080p. Model-dependent.",
-            "type": "string",
-            "x-dynamic": true
-          },
-          "script": {
-            "description": "Text for the subject to speak. Requires voiceId; synthesized to speech. Use this OR audioUrl. Before writing directions into the script, read the speech model's promptGuide with get_model.",
-            "type": "string"
-          },
-          "voiceId": {
-            "description": "The voice to speak the script (list_voices names them; required with script).",
-            "type": "string"
-          },
-          "voiceName": {
-            "description": "Human-readable voice name (display only).",
-            "type": "string"
-          }
-        },
-        "required": [
-          "modelId"
-        ],
-        "type": "object"
-      },
-      "name": "generate_lip_sync",
-      "scopes": []
-    },
-    {
-      "description": {
-        "mcp": "Upscale an existing image or video to a higher resolution. Provide the source media URL and a model-supported factor. Waits for the result; if the job is still running it returns an outputId to poll with get_status. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
-      },
-      "group": "generate",
-      "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "durationSeconds": {
-            "description": "Required for video upscalers: the source video length in seconds (used for pricing).",
-            "type": "number"
-          },
-          "factor": {
-            "description": "Upscale factor, e.g. 2x, 4x. Model-dependent; validated per model.",
-            "type": "string"
-          },
-          "getCost": {
-            "description": "Return the credit cost estimate instead of upscaling (nothing runs, nothing is charged).",
-            "type": "boolean"
-          },
-          "modelId": {
-            "description": "The model id: an upscaler. list_models names them, each one's contentType saying whether it takes an image or a video; get_model gives its factors.",
-            "type": "string",
-            "x-dynamic": true
-          },
-          "sourceUrl": {
-            "description": "The source image (image upscalers) or video (video upscalers): a URL or a previous output id (e.g. \"<id>-1\") to upscale an earlier generation.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "factor",
-          "modelId",
-          "sourceUrl"
-        ],
-        "type": "object"
-      },
-      "name": "upscale",
-      "scopes": []
-    },
-    {
-      "description": {
         "mcp": "Transform existing audio with an audio-processing model, in one of TWO shapes. FILE mode: pass sourceUrl to process a standalone file into a new library asset. Voice isolation removes background noise and music and returns the processed URL directly; audio enhancement levels loudness and cleans up background noise, is asynchronous, and returns an outputId to poll with get_status. Splitting gives a recording's four stems (vocals, drums, bass, and other: everything else, sound effects included) as four files of your own: at once when the file has been analyzed before, otherwise once its analysis lands; it returns an outputId and its status to poll with get_status. Optionally pass projectId to place the result onto that editor project's timeline in the same call, controlled by an optional placement. IN-PLACE mode: pass projectId with clipIds (or inPlace for the whole timeline) to enhance or split the audio OF EXISTING CLIPS instead of producing a new asset, which is how you clean up a recording already on a timeline. In-place returns a LIST of jobs, one per SOURCE, because the vendor estimates a noise profile per production: one recording's clips are concatenated and enhanced together so the level and noise floor stay consistent across cuts, while separate recordings stay separate jobs. Poll every job's outputId. The enhanced audio is applied to the clips automatically when each job lands: an audio clip has its source swapped, and a video clip is muted with the enhanced audio placed on its own clip. A split mutes each clip and places its four stems under it, each on its own track. Silenced clips are skipped. In-place mode needs no sourceUrl. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
       },
       "group": "generate",
@@ -1525,7 +1407,7 @@
     },
     {
       "description": {
-        "mcp": "Get one model's full request shape by id: the exact parameters it accepts (input types, prompt mode and char cap, duration range, resolutions, aspect ratios, max references, generation count, audio, features). Ground a generation against this instead of guessing the parameters, then preview cost with the matching generate tool's getCost option before running it."
+        "mcp": "Get one model's full request shape by id: the exact parameters it accepts (input types, prompt mode and char cap, duration range, resolutions, aspect ratios, max references, generation count, audio, features). Ground a generation against this instead of guessing the parameters, then preview cost with getCost on the generate tool of the model's medium (generate_image, generate_video or generate_audio) before running it."
       },
       "group": "generate",
       "inputSchema": {
@@ -2768,7 +2650,7 @@
     },
     {
       "description": {
-        "mcp": "List the account's avatars. Each avatar has an imageUrl (its base look) and a defaultVoiceId, which feed generate_lip_sync. Call get_avatar for full detail and the avatar's looks."
+        "mcp": "List the account's avatars. Each avatar has an imageUrl (its base look) and a defaultVoiceId, which feed generate_video with a lip-sync model. Call get_avatar for full detail and the avatar's looks."
       },
       "group": "characters",
       "inputSchema": {
@@ -2792,7 +2674,7 @@
     },
     {
       "description": {
-        "mcp": "Get one avatar by id: its base image (use as generate_lip_sync imageUrl), default voice, traits, and its looks (outfit variations)."
+        "mcp": "Get one avatar by id: its base image (use as a generate_video reference image for a lip-sync model), default voice, traits, and its looks (outfit variations)."
       },
       "group": "characters",
       "inputSchema": {
@@ -3006,7 +2888,7 @@
     },
     {
       "description": {
-        "mcp": "List the account's saved voices (favorites first). Set favorited=true to show only favorites. Each has a voiceId for generate_lip_sync / generate_audio (TTS). Call get_voice for full detail."
+        "mcp": "List the account's saved voices (favorites first). Set favorited=true to show only favorites. Each has a voiceId for generate_video with a lip-sync model and for generate_audio (TTS). Call get_voice for full detail."
       },
       "group": "characters",
       "inputSchema": {
@@ -7726,7 +7608,7 @@
       "scopes": []
     }
   ],
-  "version": "1108c7a376f9f8279f1bb9983cca896ae13cb4a5f26fa89fe5ea1ff3d94facbf",
+  "version": "06dac46dc2bf793bc4822f6b5392fff8b36e3dc17163d6b9cdf9ab12f98859e6",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

@@ -19,7 +19,7 @@ before(async () => {
   server = createServer((req, res) => {
     res.setHeader('content-type', 'application/json')
     if (req.method === 'GET') {
-      res.end(JSON.stringify(req.url === '/api/v1/models' ? { models } : models.find(m => req.url?.endsWith(m.modelId))))
+      res.end(JSON.stringify(req.url === '/api/v1/models' ? { models } : models.find(m => req.url?.endsWith(m.modelId)) ?? { modelId: 'video', displayName: 'Video', contentType: 'video', kind: 'generate', tags: [], capabilities: {} }))
       return
     }
     let raw = ''

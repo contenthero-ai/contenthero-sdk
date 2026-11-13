@@ -44,6 +44,10 @@ const FAKE_CATALOG = [
   cap('sentinel-image-model', 'image', 'generate', 'image'),
   cap('topaz-image-upscale', 'image', 'upscale', 'image'),
   cap('topaz-video-upscale', 'video', 'upscale', 'video'),
+  cap('recraft-remove-background', 'image', 'background-removal', 'image'),
+  cap('bria-video-background-remover', 'video', 'background-removal', 'video'),
+  cap('separate-layers', 'image', 'layer-separation', 'image'),
+  { ...cap('reference-boards', 'image', 'generate', 'image'), boardTypes: [{ boardType: 'character', summary: 'a character sheet' }] },
   cap('veo-3.1-fast', 'video', 'generate', 'video'),
   cap('infinitalk', 'video', 'lip-sync', 'video'),
   cap('elevenlabs-tts', 'audio', 'generate', 'audio'),
@@ -57,7 +61,7 @@ const FAKE_CATALOG = [
 function withCatalogEntry(model) {
   const entry = FAKE_CATALOG.find((m) => m.modelId === model.modelId)
   return entry
-    ? { ...model, contentType: entry.contentType, kind: entry.kind, capabilities: { ...model.capabilities, kind: entry.kind, outputType: entry.capabilities.outputType } }
+    ? { ...model, ...(entry.boardTypes ? { boardTypes: entry.boardTypes } : {}), contentType: entry.contentType, kind: entry.kind, capabilities: { ...model.capabilities, kind: entry.kind, outputType: entry.capabilities.outputType } }
     : model
 }
 
@@ -773,17 +777,17 @@ test('generate_video surfaces a smart-wait timeout as a pollable pending result'
   assert.ok(!res.isError)
 })
 
-test('generate_board returns the board URL on completion', async () => {
+test('generate_image on the board model returns the board URL on completion', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
-    name: 'generate_board',
-    arguments: { boardType: 'character', prompt: 'a stoic ranger' },
+    name: 'generate_image',
+    arguments: { modelId: 'reference-boards', boardType: 'character', prompt: 'a stoic ranger' },
   })
   assert.match(urlsIn(res), /https:\/\/cdn\/board\.png/)
   assert.ok(!res.isError)
 })
 
-test('generate_board surfaces a smart-wait timeout as a pollable pending result', async () => {
+test('generate_image on the board model surfaces a smart-wait timeout as a pollable pending result', async () => {
   const mcp = await connect(
     fakeClient({
       generateBoardAndWait: async () => {
@@ -792,15 +796,15 @@ test('generate_board surfaces a smart-wait timeout as a pollable pending result'
     }),
   )
   const res = await mcp.callTool({
-    name: 'generate_board',
-    arguments: { boardType: 'creature', prompt: 'a six-headed hydra' },
+    name: 'generate_image',
+    arguments: { modelId: 'reference-boards', boardType: 'creature', prompt: 'a six-headed hydra' },
   })
   assert.match(res.content[0].text, /board-pending-7/)
   assert.match(res.content[0].text, /get_status/)
   assert.ok(!res.isError)
 })
 
-test('generate_board passes any boardType to the server, whose list is the only one', async () => {
+test('generate_image on the board model passes any boardType to the server, whose list is the only one', async () => {
   let sent: unknown
   const mcp = await connect(
     fakeClient({
@@ -810,7 +814,7 @@ test('generate_board passes any boardType to the server, whose list is the only 
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'generate_board', arguments: { boardType: 'not-a-type', prompt: 'x' } })
+  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'reference-boards', boardType: 'not-a-type', prompt: 'x' } })
   assert.equal(sent, 'not-a-type')
   assert.equal(res.isError, true)
   assert.match((res.content as Array<{ text: string }>)[0].text, /Expected one of/)
@@ -890,7 +894,7 @@ test('generate_image forwards avatarId, so a generation can file itself as a loo
   assert.equal(captured.avatarId, 'av1')
 })
 
-test('generate_board forwards avatarId', async () => {
+test('generate_image on the board model forwards avatarId', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
@@ -904,8 +908,8 @@ test('generate_board forwards avatarId', async () => {
     }),
   )
   await mcp.callTool({
-    name: 'generate_board',
-    arguments: { boardType: 'character', prompt: 'x', avatarId: 'av1' },
+    name: 'generate_image',
+    arguments: { modelId: 'reference-boards', boardType: 'character', prompt: 'x', avatarId: 'av1' },
   })
   assert.equal(captured.avatarId, 'av1')
 })
@@ -1259,11 +1263,11 @@ test('generate_image get_cost returns an estimate without generating', async () 
   assert.ok(!res.isError)
 })
 
-test('generate_board get_cost returns an estimate', async () => {
+test('generate_image on the board model get_cost returns an estimate', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
-    name: 'generate_board',
-    arguments: { boardType: 'character', prompt: 'a stoic ranger', getCost: true },
+    name: 'generate_image',
+    arguments: { modelId: 'reference-boards', boardType: 'character', prompt: 'a stoic ranger', getCost: true },
   })
   assert.match(res.content[0].text, /6 credits/)
   assert.ok(!res.isError)
@@ -1291,17 +1295,23 @@ test('every generate tool tells the server the work it asks for', async () => {
   const call = (name, args) => mcp.callTool({ name, arguments: args })
   await call('generate_image', { modelId: 'sentinel-image-model', prompt: 'x' })
   await call('generate_video', { modelId: 'veo-3.1-fast', prompt: 'x' })
-  await call('upscale', { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' })
-  await call('upscale', { modelId: 'topaz-video-upscale', sourceUrl: 'https://cdn/in.mp4', factor: '2x', durationSeconds: 4 })
-  await call('generate_lip_sync', { modelId: 'infinitalk', imageUrl: 'https://cdn/face.png', audioUrl: 'https://cdn/v.mp3' })
+  await call('generate_image', { modelId: 'topaz-image-upscale', referenceImages: ['https://cdn/in.png'], upscaleFactor: '2x' })
+  await call('generate_video', { modelId: 'topaz-video-upscale', referenceVideos: ['https://cdn/in.mp4'], upscaleFactor: '2x', sourceDurationSeconds: 4 })
+  await call('generate_image', { modelId: 'recraft-remove-background', referenceImages: ['https://cdn/in.png'] })
+  await call('generate_video', { modelId: 'bria-video-background-remover', referenceVideos: ['https://cdn/in.mp4'], sourceDurationSeconds: 4 })
+  await call('generate_image', { modelId: 'separate-layers', referenceImages: ['https://cdn/in.png'] })
+  await call('generate_video', { modelId: 'infinitalk', referenceImages: ['https://cdn/face.png'], referenceAudio: ['https://cdn/v.mp3'] })
   assert.deepEqual(
     sent.map((r) => [r.modelId, r.contentType, r.kind]),
     [
       ['sentinel-image-model', 'image', 'generate'],
       ['veo-3.1-fast', 'video', 'generate'],
-      // An upscaler's medium is the registry's answer, asked at call time: the source rides where the model reads it.
+      // The operation is the model's registry kind, asked at call time: the source rides where the model reads it.
       ['topaz-image-upscale', 'image', 'upscale'],
       ['topaz-video-upscale', 'video', 'upscale'],
+      ['recraft-remove-background', 'image', 'background-removal'],
+      ['bria-video-background-remover', 'video', 'background-removal'],
+      ['separate-layers', 'image', 'layer-separation'],
       ['infinitalk', 'video', 'lip-sync'],
     ],
   )
@@ -1309,18 +1319,32 @@ test('every generate tool tells the server the work it asks for', async () => {
   assert.deepEqual(sent[3].references, { videos: ['https://cdn/in.mp4'] })
 })
 
-test("a model that does other work comes back as the server's refusal, naming the models to use", async () => {
-  const refusal = "Model 'topaz-image-upscale' is for image upscale, and this call asks for image generation. Image generation models: nano-banana-2, gpt-image-2."
-  const mcp = await connect(
-    fakeClient({
-      generate: async () => {
-        throw Object.assign(new Error(refusal), { status: 400 })
-      },
-    }),
-  )
-  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'topaz-image-upscale', prompt: 'x' } })
+test('a model of another medium or kind is refused before any request, naming the tool that runs it', async () => {
+  let reached = false
+  const mcp = await connect(fakeClient({ generate: async () => { reached = true; return { outputId: 'g', status: 'processing' } } }))
+  for (const [tool, modelId, names] of [
+    ['generate_image', 'veo-3.1-fast', /generate_video/],
+    ['generate_video', 'topaz-image-upscale', /generate_image/],
+    ['generate_video', 'separate-layers', /generate_image/],
+    ['generate_image', 'infinitalk', /generate_video/],
+  ]) {
+    const res = await mcp.callTool({ name: tool, arguments: { modelId, prompt: 'x' } })
+    assert.equal(res.isError, true, `${tool} ${modelId}`)
+    assert.match(res.content[0].text, names)
+    assert.match(res.content[0].text, new RegExp(modelId))
+  }
+  assert.equal(reached, false)
+})
+
+test('a field the model kind does not take is refused, naming the model and what it takes', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'topaz-image-upscale', referenceImages: ['https://cdn/in.png'], upscaleFactor: '2x', aspectRatio: '1:1' } })
   assert.equal(res.isError, true)
-  assert.match(res.content[0].text, /Image generation models: nano-banana-2, gpt-image-2/)
+  assert.match(res.content[0].text, /topaz-image-upscale/)
+  assert.match(res.content[0].text, /aspectRatio/)
+  const plain = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'nano-banana-2', prompt: 'x', upscaleFactor: '2x' } })
+  assert.equal(plain.isError, true)
+  assert.match(plain.content[0].text, /upscaleFactor/)
 })
 
 test('the MCP package names no model and takes no model enum', () => {
@@ -1338,90 +1362,83 @@ test('the MCP package names no model and takes no model enum', () => {
 })
 
 
-test('upscale accepts an upscale model and returns the result', async () => {
-  // topaz-image-upscale is kind=upscale, so it is absent from generate_image but
-  // present on the dedicated upscale tool, which routes the source by contentType.
+test('generate_image accepts an upscale model and returns the job, like every other generate call', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
-    name: 'upscale',
-    arguments: { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' },
+    name: 'generate_image',
+    arguments: { modelId: 'topaz-image-upscale', referenceImages: ['https://cdn/in.png'], upscaleFactor: '2x' },
   })
   assert.ok(!res.isError, 'a valid upscale call should succeed')
-  // ⚠️ SUBMITS AND RETURNS, like every other generate_* tool: an upscale is work in progress, and its card
-  // should exist while the work is happening rather than appearing already finished.
+  // SUBMITS AND RETURNS: an upscale is work in progress, and its card should exist while the work is happening.
   assert.match(res.content[0].text, /gen1/)
   assert.match(res.content[0].text, /get_status/)
 })
 
+test('an upscale model without its factor or source is refused, naming the model', async () => {
+  const mcp = await connect(fakeClient())
+  for (const args of [{ referenceImages: ['https://cdn/in.png'] }, { upscaleFactor: '2x' }]) {
+    const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'topaz-image-upscale', ...args } })
+    assert.equal(res.isError, true)
+    assert.match(res.content[0].text, /topaz-image-upscale/)
+  }
+})
 
-test('generate_lip_sync (script mode) builds a portrait + script request and returns the video', async () => {
+test('a layer-separation model is submitted with its one source image and returns the job', async () => {
+  let captured
+  const mcp = await connect(fakeClient({ generate: async (request) => { captured = request; return { outputId: 'ly1', status: 'processing' } } }))
+  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'separate-layers', referenceImages: ['https://cdn/page.png'] } })
+  assert.ok(!res.isError, JSON.stringify(res))
+  assert.deepEqual(captured, { contentType: 'image', kind: 'layer-separation', modelId: 'separate-layers', references: { images: ['https://cdn/page.png'] } })
+})
+
+test('a lip-sync model on generate_video builds its request from the reference fields (script mode)', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
       generate: async (request) => {
         captured = request
-        return {
-          outputId: 'ls1',
-          status: 'settled',
-          contentType: 'video',
-          modelId: 'infinitalk',
-          outputs: outs(['https://cdn/talk.mp4']),
-          error: null,
-          createdAt: 't',
-          completedAt: 't2',
-        }
+        return { outputId: 'ls1', status: 'processing' }
       },
     }),
   )
   const res = await mcp.callTool({
-    name: 'generate_lip_sync',
+    name: 'generate_video',
     arguments: {
       modelId: 'infinitalk',
-      imageUrl: 'https://cdn/face.png',
+      referenceImages: ['https://cdn/face.png'],
       script: 'hello world',
       voiceId: 'v1',
-      motionPrompt: 'subtle smile',
+      prompt: 'subtle smile',
       resolution: '720p',
     },
   })
   assert.ok(!res.isError)
-  // ⚠️ The REQUEST is what this test is about, and it still is. The result is now a pollable pending id
-  // rather than a finished url, because the card has to exist while the work is happening.
   assert.match(res.content[0].text, /get_status/)
-  // The portrait rides in references.images; the motion prompt in `prompt`.
   assert.deepEqual(captured.references.images, ['https://cdn/face.png'])
   assert.equal(captured.references.audio, undefined)
+  assert.equal(captured.kind, 'lip-sync')
   assert.equal(captured.text, 'hello world')
   assert.equal(captured.voiceId, 'v1')
   assert.equal(captured.prompt, 'subtle smile')
   assert.equal(captured.resolution, '720p')
 })
 
-test('generate_lip_sync (audio mode) routes audioUrl into references.audio', async () => {
+test('a lip-sync model on generate_video routes referenceAudio into references.audio (audio mode)', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
       generate: async (request) => {
         captured = request
-        return {
-          outputId: 'ls2',
-          status: 'settled',
-          contentType: 'video',
-          modelId: 'infinitalk',
-          outputs: outs(['https://cdn/talk2.mp4']),
-          error: null,
-          createdAt: 't',
-          completedAt: 't2',
-        }
+        return { outputId: 'ls2', status: 'processing' }
       },
     }),
   )
   const res = await mcp.callTool({
-    name: 'generate_lip_sync',
+    name: 'generate_video',
     arguments: {
       modelId: 'infinitalk',
-      imageUrl: 'https://cdn/face.png',
-      audioUrl: 'https://cdn/voice.mp3',
+      referenceImages: ['https://cdn/face.png'],
+      referenceAudio: ['https://cdn/voice.mp3'],
       audioDurationSeconds: 4.2,
     },
   })
@@ -5092,12 +5109,9 @@ test("get_schema kind 'link' prints the grammar, the origin and each noun with i
 const CHARGE = { credits: 7, held: 0, state: 'charged', balanceAfter: 93 }
 const SPENDING_CALLS = {
   generate_image: { modelId: 'nano-banana-2', prompt: 'a cat' },
-  generate_board: { boardType: 'character', prompt: 'a stoic ranger' },
   generate_video: { modelId: 'veo-3.1-fast', prompt: 'a city at dusk' },
   generate_audio: { modelId: 'elevenlabs-tts', text: 'hello', voiceId: 'v1' },
   edit_audio: { operation: 'isolate', sourceUrl: 'https://cdn/in.mp3' },
-  upscale: { modelId: 'topaz-image-upscale', sourceUrl: 'https://cdn/in.png', factor: '2x' },
-  generate_lip_sync: { modelId: 'infinitalk', imageUrl: 'https://cdn/face.png', script: 'hi', voiceId: 'v1' },
   transcribe: { audioUrl: 'https://cdn/clip.mp3' },
   create_avatar: { name: 'Mika', age: '20s', gender: 'female' },
   add_brand_knowledge: { brandKitId: 'bk1', sourceType: 'text', text: 'a note' },
@@ -5131,6 +5145,17 @@ test('every tool that spends reports its cost the same way', async () => {
     const textOut = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')
     assert.ok(!res.isError, `${name}: ${textOut}`)
     assert.match(textOut, /Cost: 7 credits charged\. Balance after: 93 credits\./, `${name} does not report its cost`)
+  }
+  // The operations that used to be tools of their own spend through the same two tools, and report the same way.
+  for (const [name, args] of [
+    ['generate_image', { modelId: 'reference-boards', boardType: 'character', prompt: 'a stoic ranger' }],
+    ['generate_image', { modelId: 'topaz-image-upscale', referenceImages: ['https://cdn/in.png'], upscaleFactor: '2x' }],
+    ['generate_video', { modelId: 'infinitalk', referenceImages: ['https://cdn/face.png'], script: 'hi', voiceId: 'v1' }],
+  ] as const) {
+    const res = await mcp.callTool({ name, arguments: args })
+    const textOut = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')
+    assert.ok(!res.isError, `${name} ${args.modelId}: ${textOut}`)
+    assert.match(textOut, /Cost: 7 credits charged\. Balance after: 93 credits\./, `${name} ${args.modelId} does not report its cost`)
   }
 })
 
@@ -6410,7 +6435,7 @@ test('long-work tool texts: a job ends at settled or failed, a retry repeats the
   const { tools } = await mcp.listTools()
   const text = (name: string) => tools.find((t) => t.name === name)?.description ?? ''
   assert.match(text('get_status'), /A job is over only when its status is settled or failed\. Processing and applying mean it is still running; keep reading the same id\./)
-  for (const name of ['generate_image', 'generate_board', 'generate_video', 'edit_audio', 'upscale', 'generate_lip_sync']) {
+  for (const name of ['generate_image', 'generate_video', 'edit_audio']) {
     assert.match(text(name), /A retry that repeats the same operation id or output id returns the work already started and never charges twice\. The reply names the id to read its progress\./, name)
   }
   assert.match(text('update_timeline'), /A retry that repeats the same operation id returns the revision already committed/)
@@ -6601,24 +6626,30 @@ test('video discovery prints declared toggles, upgrades, modes and video inputs 
   } finally { await mcp.close() }
 })
 
+/** A lip-sync model as the registry answers for it, under whatever id a case names. */
+function lipSyncModel(modelId) {
+  return { ...cap(modelId, 'video', 'lip-sync', 'video'), capabilities: { kind: 'lip-sync' } }
+}
+
 test('lip sync forwards image or video sources and every voice field on submission and preview', async () => {
   for (const cost of [false, true]) {
     for (const [source, references] of [
-      [{ imageUrl: 'portrait' }, { images: ['portrait'] }],
+      [{ referenceImages: ['portrait'] }, { images: ['portrait'] }],
       [{ referenceVideos: ['source-video'] }, { videos: ['source-video'] }],
     ]) {
       for (const [voice, expected] of [
-        [{ audioUrl: 'speech', audioDurationSeconds: 4.2 }, { durationSeconds: 4.2, references: { ...references, audio: ['speech'] } }],
+        [{ referenceAudio: ['speech'], audioDurationSeconds: 4.2 }, { durationSeconds: 4.2, references: { ...references, audio: ['speech'] } }],
         [{ script: 'Hello', voiceId: 'voice', voiceName: 'Speaker' }, { text: 'Hello', voiceId: 'voice', voiceName: 'Speaker', references }],
       ]) {
         let captured
         let called
         const mcp = await connect(fakeClient({
+          getModel: async id => lipSyncModel(id),
           generate: async request => { called = 'generate'; captured = request; return { outputId: 'lip', status: 'processing' } },
           estimateCost: async request => { called = 'estimateCost'; captured = request; return { creditsEstimate: 1 } },
         }))
         try {
-          const result = await mcp.callTool({ name: 'generate_lip_sync', arguments: { modelId: 'declared-model', ...source, ...voice, motionPrompt: 'Smile', resolution: '720p', getCost: cost } })
+          const result = await mcp.callTool({ name: 'generate_video', arguments: { modelId: 'declared-model', ...source, ...voice, prompt: 'Smile', resolution: '720p', getCost: cost } })
           assert.ok(!result.isError, JSON.stringify(result))
           assert.equal(called, cost ? 'estimateCost' : 'generate')
           assert.deepEqual(captured, { contentType: 'video', kind: 'lip-sync', modelId: 'declared-model', prompt: 'Smile', resolution: '720p', ...expected })
@@ -6631,14 +6662,14 @@ test('lip sync forwards image or video sources and every voice field on submissi
 test('lip sync server refusals retain missing or wrong source text on both paths', async () => {
   for (const [source, message] of [
     [{}, "model 'video-model' requires a base video in references.videos"],
-    [{ imageUrl: 'portrait' }, "model 'video-model' dubs a video and does not accept an image; pass a video URL in references.videos"],
+    [{ referenceImages: ['portrait'] }, "model 'video-model' dubs a video and does not accept an image; pass a video URL in references.videos"],
   ]) {
     for (const cost of [false, true]) {
       let reached = false
       const refuse = async () => { reached = true; throw new ValidationError(message) }
-      const mcp = await connect(fakeClient({ generate: refuse, estimateCost: refuse }))
+      const mcp = await connect(fakeClient({ getModel: async id => lipSyncModel(id), generate: refuse, estimateCost: refuse }))
       try {
-        const result = await mcp.callTool({ name: 'generate_lip_sync', arguments: { modelId: 'video-model', audioUrl: 'speech', ...source, getCost: cost } })
+        const result = await mcp.callTool({ name: 'generate_video', arguments: { modelId: 'video-model', referenceAudio: ['speech'], ...source, getCost: cost } })
         assert.ok(reached)
         assert.equal(result.isError, true)
         assert.equal(result.content.find(c => c.type === 'text')?.text, message)
