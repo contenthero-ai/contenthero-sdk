@@ -30,7 +30,7 @@
  */
 
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import type { CallToolResult, Implementation, ServerNotification, ServerRequest, Tool, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, Implementation, ServerNotification, ServerRequest, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 /**
@@ -66,8 +66,10 @@ import {
   type Generation,
   type GenerateResult,
   contentVideosPending,
+  toolAnnotations,
   toolDescription,
   toolInputSchema,
+  toolTitle,
   type ContractToolName,
   type ToolInput,
 } from '@contenthero/sdk'
@@ -323,9 +325,6 @@ async function submitAndReturn(
   )
 }
 
-const READ = { readOnlyHint: true } as const
-const WRITE = { readOnlyHint: false } as const
-
 /**
  * How long a tool that starts a background job (analyze_content, import, a reference board, export) waits
  * for it within one call, and how often it looks. The hosted route allows 60s; past this the tool answers pending and
@@ -333,7 +332,6 @@ const WRITE = { readOnlyHint: false } as const
  */
 const JOB_WAIT_MS = 40_000
 const JOB_POLL_MS = 4_000
-const PUBLISH = { readOnlyHint: false, destructiveHint: true } as const
 
 /** What one `import` call brings in: library media from a url, or a new canvas project. */
 export type ImportSource =
@@ -1167,8 +1165,9 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   /**
    * THE ONE WAY A TOOL IS REGISTERED. A tool's name, its description and its input come from the agent contract the app
-   * declares (`@contenthero/sdk`'s `AGENT_CONTRACT`), so this file holds only what the contract does not: a tool's title,
-   * its annotations, its widget metadata and its handler. A name the contract does not declare does not typecheck, and
+   * declares (`@contenthero/sdk`'s `AGENT_CONTRACT`), so this file holds only what the contract does not: a tool's widget
+   * metadata and its handler. The title and the annotations come from the contract too (derived from each tool's
+   * `effect`). A name the contract does not declare does not typecheck, and
    * the handler's `args` are typed by the contract's input for that name.
    *
    * Every input is strict: a parameter the contract does not declare is a 400, never a silent drop (zod strips unknown
@@ -1182,12 +1181,15 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // What a host lists: the contract's schema verbatim (its `x-dynamic` markers included), never a form re-derived from
   // the zod that validates a call, so the listing equals the contract field by field.
   const listed: Tool[] = []
-  type ToolConfig = { title: string; annotations: ToolAnnotations; _meta?: Record<string, unknown> }
-  const tool = <N extends ContractToolName>(
-    name: N,
-    config: ToolConfig,
-    cb: (args: ToolInput<N>, extra: ToolExtra) => CallToolResult | Promise<CallToolResult>,
-  ): void => {
+  type ToolConfig = { _meta?: Record<string, unknown> }
+  type ToolHandler<N extends ContractToolName> = (args: ToolInput<N>, extra: ToolExtra) => CallToolResult | Promise<CallToolResult>
+  function tool<N extends ContractToolName>(name: N, cb: ToolHandler<N>): void
+  function tool<N extends ContractToolName>(name: N, config: ToolConfig, cb: ToolHandler<N>): void
+  function tool<N extends ContractToolName>(name: N, configOrCb: ToolConfig | ToolHandler<N>, maybeCb?: ToolHandler<N>): void {
+    const config: ToolConfig = typeof configOrCb === 'function' ? {} : configOrCb
+    const cb = (typeof configOrCb === 'function' ? configOrCb : maybeCb) as ToolHandler<N>
+    const title = toolTitle(name)
+    const annotations = toolAnnotations(name)
     const inCall = (...args: unknown[]) =>
       runToolCall(async () => {
         try {
@@ -1196,8 +1198,8 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           return errorResult(err)
         }
       })
-    rawRegisterTool(name, { ...config, description: toolDescription(name, 'mcp'), inputSchema: contractInput(name) } as never, inCall as never)
-    listed.push({ name, title: config.title, description: toolDescription(name, 'mcp'), inputSchema: toolInputSchema(name) as unknown as Tool['inputSchema'], annotations: config.annotations, _meta: config._meta })
+    rawRegisterTool(name, { ...config, title, annotations, description: toolDescription(name, 'mcp'), inputSchema: contractInput(name) } as never, inCall as never)
+    listed.push({ name, title, description: toolDescription(name, 'mcp'), inputSchema: toolInputSchema(name) as unknown as Tool['inputSchema'], annotations, _meta: config._meta })
   }
 
   // -- generate_image -------------------------------------------------------
@@ -1205,8 +1207,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'generate_image',
     {
       ...renders('Generating images'),
-      title: 'Generate Image',
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -1259,8 +1259,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     'generate_video',
     {
       ...renders('Generating video'),
-      title: 'Generate Video',
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -1323,9 +1321,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'generate_audio',
     {
-      title: 'Generate Audio',
       ...renders('Generating audio'),
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -1361,9 +1357,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'edit_audio',
     {
-      title: 'Edit Audio',
       ...renders('Editing audio'),
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -1396,16 +1390,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- transcribe -----------------------------------------------------------
   tool(
     'transcribe',
-    {
-      title: 'Transcribe',
-      /*
-        ⭐ ANNOTATED, NOT JUST ARGUED FOR. The comment below has said "NOT read-only" since this tool
-        shipped, and nobody ever wrote the annotation, so the tool went out carrying NEITHER hint. Claude
-        files an unannotated tool under "Other", which is how 2 of 88 ended up unclassified: a comment
-        describing an enforcement nobody built reads exactly like one that was built.
-      */
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const audioUrl = args.audioUrl?.trim()
@@ -1441,10 +1425,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_avatars ---------------------------------------------------------
   tool(
     'list_avatars',
-    {
-      title: 'List Avatars',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1458,10 +1438,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_avatar -----------------------------------------------------------
   tool(
     'get_avatar',
-    {
-      title: 'Get Avatar',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1475,10 +1451,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_avatar --------------------------------------------------------
   tool(
     'create_avatar',
-    {
-      title: 'Create Avatar',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1511,10 +1483,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_avatar --------------------------------------------------------
   tool(
     'update_avatar',
-    {
-      title: 'Update Avatar',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1530,10 +1498,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- delete_avatar --------------------------------------------------------
   tool(
     'delete_avatar',
-    {
-      title: 'Delete Avatar',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1550,10 +1514,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_voices ----------------------------------------------------------
   tool(
     'list_voices',
-    {
-      title: 'List Voices',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1567,10 +1527,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_voice ------------------------------------------------------------
   tool(
     'get_voice',
-    {
-      title: 'Get Voice',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1584,10 +1540,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_brand_kits ------------------------------------------------------
   tool(
     'list_brand_kits',
-    {
-      title: 'List Brand Kits',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1603,10 +1555,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_brand_kit --------------------------------------------------------
   tool(
     'get_brand_kit',
-    {
-      title: 'Get Brand Kit',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1631,10 +1579,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_brand_kit -----------------------------------------------------
   tool(
     'create_brand_kit',
-    {
-      title: 'Create Brand Kit',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1669,10 +1613,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_brand_kit -----------------------------------------------------
   tool(
     'update_brand_kit',
-    {
-      title: 'Update Brand Kit',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1714,10 +1654,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- search_brand_knowledge -----------------------------------------------
   tool(
     'search_brand_knowledge',
-    {
-      title: 'Search Brand Knowledge',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1736,10 +1672,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_brand_knowledge -------------------------------------------------
   tool(
     'list_brand_knowledge',
-    {
-      title: 'List Brand Knowledge',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1755,10 +1687,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_brand_knowledge --------------------------------------------------
   tool(
     'get_brand_knowledge',
-    {
-      title: 'Get Brand Knowledge',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1772,10 +1700,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- add_brand_knowledge --------------------------------------------------
   tool(
     'add_brand_knowledge',
-    {
-      title: 'Add Brand Knowledge',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1802,10 +1726,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- remove_brand_knowledge -----------------------------------------------
   tool(
     'remove_brand_knowledge',
-    {
-      title: 'Remove Brand Knowledge',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1820,10 +1740,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_media -----------------------------------------------------------
   tool(
     'list_media',
-    {
-      title: 'List Media',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1853,10 +1769,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- search_media ---------------------------------------------------------
   tool(
     'search_media',
-    {
-      title: 'Search Media',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1871,10 +1783,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'list_folders',
-    {
-      title: 'List Folders',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         return folderListResult(await (await getClient(extra)).listFolders({ limit: args.limit, cursor: args.cursor }))
@@ -1886,10 +1794,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'get_folder',
-    {
-      title: 'Get Folder',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1904,10 +1808,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'create_folder',
-    {
-      title: 'Create Folder',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const f = await (await getClient(extra)).createFolder({ name: args.name, type: args.type, query: args.query, parentId: args.parentId })
@@ -1918,10 +1818,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'update_folder',
-    {
-      title: 'Update Folder',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -1952,10 +1848,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'delete_folder',
-    {
-      title: 'Delete Folder',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try { await (await getClient(extra)).deleteFolder(args.folderId); return text(`Deleted folder ${args.folderId}.`) } catch (err) { return errorResult(err) }
     },
@@ -1966,7 +1858,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'get_media',
     {
-      title: 'Get Media',
       /**
        * ⭐⭐⭐ get_media IS THE LOOKING TOOL. show_media IS THE SHOWING TOOL.
        *
@@ -1982,7 +1873,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        * ⭐ It still DISPLAYS what it attaches, because the agent is already looking and showing the person
        * the same thing costs nothing. Reach for `show_media` when the person is the audience.
        */
-      annotations: READ,
     },
     async (args, extra) => {
       try {
@@ -2016,10 +1906,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_media ---------------------------------------------------------
   tool(
     'update_media',
-    {
-      title: 'Update Media',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2036,7 +1922,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'show_media',
     {
-      title: 'Show Media',
       /**
        * ⭐⭐⭐ THE DISPLAY HALF OF WHAT get_media USED TO BE, AND THE SPLIT IS ABOUT PREDICTABLE COST.
        *
@@ -2049,7 +1934,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        * this item" and the widget would render two subtly different shapes depending on the verb used.
        */
       ...renders('Showing media'),
-      annotations: READ,
     },
     async (args, extra) => {
       try {
@@ -2067,10 +1951,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_upload --------------------------------------------------------
   tool(
     'create_upload',
-    {
-      title: 'Create Upload',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2094,10 +1974,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- sign_upload_parts ----------------------------------------------------
   tool(
     'sign_upload_parts',
-    {
-      title: 'Sign Upload Parts',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2119,9 +1995,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'complete_upload',
     {
-      title: 'Complete Upload',
       ...renders('Completing the upload'),
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -2148,9 +2022,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'import',
     {
-      title: 'Import',
       ...renders('Importing'),
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -2181,11 +2053,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- download -------------------------------------------------------------
   tool(
     'download',
-    {
-      title: 'Download',
-      // Read-only: it hands back links to what is already stored, and runs and charges nothing.
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2199,10 +2066,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_models ----------------------------------------------------------
   tool(
     'list_models',
-    {
-      title: 'List Models',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2216,10 +2079,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_model ------------------------------------------------------------
   tool(
     'get_model',
-    {
-      title: 'Get Model',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2238,10 +2097,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   */
   tool(
     'get_schema',
-    {
-      title: 'Get Schema',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         // A kind's inputs are refused, not ignored: an input silently dropped reads as an answer to a question the
@@ -2304,10 +2159,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_kling_elements --------------------------------------------------
   tool(
     'list_kling_elements',
-    {
-      title: 'List Kling Elements',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2321,10 +2172,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_kling_element ----------------------------------------------------
   tool(
     'get_kling_element',
-    {
-      title: 'Get Kling Element',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2338,10 +2185,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_kling_element -------------------------------------------------
   tool(
     'create_kling_element',
-    {
-      title: 'Create Kling Element',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2364,10 +2207,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_kling_element -------------------------------------------------
   tool(
     'update_kling_element',
-    {
-      title: 'Update Kling Element',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2384,10 +2223,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- delete_kling_element -------------------------------------------------
   tool(
     'delete_kling_element',
-    {
-      title: 'Delete Kling Element',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2418,8 +2253,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
        * ⏭️ `get_media` is the tool named "SEE specific media" and is where the look-at-an-existing-thing
        * widget belongs. Until it binds one, inspecting an old generation is text only.
        */
-      title: 'Get Status',
-      annotations: READ,
     },
     async (args, extra) => {
       try {
@@ -2452,10 +2285,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_cards -----------------------------------------------------------
   tool(
     'list_cards',
-    {
-      title: 'List Cards',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2483,10 +2312,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_card -------------------------------------------------------------
   tool(
     'get_card',
-    {
-      title: 'Get Card',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2500,10 +2325,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_spaces ----------------------------------------------------------
   tool(
     'list_spaces',
-    {
-      title: 'List Spaces',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2517,10 +2338,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_space ------------------------------------------------------------
   tool(
     'get_space',
-    {
-      title: 'Get Space',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2534,10 +2351,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_space ---------------------------------------------------------
   tool(
     'create_space',
-    {
-      title: 'Create Space',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2557,10 +2370,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_space ---------------------------------------------------------
   tool(
     'update_space',
-    {
-      title: 'Update Space',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2577,10 +2386,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- delete_space ---------------------------------------------------------
   tool(
     'delete_space',
-    {
-      title: 'Delete Space',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2595,10 +2400,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_stages -------------------------------------------------
   tool(
     'list_stages',
-    {
-      title: 'List Stages',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2612,10 +2413,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_stage ---------------------------------------------------------
   tool(
     'create_stage',
-    {
-      title: 'Create Stage',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2638,10 +2435,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_stage ---------------------------------------------------------
   tool(
     'update_stage',
-    {
-      title: 'Update Stage',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2664,10 +2457,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- delete_stage ---------------------------------------------------------
   tool(
     'delete_stage',
-    {
-      title: 'Delete Stage',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2685,10 +2474,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_card ----------------------------------------------------------
   tool(
     'create_card',
-    {
-      title: 'Create Card',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2717,10 +2502,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_card ----------------------------------------------------------
   tool(
     'update_card',
-    {
-      title: 'Update Card',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2751,10 +2532,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_tags ------------------------------------------------------------
   tool(
     'list_tags',
-    {
-      title: 'List Tags',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2768,10 +2545,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_tag -----------------------------------------------------------
   tool(
     'create_tag',
-    {
-      title: 'Create Tag',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2785,10 +2558,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_tag -----------------------------------------------------------
   tool(
     'update_tag',
-    {
-      title: 'Update Tag',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2802,10 +2571,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- delete_tag -----------------------------------------------------------
   tool(
     'delete_tag',
-    {
-      title: 'Delete Tag',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2819,10 +2584,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- publish_post ---------------------------------------------------------
   tool(
     'publish_post',
-    {
-      title: 'Publish Post',
-      annotations: PUBLISH,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2836,10 +2597,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_tracked_accounts --------------------------------------------------------
   tool(
     'list_tracked_accounts',
-    {
-      title: 'List Tracked Accounts',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2853,10 +2610,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_tracked_account ----------------------------------------------------------
   tool(
     'get_tracked_account',
-    {
-      title: 'Get Tracked Account',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2871,10 +2624,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_tracked_account -----------------------------------------------
   tool(
     'update_tracked_account',
-    {
-      title: 'Update Tracked Account',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2890,10 +2639,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // A list, as the API takes it: several accounts resolve together and the answer says which the plan allowed.
   tool(
     'add_tracked_account',
-    {
-      title: 'Add Tracked Account',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2907,10 +2652,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- remove_tracked_account -----------------------------------------------
   tool(
     'remove_tracked_account',
-    {
-      title: 'Remove Tracked Account',
-      annotations: { ...WRITE, idempotentHint: true },
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2924,10 +2665,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_content ---------------------------------------------------------
   tool(
     'list_content',
-    {
-      title: 'List Tracked Content',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2941,10 +2678,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_content ----------------------------------------------------------
   tool(
     'get_content',
-    {
-      title: 'Get Tracked Content',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -2959,11 +2692,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- analyze_content ------------------------------------------------------
   tool(
     'analyze_content',
-    {
-      title: 'Analyze Content',
-      // It can spend credits, so it is never read-only (see transcribe).
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3020,10 +2748,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_connected_accounts ----------------------------------------------
   tool(
     'list_connected_accounts',
-    {
-      title: 'List Connected Accounts',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3037,10 +2761,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_connected_account ------------------------------------------------
   tool(
     'get_connected_account',
-    {
-      title: 'Get Connected Account',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3056,10 +2776,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // A setting joins the account as a field of update_account, never as a tool of its own.
   tool(
     'get_account',
-    {
-      title: 'Get Account',
-      annotations: READ,
-    },
     async (_args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3072,10 +2788,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'update_account',
-    {
-      title: 'Update Account',
-      annotations: { ...WRITE, idempotentHint: true },
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3093,10 +2805,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- favorite -------------------------------------------------------------
   tool(
     'favorite',
-    {
-      title: 'Favorite',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3113,10 +2821,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- archive --------------------------------------------------------------
   tool(
     'archive',
-    {
-      title: 'Archive',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3134,10 +2838,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // scope of the surface that owns it. The route refuses a call naming two targets, so nothing here checks it again.
   tool(
     'share',
-    {
-      title: 'Share',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3161,10 +2861,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- unarchive ------------------------------------------------------------
   tool(
     'list_projects',
-    {
-      title: 'List Projects',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3177,10 +2873,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'get_project',
-    {
-      title: 'Get Project',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3204,10 +2896,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'view',
-    {
-      title: 'View',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3266,10 +2954,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'get_transcript',
-    {
-      title: 'Get Transcript',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3282,10 +2966,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'create_project',
-    {
-      title: 'Create Project',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3299,9 +2979,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   tool(
     'export',
     {
-      title: 'Export',
       ...renders('Exporting the project'),
-      annotations: WRITE,
     },
     async (args, extra) => {
       try {
@@ -3322,10 +3000,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'list_exports',
-    {
-      title: 'List Exports',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3341,10 +3015,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'get_export',
-    {
-      title: 'Get Export',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3358,10 +3028,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'delete_project',
-    {
-      title: 'Delete Project',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3375,10 +3041,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'update_project',
-    {
-      title: 'Update Project',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3392,10 +3054,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'duplicate_project',
-    {
-      title: 'Duplicate Project',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3409,10 +3067,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- version history (premium, as in the editor) -----------------------------
   tool(
     'list_project_versions',
-    {
-      title: 'List Project Versions',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3428,10 +3082,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'create_project_version',
-    {
-      title: 'Create Project Version',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3444,10 +3094,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'restore_project_version',
-    {
-      title: 'Restore Project Version',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3464,10 +3110,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'update_project_version',
-    {
-      title: 'Update Project Version',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3480,10 +3122,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'delete_project_version',
-    {
-      title: 'Delete Project Version',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3498,10 +3136,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- undo and redo (the editor's own) ----------------------------------------
   tool(
     'undo_project_edit',
-    {
-      title: 'Undo Project Edit',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3514,10 +3148,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'redo_project_edit',
-    {
-      title: 'Redo Project Edit',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3530,10 +3160,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'update_timeline',
-    {
-      title: 'Update Timeline',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3553,10 +3179,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
 
   tool(
     'update_canvas',
-    {
-      title: 'Update Canvas',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3581,10 +3203,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_templates -------------------------------------------------------
   tool(
     'list_templates',
-    {
-      title: 'List Templates',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3608,10 +3226,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_template ---------------------------------------------------------
   tool(
     'get_template',
-    {
-      title: 'Get Template',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3625,10 +3239,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_template ------------------------------------------------------
   tool(
     'create_template',
-    {
-      title: 'Create Template',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3645,10 +3255,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_template ------------------------------------------------------
   tool(
     'update_template',
-    {
-      title: 'Update Template',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3664,10 +3270,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- delete_template ------------------------------------------------------
   tool(
     'delete_template',
-    {
-      title: 'Delete Template',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3686,10 +3288,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- list_style_libraries ---------------------------------------------------
   tool(
     'list_style_libraries',
-    {
-      title: 'List Style Libraries',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3703,10 +3301,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- get_style_library ------------------------------------------------------
   tool(
     'get_style_library',
-    {
-      title: 'Get Style Library',
-      annotations: READ,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3721,10 +3315,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- create_style_library ---------------------------------------------------
   tool(
     'create_style_library',
-    {
-      title: 'Create Style Library',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)
@@ -3738,10 +3328,6 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
   // -- update_style_library ---------------------------------------------------
   tool(
     'update_style_library',
-    {
-      title: 'Update Style Library',
-      annotations: WRITE,
-    },
     async (args, extra) => {
       try {
         const client = await getClient(extra)

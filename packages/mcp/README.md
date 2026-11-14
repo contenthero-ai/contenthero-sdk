@@ -22,7 +22,7 @@ Requires Node 20+. You need a ContentHero API key (`ch_live_...`).
 ### Claude Code
 
 ```bash
-claude mcp add contenthero --env CONTENTHERO_API_KEY=ch_live_xxx -- npx -y @contenthero/mcp
+claude mcp add contenthero --env CONTENTHERO_API_KEY=ch_live_xxx -- npx -y @contenthero/mcp@latest
 ```
 
 ### Claude Desktop / generic MCP config
@@ -32,7 +32,7 @@ claude mcp add contenthero --env CONTENTHERO_API_KEY=ch_live_xxx -- npx -y @cont
   "mcpServers": {
     "contenthero": {
       "command": "npx",
-      "args": ["-y", "@contenthero/mcp"],
+      "args": ["-y", "@contenthero/mcp@latest"],
       "env": { "CONTENTHERO_API_KEY": "ch_live_xxx" }
     }
   }

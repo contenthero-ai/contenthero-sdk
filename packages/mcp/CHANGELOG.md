@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.4.52
+
+- Annotations: `openWorldHint` is now true on every tool that sends input to a third-party provider or fetches an address the caller names (19 tools, listed in the contract). Update, restore and archive tools stay destructive; `update_timeline` and `update_canvas` stay non-idempotent.
 - BREAKING: one generate tool per medium, no aliases. `generate_image` and `generate_video` run every model of their medium by the model's registry kind: generate, upscale, background removal, layer separation, lip sync and (image) reference boards. Removed `generate_board`, `upscale` and `generate_lip_sync` (110 tools to 107). Sources go in `referenceImages`, `referenceVideos` and `referenceAudio`. `get_model` and `list_models` name the tool that runs each model.
 - `generate_video` accepts `keyframes`, `voices` and `keepOriginalSound`, sent as `references.keyframes`, `references.voices` and `parameters.keepOriginalSound`.
 - `generate_video` accepts `klingElements[].video` and `klingElements[].voice` (from the synced contract).

@@ -15,7 +15,7 @@ This monorepo holds the public packages:
 ```bash
 npm install @contenthero/sdk
 # run the MCP server directly
-npx -y @contenthero/mcp
+npx -y @contenthero/mcp@latest
 # install the CLI
 npm install -g @contenthero/cli
 ```

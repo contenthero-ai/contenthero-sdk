@@ -3009,7 +3009,8 @@ export interface CardListResult extends Paged {
  */
 export interface StageListResult extends Paged {
   stages: Stage[]
-  space: ResolvedSpace
+  /** The board these stages belong to; null only for an account with no space yet, whose list is empty. */
+  space: ResolvedSpace | null
 }
 
 /** Options for `listCards`. */

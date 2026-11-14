@@ -95,9 +95,23 @@ export interface ContractToolDescription {
   inApp?: string
 }
 
+/** What a tool does to the account. The app derives the annotations from it (apps/web/lib/api/contract/effects.ts). */
+export type ContractEffect = 'read' | 'create' | 'update' | 'destructive'
+
+/** The MCP tool annotations, all four, exactly as a host reads them. */
+export interface ContractAnnotations {
+  readOnlyHint: boolean
+  destructiveHint: boolean
+  idempotentHint: boolean
+  openWorldHint: boolean
+}
+
 export interface ContractTool {
   name: string
   group: string
+  title: string
+  effect: ContractEffect
+  annotations: ContractAnnotations
   scopes: readonly string[]
   description: ContractToolDescription
   inputSchema: { type: 'object'; properties: Record<string, ContractSchema>; required?: readonly string[]; additionalProperties?: unknown }
@@ -143,6 +157,20 @@ export function toolDescription(name: ContractToolName, audience: 'mcp' | 'in-ap
   const tool = AGENT_CONTRACT.tools.find((t) => t.name === name)
   if (!tool) throw new Error(\`No tool named \${name} in the agent contract\`)
   return audience === 'in-app' ? (tool.description.inApp ?? tool.description.mcp) : tool.description.mcp
+}
+
+/** A tool's title, as a host shows it. */
+export function toolTitle(name: ContractToolName): string {
+  const tool = AGENT_CONTRACT.tools.find((t) => t.name === name)
+  if (!tool) throw new Error(\`No tool named \${name} in the agent contract\`)
+  return tool.title
+}
+
+/** A tool's MCP annotations, derived by the app from its effect. */
+export function toolAnnotations(name: ContractToolName): ContractAnnotations {
+  const tool = AGENT_CONTRACT.tools.find((t) => t.name === name)
+  if (!tool) throw new Error(\`No tool named \${name} in the agent contract\`)
+  return tool.annotations
 }
 
 /** A tool's input as JSON Schema. */
