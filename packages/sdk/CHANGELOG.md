@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.4.46
+
+- Effect entries no longer carry an external documentation link: `EffectDetail.documentation` is null, and the entry's own description, parameters and defaults say what it does.
+- Doc comments of the effect list and of a stock item's provider fields no longer name the rendering engine or list provider ids; they describe the effect and the source in general terms.
+
 ## 0.4.45
 
 - Annotations: `openWorldHint` is now true on every tool that sends input to a third-party provider or fetches an address the caller names (19 tools, listed in the contract). Update, restore and archive tools stay destructive; `update_timeline` and `update_canvas` stay non-idempotent.

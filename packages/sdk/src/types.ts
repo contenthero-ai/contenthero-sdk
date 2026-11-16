@@ -2036,7 +2036,7 @@ export interface MediaSummary {
   smallUrl?: string | null
   /** Stock only: the part of the stock catalog the item came from. */
   collection?: MediaStockCollection
-  /** Stock only: `pexels`, `unsplash`, `giphy`, `native` or `remotion`, and the label a person reads. */
+  /** Stock only: the source id and the label a person reads. */
   provider?: string
   providerLabel?: string
   /** Stock only: the credited person or account, their page, and the item's page at the provider. */
@@ -5337,7 +5337,7 @@ export interface EffectSummary {
   gradedBy?: string
 }
 
-/** Every effect of `@remotion/effects` the app has, from `listEffects`. */
+/** Every effect the app has, from `listEffects`. */
 export interface EffectList {
   effects: EffectSummary[]
   /** The elements code gives `effects` to. */
@@ -5358,6 +5358,7 @@ export interface EffectParamSchema {
 /** One effect in full, from `getEffect`. */
 export interface EffectDetail extends EffectSummary {
   backend: string
+  /** Always null: an effect names no external page. Read the entry's own description, parameters and defaults. */
   documentation: string | null
   params: Record<string, EffectParamSchema>
   /** Parameters that draw something sensible as they are; some effects draw nothing, or refuse, without them. */
