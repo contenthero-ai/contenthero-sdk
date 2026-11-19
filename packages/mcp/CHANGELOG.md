@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.53
+
+- `list_tier_lists`, `get_tier_list`, `create_tier_list` and `update_tier_list` (staff only: the hosted server hides them from other callers, and the server refuses their calls).
+
 ## 0.4.52
 
 - Annotations: `openWorldHint` is now true on every tool that sends input to a third-party provider or fetches an address the caller names (19 tools, listed in the contract). Update, restore and archive tools stay destructive; `update_timeline` and `update_canvas` stay non-idempotent.

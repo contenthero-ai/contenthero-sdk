@@ -1,4 +1,18 @@
 {
+  "staffScopes": [
+    "tier-lists:write"
+  ],
+  "staffValues": {
+    "ARCHIVE_ASSET_TYPES": [
+      "tier_list"
+    ],
+    "FAVORITE_ASSET_TYPES": [
+      "tier_list"
+    ],
+    "SHARE_ASSET_TYPES": [
+      "tier_list"
+    ]
+  },
   "tools": [
     {
       "annotations": {
@@ -2729,7 +2743,8 @@
               "transition",
               "caption-template",
               "template",
-              "space"
+              "space",
+              "tier_list"
             ],
             "type": "string"
           },
@@ -2782,7 +2797,8 @@
               "project",
               "space",
               "template",
-              "style_library"
+              "style_library",
+              "tier_list"
             ],
             "type": "string"
           },
@@ -2821,7 +2837,8 @@
           "assetType": {
             "description": "The kind of item, for anything that is not media. Pass with id.",
             "enum": [
-              "project"
+              "project",
+              "tier_list"
             ],
             "type": "string"
           },
@@ -2855,6 +2872,735 @@
       "name": "share",
       "scopes": [],
       "title": "Share"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "audience": "staff",
+      "description": {
+        "mcp": "List the account's tier lists, filtered and sorted, a page at a time. A tier list ranks library media into tiers, with standings that total the placements across its tabs. Archived ones are left out unless archived is set. Pass the answer's cursor for the next page."
+      },
+      "effect": "read",
+      "group": "media",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "description": "Only archived tier lists.",
+            "type": "boolean"
+          },
+          "cursor": {
+            "description": "The previous page's cursor.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "How many to return.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "order": {
+            "description": "The sort direction.",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "type": "string"
+          },
+          "search": {
+            "description": "Search tier list names.",
+            "type": "string"
+          },
+          "sort": {
+            "description": "The field to sort by.",
+            "enum": [
+              "updatedAt",
+              "createdAt",
+              "name"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_tier_lists",
+      "scopes": [],
+      "title": "List Tier Lists"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "audience": "staff",
+      "description": {
+        "mcp": "Read one tier list by id: its tiers from best to worst, its tabs with each tab's revision, the items of one tab in display order with their media ids and thumbnails, the standings across every tab, and a link to the page. Items not placed in a tier are unranked. Read it before arranging a tab, because the arrangement names the revision it read."
+      },
+      "effect": "read",
+      "group": "media",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tabId": {
+            "description": "The tab whose items to return, by its short id or its UUID. Left out, the first tab's.",
+            "type": "string"
+          },
+          "tierListId": {
+            "description": "The tier list id. Either its short id or its UUID.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tierListId"
+        ],
+        "type": "object"
+      },
+      "name": "get_tier_list",
+      "scopes": [],
+      "title": "Get Tier List"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "audience": "staff",
+      "description": {
+        "mcp": "Create a tier list. Tiers run from best to worst and the default set is used when none are sent. Each tab holds library images or videos, placed in a tier by its label or id, or left unranked. An item without a label takes the name of the model that made its media. Requires the tier-lists:write scope."
+      },
+      "effect": "create",
+      "group": "media",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "What the tier list ranks.",
+            "type": "string"
+          },
+          "height": {
+            "description": "The board height in pixels.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "name": {
+            "description": "The tier list name.",
+            "type": "string"
+          },
+          "showPoints": {
+            "description": "Whether tiers show points and the standings total them.",
+            "type": "boolean"
+          },
+          "tabs": {
+            "description": "The tabs with the media on each. Left out, one empty tab is made.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "items": {
+                  "description": "The media to place on this tab.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "caption": {
+                        "description": "A note shown with the item.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "label": {
+                        "description": "What the contender is called. Left out, the name of the model that made the media is used when it has one.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mediaId": {
+                        "description": "The library media to place: an image or a video. Name this or url.",
+                        "type": "string"
+                      },
+                      "tier": {
+                        "description": "The tier it starts in, by its short id, its UUID or its label. Left out or null, it is unranked.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "url": {
+                        "description": "Instead of mediaId: the address of a file in the library, as the media picker gives it.",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "name": {
+                  "description": "The tab's name.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "tiers": {
+            "description": "The tiers from best to worst. Left out, the default set is used.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "description": "The tier color: a hex value of # and six digits.",
+                  "type": "string"
+                },
+                "label": {
+                  "description": "The tier's short label.",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "The tier's name.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "points": {
+                  "description": "What each item in this tier is worth in the standings.",
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "color",
+                "label"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "width": {
+            "description": "The board width in pixels.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "create_tier_list",
+      "scopes": [
+        "tier-lists:write"
+      ],
+      "title": "Create Tier List"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "audience": "staff",
+      "description": {
+        "mcp": "Change a tier list: its name, description, canvas size, points display or cover image, and its tiers, tabs and items, each by adding, updating and removing. Changes apply in order (tiers, tabs, items, then one arrangement) and a refusal stops the rest, leaving what ran before it. A moved tier, tab or item names a neighbor with afterId or beforeId, or an end with position, never a number. Removing a tier returns its items to unranked. To arrange a whole tab in one step, send the arrangement with the tab's revision from get_tier_list; a tab that changed since is refused. Archive a tier list with the archive tool and favorite it with the favorite tool. Requires the tier-lists:write scope."
+      },
+      "effect": "update",
+      "group": "media",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "arrangement": {
+            "additionalProperties": false,
+            "description": "Arrange one whole tab in one step, against the revision you read. Applied last.",
+            "properties": {
+              "baseRevision": {
+                "description": "The tab's revision you read. A tab that has changed since is refused.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placements": {
+                "description": "Every item of the tab exactly once, in the order they should sit within each tier.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "itemId": {
+                      "description": "The item. Either its short id or its UUID.",
+                      "type": "string"
+                    },
+                    "tier": {
+                      "description": "The tier it lands in, by short id, UUID or label. Null is unranked.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "itemId",
+                    "tier"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "tabId": {
+                "description": "The tab to arrange. Either its short id or its UUID.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "baseRevision",
+              "placements",
+              "tabId"
+            ],
+            "type": "object"
+          },
+          "coverMediaId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An image from the library as the cover of the tier list card, by its media id, or null to remove the cover."
+          },
+          "coverPosition": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the cover is framed, as percentages of its width and height from 0 to 100, or null for the center. Needs a cover."
+          },
+          "coverUrl": {
+            "description": "Instead of coverMediaId: the address of an image in the library, as the media picker gives it.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "description": "What the tier list ranks.",
+            "type": "string"
+          },
+          "height": {
+            "description": "The board height in pixels.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "Changes to the items.",
+            "properties": {
+              "add": {
+                "description": "Media to place, each at the end of its tier.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "caption": {
+                      "description": "A note shown with the item.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "label": {
+                      "description": "What the contender is called. Left out, the name of the model that made the media is used when it has one.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mediaId": {
+                      "description": "The library media to place: an image or a video. Name this or url.",
+                      "type": "string"
+                    },
+                    "tabId": {
+                      "description": "The tab to place the media on. Either its short id or its UUID.",
+                      "type": "string"
+                    },
+                    "tier": {
+                      "description": "The tier it starts in, by its short id, its UUID or its label. Left out or null, it is unranked.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "url": {
+                      "description": "Instead of mediaId: the address of a file in the library, as the media picker gives it.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "tabId"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "remove": {
+                "description": "The items to remove, each by its short id or its UUID.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "update": {
+                "description": "Items to change or move.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "afterId": {
+                      "description": "Place it immediately after this item of the same list.",
+                      "type": "string"
+                    },
+                    "beforeId": {
+                      "description": "Place it immediately before this item of the same list.",
+                      "type": "string"
+                    },
+                    "caption": {
+                      "description": "A note shown with the item. Null clears it.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "description": "The item. Either its short id or its UUID.",
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "What the contender is called. Null clears it.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "position": {
+                      "description": "Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.",
+                      "enum": [
+                        "top",
+                        "bottom"
+                      ],
+                      "type": "string"
+                    },
+                    "tier": {
+                      "description": "The tier to move it to, by its short id, its UUID or its label. Null moves it to unranked.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "name": {
+            "description": "The tier list name.",
+            "type": "string"
+          },
+          "showPoints": {
+            "description": "Whether tiers show points and the standings total them.",
+            "type": "boolean"
+          },
+          "tabs": {
+            "additionalProperties": false,
+            "description": "Changes to the tabs.",
+            "properties": {
+              "add": {
+                "description": "Tabs to add.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "afterId": {
+                      "description": "Place it immediately after this item of the same list.",
+                      "type": "string"
+                    },
+                    "beforeId": {
+                      "description": "Place it immediately before this item of the same list.",
+                      "type": "string"
+                    },
+                    "items": {
+                      "description": "The media to place on the new tab.",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "caption": {
+                            "description": "A note shown with the item.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "label": {
+                            "description": "What the contender is called. Left out, the name of the model that made the media is used when it has one.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mediaId": {
+                            "description": "The library media to place: an image or a video. Name this or url.",
+                            "type": "string"
+                          },
+                          "tier": {
+                            "description": "The tier it starts in, by its short id, its UUID or its label. Left out or null, it is unranked.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "description": "Instead of mediaId: the address of a file in the library, as the media picker gives it.",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "name": {
+                      "description": "The tab's name.",
+                      "type": "string"
+                    },
+                    "position": {
+                      "description": "Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.",
+                      "enum": [
+                        "top",
+                        "bottom"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "remove": {
+                "description": "The tabs to remove, each by its short id or its UUID.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "update": {
+                "description": "Tabs to rename or move.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "afterId": {
+                      "description": "Place it immediately after this item of the same list.",
+                      "type": "string"
+                    },
+                    "beforeId": {
+                      "description": "Place it immediately before this item of the same list.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "The tab. Either its short id or its UUID.",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "The tab's name.",
+                      "type": "string"
+                    },
+                    "position": {
+                      "description": "Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.",
+                      "enum": [
+                        "top",
+                        "bottom"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "tierListId": {
+            "description": "The tier list id to update. Either its short id or its UUID.",
+            "type": "string"
+          },
+          "tiers": {
+            "additionalProperties": false,
+            "description": "Changes to the tiers.",
+            "properties": {
+              "add": {
+                "description": "Tiers to add.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "afterId": {
+                      "description": "Place it immediately after this item of the same list.",
+                      "type": "string"
+                    },
+                    "beforeId": {
+                      "description": "Place it immediately before this item of the same list.",
+                      "type": "string"
+                    },
+                    "color": {
+                      "description": "The tier color: a hex value of # and six digits.",
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "The tier's short label.",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "The tier's name.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "points": {
+                      "description": "What each item in this tier is worth in the standings.",
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "position": {
+                      "description": "Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.",
+                      "enum": [
+                        "top",
+                        "bottom"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "color",
+                    "label"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "remove": {
+                "description": "The tiers to remove, each by its short id or its UUID.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "update": {
+                "description": "Tiers to change or move.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "afterId": {
+                      "description": "Place it immediately after this item of the same list.",
+                      "type": "string"
+                    },
+                    "beforeId": {
+                      "description": "Place it immediately before this item of the same list.",
+                      "type": "string"
+                    },
+                    "color": {
+                      "description": "The tier color: a hex value of # and six digits.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "The tier. Either its short id or its UUID.",
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "The tier's short label, such as the letter shown in its column.",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "The tier's name, shown beside its label.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "points": {
+                      "description": "What each item in this tier is worth in the standings.",
+                      "maximum": 9007199254740991,
+                      "minimum": -9007199254740991,
+                      "type": "integer"
+                    },
+                    "position": {
+                      "description": "Place it at an end of the list instead of beside an item. Name neighbors or a position, not both.",
+                      "enum": [
+                        "top",
+                        "bottom"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "width": {
+            "description": "The board width in pixels.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tierListId"
+        ],
+        "type": "object"
+      },
+      "name": "update_tier_list",
+      "scopes": [
+        "tier-lists:write"
+      ],
+      "title": "Update Tier List"
     },
     {
       "annotations": {
@@ -8464,7 +9210,7 @@
       "title": "Get Schema"
     }
   ],
-  "version": "b54c03cd2ea1833fa63fcc8b94bb67b8c0efd70955f68f7edf4600376d839bee",
+  "version": "981f4254c743ca721e1acb2549d524224ea40b9006f360477fb560bbdcc1381c",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",
@@ -8486,7 +9232,8 @@
       "project",
       "space",
       "template",
-      "style_library"
+      "style_library",
+      "tier_list"
     ],
     "CANVAS_ANCHORS": [
       "center",
@@ -8541,7 +9288,8 @@
       "transition",
       "caption-template",
       "template",
-      "space"
+      "space",
+      "tier_list"
     ],
     "FOLDER_QUERY_SORTS": [
       "relevance",
@@ -8686,6 +9434,10 @@
       "code",
       "effect"
     ],
+    "SHARE_ASSET_TYPES": [
+      "project",
+      "tier_list"
+    ],
     "SOCIAL_PLATFORMS": [
       "youtube",
       "instagram",
@@ -8732,6 +9484,11 @@
       "system",
       "user",
       "all"
+    ],
+    "TIER_LIST_SORTS": [
+      "updatedAt",
+      "createdAt",
+      "name"
     ],
     "TRACKED_ACCOUNT_TYPES": [
       "inspiration",

@@ -21,11 +21,11 @@ import { CliError, EXIT } from '../errors.js'
 
 /** The 'media' positional means "a media item, named by its media id". */
 const MEDIA = 'media'
-const FAVORITE_TYPES = ['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space'] as const
-const ARCHIVE_TYPES = ['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'style-library'] as const
+const FAVORITE_TYPES = ['card', 'voice', 'brand_kit', 'project', 'inspiration_content', 'gallery', 'transition', 'space', 'tier_list'] as const
+const ARCHIVE_TYPES = ['card', 'brand_kit', 'brand_kit_section', 'project', 'space', 'style-library', 'tier-list'] as const
 
 /** The CLI's hyphenated spelling of an asset type, to the API's. */
-const API_ASSET_TYPE: Record<string, string> = { 'style-library': 'style_library' }
+const API_ASSET_TYPE: Record<string, string> = { 'style-library': 'style_library', 'tier-list': 'tier_list' }
 
 type Target = { mediaId: string } | { assetType: string; id: string }
 

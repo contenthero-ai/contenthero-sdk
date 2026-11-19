@@ -180,6 +180,11 @@ import type {
   StyleLibraryDetail,
   StyleLibraryWithVersion,
   StyleLibraryListResult,
+  TierListDetail,
+  TierListListResult,
+  ListTierListsOptions,
+  CreateTierListRequest,
+  UpdateTierListRequest,
   ListStyleLibrariesOptions,
   GetStyleLibraryOptions,
   CreateStyleLibraryRequest,
@@ -1710,6 +1715,41 @@ export class ContentHero {
       request,
     )
     return data.styleLibrary
+  }
+
+  // -------------------------------------------------------------------------
+  // Tier lists (boards of library media ranked into tiers; a staff-only feature while it is built, refused for
+  // everyone else with 403 `feature_unavailable`). Archiving one is the cross-entity `archive()` with assetType 'tier_list'.
+  // -------------------------------------------------------------------------
+
+  /** The account's tier lists, sorted by `sort` and `order`, a page at a time. Archived ones are left out unless `archived` is true. */
+  async listTierLists(options: ListTierListsOptions = {}): Promise<TierListListResult> {
+    const q = new URLSearchParams()
+    if (options.archived) q.set('archived', 'true')
+    if (options.search) q.set('search', options.search)
+    setSort(q, options)
+    setPage(q, options)
+    return this.request<TierListListResult>('GET', `/api/v1/tier-lists${queryOf(q)}`)
+  }
+
+  /** One tier list by id: its tiers, its tabs, one tab's items (the first, or `tabId`) and the standings. */
+  async getTierList(id: string, options: { tabId?: string } = {}): Promise<TierListDetail> {
+    const q = new URLSearchParams()
+    if (options.tabId) q.set('tabId', options.tabId)
+    const data = await this.request<{ tierList: TierListDetail }>('GET', `/api/v1/tier-lists/${encodeURIComponent(id)}${queryOf(q)}`)
+    return data.tierList
+  }
+
+  /** Create a tier list, with its tiers and tabs when given. */
+  async createTierList(request: CreateTierListRequest): Promise<TierListDetail> {
+    const data = await this.request<{ tierList: TierListDetail }>('POST', '/api/v1/tier-lists', request)
+    return data.tierList
+  }
+
+  /** Change a tier list, its tiers, tabs and items, or arrange one tab, in one call: a PATCH, where a field left out is left alone. */
+  async updateTierList(id: string, request: UpdateTierListRequest): Promise<TierListDetail> {
+    const data = await this.request<{ tierList: TierListDetail }>('PATCH', `/api/v1/tier-lists/${encodeURIComponent(id)}`, request)
+    return data.tierList
   }
 
   // -------------------------------------------------------------------------

@@ -142,3 +142,11 @@ export function profileRef(raw: string): { platform?: string; handleOrUrl: strin
   }
   return { platform, handleOrUrl: rest.join(':') }
 }
+
+/** `--cover-position`: x,y percentages, or a clear word for the default framing. Returns null to clear. */
+export function toCoverPosition(value: string): { x: number; y: number } | null {
+  if (isClear(value)) return null
+  const parts = value.split(',').map((p) => toFloat(p.trim()))
+  if (parts.length !== 2) throw new CliError(`Invalid --cover-position "${value}". Expected x,y.`, EXIT.USAGE)
+  return { x: parts[0]!, y: parts[1]! }
+}

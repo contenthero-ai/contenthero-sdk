@@ -50,7 +50,7 @@ import {
 import { makeClient } from '../context.js'
 import { emit, keyValues, moreLine, statusCommandFor, table, withMore } from '../output.js'
 import { CliError, EXIT } from '../errors.js'
-import { isClear, toFloat, toInt, toJson, toLoudness, withPageFlags, withSortFlags } from '../args.js'
+import { isClear, toCoverPosition, toInt, toJson, toLoudness, withPageFlags, withSortFlags } from '../args.js'
 
 function parseOps(raw: string): EditorOp[] {
   let parsed: unknown
@@ -421,14 +421,6 @@ function toCoverChoice(value: string): ProjectCoverChoice {
   const media = /^media:(.+)$/.exec(value)
   if (media) return { mediaId: media[1]! }
   throw new CliError(`Invalid --cover "${value}". Expected auto, frame:<n> or media:<id>.`, EXIT.USAGE)
-}
-
-/** `--cover-position`: x,y percentages, or a clear word for the default framing. */
-function toCoverPosition(value: string): { x: number; y: number } | null {
-  if (isClear(value)) return null
-  const parts = value.split(',').map((p) => toFloat(p.trim()))
-  if (parts.length !== 2) throw new CliError(`Invalid --cover-position "${value}". Expected x,y.`, EXIT.USAGE)
-  return { x: parts[0]!, y: parts[1]! }
 }
 
 /**

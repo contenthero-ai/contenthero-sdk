@@ -113,6 +113,8 @@ export interface ContractTool {
   effect: ContractEffect
   annotations: ContractAnnotations
   scopes: readonly string[]
+  /** Offered only to this audience while a feature is built. */
+  audience?: 'staff'
   description: ContractToolDescription
   inputSchema: { type: 'object'; properties: Record<string, ContractSchema>; required?: readonly string[]; additionalProperties?: unknown }
   inApp?: { omit?: Record<string, string>; optional?: Record<string, string>; narrow?: Record<string, { values: readonly string[]; reason: string }> }
@@ -136,6 +138,10 @@ export interface ContractSchema {
 export interface AgentContract {
   tools: readonly ContractTool[]
   vocabularies: Record<string, readonly string[]>
+  /** Values of a vocabulary that only a staff feature offers, by the vocabulary's name. Absent in an older contract. */
+  staffValues?: Record<string, readonly string[]>
+  /** Scopes that exist only for a staff feature. Absent in an older contract. */
+  staffScopes?: readonly string[]
   version: string
 }
 
@@ -164,6 +170,13 @@ export function toolTitle(name: ContractToolName): string {
   const tool = AGENT_CONTRACT.tools.find((t) => t.name === name)
   if (!tool) throw new Error(\`No tool named \${name} in the agent contract\`)
   return tool.title
+}
+
+/** Who a tool is offered to: 'staff' while a feature is built, absent for everyone. The server refuses other callers regardless. */
+export function toolAudience(name: ContractToolName): 'staff' | undefined {
+  const tool = AGENT_CONTRACT.tools.find((t) => t.name === name)
+  if (!tool) throw new Error(\`No tool named \${name} in the agent contract\`)
+  return tool.audience
 }
 
 /** A tool's MCP annotations, derived by the app from its effect. */

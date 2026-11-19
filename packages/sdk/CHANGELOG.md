@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.4.47
+
+- Tier lists: `listTierLists`, `getTierList`, `createTierList` and `updateTierList`, with the `TierList`, `TierListTier`, `TierListTab` and `TierListItem` types. Staff only for now: the server refuses other callers.
+- The contract carries a tool's `audience` and the staff-only values of a vocabulary (`staffValues`).
+
 ## 0.4.46
 
 - Effect entries no longer carry an external documentation link: `EffectDetail.documentation` is null, and the entry's own description, parameters and defaults say what it does.

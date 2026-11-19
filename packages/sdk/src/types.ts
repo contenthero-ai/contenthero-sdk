@@ -49,6 +49,7 @@ import {
   STOCK_COLLECTIONS,
   STOCK_ORIENTATIONS,
   STYLE_LIBRARY_SORTS,
+  TIER_LIST_SORTS,
   TEMPLATE_COVERAGES,
   TEMPLATE_RESIZES,
   TEMPLATE_SCOPE_FILTERS,
@@ -199,6 +200,7 @@ export const LIST_SORTS = {
   projects: PROJECT_SORTS,
   spaces: SPACE_SORTS,
   styleLibraries: STYLE_LIBRARY_SORTS,
+  tierLists: TIER_LIST_SORTS,
   content: CONTENT_SORTS,
   media: MEDIA_SORTS,
 } as const
@@ -213,6 +215,7 @@ export type CardSort = SortFieldOf<'cards'>
 export type ProjectSort = SortFieldOf<'projects'>
 export type SpaceSort = SortFieldOf<'spaces'>
 export type StyleLibrarySort = SortFieldOf<'styleLibraries'>
+export type TierListSort = SortFieldOf<'tierLists'>
 export type ContentSort = SortFieldOf<'content'>
 export type MediaSort = SortFieldOf<'media'>
 
@@ -5723,4 +5726,172 @@ export interface MediaTranscriptOptions {
 export interface TranscriptQuery extends ProjectTranscriptOptions, MediaTranscriptOptions {
   projectId?: string
   mediaId?: string
+}
+
+// ---------------------------------------------------------------------------
+// Tier lists (boards of library media ranked into tiers, with tabs and standings)
+// ---------------------------------------------------------------------------
+
+/** A tier list as a listing shows it. */
+export interface TierList {
+  id: string
+  shortId: string
+  name: string
+  description: string | null
+  width: number
+  height: number
+  showPoints: boolean
+  /** The image shown on the board's card, or null for the board preview. */
+  coverUrl?: string | null
+  /** Where the cover is framed, as percentages from 0 to 100; null with no cover. */
+  coverPosition?: { x: number; y: number } | null
+  favorited: boolean
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+  appUrl: string
+}
+
+/** One tier of a board. */
+export interface TierListTier {
+  id: string
+  shortId: string
+  label: string
+  name: string
+  points: number
+  color: string
+}
+
+/** One tab of a board. Its `revision` counts every change to the tab's items. */
+export interface TierListTab {
+  id: string
+  shortId: string
+  name: string
+  revision: number
+  appUrl: string
+}
+
+/** One piece of media placed on a tab. A null `tierId` is Unranked. */
+export interface TierListItem {
+  id: string
+  shortId: string
+  tabId: string
+  tierId: string | null
+  label: string | null
+  caption: string | null
+  mediaId: string | null
+  kind: 'image' | 'video' | null
+  url: string | null
+  thumbnailUrl: string | null
+  inTrash: boolean
+  width: number | null
+  height: number | null
+}
+
+/** One label's standing across every tab of a board. */
+export interface TierListStanding {
+  label: string
+  rank: number
+  tied: boolean
+  total: number | null
+  counts: Array<{ tierId: string; count: number }>
+  unranked: number
+  placements: number
+}
+
+/** A board with its tiers, tabs, one tab's items and the standings. */
+export interface TierListDetail extends TierList {
+  tiers: TierListTier[]
+  tabs: TierListTab[]
+  tab: TierListTab
+  items: TierListItem[]
+  standings: TierListStanding[]
+}
+
+/** Options for `listTierLists`. */
+export interface ListTierListsOptions extends PageOptions, SortOptions<TierListSort> {
+  /** `true` lists ONLY archived tier lists. */
+  archived?: boolean
+  /** A name search. */
+  search?: string
+}
+
+/** Result of `listTierLists`. */
+export interface TierListListResult extends Paged {
+  tierLists: TierList[]
+}
+
+/** Where a tier, tab or item goes among its siblings: next to one, or at an end. */
+export interface TierListPlacement {
+  afterId?: string
+  beforeId?: string
+  position?: 'top' | 'bottom'
+}
+
+/** A tier as a request writes it. */
+export interface TierListTierInput {
+  label: string
+  name?: string | null
+  points?: number
+  color: string
+}
+
+/** One piece of media to place. `tier` is a tier id or label; left out or null it is Unranked. */
+export interface TierListItemInput {
+  /** The library media to place. Name this or `url`. */
+  mediaId?: string
+  /** Instead of `mediaId`: the address of a file in the library, as the media picker gives it. */
+  url?: string
+  label?: string | null
+  caption?: string | null
+  tier?: string | null
+}
+
+/** A tab as a request writes it. */
+export interface TierListTabInput {
+  name?: string
+  items?: TierListItemInput[]
+}
+
+/** Input to `createTierList`. */
+export interface CreateTierListRequest {
+  name: string
+  description?: string | null
+  width?: number
+  height?: number
+  showPoints?: boolean
+  tiers?: TierListTierInput[]
+  tabs?: TierListTabInput[]
+}
+
+/** Input to `updateTierList`: a PATCH, where a field left out is left alone. Parts apply in order and a refusal stops the rest. */
+export interface UpdateTierListRequest {
+  name?: string
+  description?: string | null
+  width?: number
+  height?: number
+  showPoints?: boolean
+  /** An image from the library as the cover of the tier list card, by its media id, or null to remove the cover. */
+  coverMediaId?: string | null
+  /** Instead of `coverMediaId`: the address of an image in the library, as the media picker gives it. */
+  coverUrl?: string
+  /** Where the cover is framed, as percentages of its width and height from 0 to 100, or null for the center. Needs a cover. */
+  coverPosition?: { x: number; y: number } | null
+  tiers?: {
+    add?: Array<TierListTierInput & TierListPlacement>
+    update?: Array<{ id: string; label?: string; name?: string | null; points?: number; color?: string } & TierListPlacement>
+    remove?: string[]
+  }
+  tabs?: {
+    add?: Array<TierListTabInput & TierListPlacement>
+    update?: Array<{ id: string; name?: string } & TierListPlacement>
+    remove?: string[]
+  }
+  items?: {
+    add?: Array<TierListItemInput & { tabId: string }>
+    update?: Array<{ id: string; label?: string | null; caption?: string | null; tier?: string | null } & TierListPlacement>
+    remove?: string[]
+  }
+  /** Arrange one whole tab in one step, against the revision you read. Applied last. */
+  arrangement?: { tabId: string; baseRevision: number; placements: Array<{ itemId: string; tier: string | null }> }
 }

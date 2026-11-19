@@ -7,7 +7,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 // The spec's own spelling of the key that binds a result to its widget. See `server.ts` for why only the
 // constants come from this package and not its server helpers.
-import { aspectLabel } from '@contenthero-ai/brand-ui'
+import { aspectLabel, countPhrase } from '@contenthero-ai/brand-ui'
 import { RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps'
 
 /**
@@ -72,6 +72,9 @@ import type {
   StyleLibrary,
   StyleLibraryDetail,
   StyleLibraryListResult,
+  TierList,
+  TierListDetail,
+  TierListListResult,
   StyleLibraryWithVersion,
   Generation,
   JobKind,
@@ -230,14 +233,15 @@ export type GeneratedAttachment =
  * to set. Embedding base64 here would pay the context cost twice over.
  */
 /**
- * ⭐⭐ HOW PROSE NAMES AN ITEM: its id, then its app link when the server sent one.
+ * ⭐⭐ HOW PROSE NAMES AN ITEM: its short id (the one every tool takes first; the UUID when it has none), then its app link when the server sent one.
  *
  * ONE spelling everywhere, so an agent learns it once and can hyperlink any item for the person. The link is the
  * server's `appUrl`, never composed here: this module once built its own studio links, and their format drifted
  * from the app's. An item whose type carries no `appUrl` (or an older server) simply renders its id.
  */
-export function idOf(item: { id: string | null; appUrl?: string | null }, label = 'id'): string {
-  return item.appUrl ? `${label} ${item.id}, appUrl ${item.appUrl}` : `${label} ${item.id}`
+export function idOf(item: { id: string | null; shortId?: string | null; appUrl?: string | null }, label = 'id'): string {
+  const id = item.shortId || item.id
+  return item.appUrl ? `${label} ${id}, appUrl ${item.appUrl}` : `${label} ${id}`
 }
 
 /** The same appUrl, after a url a line already shows. */
@@ -1987,14 +1991,14 @@ export function klingElementDeletedResult(id: string): CallToolResult {
 /** One saved Kling element. */
 export function klingElementResult(e: KlingElement, verb?: string): CallToolResult {
   if (verb) {
-    return text(`${verb} Kling element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via generate_video's klingElements [{ klingElementId: "${e.id}" }] and @${e.name} in the prompt.`)
+    return text(`${verb} Kling element "${e.name}" (${idOf(e)}, ${e.category}). Reference it in a Kling generation via generate_video's klingElements [{ klingElementId: "${e.shortId || e.id}" }] and @${e.name} in the prompt.`)
   }
   return text(
     lines([
       `${e.name} (${idOf(e)}) | ${e.category}`,
       e.description ? `description: ${e.description}` : null,
       e.inputVideoUrl ? `video: ${e.inputVideoUrl}` : `images (${e.inputUrls.length}): ${e.inputUrls.join(', ')}`,
-      `Reference in a Kling prompt as @${e.name}; pass generate_video's klingElements [{ klingElementId: "${e.id}" }].`,
+      `Reference in a Kling prompt as @${e.name}; pass generate_video's klingElements [{ klingElementId: "${e.shortId || e.id}" }].`,
     ]),
   )
 }
@@ -3076,7 +3080,7 @@ void PROJECT_DETAIL_EXPOSURE
  */
 function projectPartsResult(p: ProjectParts): CallToolResult {
   return text(
-    `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}", revision ${p.revision}, ${p.fps} fps. ${describePartsAsked(p.parts)}\n` +
+    `Project ${itemHandle({ id: p.id, shortId: p.shortId })}${linkAfter(p.appUrl)}: "${p.title}", revision ${p.revision}, ${p.fps} fps. ${describePartsAsked(p.parts)}\n` +
       `${PASS_REVISION_LINE}\n` +
       (p.compositionSpace ? `Layer geometry is in composition space ${p.compositionSpace.width}x${p.compositionSpace.height} (center-relative px).\n` : '') +
       (p.state?.missing?.length ? `These named nothing in the project: ${p.state.missing.join(', ')}.\n` : '') +
@@ -3095,7 +3099,7 @@ function projectPartsResult(p: ProjectParts): CallToolResult {
 export function projectDetailResult(p: ProjectDetail | ProjectParts): CallToolResult {
   if (isProjectParts(p)) return projectPartsResult(p)
   return text(
-    `Project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Project ${itemHandle({ id: p.id, shortId: p.shortId })}${linkAfter(p.appUrl)}: "${p.title}" (${p.type}, ${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       `${PASS_REVISION_LINE}\n` +
       // A windowed read is part of the document. Said in words, because a full read of one beat looks exactly like a
       // full read of a short timeline, and writing it back as the whole would drop everything outside the window.
@@ -3446,7 +3450,7 @@ export function projectListResult({ projects, nextCursor }: ProjectListResult): 
   if (projects.length === 0) return text('No projects found.')
   const rows = projects.map((p) => {
     const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
-    return `- ${p.id}  [${p.type}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}${linkAfter(p.appUrl)}`
+    return `- ${itemHandle({ id: p.id, shortId: p.shortId })}  [${p.type}]  "${p.title}"  ${p.orientation}${flags ? `  (${flags})` : ''}${linkAfter(p.appUrl)}`
   })
   return text(lines([`${projects.length} project(s):`, ...rows, moreLine(nextCursor)]))
 }
@@ -3454,7 +3458,7 @@ export function projectListResult({ projects, nextCursor }: ProjectListResult): 
 /** A freshly created project: the id + kind to start editing against. */
 export function projectCreatedResult(p: ProjectDetail, linkedCardId?: string): CallToolResult {
   return text(
-    `Created ${p.type} project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
+    `Created ${p.type} project ${itemHandle({ id: p.id, shortId: p.shortId })}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height}), revision ${p.revision}.\n` +
       (linkedCardId ? `Linked to card ${linkedCardId}.\n` : '') +
       // The TOOL is still called update_timeline; `kind` is what says which one applies.
       `Use this id with update_${p.type === 'canvas' ? 'canvas' : 'timeline'} to add content.` +
@@ -3498,7 +3502,7 @@ export function settingsText(p: ProjectSettings): string {
 export function projectSummaryResult(p: ProjectSummary & ProjectSettings, verb: string): CallToolResult {
   const flags = [p.isArchived ? 'archived' : null, p.isFavorited ? 'favorited' : null].filter(Boolean).join(', ')
   return text(
-    `${verb} ${p.type} project ${p.id}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height})` +
+    `${verb} ${p.type} project ${itemHandle({ id: p.id, shortId: p.shortId })}${linkAfter(p.appUrl)}: "${p.title}" (${p.orientation} ${p.width}x${p.height})` +
       `, cover ${p.coverSource}${p.coverFrame != null ? ` at frame ${p.coverFrame}` : ''}${flags ? ` (${flags})` : ''}.` +
       (p.fps ? `\nFrame rate: ${p.fps} fps.` : '') +
       (settingsText(p) ? `\n${settingsText(p).trimEnd()}` : ''),
@@ -3870,5 +3874,40 @@ export function timelineTypesResult(cat: TimelineTypeCatalog): CallToolResult {
       (editOps.length ? `update_timeline edit ops (${cat.editOps!.description}):\n${editOps.join('\n')}\n\n` : '') +
       `Shared prop groups: ${Object.keys(cat.sharedProps).join(', ')}.\n\n` +
       JSON.stringify(cat), // minified: a model reads it, and indentation was a third of its size
+  )
+}
+
+// -- Tier lists ---------------------------------------------------------------
+
+function tierListLine(l: TierList): string {
+  const bits = [`id ${itemHandle({ id: l.id, shortId: l.shortId })}`, `${l.width}x${l.height}`, `updated ${l.updatedAt}`, ...(l.archivedAt ? ['ARCHIVED'] : [])]
+  return `- ${l.name} (${bits.join(', ')})${l.description ? `: ${l.description}` : ''}\n  ${l.appUrl}`
+}
+
+/** A page of tier lists. */
+export function tierListListResult({ tierLists, nextCursor }: TierListListResult): CallToolResult {
+  if (!tierLists.length) return text('No tier lists found.')
+  return text(lines([`${tierLists.length} tier list(s):`, ...tierLists.map(tierListLine), moreLine(nextCursor)]))
+}
+
+/** One tier list: tiers, tabs, the shown tab's items by tier, and the standings. */
+export function tierListResult(verb: string | null, l: TierListDetail): CallToolResult {
+  const tierName = (id: string | null) => (id === null ? 'Unranked' : (l.tiers.find((t) => t.id === id)?.label ?? id))
+  const itemLine = (i: TierListDetail['items'][number]) =>
+    `    - item ${itemHandle({ id: i.id, shortId: i.shortId })}: ${i.label ?? 'no label'}${i.caption ? ` (${i.caption})` : ''}, media ${i.mediaId ?? 'gone'}${i.inTrash ? ', in trash' : ''}`
+  const groups = [...l.tiers.map((t) => t.id), null].map((id) => ({ id, items: l.items.filter((i) => i.tierId === id) }))
+  return text(
+    lines([
+      `${verb ? `${verb} ` : ''}${tierListLine(l)}`,
+      `Points ${l.showPoints ? 'on' : 'off'}.`,
+      `Tiers: ${l.tiers.map((t) => `${t.label} (id ${itemHandle({ id: t.id, shortId: t.shortId })}, ${countPhrase(t.points, 'point')})`).join('; ') || 'none'}`,
+      `Tabs: ${l.tabs.map((t) => `${t.name} (id ${itemHandle({ id: t.id, shortId: t.shortId })}, revision ${t.revision})`).join('; ')}`,
+      `Showing tab ${l.tab.name} (id ${itemHandle({ id: l.tab.id, shortId: l.tab.shortId })}, revision ${l.tab.revision}):`,
+      ...groups.flatMap((g) => [`  ${tierName(g.id)}: ${g.items.length}`, ...g.items.map(itemLine)]),
+      'Standings:',
+      ...(l.standings.length
+        ? l.standings.map((s) => `  ${s.rank}${s.tied ? ' (tied)' : ''}. ${s.label}${s.total === null ? '' : `, ${countPhrase(s.total, 'point')}`}, ${countPhrase(s.placements, 'placement')}`)
+        : ['  none']),
+    ]),
   )
 }

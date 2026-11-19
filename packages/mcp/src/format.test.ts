@@ -654,6 +654,9 @@ test('an unfinished export reports its overall progress and its stage', () => {
 test('an item is named by its id and then its appUrl', () => {
   assert.equal(idOf({ id: 'c1', appUrl: 'https://app.contenthero.ai/cards/c1' }), 'id c1, appUrl https://app.contenthero.ai/cards/c1')
   assert.equal(idOf({ id: 'c1' }), 'id c1')
+  assert.equal(idOf({ id: 'uuid-1', shortId: 'c1' }), 'id c1')
+  assert.equal(idOf({ id: 'uuid-1', shortId: null }), 'id uuid-1')
+  assert.equal(idOf({ id: 'uuid-1', shortId: 'c1', appUrl: 'https://app/c1' }, 'media'), 'media c1, appUrl https://app/c1')
   const out = tagListResult({ tags: [{ id: 't1', name: 'long-form', appUrl: 'https://app.contenthero.ai/tags/t1' } as never], nextCursor: null })
   assert.match((out.content[0] as { text: string }).text, /- long-form \(id t1, appUrl https:\/\/app\.contenthero\.ai\/tags\/t1\)/)
 })

@@ -17,6 +17,7 @@ import { registerTag } from './commands/tag.js'
 import { registerKlingElement } from './commands/kling-element.js'
 import { registerTemplate } from './commands/template.js'
 import { registerStyleLibrary } from './commands/style-library.js'
+import { registerTierList } from './commands/tier-list.js'
 import { registerGenerate } from './commands/generate.js'
 import { registerAudio } from './commands/audio.js'
 import { registerTranscribe } from './commands/transcribe.js'
@@ -63,6 +64,7 @@ export function buildProgram(): Command {
   registerKlingElement(program)
   registerTemplate(program)
   registerStyleLibrary(program)
+  registerTierList(program)
   registerGenerate(program)
   registerAudio(program)
   registerTranscribe(program)

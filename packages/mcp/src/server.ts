@@ -70,6 +70,7 @@ import {
   toolDescription,
   toolInputSchema,
   toolTitle,
+  toolAudience,
   type ContractToolName,
   type ToolInput,
 } from '@contenthero/sdk'
@@ -141,6 +142,8 @@ import {
   klingElementListResult,
   templateListResult,
   styleLibraryListResult,
+  tierListListResult,
+  tierListResult,
   styleLibraryResult,
   styleLibraryWrittenResult,
   templateResult,
@@ -1015,6 +1018,12 @@ export interface RegisterToolsOptions {
   getClient: GetClient
   /** How long a job-starting tool waits within one call, and how often it looks. Tests shorten it. */
   jobWait?: JobWait
+  /**
+   * Whether the caller of a listing is staff. Given, a tool the contract marks for staff is listed only when this
+   * answers true; left out, the caller is unknown and every tool is listed. Listing is a courtesy: the server
+   * refuses a staff tool for anyone else however the call arrives.
+   */
+  isStaff?: (extra: ToolExtra) => boolean | Promise<boolean>
 }
 
 export interface JobWait {
@@ -3339,7 +3348,52 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     },
   )
 
-  server.server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: listed }))
+  // ===========================================================================
+  // Tier lists (a staff-only feature while it is built)
+  // ===========================================================================
+
+  tool('list_tier_lists', async (args, extra) => {
+    try {
+      const client = await getClient(extra)
+      return tierListListResult(await client.listTierLists(args))
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  tool('get_tier_list', async (args, extra) => {
+    try {
+      const client = await getClient(extra)
+      const { tierListId, ...options } = args
+      return tierListResult(null, await client.getTierList(tierListId, options))
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  tool('create_tier_list', async (args, extra) => {
+    try {
+      const client = await getClient(extra)
+      return tierListResult('Created', await client.createTierList(args))
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  tool('update_tier_list', async (args, extra) => {
+    try {
+      const client = await getClient(extra)
+      const { tierListId, ...changes } = args
+      return tierListResult('Updated', await client.updateTierList(tierListId, changes))
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.server.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
+    if (!opts.isStaff || (await opts.isStaff(extra))) return { tools: listed }
+    return { tools: listed.filter((t) => toolAudience(t.name as ContractToolName) !== 'staff') }
+  })
 }
 
 /**

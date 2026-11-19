@@ -5216,7 +5216,7 @@ test('the Kling element tools reach the Kling element SDK methods, by klingEleme
   const listed = await mcp.callTool({ name: 'list_kling_elements', arguments: {} })
   assert.match(listed.content[0].text, /^1 Kling element\(s\):/)
   const got = await mcp.callTool({ name: 'get_kling_element', arguments: { klingElementId: 'Kling001' } })
-  assert.match(got.content[0].text, /klingElements \[\{ klingElementId: "11111111-1111-4111-8111-111111111111" \}\]/)
+  assert.match(got.content[0].text, /klingElements \[\{ klingElementId: "Kling001" \}\]/)
   await mcp.callTool({ name: 'create_kling_element', arguments: { name: 'hero', description: 'the subject', images: row.input_urls } })
   await mcp.callTool({ name: 'update_kling_element', arguments: { klingElementId: 'Kling001', name: 'villain' } })
   const deleted = await mcp.callTool({ name: 'delete_kling_element', arguments: { klingElementId: 'Kling001' } })

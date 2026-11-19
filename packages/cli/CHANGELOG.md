@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.3.42
+
+- `tier-list` commands: list, get, create and update (staff only: the server refuses other callers). `favorite` and `archive` take a tier list.
 - BREAKING: one generate command per medium, no aliases. `generate image` and `generate video` run every model of their medium by the model's registry kind: generate, upscale, background removal, layer separation, lip sync and (image) reference boards. Removed `generate board`, `generate lip-sync` and `upscale` (121 leaf commands to 118). `model get` shows a "Run with" row.
 - `generate video --keyframe` (repeatable), `--voice name:url` (repeatable) and `--keep-original-sound`.
 - `model get` prints a "Reference tags" row from the registry's prompt tags.
