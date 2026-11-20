@@ -5797,6 +5797,12 @@ export interface TierListStanding {
   counts: Array<{ tierId: string; count: number }>
   unranked: number
   placements: number
+  /**
+   * The tiebreak that put this standing behind the one above it when the points were level: `countback` (more
+   * placements in the better tiers) or `position` (placed further left within the same tiers). Null when the points
+   * separated them, for the first standing, and for a tie.
+   */
+  settledBy: 'countback' | 'position' | null
 }
 
 /** A board with its tiers, tabs, one tab's items and the standings. */

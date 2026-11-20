@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.48
+
+- `TierListStanding.settledBy`: which tiebreak put a standing behind the one above it when the points were level, `countback` or `position` (placed further left within the same tiers), or null.
+
 ## 0.4.47
 
 - Tier lists: `listTierLists`, `getTierList`, `createTierList` and `updateTierList`, with the `TierList`, `TierListTier`, `TierListTab` and `TierListItem` types. Staff only for now: the server refuses other callers.
