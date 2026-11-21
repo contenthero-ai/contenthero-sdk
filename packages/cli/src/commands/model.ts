@@ -49,7 +49,7 @@ export function registerModel(program: Command): void {
       emit(models, ctx, (rows: ModelInfo[]) =>
         table(
           ['MODEL', 'TYPE', 'KIND', 'NAME', 'CONTROLS'],
-          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, [...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities), ...(m.boardTypes?.length ? [`board types: ${m.boardTypes.map((t) => t.boardType).join(', ')}`] : [])].join('; ')]),
+          rows.map((m) => [m.modelId, m.contentType, m.kind, m.displayName, [...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities), ...(m.sheetTypes?.length ? [`sheet types: ${m.sheetTypes.map((t) => t.sheetType).join(', ')}`] : [])].join('; ')]),
         ),
       )
     })
@@ -113,8 +113,8 @@ export function registerModel(program: Command): void {
           ...(model.promptReferences && describePromptReferenceTags(model.promptReferences.inputs).length
             ? [['Reference tags', describePromptReferenceTags(model.promptReferences.inputs).join(', ')] as [string, string]]
             : []),
-          ...(model.boardTypes?.length
-            ? [['Board types', model.boardTypes.map((t) => `${t.boardType} (${t.summary})`).join(', ')] as [string, string]]
+          ...(model.sheetTypes?.length
+            ? [['Sheet types', model.sheetTypes.map((t) => `${t.sheetType} (${t.summary}; default ${t.defaultPanelCount} panels, ${t.defaultAspectRatio})`).join(', ')] as [string, string]]
             : []),
         ])
       })

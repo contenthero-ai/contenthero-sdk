@@ -47,7 +47,7 @@ const FAKE_CATALOG = [
   cap('recraft-remove-background', 'image', 'background-removal', 'image'),
   cap('bria-video-background-remover', 'video', 'background-removal', 'video'),
   cap('separate-layers', 'image', 'layer-separation', 'image'),
-  { ...cap('reference-boards', 'image', 'generate', 'image'), boardTypes: [{ boardType: 'character', summary: 'a character sheet' }] },
+  { ...cap('reference-sheets', 'image', 'generate', 'image'), sheetTypes: [{ sheetType: 'character', summary: 'a character sheet' }] },
   cap('veo-3.1-fast', 'video', 'generate', 'video'),
   cap('infinitalk', 'video', 'lip-sync', 'video'),
   cap('elevenlabs-tts', 'audio', 'generate', 'audio'),
@@ -61,7 +61,7 @@ const FAKE_CATALOG = [
 function withCatalogEntry(model) {
   const entry = FAKE_CATALOG.find((m) => m.modelId === model.modelId)
   return entry
-    ? { ...model, ...(entry.boardTypes ? { boardTypes: entry.boardTypes } : {}), contentType: entry.contentType, kind: entry.kind, capabilities: { ...model.capabilities, kind: entry.kind, outputType: entry.capabilities.outputType } }
+    ? { ...model, ...(entry.sheetTypes ? { sheetTypes: entry.sheetTypes } : {}), contentType: entry.contentType, kind: entry.kind, capabilities: { ...model.capabilities, kind: entry.kind, outputType: entry.capabilities.outputType } }
     : model
 }
 
@@ -129,8 +129,8 @@ function fakeClient(overrides = {}) {
     }),
     listMedia: async () => ({
       media: [
-        { id: 'out-uuid-1', kind: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, origin: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
-        { id: 'out-uuid-1', kind: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, origin: null, boardType: null, source: 'creations', fileName: null, durationSeconds: null },
+        { id: 'out-uuid-1', kind: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-1', url: 'https://cdn/1.png', generationSize: 2, isFavorited: false, origin: null, sheetType: null, source: 'creations', fileName: null, durationSeconds: null },
+        { id: 'out-uuid-1', kind: 'image', model: 'nano-banana-2', prompt: 'a cat', status: 'completed', createdAt: 't', mediaId: 'Out12345-2', url: 'https://cdn/2.png', generationSize: 2, isFavorited: true, origin: null, sheetType: null, source: 'creations', fileName: null, durationSeconds: null },
       ],
       nextCursor: null,
     }),
@@ -146,7 +146,7 @@ function fakeClient(overrides = {}) {
       generationSize: 2,
       isFavorited: id.includes('-2'),
       kind: null,
-      boardType: null,
+      sheetType: null,
       source: 'creations',
       fileName: null,
       durationSeconds: null,
@@ -265,18 +265,18 @@ function fakeClient(overrides = {}) {
         }),
       )
     },
-    generateBoardAndWait: async () => ({
-      outputId: 'board1',
+    generateReferenceSheetAndWait: async () => ({
+      outputId: 'sheet1',
       status: 'settled',
       contentType: 'image',
       modelId: 'gpt-image-2',
-      outputs: outs(['https://cdn/board.png']),
+      outputs: outs(['https://cdn/sheet.png']),
       error: null,
       createdAt: 't',
       completedAt: 't2',
     }),
     estimateCost: async () => ({ getCost: true, creditsEstimate: 7, modelId: 'nano-banana-2', contentType: 'image' }),
-    estimateBoardCost: async () => ({ getCost: true, creditsEstimate: 6, contentType: 'image' }),
+    estimateReferenceSheetCost: async () => ({ getCost: true, creditsEstimate: 6, contentType: 'image' }),
     // The fake registry. listModels and getModel both read it, as the server does: the MCP holds no list of its
     // own, so a model's kind and medium come from here at call time.
     listModels: async () => FAKE_CATALOG,
@@ -777,47 +777,72 @@ test('generate_video surfaces a smart-wait timeout as a pollable pending result'
   assert.ok(!res.isError)
 })
 
-test('generate_image on the board model returns the board URL on completion', async () => {
+test('generate_image on the reference sheet model returns the sheet URL on completion', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
     name: 'generate_image',
-    arguments: { modelId: 'reference-boards', boardType: 'character', prompt: 'a stoic ranger' },
+    arguments: { modelId: 'reference-sheets', sheetType: 'character', prompt: 'a stoic ranger' },
   })
-  assert.match(urlsIn(res), /https:\/\/cdn\/board\.png/)
+  assert.match(urlsIn(res), /https:\/\/cdn\/sheet\.png/)
   assert.ok(!res.isError)
 })
 
-test('generate_image on the board model surfaces a smart-wait timeout as a pollable pending result', async () => {
+test('generate_image on the reference sheet model surfaces a smart-wait timeout as a pollable pending result', async () => {
   const mcp = await connect(
     fakeClient({
-      generateBoardAndWait: async () => {
-        throw new GenerationTimeoutError('board-pending-7')
+      generateReferenceSheetAndWait: async () => {
+        throw new GenerationTimeoutError('sheet-pending-7')
       },
     }),
   )
   const res = await mcp.callTool({
     name: 'generate_image',
-    arguments: { modelId: 'reference-boards', boardType: 'creature', prompt: 'a six-headed hydra' },
+    arguments: { modelId: 'reference-sheets', sheetType: 'creature', prompt: 'a six-headed hydra' },
   })
-  assert.match(res.content[0].text, /board-pending-7/)
+  assert.match(res.content[0].text, /sheet-pending-7/)
   assert.match(res.content[0].text, /get_status/)
   assert.ok(!res.isError)
 })
 
-test('generate_image on the board model passes any boardType to the server, whose list is the only one', async () => {
+test('generate_image on the reference sheet model passes any sheetType to the server, whose list is the only one', async () => {
   let sent: unknown
   const mcp = await connect(
     fakeClient({
-      generateBoardAndWait: async (req: { boardType: string }) => {
-        sent = req.boardType
-        throw Object.assign(new Error('Invalid or missing boardType. Expected one of: character, pose.'), { status: 400 })
+      generateReferenceSheetAndWait: async (req: { sheetType: string }) => {
+        sent = req.sheetType
+        throw Object.assign(new Error('Invalid or missing sheetType. Expected one of: character, pose.'), { status: 400 })
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'reference-boards', boardType: 'not-a-type', prompt: 'x' } })
+  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'reference-sheets', sheetType: 'not-a-type', prompt: 'x' } })
   assert.equal(sent, 'not-a-type')
   assert.equal(res.isError, true)
   assert.match((res.content as Array<{ text: string }>)[0].text, /Expected one of/)
+})
+
+test('generate_image on the reference sheet model passes the panel count and aspect ratio to the server', async () => {
+  let sent: Record<string, unknown> = {}
+  const mcp = await connect(
+    fakeClient({
+      generateReferenceSheetAndWait: async (req: Record<string, unknown>) => {
+        sent = req
+        return { outputId: 's', status: 'settled', contentType: 'image', modelId: 'reference-sheets', outputs: outs(['https://cdn/sheet.png']), error: null, createdAt: 't', completedAt: 't2' }
+      },
+    }),
+  )
+  await mcp.callTool({
+    name: 'generate_image',
+    arguments: { modelId: 'reference-sheets', sheetType: 'character', prompt: 'x', panelCount: 3, aspectRatio: '16:9' },
+  })
+  assert.equal(sent.panelCount, 3)
+  assert.equal(sent.aspectRatio, '16:9')
+})
+
+test('generate_image refuses panelCount on a model that is not a sheet, never ignoring it', async () => {
+  const mcp = await connect(fakeClient())
+  const res = await mcp.callTool({ name: 'generate_image', arguments: { modelId: 'nano-banana-2', prompt: 'x', panelCount: 3 } })
+  assert.equal(res.isError, true)
+  assert.match((res.content as Array<{ text: string }>)[0].text, /panelCount/)
 })
 
 /**
@@ -869,7 +894,7 @@ test('the generate_image schema no longer advertises a mode parameter', async ()
  * along and no client exposed it".
  *
  * `/api/v1/studio/generate` has accepted `avatarId` since avatar looks landed, and the core tags the row
- * `kind: 'look'`. The SDK carried the field on the BOARD request only, and neither MCP tool advertised it,
+ * `kind: 'look'`. The SDK carried the field on the reference sheet request only, and neither MCP tool advertised it,
  * so an agent could generate an image for a character and then had to hand it to a human to attach. A gap
  * like that is invisible from either side on its own: the server looks complete and the client looks
  * consistent. Asserting the field ARRIVES in the request is what makes it visible.
@@ -894,22 +919,22 @@ test('generate_image forwards avatarId, so a generation can file itself as a loo
   assert.equal(captured.avatarId, 'av1')
 })
 
-test('generate_image on the board model forwards avatarId', async () => {
+test('generate_image on the reference sheet model forwards avatarId', async () => {
   let captured
   const mcp = await connect(
     fakeClient({
-      generateBoardAndWait: async (req) => {
+      generateReferenceSheetAndWait: async (req) => {
         captured = req
         return {
-          outputId: 'b', status: 'settled', contentType: 'image', modelId: 'board',
-          outputs: outs(['https://cdn/board.png']), error: null, createdAt: 't', completedAt: 't2',
+          outputId: 'b', status: 'settled', contentType: 'image', modelId: 'sheet',
+          outputs: outs(['https://cdn/sheet.png']), error: null, createdAt: 't', completedAt: 't2',
         }
       },
     }),
   )
   await mcp.callTool({
     name: 'generate_image',
-    arguments: { modelId: 'reference-boards', boardType: 'character', prompt: 'x', avatarId: 'av1' },
+    arguments: { modelId: 'reference-sheets', sheetType: 'character', prompt: 'x', avatarId: 'av1' },
   })
   assert.equal(captured.avatarId, 'av1')
 })
@@ -975,8 +1000,8 @@ test('list_media forwards the origin filter', async () => {
       },
     }),
   )
-  await mcp.callTool({ name: 'list_media', arguments: { origin: 'board' } })
-  assert.equal(captured.origin, 'board')
+  await mcp.callTool({ name: 'list_media', arguments: { origin: 'sheet' } })
+  assert.equal(captured.origin, 'sheet')
 })
 
 test('generate_audio returns the audio URL synchronously', async () => {
@@ -1263,11 +1288,11 @@ test('generate_image get_cost returns an estimate without generating', async () 
   assert.ok(!res.isError)
 })
 
-test('generate_image on the board model get_cost returns an estimate', async () => {
+test('generate_image on the reference sheet model get_cost returns an estimate', async () => {
   const mcp = await connect(fakeClient())
   const res = await mcp.callTool({
     name: 'generate_image',
-    arguments: { modelId: 'reference-boards', boardType: 'character', prompt: 'a stoic ranger', getCost: true },
+    arguments: { modelId: 'reference-sheets', sheetType: 'character', prompt: 'a stoic ranger', getCost: true },
   })
   assert.match(res.content[0].text, /6 credits/)
   assert.ok(!res.isError)
@@ -1350,14 +1375,14 @@ test('a field the model kind does not take is refused, naming the model and what
 test('the MCP package names no model and takes no model enum', () => {
   // A list here is a copy of the registry, and a copy drifts. Model ids appear only in tests.
   const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
-  // src/models.ts held the board types until 7.52; the server's list is the only one now (get_model('reference-boards')).
+  // src/models.ts held the sheet types until 7.52; the server's list is the only one now (get_model('reference-sheets')).
   const files = ['src/server.ts', 'src/format.ts', 'src/index.ts']
   for (const f of files) {
     const code = strip(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
     assert.doesNotMatch(code, /\b(veo|seedance|nano-banana|gpt-image|seedream|kling-\d|wan-2|sora|elevenlabs-|topaz|infinitalk|auphonic)[\w.-]*/i, `${f} names a model`)
     assert.doesNotMatch(code, /modelId:\s*z\s*\.enum\(/, `${f} gives a modelId an enum`)
     assert.doesNotMatch(code, /FALLBACK|resolveModelEnums/, `${f} keeps a fallback model list`)
-    assert.doesNotMatch(code, /BOARD_TYPES|'mascot'/, `${f} keeps a copy of the board types`)
+    assert.doesNotMatch(code, /REFERENCE_SHEET_TYPES|'mascot'/, `${f} keeps a copy of the sheet types`)
   }
 })
 
@@ -1907,10 +1932,10 @@ test('create_tag lowercases and returns the tag', async () => {
       },
     }),
   )
-  const res = await mcp.callTool({ name: 'create_tag', arguments: { name: 'Reference Boards' } })
+  const res = await mcp.callTool({ name: 'create_tag', arguments: { name: 'Reference Sheets' } })
   assert.ok(!res.isError)
-  assert.equal(captured, 'Reference Boards')
-  assert.match(res.content[0].text, /Created: reference boards \(id t9\)/)
+  assert.equal(captured, 'Reference Sheets')
+  assert.match(res.content[0].text, /Created: reference sheets \(id t9\)/)
 })
 
 test('delete_tag destroys the tag and notes the cascade', async () => {
@@ -4415,7 +4440,7 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
           generationSize: 1,
           isFavorited: false,
           kind: 'upload',
-          boardType: null,
+          sheetType: null,
           source: 'uploads',
           fileName: 'C0001.MP4',
           durationSeconds: 1792,
@@ -4438,7 +4463,7 @@ test('list_media surfaces an upload file name, duration, and url inline', async 
 test('list_media prints each item\'s asset id', async () => {
   const item = {
     id: 'up-uuid-1', type: 'video', model: null, prompt: null, status: 'completed', createdAt: 't', mediaId: 'Upl12345',
-    url: 'https://cdn/editor-media-1.mp4', generationSize: 1, isFavorited: false, kind: 'upload', boardType: null,
+    url: 'https://cdn/editor-media-1.mp4', generationSize: 1, isFavorited: false, kind: 'upload', sheetType: null,
     source: 'uploads', fileName: null, durationSeconds: null, assetId: '15bf8171-0000-4000-8000-000000000000',
   }
   const mcp = await connect(fakeClient({ listMedia: async () => ({ media: [item, { ...item, id: 'up-uuid-2', assetId: null }], nextCursor: null }) }))
@@ -5127,7 +5152,7 @@ test('every tool that spends reports its cost the same way', async () => {
         req.modelId === 'elevenlabs-tts'
           ? { outputId: 'a1', appUrl: 'https://app/a1', status: 'settled', outputs: outs(['https://cdn/a1.mp3']), charge: CHARGE }
           : { outputId: 'o1', appUrl: 'https://app/o1', status: 'processing', charge: CHARGE },
-      generateBoardAndWait: async () => done,
+      generateReferenceSheetAndWait: async () => done,
       editAudio: async () => ({ outputId: 'e1', appUrl: 'https://app/e1', status: 'settled', outputs: outs(['https://cdn/e1.mp3']), charge: CHARGE }),
       transcribe: async () => ({ outputId: 'tr1', transcript: 'hi', language: 'en', wordCount: 1, durationSeconds: 1, charge: CHARGE }),
       createAvatar: async () => ({ avatar: { id: 'av1', shortId: 'abc', appUrl: 'https://app/av1', name: 'Mika' }, status: 'processing', message: '', charge: CHARGE }),
@@ -5148,7 +5173,7 @@ test('every tool that spends reports its cost the same way', async () => {
   }
   // The operations that used to be tools of their own spend through the same two tools, and report the same way.
   for (const [name, args] of [
-    ['generate_image', { modelId: 'reference-boards', boardType: 'character', prompt: 'a stoic ranger' }],
+    ['generate_image', { modelId: 'reference-sheets', sheetType: 'character', prompt: 'a stoic ranger' }],
     ['generate_image', { modelId: 'topaz-image-upscale', referenceImages: ['https://cdn/in.png'], upscaleFactor: '2x' }],
     ['generate_video', { modelId: 'infinitalk', referenceImages: ['https://cdn/face.png'], script: 'hi', voiceId: 'v1' }],
   ] as const) {
@@ -5561,8 +5586,8 @@ test('the media listings take smallCopies and print each small copy as one, the 
       listMedia: async (o) => {
         asked.list = o.smallCopies
         return { nextCursor: null, media: [
-          { id: '1', shortId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Aaaaaaaa', generationSize: 1, isFavorited: false, kind: 'creation', boardType: null, source: 'creations', fileName: null, durationSeconds: null, ...image },
-          { id: '2', shortId: 'Bbbbbbbb', appUrl: 'https://app/media/Bbbbbbbb', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Bbbbbbbb', generationSize: 1, isFavorited: false, kind: 'creation', boardType: null, source: 'creations', fileName: null, durationSeconds: null, ...bare },
+          { id: '1', shortId: 'Aaaaaaaa', appUrl: 'https://app/media/Aaaaaaaa', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Aaaaaaaa', generationSize: 1, isFavorited: false, kind: 'creation', sheetType: null, source: 'creations', fileName: null, durationSeconds: null, ...image },
+          { id: '2', shortId: 'Bbbbbbbb', appUrl: 'https://app/media/Bbbbbbbb', type: 'image', model: 'm', prompt: null, status: 'completed', createdAt: null, mediaId: 'Bbbbbbbb', generationSize: 1, isFavorited: false, kind: 'creation', sheetType: null, source: 'creations', fileName: null, durationSeconds: null, ...bare },
         ] }
       },
       searchMedia: async (_q, o) => {
@@ -5939,7 +5964,7 @@ test('list_media reads stock: collection and query are inputs, the wording is th
   const stockItem = {
     id: 'stock:pexels:image:123', mediaId: 'stock:pexels:image:123', shortId: '', appUrl: null, type: 'image', model: null, prompt: null,
     status: null, createdAt: null, url: 'https://images.example.test/a.jpg', generationSize: null, isFavorited: null, kind: null,
-    boardType: null, source: 'stock', name: 'A red car on a street', fileName: null, durationSeconds: null,
+    sheetType: null, source: 'stock', name: 'A red car on a street', fileName: null, durationSeconds: null,
     collection: 'photos', provider: 'pexels', providerLabel: 'Pexels', creator: 'Jo Doe', previewUrl: 'https://images.example.test/s.jpg',
     license: { clearedForEndUsers: true, requiresCredit: false },
   }

@@ -50,7 +50,7 @@ contenthero model list --type image --human
 
 ## Generate
 
-`generate` covers image, video, audio, board, and lip-sync. The waitable kinds
+`generate` covers image, video, audio, reference sheet, and lip-sync. The waitable kinds
 share `--cost` (preflight, charges nothing), `--wait` / `--no-wait` (default
 waits), and `--timeout <seconds>`.
 

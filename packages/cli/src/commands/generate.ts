@@ -1,7 +1,7 @@
 /**
  * `contenthero generate <type>` - the generation hero path.
  *   generate image     everything the Studio image picker runs: generation, upscale, background removal,
- *                      layer separation, Reference Boards
+ *                      layer separation, Reference Sheets
  *   generate video     everything the Studio video picker runs: generation, lip-sync, upscale, background removal
  *   generate audio     ElevenLabs TTS / music / sfx (synchronous)
  *
@@ -26,7 +26,7 @@ import {
   type ModelInfo,
 } from '@contenthero/sdk'
 import { makeClient, type Context } from '../context.js'
-import { runGeneration, runBoard, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
+import { runGeneration, runReferenceSheet, compact, references, type RunOptions, DEFAULT_TIMEOUT_SEC } from '../generation.js'
 import { collect, collectJson, toVoice, toFloat, toInt, toJson } from '../args.js'
 
 
@@ -94,7 +94,7 @@ function given<T extends object>(obj: T): T {
 /**
  * Run one image or video call. The model is asked for at call time, the SDK plans the call from its kind, and the
  * plan picks the route: a plain generation submits the request built by the caller, an operation submits the
- * planned request, a board runs the board pipeline.
+ * planned request, a reference sheet runs the sheet pipeline.
  */
 async function runMedium(
   client: ContentHero,
@@ -106,7 +106,7 @@ async function runMedium(
   run: RunOptions,
 ): Promise<void> {
   const plan = planMediumCall(model, medium, input)
-  if (plan.route === 'board') return runBoard(client, ctx, plan.request, run)
+  if (plan.route === 'sheet') return runReferenceSheet(client, ctx, plan.request, run)
   return runGeneration(client, ctx, plan.route === 'operation' ? plan.request : generateRequest, run)
 }
 
@@ -137,8 +137,9 @@ export function registerGenerate(program: Command): void {
       .option('--ref <urlOrId>', 'reference image (URL or output id); repeatable', collect)
       .option('--avatar <id>', 'file the result onto this avatar as a new look (see `contenthero avatar list`)')
       .option('--upscale-factor <factor>', image('upscaleFactor'))
-      .option('--type <boardType>', image('boardType'))
-      .option('--name <name>', image('boardName')),
+      .option('--type <sheetType>', image('sheetType'))
+      .option('--panel-count <count>', image('panelCount'), toInt)
+      .option('--name <name>', image('sheetName')),
   )).action(async (prompt: string | undefined, opts: Record<string, unknown>, command: Command) => {
     const { client, ctx } = makeClient(command)
     const model = await getMediumModel(client, opts.model as string, 'image')
@@ -180,8 +181,9 @@ export function registerGenerate(program: Command): void {
       referenceImages: opts.ref as string[] | undefined,
       avatarId: opts.avatar as string | undefined,
       upscaleFactor: opts.upscaleFactor as string | undefined,
-      boardType: opts.type as MediumInput['boardType'],
-      boardName: opts.name as string | undefined,
+      sheetType: opts.type as MediumInput['sheetType'],
+      sheetName: opts.name as string | undefined,
+      panelCount: opts.panelCount as number | undefined,
       projectId: opts.project as string | undefined,
       placement: opts.placement as MediumInput['placement'],
       playheadFrame: opts.playhead as number | undefined,

@@ -3,7 +3,7 @@
  * kernel.
  *
  *   generate_image    - every image model of the Studio picker: generation, upscaling, background removal, layer
- *                       separation, reference boards (a model's operation decides; submits and returns, a board waits)
+ *                       separation, reference sheets (a model's operation decides; submits and returns, a reference sheet waits)
  *   generate_video    - every video model: generation, lip sync, upscaling, background removal (submits and returns)
  *   generate_audio    - synchronous (ElevenLabs), no polling
  *   transcribe        - speech-to-text: an audio URL, a public video page, or a tracked post's downloaded video, word by word
@@ -313,7 +313,7 @@ function pendingShapeFrom(
  * here and is reported; only the WAITING is gone, not the reporting.
  *
  * Every operation of the image and video tools that runs through the generate route (generation, upscaling, background
- * removal, layer separation, lip sync) submits and returns here. Only a reference board waits, in `generate_image`.
+ * removal, layer separation, lip sync) submits and returns here. Only a reference sheet waits, in `generate_image`.
  */
 async function submitAndReturn(
   client: ContentHero,
@@ -329,7 +329,7 @@ async function submitAndReturn(
 }
 
 /**
- * How long a tool that starts a background job (analyze_content, import, a reference board, export) waits
+ * How long a tool that starts a background job (analyze_content, import, a reference sheet, export) waits
  * for it within one call, and how often it looks. The hosted route allows 60s; past this the tool answers pending and
  * the agent waits with get_status.
  */
@@ -1223,10 +1223,10 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
         // The registry says what the model does, asked at call time rather than remembered: no list here can
         // disagree with it. The model's operation decides the work; a field it does not take is refused.
         const plan = planMediumCall(await getMediumModel(client, args.modelId, 'image'), 'image', args)
-        if (plan.route === 'board') {
-          if (args.getCost) return costResult(await client.estimateBoardCost(plan.request))
+        if (plan.route === 'sheet') {
+          if (args.getCost) return costResult(await client.estimateReferenceSheetCost(plan.request))
           const deadline = Date.now() + CALL_DEADLINE_MS
-          const gen = await client.generateBoardAndWait(plan.request, { timeoutMs: jobWait.waitMs })
+          const gen = await client.generateReferenceSheetAndWait(plan.request, { timeoutMs: jobWait.waitMs })
           return completedResult(gen, await attachmentsFor(gen, deadline))
         }
         const request = plan.route === 'operation' ? plan.request : compact<GenerateRequest>({

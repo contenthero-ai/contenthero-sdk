@@ -668,6 +668,7 @@ test('describeInputRules words each declared count, the quota, the frame table, 
     ],
   )
   assert.deepEqual(describeInputRules({}), [])
+  assert.deepEqual(describeInputRules({ panelCount: { min: 1, max: 10 } }), ['panels on a sheet: 1 to 10'])
 })
 
 test('describePromptReferenceTags lists the tag of each input that has one, with its count when more than one', () => {

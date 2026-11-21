@@ -202,7 +202,7 @@ const NAMING_RULES: Array<(input: string, tool: string) => string[]> = [
 
 /** Genuine one-off names: tool -> input -> the flag or positional that expresses it. */
 const ALIASES: Record<string, Record<string, string>> = {
-  generate_image: { boardType: '--type', boardName: '--name' },
+  generate_image: { sheetType: '--type', sheetName: '--name' },
   generate_video: { audioEnabled: '--audio', negativePrompt: '--negative', referenceVideos: '--ref-video', referenceAudio: '--ref-audio', sourceDurationSeconds: '--source-duration', audioDurationSeconds: '--audio-duration' },
   edit_audio: { clipIds: '--clips' },
   create_avatar: { defaultVoiceId: '--voice' },

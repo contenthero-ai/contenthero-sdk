@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.4.49
+
+- BREAKING: reference boards are now reference sheets, no aliases. `generateBoard` is `generateReferenceSheet` (and its wait and cost variants), `boardType`, `boardTypes` and `boardName` are `sheetType`, `sheetTypes` and `sheetName`, `getModel('reference-boards')` is `getModel('reference-sheets')`, the route is `/api/v1/studio/reference-sheet`, and the media `origin` value `board` is `sheet`.
+- `generateReferenceSheet` takes `panelCount` and `aspectRatio`; `getModel('reference-sheets')` reports the panel range, each sheet type's default count and ratio, and the ratios the sheet model offers. A count or ratio outside them is refused naming the real limits.
+
 ## 0.4.48
 
 - `TierListStanding.settledBy`: which tiebreak put a standing behind the one above it when the points were level, `countback` or `position` (placed further left within the same tiers), or null.

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.4.54
+
+- BREAKING: reference boards are now reference sheets, no aliases. `generate_image` takes `sheetType` and `sheetName` in place of `boardType` and `boardName`, `get_model('reference-sheets')` lists the sheet types, and the media `origin` value `board` is `sheet`.
+- `generate_image` takes `panelCount` (and `aspectRatio`) for a reference sheet model; any other model refuses `panelCount`. `get_model('reference-sheets')` prints the panel range, each type's default count and ratio, and the ratios offered.
+
 ## 0.4.53
 
 - `list_tier_lists`, `get_tier_list`, `create_tier_list` and `update_tier_list` (staff only: the hosted server hides them from other callers, and the server refuses their calls).

@@ -529,48 +529,63 @@ export interface GenerateRequest {
 }
 
 /**
- * A Reference Board type: one of the `boardTypes` that `getModel('reference-boards')` lists.
+ * A Reference Sheet type: one of the `sheetTypes` that `getModel('reference-sheets')` lists.
  *
  * A string, not a union: the server's list is the only one, and a copy here would fall behind it. The server
  * refuses a type it does not know, naming the valid ones.
  */
-export type BoardType = string
+export type ReferenceSheetType = string
 
-/** One board type as `getModel('reference-boards')` lists it. */
-export interface BoardTypeInfo {
-  boardType: BoardType
+/** One sheet type as `getModel('reference-sheets')` lists it. */
+export interface ReferenceSheetTypeInfo {
+  sheetType: ReferenceSheetType
   label: string
   /** What the type is for. */
   summary: string
+  /** How many panels a sheet of this type holds when the request gives no `panelCount`. */
+  defaultPanelCount: number
+  /** The aspect ratio a sheet of this type is made in when the request gives no `aspectRatio`. */
+  defaultAspectRatio: string
 }
 
 /**
- * A Reference Board generation request. A board is a dense multi-panel reference
- * sheet built from a source image and/or a written description, on a fixed
- * pipeline (3:4 / 4K). Provide at least one of `referenceImages` or `prompt`.
+ * A Reference Sheet generation request. A reference sheet is a dense multi-panel image
+ * built from a source image and/or a written description. The panel count and the aspect
+ * ratio are yours to set; the rest of the pipeline is fixed. Provide at least one of
+ * `referenceImages` or `prompt`.
  */
-export interface GenerateBoardRequest {
-  /** One of the board types `getModel('reference-boards')` lists. Required. */
-  boardType: BoardType
+export interface GenerateReferenceSheetRequest {
+  /** One of the sheet types `getModel('reference-sheets')` lists. Required. */
+  sheetType: ReferenceSheetType
   /**
    * Freeform description / context. The source image leads when both are given;
-   * required when no `referenceImages` are provided (text-only boards).
+   * required when no `referenceImages` are provided (text-only sheets).
    */
   prompt?: string
   /**
-   * Image references the board is built from: each a URL or one of your own
+   * Image references the sheet is built from: each a URL or one of your own
    * output ids (e.g. "<id>" or "<id>-2") to chain from an earlier generation.
    */
   referenceImages?: string[]
   /** Number of variations to produce (1-4). Defaults to 1. */
   numImages?: number
-  /** Optional user-facing board name. */
-  boardName?: string
-  /** Optional avatar id to associate the board with. */
+  /** Optional user-facing sheet name. */
+  sheetName?: string
+  /** Optional avatar id to associate the sheet with. */
   avatarId?: string
   /**
+   * How many panels the sheet holds: a whole number within the range
+   * `getModel('reference-sheets')` reports. Omitted uses the sheet type's default.
+   */
+  panelCount?: number
+  /**
+   * The sheet's aspect ratio: one the sheet's image model offers, which `getModel('reference-sheets')`
+   * lists. Omitted uses the sheet type's default.
+   */
+  aspectRatio?: string
+  /**
    * Optional client-chosen id for idempotency. Must be a UUID; it becomes the
-   * board's id. Re-submitting with the same id returns the existing job.
+   * sheet's id. Re-submitting with the same id returns the existing job.
    */
   outputId?: string
 }
@@ -720,7 +735,7 @@ export interface PlacementResult {
 }
 
 /**
- * Result of a get_cost preflight (`estimateCost` / `estimateBoardCost`): the credit
+ * Result of a get_cost preflight (`estimateCost` / `estimateReferenceSheetCost`): the credit
  * estimate only, with no generation run and nothing charged. It equals what the real
  * generate would charge; audio covered by a BYO ElevenLabs key estimates 0.
  */
@@ -1974,8 +1989,8 @@ export interface AudioFacts {
   channels?: number
 }
 
-/** What a generation is: 'creation' (the default), 'board' (a reference board) or 'look'. An item's `origin`, and the `origin` filter of `listMedia`. */
-export type MediaOrigin = 'creation' | 'board' | 'look'
+/** What a generation is: 'creation' (the default), 'sheet' (a reference sheet) or 'look'. An item's `origin`, and the `origin` filter of `listMedia`. */
+export type MediaOrigin = 'creation' | 'sheet' | 'look'
 
 /**
  * One atomic library asset as returned by `listMedia`. The grain is a VARIATION (an individual media file),
@@ -2006,10 +2021,10 @@ export interface MediaSummary {
   generationSize: number | null
   /** Whether THIS variation is favorited (studio per-slot; uploads are go-forward, false); null for a stock item in a list. */
   isFavorited: boolean | null
-  /** For a creation, what the generation is: 'creation' (default), 'board' (a reference board) or 'look'. Null for anything a generation did not make (an upload, an export, stock). */
+  /** For a creation, what the generation is: 'creation' (default), 'sheet' (a reference sheet) or 'look'. Null for anything a generation did not make (an upload, an export, stock). */
   origin: MediaOrigin | null
-  /** Board type when origin is 'board' (character, weapon, location, etc.); else null. */
-  boardType: string | null
+  /** Sheet type when origin is 'sheet' (character, weapon, location, etc.); else null. */
+  sheetType: string | null
   /** Which part of the library this item is in; self-describing. */
   source: MediaSource
   /**
@@ -2665,6 +2680,8 @@ export interface ModelCapabilities {
    */
   promptGuide?: string
   inputTypes?: string[]
+  /** The sheet pipeline only: how many panels a sheet may hold. The range is the registry's, so read it here. */
+  panelCount?: { min: number; max: number }
   draftUpgrade?: { providerModelId: string; resolution: string; validForSeconds: number }
   quality?: ModelChoice
   outputFormat?: ModelChoice
@@ -2740,8 +2757,8 @@ export interface ModelInfo {
   capabilities: ModelCapabilities
   /** How to address references in the prompt (present on getModel; optional on list items). */
   promptReferences?: PromptReferences
-  /** The board pipeline only (`getModel('reference-boards')`): every board type `generateBoard` takes. */
-  boardTypes?: BoardTypeInfo[]
+  /** The sheet pipeline only (`getModel('reference-sheets')`): every sheet type `generateReferenceSheet` takes. */
+  sheetTypes?: ReferenceSheetTypeInfo[]
 }
 
 // ---------------------------------------------------------------------------

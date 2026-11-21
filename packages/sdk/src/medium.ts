@@ -13,7 +13,7 @@
  */
 import { NotFoundError, ValidationError } from './errors.js'
 import type { ToolInput } from './contract.generated.js'
-import type { GenerateBoardRequest, GenerateRequest, ModelInfo } from './types.js'
+import type { GenerateReferenceSheetRequest, GenerateRequest, ModelInfo } from './types.js'
 
 /** Every operation a registry model can perform. */
 export const MODEL_KINDS = [
@@ -93,9 +93,9 @@ export async function getMediumModel(client: ModelReader, modelId: string, mediu
   }
 }
 
-/** True for the reference board pipeline, which the registry lists as a generation but which runs its own route. */
-export function isBoardModel(model: Pick<ModelInfo, 'boardTypes'>): boolean {
-  return Array.isArray(model.boardTypes)
+/** True for the reference sheet pipeline, which the registry lists as a generation but which runs its own route. */
+export function isReferenceSheetModel(model: Pick<ModelInfo, 'sheetTypes'>): boolean {
+  return Array.isArray(model.sheetTypes)
 }
 
 /** What a model does, in words. */
@@ -114,16 +114,16 @@ const WORK: Record<ModelKind, string> = {
  * The inputs a model's operation takes, as its tool's field names, or null for a plain generation (whose fields are
  * the model's request shape) and for a model no tool runs.
  */
-export function operationInputs(model: Pick<ModelInfo, 'contentType' | 'kind' | 'boardTypes'>): string[] | null {
-  if (isBoardModel(model)) return [...BOARD_TAKES]
+export function operationInputs(model: Pick<ModelInfo, 'contentType' | 'kind' | 'sheetTypes'>): string[] | null {
+  if (isReferenceSheetModel(model)) return [...REFERENCE_SHEET_TAKES]
   const taken = TAKES[model.kind as ModelKind]?.[model.contentType as Medium]
   return taken ? [...taken] : null
 }
 
 /** The sentence a model's description ends with: which tool runs it. */
-export function matchingToolSentence(model: ToolSubject & Pick<ModelInfo, 'boardTypes'>): string {
+export function matchingToolSentence(model: ToolSubject & Pick<ModelInfo, 'sheetTypes'>): string {
   const tool = toolForModel(model)
-  const work = isBoardModel(model) ? 'reference board' : tool === 'transcribe' ? 'transcription' : WORK[model.kind as ModelKind] ?? model.kind
+  const work = isReferenceSheetModel(model) ? 'reference sheet' : tool === 'transcribe' ? 'transcription' : WORK[model.kind as ModelKind] ?? model.kind
   return tool
     ? `Runs with ${tool} (${work}).`
     : `No agent tool runs this model (${work}).`
@@ -156,11 +156,11 @@ const TAKES: Partial<Record<ModelKind, Partial<Record<Medium, readonly string[]>
   },
 }
 
-const BOARD_TAKES: readonly string[] = ['boardType', 'boardName', 'prompt', 'referenceImages', 'numImages', 'avatarId']
+const REFERENCE_SHEET_TAKES: readonly string[] = ['sheetType', 'sheetName', 'prompt', 'referenceImages', 'numImages', 'avatarId', 'panelCount', 'aspectRatio']
 
 /** Fields only another operation takes; a plain generation refuses them. */
 const FOREIGN_TO_GENERATE: readonly string[] = [
-  'upscaleFactor', 'sourceDurationSeconds', 'script', 'voiceId', 'voiceName', 'audioDurationSeconds', 'boardType', 'boardName',
+  'upscaleFactor', 'sourceDurationSeconds', 'script', 'voiceId', 'voiceName', 'audioDurationSeconds', 'sheetType', 'sheetName', 'panelCount',
 ]
 
 function present(v: unknown): boolean {
@@ -172,13 +172,13 @@ function present(v: unknown): boolean {
  * that is silently ignored is a lie about what ran, so every mismatch is an error.
  */
 function refuseForeign(model: ModelInfo, input: MediumInput, medium: Medium): void {
-  const board = isBoardModel(model)
+  const referenceSheet = isReferenceSheetModel(model)
   const kind = model.kind as ModelKind
   const set = Object.keys(input).filter((k) => present((input as Record<string, unknown>)[k]))
   let bad: string[]
   let takes: string[] | null
-  if (board) {
-    takes = [...ANY, ...BOARD_TAKES]
+  if (referenceSheet) {
+    takes = [...ANY, ...REFERENCE_SHEET_TAKES]
     bad = set.filter((k) => !takes!.includes(k))
   } else if (kind === 'generate') {
     takes = null
@@ -188,11 +188,30 @@ function refuseForeign(model: ModelInfo, input: MediumInput, medium: Medium): vo
     bad = set.filter((k) => !takes!.includes(k))
   }
   if (bad.length === 0) return
-  const what = board ? 'a reference board' : WORK[kind] ?? kind
+  const what = referenceSheet ? 'a reference sheet' : WORK[kind] ?? kind
   throw new ValidationError(
     `${model.modelId} is a model for ${medium} work that does ${what}. It does not take ${bad.join(', ')}. ` +
       (takes ? `It takes: ${takes.join(', ')}.` : 'get_model lists the fields it takes.'),
   )
+}
+
+/**
+ * A sheet's panel count and aspect ratio are checked against what `get_model` reports for the sheet model (the range
+ * on the model, the ratios its renderer offers), so the refusal names the real limits and nothing here restates them.
+ * A model that reports no list leaves the check to the server.
+ */
+function checkSheetSettings(model: ModelInfo, input: MediumInput): void {
+  const caps = (model.capabilities ?? {}) as { panelCount?: { min: number; max: number }; aspectRatio?: { supported?: string[] } }
+  const count = input.panelCount
+  if (present(count) && caps.panelCount && (!Number.isInteger(count) || count! < caps.panelCount.min || count! > caps.panelCount.max)) {
+    throw new ValidationError(
+      `${model.modelId} takes a whole number of panels from ${caps.panelCount.min} to ${caps.panelCount.max}, not ${count}.`,
+    )
+  }
+  const offered = caps.aspectRatio?.supported
+  if (present(input.aspectRatio) && offered?.length && !offered.includes(input.aspectRatio!)) {
+    throw new ValidationError(`${model.modelId} offers the aspect ratios ${offered.join(', ')}, not ${input.aspectRatio}.`)
+  }
 }
 
 function need(model: ModelInfo, what: string, input: unknown): void {
@@ -212,8 +231,8 @@ export type MediumPlan =
   | { route: 'generate' }
   /** Any other operation that runs through the generate route, with the request ready. */
   | { route: 'operation'; request: GenerateRequest }
-  /** The reference board pipeline: its own route, which waits. */
-  | { route: 'board'; request: GenerateBoardRequest }
+  /** The reference sheet pipeline: its own route, which waits. */
+  | { route: 'sheet'; request: GenerateReferenceSheetRequest }
 
 /**
  * Checks a model against the tool its medium calls and the fields passed, and builds the request for every
@@ -229,20 +248,23 @@ export function planMediumCall(model: ModelInfo, medium: 'image' | 'video', inpu
   }
   refuseForeign(model, input, medium)
 
-  if (isBoardModel(model)) {
-    need(model, 'boardType', input.boardType)
+  if (isReferenceSheetModel(model)) {
+    need(model, 'sheetType', input.sheetType)
     if (!present(input.referenceImages) && !present(input.prompt)) {
       throw new ValidationError(`${model.modelId} needs referenceImages, a prompt, or both.`)
     }
+    checkSheetSettings(model, input)
     return {
-      route: 'board',
-      request: compactOf<GenerateBoardRequest>({
-        boardType: input.boardType as GenerateBoardRequest['boardType'],
+      route: 'sheet',
+      request: compactOf<GenerateReferenceSheetRequest>({
+        sheetType: input.sheetType as GenerateReferenceSheetRequest['sheetType'],
         prompt: input.prompt,
         referenceImages: input.referenceImages,
         numImages: input.numImages,
-        boardName: input.boardName,
+        sheetName: input.sheetName,
         avatarId: input.avatarId,
+        panelCount: input.panelCount,
+        aspectRatio: input.aspectRatio,
       }),
     }
   }

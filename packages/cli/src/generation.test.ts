@@ -156,7 +156,7 @@ function flakyClient(routes: (path: string, method: string) => { status: number;
 
 // A submitted generation is running and CHARGED. If polling breaks, the CLI must still
 // hand back the outputId: throwing would report a failure for a live job and invite a
-// re-run that pays for it twice. This is the class of bug that made a rendered board
+// re-run that pays for it twice. This is the class of bug that made a rendered reference sheet
 // look like an error.
 test('runGeneration emits the outputId and exit 4 when polling breaks, rather than throwing', async () => {
   let polled = false

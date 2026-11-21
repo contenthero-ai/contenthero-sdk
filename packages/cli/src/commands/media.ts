@@ -6,7 +6,7 @@
  *   media update <id> [--name --description]                rename a stored file or describe it
  *   media zoom <idOrUrl> <x,y,width,height>                 a region of an image, cut from the original at its own detail
  *
- * Spans creations, reference boards, and looks; filter with --origin. Every item is named by its media id: the short
+ * Spans creations, reference sheets, and looks; filter with --origin. Every item is named by its media id: the short
  * id, plus "-N" for output N of a generation with several, exactly as these commands print it.
  */
 
@@ -48,7 +48,7 @@ function bufferFromDataUrl(dataUrl: string): Buffer | null {
   return b64 ? Buffer.from(b64, 'base64') : null
 }
 
-const ORIGINS = ['creation', 'board', 'look'] as const
+const ORIGINS = ['creation', 'sheet', 'look'] as const
 type Origin = (typeof ORIGINS)[number]
 // `list` reads the library's files, all or one partition (`MEDIA_LIST_SOURCES`); a single-item `get` names its library.
 const GET_SOURCES: MediaSource[] = ['creations', 'uploads', 'stock']

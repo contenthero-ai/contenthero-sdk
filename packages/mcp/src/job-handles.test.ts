@@ -83,15 +83,15 @@ function exportJob(status: 'completed' | 'rendering'): Record<string, unknown> {
   }
 }
 
-/** The registry's answer for each model a case names: its medium, its operation, and the board types of the board pipeline. */
-const MODELS: Record<string, { contentType: string; kind: string; boardTypes?: unknown[] }> = {
+/** The registry's answer for each model a case names: its medium, its operation, and the sheet types of the reference sheet pipeline. */
+const MODELS: Record<string, { contentType: string; kind: string; sheetTypes?: unknown[] }> = {
   'test-image': { contentType: 'image', kind: 'generate' },
   'test-video': { contentType: 'video', kind: 'generate' },
   'test-lip-sync': { contentType: 'video', kind: 'lip-sync' },
   'test-upscale': { contentType: 'image', kind: 'upscale' },
   'test-background-removal': { contentType: 'image', kind: 'background-removal' },
   'test-layers': { contentType: 'image', kind: 'layer-separation' },
-  'test-board': { contentType: 'image', kind: 'generate', boardTypes: [{ boardType: 'character', summary: 'a character sheet' }] },
+  'test-sheet': { contentType: 'image', kind: 'generate', sheetTypes: [{ sheetType: 'character', summary: 'a character sheet' }] },
 }
 function modelNamed(modelId: string): Record<string, unknown> {
   const model = MODELS[modelId]
@@ -109,7 +109,7 @@ function server(path: Path) {
       if (body.contentType === 'audio') return { ...generation('settled', 'audio'), status: 'settled' }
       return { outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, status: 'processing' }
     }
-    if (method === 'POST' && p === '/api/v1/studio/reference-board') {
+    if (method === 'POST' && p === '/api/v1/studio/reference-sheet') {
       return { outputId: OUTPUT.id, shortId: OUTPUT.shortId, appUrl: OUTPUT.appUrl, status: 'processing' }
     }
     if (method === 'POST' && p === '/api/v1/studio/audio/edit') {
@@ -224,7 +224,7 @@ const CASES: Case[] = [
   { tool: 'generate_image', args: { modelId: 'test-background-removal', referenceImages: ['https://media.contenthero.ai/a.png'] }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'generate_image', args: { modelId: 'test-layers', referenceImages: ['https://media.contenthero.ai/a.png'] }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'generate_audio', args: { modelId: 'test-model', text: 'hello' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished'] },
-  { tool: 'generate_image', args: { modelId: 'test-board', boardType: 'character', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
+  { tool: 'generate_image', args: { modelId: 'test-sheet', sheetType: 'character', prompt: 'a cat' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'edit_audio', args: { operation: 'enhance', sourceUrl: 'https://media.contenthero.ai/a.mp3' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'edit_audio', args: { projectId: 'p1', inPlace: true }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['pending'] },
   { tool: 'import', args: { url: 'https://example.com/a.png' }, names: { id: OUTPUT.shortId, appUrl: OUTPUT.appUrl }, paths: ['finished', 'pending'] },

@@ -1125,7 +1125,7 @@ test('every paged listing sends limit and cursor, never offset, and returns next
 // Once the POST succeeds the job is running and CHARGED. If a poll then fails, dropping
 // the id leaves the caller no way to resume, and the natural retry pays for the same
 // generation twice. This is what turned a transient dev-server 404 into a "failed"
-// board that had in fact rendered.
+// reference sheet that had in fact rendered.
 
 test('generateAndWait surfaces the outputId when polling fails transiently', async () => {
   const { fetch } = stubFetch([
@@ -1143,15 +1143,15 @@ test('generateAndWait surfaces the outputId when polling fails transiently', asy
   )
 })
 
-test('generateBoardAndWait surfaces the outputId too', async () => {
+test('generateReferenceSheetAndWait surfaces the outputId too', async () => {
   const { fetch } = stubFetch([
-    { status: 200, body: { outputId: 'board_1', status: 'processing' } },
+    { status: 200, body: { outputId: 'sheet_1', status: 'processing' } },
     { status: 404, body: { error: 'not found' } },
   ])
   const client = new ContentHero({ apiKey: 'k', fetch })
   await assert.rejects(
-    () => client.generateBoardAndWait({ boardType: 'object', prompt: 'mug' }, { timeoutMs: 5_000 }),
-    (err: unknown) => err instanceof GenerationInterruptedError && err.outputId === 'board_1',
+    () => client.generateReferenceSheetAndWait({ sheetType: 'object', prompt: 'mug' }, { timeoutMs: 5_000 }),
+    (err: unknown) => err instanceof GenerationInterruptedError && err.outputId === 'sheet_1',
   )
 })
 

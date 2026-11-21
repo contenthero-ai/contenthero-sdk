@@ -28,7 +28,7 @@ type Medium = 'image' | 'video'
 interface Case {
   medium: Medium
   kind: string
-  board?: boolean
+  referenceSheet?: boolean
   mcp: Record<string, unknown>
   cli: string[]
 }
@@ -36,7 +36,7 @@ interface Case {
 /** One valid call per (medium, kind) the generate tools must accept. Add a row when the registry gains a kind. */
 const CASES: Case[] = [
   { medium: 'image', kind: 'generate', mcp: { prompt: 'x' }, cli: ['x'] },
-  { medium: 'image', kind: 'generate', board: true, mcp: { boardType: 'character', prompt: 'x' }, cli: ['x', '--type', 'character'] },
+  { medium: 'image', kind: 'generate', referenceSheet: true, mcp: { sheetType: 'character', prompt: 'x' }, cli: ['x', '--type', 'character'] },
   { medium: 'image', kind: 'upscale', mcp: { referenceImages: ['u'], upscaleFactor: '2x' }, cli: ['--ref', 'u', '--upscale-factor', '2x'] },
   { medium: 'image', kind: 'background-removal', mcp: { referenceImages: ['u'] }, cli: ['--ref', 'u'] },
   { medium: 'image', kind: 'layer-separation', mcp: { referenceImages: ['u'] }, cli: ['--ref', 'u'] },
@@ -57,7 +57,7 @@ const CASES: Case[] = [
 function modelFor(c: Case) {
   return {
     modelId: 'guard-model', displayName: 'Guard', contentType: c.medium, kind: c.kind, tags: [], capabilities: { kind: c.kind },
-    ...(c.board ? { boardTypes: [{ boardType: 'character', summary: 's' }] } : {}),
+    ...(c.referenceSheet ? { sheetTypes: [{ sheetType: 'character', summary: 's' }] } : {}),
   }
 }
 
@@ -88,21 +88,21 @@ test('the routing table names the medium tool for every case', () => {
 test('the MCP tool of each medium accepts a model of every kind and sends its operation', async () => {
   for (const c of CASES) {
     const sent: Array<Record<string, unknown>> = []
-    const boards: unknown[] = []
+    const referenceSheets: unknown[] = []
     const client = {
       getModel: async () => modelFor(c),
       generate: async (request: Record<string, unknown>) => { sent.push(request); return { outputId: 'o', status: 'processing' } },
-      estimateBoardCost: async (request: unknown) => { boards.push(request); return { creditsEstimate: 1 } },
+      estimateReferenceSheetCost: async (request: unknown) => { referenceSheets.push(request); return { creditsEstimate: 1 } },
     }
     const server = await buildServer({ getClient: () => client as never })
     const [a, b] = InMemoryTransport.createLinkedPair()
     const mcp = new Client({ name: 'guard', version: '0' })
     await Promise.all([server.connect(a), mcp.connect(b)])
     const name = c.medium === 'image' ? 'generate_image' : 'generate_video'
-    const res = await mcp.callTool({ name, arguments: { modelId: 'guard-model', ...c.mcp, ...(c.board ? { getCost: true } : {}) } })
+    const res = await mcp.callTool({ name, arguments: { modelId: 'guard-model', ...c.mcp, ...(c.referenceSheet ? { getCost: true } : {}) } })
     const text = JSON.stringify(res.content)
-    assert.ok(!res.isError, `${name} refused ${c.medium}/${c.kind}${c.board ? ' (board)' : ''}: ${text}`)
-    if (c.board) assert.equal(boards.length, 1, `${c.medium}/board took the board route`)
+    assert.ok(!res.isError, `${name} refused ${c.medium}/${c.kind}${c.referenceSheet ? ' (reference sheet)' : ''}: ${text}`)
+    if (c.referenceSheet) assert.equal(referenceSheets.length, 1, `${c.medium}/reference-sheet took the reference sheet route`)
     else {
       assert.equal(sent.length, 1, `${name} ${c.kind} submitted one request`)
       assert.equal(sent[0]!.kind, c.kind)
@@ -144,8 +144,8 @@ test('the CLI command of each medium accepts a model of every kind and sends its
       ['--api-key', 'k', '--base-url', baseUrl, '--json', 'generate', c.medium, '--model', 'guard-model', ...c.cli, '--cost'],
       { from: 'user' },
     )
-    assert.equal(seen.length, 1, `generate ${c.medium} ${c.kind}${c.board ? ' (board)' : ''} sent one request`)
-    if (c.board) assert.match(seen[0]!.url, /board/, 'the board route')
+    assert.equal(seen.length, 1, `generate ${c.medium} ${c.kind}${c.referenceSheet ? ' (reference sheet)' : ''} sent one request`)
+    if (c.referenceSheet) assert.match(seen[0]!.url, /reference-sheet/, 'the reference sheet route')
     else {
       assert.equal(seen[0]!.body.kind, c.kind, `generate ${c.medium} sent kind ${c.kind}`)
       assert.equal(seen[0]!.body.contentType, c.medium)

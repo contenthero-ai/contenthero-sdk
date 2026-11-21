@@ -375,10 +375,10 @@ test('project version commands reach the version routes with the bodies the API 
 })
 
 test('media list sends the library contract: a source partition, several types, and no status', async () => {
-  const r = await run('media', 'list', '--source', 'exports', '--type', 'video,doc', '--origin', 'board', '--favorite')
+  const r = await run('media', 'list', '--source', 'exports', '--type', 'video,doc', '--origin', 'sheet', '--favorite')
   assert.equal(r.query.get('source'), 'exports')
   assert.equal(r.query.get('contentType'), 'video,doc')
-  assert.equal(r.query.get('origin'), 'board')
+  assert.equal(r.query.get('origin'), 'sheet')
   assert.equal(r.query.get('favorited'), 'true')
   assert.equal(r.query.has('status'), false)
 })

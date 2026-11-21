@@ -16,7 +16,7 @@ import {
   type CostEstimate,
   type EditAudioRequest,
   type EditAudioResult,
-  type GenerateBoardRequest,
+  type GenerateReferenceSheetRequest,
   type GenerateRequest,
   type GenerateResult,
   type Generation,
@@ -104,17 +104,17 @@ function generationHuman(g: Generation): string {
 async function emitCost(
   client: ContentHero,
   ctx: Context,
-  request: GenerateRequest | GenerateBoardRequest,
-  isBoard: boolean,
+  request: GenerateRequest | GenerateReferenceSheetRequest,
+  isReferenceSheet: boolean,
 ): Promise<void> {
-  const est = isBoard
-    ? await client.estimateBoardCost(request as GenerateBoardRequest)
+  const est = isReferenceSheet
+    ? await client.estimateReferenceSheetCost(request as GenerateReferenceSheetRequest)
     : await client.estimateCost(request as GenerateRequest)
   emit(est, ctx, costHuman)
 }
 
 /**
- * Submit a generation (or board) and render it. Honors --cost (preflight only),
+ * Submit a generation (or reference sheet) and render it. Honors --cost (preflight only),
  * --wait (poll to terminal, the default), and --no-wait (return the submission).
  */
 export async function runGeneration(
@@ -147,15 +147,15 @@ export async function runEditAudio(
   await renderSubmission(client, ctx, submitted, opts)
 }
 
-/** Same as runGeneration, for the Reference Board pipeline. */
-export async function runBoard(
+/** Same as runGeneration, for the Reference Sheet pipeline. */
+export async function runReferenceSheet(
   client: ContentHero,
   ctx: Context,
-  request: GenerateBoardRequest,
+  request: GenerateReferenceSheetRequest,
   opts: RunOptions,
 ): Promise<void> {
   if (opts.cost) return emitCost(client, ctx, request, true)
-  const submitted = await client.generateBoard(request)
+  const submitted = await client.generateReferenceSheet(request)
   await renderSubmission(client, ctx, submitted, opts)
 }
 

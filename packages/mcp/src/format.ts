@@ -1343,8 +1343,8 @@ export function mediaListResult(page: MediaListResult): CallToolResult {
     const favTag = m.isFavorited ? ' [favorite]' : ''
     const promptStr = m.prompt ? ` | ${clipped(m.prompt, LISTING_TEXT_MAX)}` : ''
     const originTag =
-      m.origin === 'board'
-        ? ` | board${m.boardType ? `:${m.boardType}` : ''}`
+      m.origin === 'sheet'
+        ? ` | sheet${m.sheetType ? `:${m.sheetType}` : ''}`
         : m.origin && m.origin !== 'creation'
           ? ` | ${m.origin}`
           : ''
@@ -2160,8 +2160,8 @@ export function modelListResult(models: ModelInfo[]): CallToolResult {
   const rows = models.map((m) => {
     const summary = capabilitySummary(m)
     const def = m.isDefault ? ' [default]' : ''
-    const boards = m.boardTypes?.length ? ` | board types: ${m.boardTypes.map((t) => t.boardType).join(', ')}` : ''
-    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind} | ${toolForModel(m) ?? 'no tool'}${boards}${summary ? ` | ${summary}` : ''}${[...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities)].map(l => `\n  ${l}`).join('')}`
+    const sheets = m.sheetTypes?.length ? ` | sheet types: ${m.sheetTypes.map((t) => t.sheetType).join(', ')}` : ''
+    return `- [${m.contentType}] ${m.modelId} (${m.displayName})${def} | ${m.kind} | ${toolForModel(m) ?? 'no tool'}${sheets}${summary ? ` | ${summary}` : ''}${[...describeInputRules(m.capabilities), ...describeInputModes(m.capabilities)].map(l => `\n  ${l}`).join('')}`
   })
   return text(
     [
@@ -2243,8 +2243,12 @@ export function modelResult(m: ModelInfo): CallToolResult {
       ...shotLines(m),
       enabledFeatures.length ? `  features: ${enabledFeatures.join(', ')}` : null,
       ...promptReferenceLines(m.promptReferences),
-      ...(m.boardTypes?.length
-        ? ['', 'Board types (boardType, on generate_image):', ...m.boardTypes.map((t) => `  ${t.boardType}: ${t.summary}`)]
+      ...(m.sheetTypes?.length
+        ? [
+            '',
+            'Sheet types (sheetType, on generate_image; panelCount and aspectRatio override each type\'s default):',
+            ...m.sheetTypes.map((t) => `  ${t.sheetType}: ${t.summary} (default ${t.defaultPanelCount} panels, ${t.defaultAspectRatio})`),
+          ]
         : []),
       '',
       matchingToolSentence(m),

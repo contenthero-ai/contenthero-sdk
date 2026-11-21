@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.43
+
+- BREAKING: reference boards are now reference sheets, no aliases. `--type` now names a sheet type (`sheetType`), `model get reference-sheets` lists them, and the media `origin` filter value `board` is `sheet`.
+- `generate image --panel-count` for a reference sheet model (`--aspect-ratio` is checked against the sheet model's ratios); `model get reference-sheets` shows the panel range and each type's defaults.
+
 ## 0.3.42
 
 - `tier-list` commands: list, get, create and update (staff only: the server refuses other callers). `favorite` and `archive` take a tier list.

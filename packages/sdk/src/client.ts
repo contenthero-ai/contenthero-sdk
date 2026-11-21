@@ -67,7 +67,7 @@ import type {
   UpdateBrandKitInput,
   CreateBrandKitInput,
   BrandImportOutcome,
-  GenerateBoardRequest,
+  GenerateReferenceSheetRequest,
   GenerateRequest,
   GenerateResult,
   Generation,
@@ -413,26 +413,26 @@ export class ContentHero {
   }
 
   /**
-   * Submit a Reference Board: a dense multi-panel reference sheet built from a
-   * source image and/or a written description (one of them is required). A board
+   * Submit a Reference Sheet: a dense multi-panel reference sheet built from a
+   * source image and/or a written description (one of them is required). A sheet
    * is a pipeline, not a registry model, so it has its own endpoint. Returns
-   * immediately with `status: 'processing'`; poll with `getStatus` (boards
-   * are ordinary outputs) or use `generateBoardAndWait`.
+   * immediately with `status: 'processing'`; poll with `getStatus` (sheets
+   * are ordinary outputs) or use `generateReferenceSheetAndWait`.
    */
-  async generateBoard(request: GenerateBoardRequest): Promise<GenerateResult> {
-    return this.requestWithRetry<GenerateResult>('POST', '/api/v1/studio/reference-board', withOutputId(request))
+  async generateReferenceSheet(request: GenerateReferenceSheetRequest): Promise<GenerateResult> {
+    return this.requestWithRetry<GenerateResult>('POST', '/api/v1/studio/reference-sheet', withOutputId(request))
   }
 
   /**
-   * Submit a board and poll until it reaches a terminal state. Same semantics as
-   * `generateAndWait`. Boards render slowly (minutes), so size `timeoutMs`
+   * Submit a sheet and poll until it reaches a terminal state. Same semantics as
+   * `generateAndWait`. Sheets render slowly (minutes), so size `timeoutMs`
    * accordingly or catch `GenerationTimeoutError` and re-poll with `getStatus`.
    */
-  async generateBoardAndWait(
-    request: GenerateBoardRequest,
+  async generateReferenceSheetAndWait(
+    request: GenerateReferenceSheetRequest,
     options: WaitOptions = {},
   ): Promise<Generation> {
-    const submitted = await this.generateBoard(request)
+    const submitted = await this.generateReferenceSheet(request)
     return this.#waitAfterSubmit(submitted, options)
   }
 
@@ -467,9 +467,9 @@ export class ContentHero {
     return this.request<CostEstimate>('POST', '/api/v1/studio/generate', { ...request, getCost: true })
   }
 
-  /** Estimate the credit cost of a Reference Board without running it. */
-  async estimateBoardCost(request: GenerateBoardRequest): Promise<CostEstimate> {
-    return this.request<CostEstimate>('POST', '/api/v1/studio/reference-board', { ...request, getCost: true })
+  /** Estimate the credit cost of a Reference Sheet without running it. */
+  async estimateReferenceSheetCost(request: GenerateReferenceSheetRequest): Promise<CostEstimate> {
+    return this.request<CostEstimate>('POST', '/api/v1/studio/reference-sheet', { ...request, getCost: true })
   }
 
   /**
@@ -537,12 +537,12 @@ export class ContentHero {
 
   /**
    * Poll an already-submitted generation to a terminal state. Pass an outputId
-   * from a prior `generate` / `generateBoard` (e.g. one you got back when a
+   * from a prior `generate` / `generateReferenceSheet` (e.g. one you got back when a
    * render was still in progress). Resolves with the completed `Generation` (or an
    * `abandoned` one, which is terminal without being a failure),
    * throws `GenerationFailedError` on failure, or `GenerationTimeoutError` if it
    * does not finish within `timeoutMs` (the server-side job may still complete;
-   * re-poll). Also backs `generateAndWait` / `generateBoardAndWait`.
+   * re-poll). Also backs `generateAndWait` / `generateReferenceSheetAndWait`.
    *
    * The same wait as `waitForStatus`, read as an output: the server says when a generation is done (`settled`; the
    * window where its file exists but its placement has not landed reads `applying`), so this client holds no second

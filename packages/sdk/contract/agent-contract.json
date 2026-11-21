@@ -22,7 +22,7 @@
         "readOnlyHint": false
       },
       "description": {
-        "mcp": "Run any image model of the Studio picker. The model's operation decides the work: generation from a prompt (optionally image-to-image with reference images), upscaling, background removal, layer separation, or a reference board. get_model names the operation and the inputs the model takes; a field the model's operation does not take is refused, never ignored. Sources for upscaling, background removal and layer separation go in referenceImages. Generation, upscaling and background removal return at once with an outputId; get_status waits for the render. A reference board waits for its result and, when it is still rendering, returns an outputId to read with get_status. A layer separation result carries every output (the base and each layer) with its position. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
+        "mcp": "Run any image model of the Studio picker. The model's operation decides the work: generation from a prompt (optionally image-to-image with reference images), upscaling, background removal, layer separation, or a reference sheet. get_model names the operation and the inputs the model takes; a field the model's operation does not take is refused, never ignored. Sources for upscaling, background removal and layer separation go in referenceImages. Generation, upscaling and background removal return at once with an outputId; get_status waits for the render. A reference sheet waits for its result and, when it is still rendering, returns an outputId to read with get_status. A layer separation result carries every output (the base and each layer) with its position. Optionally pass projectId to place the generated image onto that project in the same call, controlled by an optional placement: a VIDEO timeline places a clip on a track, a CANVAS design places a layer on a slide (defaulting to the slide the user is focused on). Omit projectId to save a standalone library output. The result LINKS each output so the user sees it inline; to SEE it yourself (judge a face, check legibility, pick between variations) call get_media with the outputId. SPENDS CREDITS: pass getCost to preview the price first, which runs nothing and charges nothing. A retry that repeats the same operation id or output id returns the work already started and never charges twice. The reply names the id to read its progress."
       },
       "effect": "create",
       "group": "generate",
@@ -30,26 +30,18 @@
         "additionalProperties": false,
         "properties": {
           "aspectRatio": {
-            "description": "e.g. 16:9, 1:1, 9:16. Validated per model.",
+            "description": "e.g. 16:9, 1:1, 9:16. Validated per model; on a reference sheet model, one of the ratios get_model lists for it.",
             "type": "string",
             "x-dynamic": true
           },
           "avatarId": {
-            "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model. Either its short id or its UUID. On a reference board model it associates the board with that avatar instead.",
+            "description": "Optional avatar id from list_avatars. File the result onto that avatar as a new LOOK (one appearance of a reusable character: same person, different outfit, setting or framing) instead of saving a standalone library output. Combine with a referenceImage of the avatar to keep the subject on-model. Either its short id or its UUID. On a reference sheet model it associates the sheet with that avatar instead.",
             "type": "string"
           },
           "background": {
             "description": "Background handling declared by the model, subject to output format compatibility.",
             "type": "string",
             "x-dynamic": true
-          },
-          "boardName": {
-            "description": "Optional name for the board.",
-            "type": "string"
-          },
-          "boardType": {
-            "description": "One of the board types listed by get_model('reference-boards').",
-            "type": "string"
           },
           "frameCount": {
             "anyOf": [
@@ -95,6 +87,12 @@
             "description": "Output format declared by the model, subject to its input and background restrictions.",
             "type": "string",
             "x-dynamic": true
+          },
+          "panelCount": {
+            "description": "How many panels the sheet holds, a whole number within the range get_model('reference-sheets') reports. Omitted uses the sheet type's default.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
           },
           "placement": {
             "anyOf": [
@@ -298,7 +296,7 @@
             "x-dynamic": true
           },
           "referenceImages": {
-            "description": "References for image-to-image or editing, and the source image of an upscaling, background removal, layer separation or reference board model. Each may be a URL or a previous output id (e.g. \"<id>\" or \"<id>-2\") to chain from an earlier generation.",
+            "description": "References for image-to-image or editing, and the source image of an upscaling, background removal, layer separation or reference sheet model. Each may be a URL or a previous output id (e.g. \"<id>\" or \"<id>-2\") to chain from an earlier generation.",
             "items": {
               "type": "string"
             },
@@ -308,6 +306,14 @@
             "description": "e.g. 1K, 2K, 4K. get_model lists the resolutions a model takes; validated per model.",
             "type": "string",
             "x-dynamic": true
+          },
+          "sheetName": {
+            "description": "Optional name for the sheet.",
+            "type": "string"
+          },
+          "sheetType": {
+            "description": "One of the sheet types listed by get_model('reference-sheets').",
+            "type": "string"
           },
           "upscaleFactor": {
             "description": "Upscale factor, for an upscale model. Validated per model.",
@@ -1586,10 +1592,10 @@
             "type": "string"
           },
           "origin": {
-            "description": "Creations only. Narrow to one kind of generation: 'creation' (normal generations), 'board' (reference boards), or 'look'. The same word an item's origin says. Omit to list all.",
+            "description": "Creations only. Narrow to one kind of generation: 'creation' (normal generations), 'sheet' (reference sheets), or 'look'. The same word an item's origin says. Omit to list all.",
             "enum": [
               "creation",
-              "board",
+              "sheet",
               "look"
             ],
             "type": "string"
@@ -9210,7 +9216,7 @@
       "title": "Get Schema"
     }
   ],
-  "version": "981f4254c743ca721e1acb2549d524224ea40b9006f360477fb560bbdcc1381c",
+  "version": "b334831bc59bb3524ad3325b402bd6e2dff47ec26cce45733aa532bd039711e3",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

@@ -106,7 +106,7 @@ export function describeInputModes(capabilities: Record<string, unknown> | null 
 
 /**
  * The input counts and rules a model declares beyond its reference buckets: keyframes, voices, video subjects, the
- * shared quota, the frame count by duration, the rules a name must meet and the model's own settings. One line each,
+ * shared quota, the panels a sheet may hold, the frame count by duration, the rules a name must meet and the model's own settings. One line each,
  * empty for a model that declares none. The numbers and patterns are the registry's; only the words live here.
  */
 export function describeInputRules(capabilities: Record<string, unknown> | null | undefined): string[] {
@@ -115,6 +115,8 @@ export function describeInputRules(capabilities: Record<string, unknown> | null 
   if (typeof c.maxKeyframes === 'number') out.push(`keyframes: up to ${c.maxKeyframes}`)
   if (typeof c.maxVoices === 'number') out.push(`voices: up to ${c.maxVoices}`)
   if (typeof c.maxVideoElements === 'number') out.push(`video subjects: up to ${c.maxVideoElements}`)
+  const panels = c.panelCount as { min?: number; max?: number } | undefined
+  if (panels && typeof panels.min === 'number' && typeof panels.max === 'number') out.push(`panels on a sheet: ${panels.min} to ${panels.max}`)
   const quota = c.inputQuota as { total?: number; costs?: Record<string, number> } | undefined
   if (quota && typeof quota.total === 'number') {
     const costs = Object.entries(quota.costs ?? {}).map(([k, v]) => `${k} ${v}`).join(', ')

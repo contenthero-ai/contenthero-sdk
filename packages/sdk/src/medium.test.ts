@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { NotFoundError, ValidationError } from './errors.js'
-import { HOMES, MODEL_KINDS, getMediumModel, isBoardModel, matchingToolSentence, operationInputs, planMediumCall, toolForModel } from './medium.js'
+import { HOMES, MODEL_KINDS, getMediumModel, isReferenceSheetModel, matchingToolSentence, operationInputs, planMediumCall, toolForModel } from './medium.js'
 import type { ModelInfo } from './types.js'
 
 function model(modelId: string, contentType: string, kind: string, extra: Partial<ModelInfo> = {}): ModelInfo {
@@ -38,10 +38,10 @@ test('an audio model names the tool the registry says runs it, not its kind alon
   assert.match(matchingToolSentence(model('vc', 'audio', 'voice', { editOperation: 'change_voice' })), /No agent tool runs this model/)
 })
 
-test('a board model is told apart by its board types', () => {
-  assert.equal(isBoardModel(model('b', 'image', 'generate', { boardTypes: [] } as never)), true)
-  assert.equal(isBoardModel(model('b', 'image', 'generate')), false)
-  assert.ok(operationInputs(model('b', 'image', 'generate', { boardTypes: [] } as never))!.includes('boardType'))
+test('a reference sheet model is told apart by its sheet types', () => {
+  assert.equal(isReferenceSheetModel(model('b', 'image', 'generate', { sheetTypes: [] } as never)), true)
+  assert.equal(isReferenceSheetModel(model('b', 'image', 'generate')), false)
+  assert.ok(operationInputs(model('b', 'image', 'generate', { sheetTypes: [] } as never))!.includes('sheetType'))
 })
 
 test('an upscale builds its request from the one reference source', () => {
@@ -77,11 +77,39 @@ test('a lip-sync model reads its speech from the reference audio or the script',
   }
 })
 
-test('a board model routes to the board request', () => {
-  const plan = planMediumCall(model('bd', 'image', 'generate', { boardTypes: [] } as never), 'image', {
-    modelId: 'bd', boardType: 'character' as never, prompt: 'x',
+test('a reference sheet model routes to the sheet request', () => {
+  const plan = planMediumCall(model('bd', 'image', 'generate', { sheetTypes: [] } as never), 'image', {
+    modelId: 'bd', sheetType: 'character' as never, prompt: 'x',
   })
-  assert.equal(plan.route, 'board')
+  assert.equal(plan.route, 'sheet')
+})
+
+const sheetModel = () => model('bd', 'image', 'generate', {
+  sheetTypes: [],
+  capabilities: { panelCount: { min: 2, max: 6 }, aspectRatio: { supported: ['3:4', '16:9'] } },
+} as never)
+
+test('a reference sheet carries its panel count and aspect ratio into the request', () => {
+  const plan = planMediumCall(sheetModel(), 'image', { modelId: 'bd', sheetType: 'character' as never, prompt: 'x', panelCount: 4, aspectRatio: '16:9' })
+  assert.deepEqual(plan, { route: 'sheet', request: { sheetType: 'character', prompt: 'x', panelCount: 4, aspectRatio: '16:9' } })
+})
+
+test('a sheet refuses a panel count outside the range the model reports, and a ratio it does not offer', () => {
+  const ask = (extra: object) => () => planMediumCall(sheetModel(), 'image', { modelId: 'bd', sheetType: 'object' as never, prompt: 'x', ...extra })
+  assert.throws(ask({ panelCount: 7 }), (e: unknown) => e instanceof ValidationError && /2 to 6, not 7/.test(e.message))
+  assert.throws(ask({ panelCount: 2.5 }), (e: unknown) => e instanceof ValidationError && /whole number/.test(e.message))
+  assert.throws(ask({ aspectRatio: '1:1' }), (e: unknown) => e instanceof ValidationError && /3:4, 16:9, not 1:1/.test(e.message))
+})
+
+test('a model that is not a sheet refuses a panel count, never ignores it', () => {
+  assert.throws(
+    () => planMediumCall(model('g', 'image', 'generate'), 'image', { modelId: 'g', prompt: 'x', panelCount: 3 }),
+    (e: unknown) => e instanceof ValidationError && /panelCount/.test(e.message),
+  )
+  assert.throws(
+    () => planMediumCall(model('up', 'image', 'upscale'), 'image', { modelId: 'up', referenceImages: ['u'], upscaleFactor: '2x', panelCount: 3 }),
+    (e: unknown) => e instanceof ValidationError && /panelCount/.test(e.message),
+  )
 })
 
 test('a plain generation routes to generate and refuses another operation field', () => {

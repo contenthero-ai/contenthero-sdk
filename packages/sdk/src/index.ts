@@ -25,7 +25,7 @@ export type {
   MediaStockLicense,
   MediaListType,
 } from './types.js'
-export { MODEL_KINDS, HOMES, getMediumModel, toolForModel, isBoardModel, matchingToolSentence, operationInputs, planMediumCall } from './medium.js'
+export { MODEL_KINDS, HOMES, getMediumModel, toolForModel, isReferenceSheetModel, matchingToolSentence, operationInputs, planMediumCall } from './medium.js'
 export type { Medium, MediumTool, MediumInput, MediumPlan } from './medium.js'
 export { AnswerTally } from './answers.js'
 export { outlierFormatGroup, headlineMetric, secondaryMetric, compactCount, formatMetric, formatMetricExact } from './engagement.js'
@@ -40,9 +40,9 @@ export type {
   InPlaceAudioJob,
   PlacementIntent,
   CostEstimate,
-  GenerateBoardRequest,
-  BoardType,
-  BoardTypeInfo,
+  GenerateReferenceSheetRequest,
+  ReferenceSheetType,
+  ReferenceSheetTypeInfo,
   EditAudioOperation,
   Generation,
   GenerationOutput,

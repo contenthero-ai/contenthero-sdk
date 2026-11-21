@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { ServiceUnavailableError } from '@contenthero/sdk'
 import {
   outlierListResult,
+  modelResult,
   generationStatusResult,
   generationBatchResult,
   getStatusCall,
@@ -895,7 +896,7 @@ test("a layer separation's outputs name where each sits in the base image", () =
   assert.match(out, /ls1-2 \(lamp, box x 10 y 20 width 30 height 40\)/)
 })
 
-test('list_models names the tool of each audio model and the board types of the board pipeline', () => {
+test('list_models names the tool of each audio model and the sheet types of the reference sheet pipeline', () => {
   const caps = (outputType: string) => ({ kind: 'generate', inputTypes: [], outputType })
   const base = { brandColor: null, iconKey: null, description: null, tags: [] }
   const out = body(
@@ -903,13 +904,27 @@ test('list_models names the tool of each audio model and the board types of the 
       { ...base, modelId: 'iso', displayName: 'Iso', contentType: 'audio', kind: 'voice', editOperation: 'isolate', capabilities: caps('audio') },
       { ...base, modelId: 'stt', displayName: 'Stt', contentType: 'audio', kind: 'generate', capabilities: caps('text') },
       { ...base, modelId: 'vc', displayName: 'Vc', contentType: 'audio', kind: 'voice', editOperation: 'change_voice', capabilities: caps('audio') },
-      { ...base, modelId: 'boards', displayName: 'Boards', contentType: 'image', kind: 'generate', capabilities: caps('image'), boardTypes: [{ boardType: 'alpha', label: 'A', summary: 's' }, { boardType: 'beta', label: 'B', summary: 's' }] },
+      { ...base, modelId: 'sheets', displayName: 'Sheets', contentType: 'image', kind: 'generate', capabilities: caps('image'), sheetTypes: [{ sheetType: 'alpha', label: 'A', summary: 's' }, { sheetType: 'beta', label: 'B', summary: 's' }] },
     ] as never),
   )
   assert.match(out, /iso \(Iso\) \| voice \| edit_audio/)
   assert.match(out, /stt \(Stt\) \| generate \| transcribe/)
   assert.match(out, /vc \(Vc\) \| voice \| no tool/)
-  assert.match(out, /boards \(Boards\) \| generate \| generate_image \| board types: alpha, beta/)
+  assert.match(out, /sheets \(Sheets\) \| generate \| generate_image \| sheet types: alpha, beta/)
+})
+
+test('get_model on the sheet pipeline prints the panel range, each type default and the ratios it offers', () => {
+  const out = body(
+    modelResult({
+      brandColor: null, iconKey: null, description: null, tags: [],
+      modelId: 'sheets', displayName: 'Sheets', contentType: 'image', kind: 'generate',
+      capabilities: { kind: 'generate', outputType: 'image', promptMode: 'optional', inputTypes: [], panelCount: { min: 2, max: 7 }, aspectRatio: { supported: ['3:4', '16:9'], default: '3:4' } },
+      sheetTypes: [{ sheetType: 'alpha', label: 'A', summary: 'for alpha', defaultPanelCount: 4, defaultAspectRatio: '3:4' }],
+    } as never),
+  )
+  assert.match(out, /panels on a sheet: 2 to 7/)
+  assert.match(out, /alpha: for alpha \(default 4 panels, 3:4\)/)
+  assert.match(out, /3:4, 16:9/)
 })
 
 /** Outside a tool call there is no answer to hand over, so errorResult reports a fault as it always did. */
