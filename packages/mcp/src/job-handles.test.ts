@@ -130,6 +130,7 @@ function server(path: Path) {
     if (method === 'POST' && p === '/api/v1/studio/transcribe') {
       return { outputId: TRANSCRIPT.id, shortId: TRANSCRIPT.shortId, appUrl: TRANSCRIPT.appUrl, status: 'completed', transcript: 'hi', language: 'en', wordCount: 1, durationSeconds: 1 }
     }
+    if (method === 'POST' && /^\/api\/v1\/tier-lists\/[^/]+\/export$/.test(p)) return exportJob('rendering')
     if (method === 'POST' && /^\/api\/v1\/projects\/[^/]+\/export$/.test(p)) {
       // A file the server makes at once (subtitles, a transcript) is finished in the start's own answer.
       if (body.format === 'srt') return exportJob('completed')
@@ -232,6 +233,7 @@ const CASES: Case[] = [
   // The 2026-10-10 case: a picture or sound export that finished inside the call is drawn by the card, and still named.
   { tool: 'export', args: { projectId: 'p1', format: 'mp4' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'export', args: { projectId: 'p1', format: 'srt' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished'] },
+  { tool: 'export_tier_list', args: { tierListId: 't1' }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'get_export', args: { exportId: EXPORT.shortId }, names: { id: EXPORT.shortId, appUrl: EXPORT.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'analyze_content', args: { contentId: POST.shortId }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished', 'pending'] },
   { tool: 'analyze_content', args: { contentId: POST.shortId, kind: 'scenes' }, names: { id: POST.shortId, appUrl: POST.appUrl }, paths: ['finished', 'pending'] },

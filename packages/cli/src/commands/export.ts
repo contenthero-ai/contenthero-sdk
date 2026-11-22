@@ -104,13 +104,13 @@ export function registerExport(program: Command): void {
 }
 
 /** An export as the CLI names it, from a start, a wait or a read: all an ended wait knows is what the start returned. */
-type ExportJobView = Omit<ExportJob, 'shortId' | 'appUrl'> & { shortId?: string | null; appUrl?: string | null }
+export type ExportJobView = Omit<ExportJob, 'shortId' | 'appUrl'> & { shortId?: string | null; appUrl?: string | null }
 
 /**
  * One export for a person, the same from `export` and `export get`: its id and link, then its file
  * and share page once finished, its progress and how to wait while it runs, or why it failed.
  */
-function exportHuman(job: ExportJobView): string {
+export function exportHuman(job: ExportJobView): string {
   const head = `Export ${job.shortId || job.exportId}${job.appUrl ? ` (${job.appUrl})` : ''}`
   if (job.status === 'completed') {
     const share = describeExportShareLink(job.shareUrl)

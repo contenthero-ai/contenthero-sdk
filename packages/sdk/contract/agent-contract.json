@@ -3611,6 +3611,89 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "audience": "staff",
+      "description": {
+        "mcp": "Export (render) tabs of a tier list to pictures the user KEEPS: permanent files in the library that count against the user's storage. One picture comes back per tab named in tabs, drawn exactly as the board shows it when presented, at the tier list's own size. The formats and the options each takes are listed by get_schema kind 'export'; read it before choosing one. Resolution and watermark follow the plan: a free account never exports above 720p and never removes the watermark. Each picture lands in the library, in the folder named, and comes back with its media id and download link. Returns the pictures when the export finishes in time, otherwise an exportId: wait for it with get_status (kind export), then read it with get_export. Requires the tier-lists:write scope."
+      },
+      "effect": "create",
+      "group": "media",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "destination": {
+            "description": "Where the pictures go besides the library. Left out, nowhere else.",
+            "enum": [
+              "local",
+              "google-drive",
+              "add-to-post"
+            ],
+            "type": "string"
+          },
+          "driveAccountId": {
+            "description": "With destination google-drive: the connected drive to save into. Left out, the default one.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "A manual library folder to file the pictures into. Left out, they are filed at the top of the library.",
+            "type": "string"
+          },
+          "format": {
+            "description": "A picture format, one get_schema kind 'export' lists. Defaults to 'png'.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "postIds": {
+            "description": "With destination add-to-post: the planner cards the pictures attach to, each by its short id or its UUID.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "resolution": {
+            "description": "The picture's size rung. A picture is never larger than the board's own size. Left out, the best the plan allows; naming one above the plan is refused.",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p",
+              "2k",
+              "4k"
+            ],
+            "type": "string"
+          },
+          "tabs": {
+            "description": "The tabs to picture, each by its short id or its UUID, or standings for the totals across every tab. Left out, every tab in order. Each tab becomes its own picture.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tierListId": {
+            "description": "The tier list to export. Either its short id or its UUID.",
+            "type": "string"
+          },
+          "watermark": {
+            "description": "Keep the watermark. Defaults true; removing it is plan-gated.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tierListId"
+        ],
+        "type": "object"
+      },
+      "name": "export_tier_list",
+      "scopes": [
+        "tier-lists:write"
+      ],
+      "title": "Export Tier List"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
         "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": true
@@ -9250,7 +9333,7 @@
       "title": "Get Schema"
     }
   ],
-  "version": "9810dfff87b64d001211120e604d0a5df2ddeb7037e41d1baddb534a3c53e8d9",
+  "version": "fe2fb47178643925ba5a2d6b237ab2454ff47423314cea58c6fd388b90fb3c05",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

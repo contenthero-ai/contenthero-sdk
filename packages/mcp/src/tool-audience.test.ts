@@ -24,7 +24,7 @@ async function listed(isStaff?: (extra: ToolExtra) => boolean | Promise<boolean>
 }
 
 test('the contract marks the tier list tools for staff, and nothing else', () => {
-  assert.deepEqual([...STAFF_TOOLS].sort(), ['create_tier_list', 'get_tier_list', 'list_tier_lists', 'update_tier_list'])
+  assert.deepEqual([...STAFF_TOOLS].sort(), ['create_tier_list', 'export_tier_list', 'get_tier_list', 'list_tier_lists', 'update_tier_list'])
   assert.equal(toolAudience('list_tier_lists' as ContractToolName), 'staff')
   assert.equal(toolAudience('list_media' as ContractToolName), undefined)
 })

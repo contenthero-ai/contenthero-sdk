@@ -4,6 +4,7 @@
  *   tier-list get <id> [--tab-id]              one, with its tiers, tabs, one tab's items and the standings
  *   tier-list create <name> [--tiers --tabs]   create one
  *   tier-list update <id> [...]                change the board, its tiers, tabs and items, or arrange one tab
+ *   tier-list export <id> [--tabs --wait]      render tabs as pictures in the library, one per tab
  *
  * Archiving one is `contenthero archive tier-list <id>`. The structured parts take JSON, in the shape the tool
  * documents. The server refuses everyone else with 403 `feature_unavailable`.
@@ -11,18 +12,22 @@
 
 import type { Command } from 'commander'
 import {
+  GenerationTimeoutError,
   LIST_SORTS,
   optionFromContract,
   type ContractToolName,
   toolDescription,
   type CreateTierListRequest,
   type SortOrder,
+  type StartTierListExportInput,
   type TierListDetail,
   type TierListListResult,
   type TierListSort,
   type UpdateTierListRequest,
 } from '@contenthero/sdk'
 import { makeClient } from '../context.js'
+import { EXIT } from '../errors.js'
+import { exportHuman, type ExportJobView } from './export.js'
 import { emit, table, keyValues, withMore, clip } from '../output.js'
 import { toCoverPosition, toInt, toJson, withPageFlags, withSortFlags } from '../args.js'
 
@@ -151,5 +156,47 @@ export function registerTierList(program: Command): void {
         ...(opts.arrangement !== undefined ? { arrangement: opts.arrangement as UpdateTierListRequest['arrangement'] } : {}),
       }
       emit(await client.updateTierList(id, request), ctx, show)
+    })
+
+  group
+    .command('export')
+    .description(toolDescription('export_tier_list'))
+    .argument('<id>', opt('export_tier_list', 'tierListId'))
+    .option('--tabs <tabs>', `${opt('export_tier_list', 'tabs')} Comma separated.`)
+    .option('--format <format>', opt('export_tier_list', 'format'))
+    .option('--resolution <res>', opt('export_tier_list', 'resolution'))
+    .option('--no-watermark', 'remove the watermark (plan-gated)')
+    .option('--folder <id>', opt('export_tier_list', 'folderId'))
+    .option('--destination <where>', opt('export_tier_list', 'destination'))
+    .option('--posts <ids>', `${opt('export_tier_list', 'postIds')} Comma separated.`)
+    .option('--drive-account <id>', opt('export_tier_list', 'driveAccountId'))
+    .option('--wait', 'poll until the export finishes and print the links')
+    .option('--timeout <ms>', 'max wait when --wait (default 600000)', toInt)
+    .action(async (id: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const list = (v: unknown): string[] => (v as string).split(',').map((t) => t.trim()).filter(Boolean)
+      const input: StartTierListExportInput = {
+        ...(opts.tabs !== undefined ? { tabs: list(opts.tabs) } : {}),
+        ...(opts.format !== undefined ? { format: opts.format as string } : {}),
+        ...(opts.resolution !== undefined ? { resolution: opts.resolution as string } : {}),
+        // commander sets opts.watermark=false when --no-watermark is passed; leave undefined otherwise.
+        ...(opts.watermark === false ? { watermark: false } : {}),
+        ...(opts.folder !== undefined ? { folderId: opts.folder as string } : {}),
+        ...(opts.destination !== undefined ? { destination: opts.destination as StartTierListExportInput['destination'] } : {}),
+        ...(opts.posts !== undefined ? { postIds: list(opts.posts) } : {}),
+        ...(opts.driveAccount !== undefined ? { driveAccountId: opts.driveAccount as string } : {}),
+      }
+      let job: ExportJobView
+      try {
+        job = opts.wait
+          ? await client.exportTierListAndWait(id, input, { timeoutMs: (opts.timeout as number | undefined) ?? 600000 })
+          : await client.startTierListExport(id, input)
+      } catch (err) {
+        // Still running when the wait ended: the export is not lost, so name it and how to wait, and exit TIMEOUT.
+        if (!(err instanceof GenerationTimeoutError)) throw err
+        job = { exportId: err.outputId, shortId: err.shortId, appUrl: err.appUrl, status: 'rendering' }
+        process.exitCode = EXIT.TIMEOUT
+      }
+      emit(job, ctx, () => exportHuman(job))
     })
 }

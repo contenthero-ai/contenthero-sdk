@@ -884,6 +884,23 @@ test('startExport POSTs to /api/v1/projects/:id/export', async () => {
   assert.equal(job.status, 'rendering')
 })
 
+test('startTierListExport POSTs the tabs to /api/v1/tier-lists/:id/export', async () => {
+  const { fetch, calls } = stubFetch([{ status: 202, body: { exportId: 'exp1', status: 'rendering' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const job = await client.startTierListExport('t 1', { tabs: ['a', 'standings'], folderId: 'f1' })
+  assert.equal(calls[0]?.url, 'https://example.test/api/v1/tier-lists/t%201/export')
+  assert.equal(calls[0]?.init?.method, 'POST')
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { tabs: ['a', 'standings'], folderId: 'f1' })
+  assert.equal(job.status, 'rendering')
+})
+
+test('exportTierListAndWait returns immediately when the pictures are already done', async () => {
+  const { fetch } = stubFetch([{ status: 202, body: { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/o.png' } }])
+  const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })
+  const job = await client.exportTierListAndWait('t1')
+  assert.equal(job.outputUrl, 'https://x/o.png')
+})
+
 test('getExport GETs /api/v1/exports/:id', async () => {
   const { fetch, calls } = stubFetch([{ status: 200, body: { exportId: 'exp1', status: 'completed', outputUrl: 'https://x/o.mp4' } }])
   const client = new ContentHero({ apiKey: 'ch_live_test', fetch, baseUrl: 'https://example.test' })

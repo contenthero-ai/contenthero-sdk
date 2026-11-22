@@ -5251,6 +5251,26 @@ export interface StartExportInput {
   loudness?: Loudness
 }
 
+/** Options for exporting a tier list: pictures of its tabs, one per tab. All optional. */
+export interface StartTierListExportInput {
+  /** The tabs to picture, each by its short id or UUID, or `standings` for the totals across every tab. Omitted, every tab in order. */
+  tabs?: string[]
+  /** A picture format the export catalog lists. Defaults to 'png'. */
+  format?: string
+  /** The picture's size rung. A picture is never larger than the board's own size. Omitted, the best the plan allows; naming one above the plan is refused. */
+  resolution?: string
+  /** Keep the watermark. Defaults true; removing it is plan-gated. */
+  watermark?: boolean
+  /** A manual library folder to file the pictures into. Omitted, they are filed at the top of the library. */
+  folderId?: string
+  /** Where the pictures go besides the library: `local`, `google-drive` or `add-to-post`. Omitted, nowhere else. */
+  destination?: 'local' | 'google-drive' | 'add-to-post'
+  /** With `add-to-post`: the planner cards the pictures attach to, each by its short id or UUID. */
+  postIds?: string[]
+  /** With `google-drive`: the connected drive to save into. Omitted, the default one. */
+  driveAccountId?: string
+}
+
 /** How an export's loudness came out, once it has finished. */
 export interface ExportLoudness {
   /** What the export was asked to deliver at. */

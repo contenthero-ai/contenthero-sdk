@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.52
+
+- `startTierListExport` and `exportTierListAndWait`: render tier list tabs as PNGs on the server, one picture per tab, like other exports. Staff only.
+
 ## 0.4.51
 
 - `ProjectSummaryClip` lists `volume` (dB, when not 0; `null` when muted), `fadeInSeconds` and `fadeOutSeconds` (when above 0) for audio and video clips, so `get_project` at the default detail shows clip sound.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.46
+
+- `tier-list export`: render tier list tabs as PNGs on the server, one picture per tab, filed in the library. Staff only, like the rest of `tier-list`.
+
 ## 0.3.45
 
 - `card update --blog-slug`: name the address a card's blog post publishes under before the video is out, so links made ahead of time are right.

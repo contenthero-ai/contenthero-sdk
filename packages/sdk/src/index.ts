@@ -390,6 +390,7 @@ export type {
   ImportProjectSource,
   ImportProjectInput,
   StartExportInput,
+  StartTierListExportInput,
   ExportJob,
   ExportLoudness,
   ExportFormatSpec,

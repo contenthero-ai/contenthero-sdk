@@ -3390,6 +3390,26 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
     }
   })
 
+  tool(
+    'export_tier_list',
+    {
+      ...renders('Exporting the tier list'),
+    },
+    async (args, extra) => {
+      try {
+        const client = await getClient(extra)
+        const { tierListId, ...input } = args
+        const job = await client.exportTierListAndWait(tierListId, input, { timeoutMs: jobWait.waitMs })
+        return completedExportResult(job, input.format ?? 'png')
+      } catch (err) {
+        if (err instanceof GenerationTimeoutError) {
+          return exportJobResult({ exportId: err.outputId, shortId: err.shortId, appUrl: err.appUrl, status: 'rendering' })
+        }
+        return errorResult(err)
+      }
+    },
+  )
+
   server.server.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
     if (!opts.isStaff || (await opts.isStaff(extra))) return { tools: listed }
     return { tools: listed.filter((t) => toolAudience(t.name as ContractToolName) !== 'staff') }

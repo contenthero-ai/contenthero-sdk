@@ -98,6 +98,7 @@ import type {
   CreateProjectInput,
   ImportProjectInput,
   StartExportInput,
+  StartTierListExportInput,
   ExportJob,
   ExportFormatCatalog,
   LinkFormats,
@@ -2377,6 +2378,14 @@ export class ContentHero {
   }
 
   /**
+   * Export tabs of a tier list as pictures in the library: one picture per tab, drawn as the board shows it when
+   * presented. Returns the export to wait on, as `startExport` does. Staff only.
+   */
+  async startTierListExport(tierListId: string, input: StartTierListExportInput = {}): Promise<ExportJob> {
+    return this.request<ExportJob>('POST', `/api/v1/tier-lists/${encodeURIComponent(tierListId)}/export`, input)
+  }
+
+  /**
    * A project's exports, newest first, a page at a time: every finished one with its file and share page, and the ones
    * still running, each with its `status` (wait for one with `getStatus`, kind `'export'`). A failed export is not
    * listed. Requires `editor:read`.
@@ -2452,6 +2461,25 @@ export class ContentHero {
       return await this.waitForExport(job.exportId, options)
     } catch (err) {
       // Still running: the error names the export as the start did, so the caller waits on its short id.
+      if (err instanceof GenerationTimeoutError) throw exportTimeout(job.exportId, job)
+      throw err
+    }
+  }
+
+  /** `startTierListExport`, then wait for the pictures, resolved like `exportProjectAndWait`. */
+  async exportTierListAndWait(
+    tierListId: string,
+    input: StartTierListExportInput = {},
+    options: WaitOptions = {},
+  ): Promise<ExportJob> {
+    const job = await this.startTierListExport(tierListId, input)
+    if (job.status === 'completed' || job.status === 'failed') {
+      if (job.status === 'failed') throw new GenerationFailedError(job.exportId, job.errorMessage ?? 'Export failed')
+      return job
+    }
+    try {
+      return await this.waitForExport(job.exportId, options)
+    } catch (err) {
       if (err instanceof GenerationTimeoutError) throw exportTimeout(job.exportId, job)
       throw err
     }

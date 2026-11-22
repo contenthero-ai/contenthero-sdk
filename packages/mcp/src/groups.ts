@@ -46,7 +46,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = [
       'create_upload', 'sign_upload_parts', 'complete_upload',
       'list_folders', 'get_folder', 'create_folder', 'update_folder', 'delete_folder',
       'update_media', 'favorite', 'archive', 'share',
-      'list_tier_lists', 'get_tier_list', 'create_tier_list', 'update_tier_list',
+      'list_tier_lists', 'get_tier_list', 'create_tier_list', 'update_tier_list', 'export_tier_list',
     ],
   },
   {

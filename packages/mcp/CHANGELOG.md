@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.57
+
+- `export_tier_list`: render tier list tabs as PNGs on the server, one picture per tab. Staff only, like the other tier list tools.
+
 ## 0.4.56
 
 - Tests only: the `get_project` description assertion matches the current wording. No change to the server.
