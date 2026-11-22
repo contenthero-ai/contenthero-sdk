@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.55
+
+- `update_avatar` takes an `add_sheet` op: attach images the account already owns to the avatar as sheets.
+
 ## 0.4.54
 
 - BREAKING: reference boards are now reference sheets, no aliases. `generate_image` takes `sheetType` and `sheetName` in place of `boardType` and `boardName`, `get_model('reference-sheets')` lists the sheet types, and the media `origin` value `board` is `sheet`.

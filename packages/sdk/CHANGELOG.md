@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.50
+
+- `addAvatarSheets` and the `add_sheet` avatar op: attach images you already own to an avatar as sheets. Each answer carries the sheet as the sheets list returns it, and `skipped` lists request positions.
+
 ## 0.4.49
 
 - BREAKING: reference boards are now reference sheets, no aliases. `generateBoard` is `generateReferenceSheet` (and its wait and cost variants), `boardType`, `boardTypes` and `boardName` are `sheetType`, `sheetTypes` and `sheetName`, `getModel('reference-boards')` is `getModel('reference-sheets')`, the route is `/api/v1/studio/reference-sheet`, and the media `origin` value `board` is `sheet`.

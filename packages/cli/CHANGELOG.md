@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.44
+
+- `avatar sheet add`: attach images you already own to an avatar as sheets.
+
 ## 0.3.43
 
 - BREAKING: reference boards are now reference sheets, no aliases. `--type` now names a sheet type (`sheetType`), `model get reference-sheets` lists them, and the media `origin` filter value `board` is `sheet`.

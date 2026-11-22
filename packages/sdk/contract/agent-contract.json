@@ -3750,7 +3750,7 @@
         "readOnlyHint": false
       },
       "description": {
-        "mcp": "Update an avatar and/or change its looks. Fields: name, description, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId. Looks are changed through ops, the same shape update_timeline and update_canvas use: add_look files images the account ALREADY OWNS onto the avatar, remove_look trashes one (recoverable for 30 days). Ops run before the fields, so one call can add a look and make it the default. To GENERATE a new look instead of filing an existing image, call generate_image with avatarId."
+        "mcp": "Update an avatar and/or change its looks. Fields: name, description, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId. Looks are changed through ops, the same shape update_timeline and update_canvas use: add_look files images the account ALREADY OWNS onto the avatar, remove_look trashes one (recoverable for 30 days), and add_sheet attaches images the account ALREADY OWNS to the avatar as sheets (a sheet is a reference image of the character; nothing is copied). Ops run before the fields, so one call can add a look and make it the default. To GENERATE a new look instead of filing an existing image, call generate_image with avatarId."
       },
       "effect": "update",
       "group": "characters",
@@ -3789,7 +3789,7 @@
             "type": "string"
           },
           "ops": {
-            "description": "Look changes, applied in order before the field updates. NOT a transaction: a failure part-way leaves earlier ops applied.",
+            "description": "Look and sheet changes, applied in order before the field updates. NOT a transaction: a failure part-way leaves earlier ops applied.",
             "items": {
               "anyOf": [
                 {
@@ -3808,6 +3808,27 @@
                     },
                     "op": {
                       "const": "add_look",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "imageUrls",
+                    "op"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "imageUrls": {
+                      "description": "Images the account already owns, as URLs: an upload, a creation, an editor export, or an image already used elsewhere. Anything not owned by this account is skipped rather than failing the call.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "op": {
+                      "const": "add_sheet",
                       "type": "string"
                     }
                   },
@@ -9216,7 +9237,7 @@
       "title": "Get Schema"
     }
   ],
-  "version": "b334831bc59bb3524ad3325b402bd6e2dff47ec26cce45733aa532bd039711e3",
+  "version": "43fdc202898899a61881c9ae6bab4252542ed9e4102caec516aa0449bb5ae70b",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

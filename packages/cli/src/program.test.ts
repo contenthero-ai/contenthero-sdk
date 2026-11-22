@@ -105,7 +105,7 @@ test('avatar is a full CRUD surface and voice is still read-only', () => {
   // ⚠️ THE ASYMMETRY IS DELIBERATE, NOT AN OVERSIGHT. Avatars became writable in Phase 7; voice
   // creation stays in the app because only avatars had a demonstrated agent use case. Asserting
   // voice's shape too is what makes a later accidental voice write show up as a decision.
-  assert.deepEqual(subcommands('avatar').sort(), ['create', 'delete', 'get', 'list', 'look', 'update'])
+  assert.deepEqual(subcommands('avatar').sort(), ['create', 'delete', 'get', 'list', 'look', 'sheet', 'update'])
   assert.deepEqual(subcommands('voice').sort(), ['get', 'list'])
 })
 

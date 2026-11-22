@@ -173,6 +173,8 @@ export type {
   UpdateAvatarResult,
   AvatarOp,
   AddAvatarLooksResult,
+  AddAvatarSheetsResult,
+  AddedAvatarSheet,
   VoiceSummary,
   Voice,
   ListVoicesOptions,

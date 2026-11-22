@@ -185,6 +185,25 @@ export function registerIdentity(program: Command): void {
       })
     })
 
+  const sheet = avatar.command('sheet').description("Manage an avatar's sheets")
+
+  sheet
+    .command('add')
+    .description('Attach images you already own to an avatar as sheets (costs nothing)')
+    .argument('<avatarId>', 'the avatar id')
+    .requiredOption('--image <urlOrId>', 'image to attach; repeatable', collect)
+    .action(async (avatarId: string, opts: Record<string, unknown>, command: Command) => {
+      const { client, ctx } = makeClient(command)
+      const result = await client.addAvatarSheets(avatarId, opts.image as string[])
+      emit(result, ctx, () => {
+        const added = `Attached ${result.sheets.length} sheet${result.sheets.length === 1 ? '' : 's'} to ${avatarId}.`
+        // Skipped is reported, never swallowed: an image this account does not own is dropped, not an error.
+        return result.skipped.length
+          ? `${added}\nSkipped ${result.skipped.length} image(s) this account does not own.`
+          : added
+      })
+    })
+
   look
     .command('remove')
     .description('Remove a look (trashed, recoverable for 30 days)')

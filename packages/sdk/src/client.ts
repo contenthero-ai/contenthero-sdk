@@ -36,6 +36,7 @@ import type {
   UpdateAvatarRequest,
   UpdateAvatarResult,
   AddAvatarLooksResult,
+  AddAvatarSheetsResult,
   Account,
   AccountUpdate,
   BrandKit,
@@ -796,6 +797,21 @@ export class ContentHero {
     return this.request<AddAvatarLooksResult>(
       'POST',
       `/api/v1/avatars/${encodeURIComponent(avatarId)}/looks`,
+      { imageUrls },
+    )
+  }
+
+  /**
+   * Attach images you already own to an avatar as sheets.
+   *
+   * Costs nothing. Accepts any url the account owns. An image that is already a slot of one of your sheets is
+   * linked and keeps its id; any other becomes a new sheet that shows the same file. Each entry of `sheets`
+   * carries the sheet as the sheets list returns it. Anything not yours is reported in `skipped`.
+   */
+  async addAvatarSheets(avatarId: string, imageUrls: string[]): Promise<AddAvatarSheetsResult> {
+    return this.request<AddAvatarSheetsResult>(
+      'POST',
+      `/api/v1/avatars/${encodeURIComponent(avatarId)}/sheets`,
       { imageUrls },
     )
   }

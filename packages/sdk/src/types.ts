@@ -1385,6 +1385,11 @@ export type AvatarOp =
       /** Images you already own, as URLs. An image this account does not own is skipped, not an error. */
       imageUrls: string[]
     }
+  | {
+      op: 'add_sheet'
+      /** Images you already own, as URLs. An image this account does not own is skipped, not an error. */
+      imageUrls: string[]
+    }
   | { op: 'remove_look'; lookId: string }
 
 /** What `updateAvatar` returns: the avatar, plus a per-op record when `ops` were supplied. */
@@ -1404,6 +1409,28 @@ export interface AddAvatarLooksResult {
    * failing the call; a non-zero count means you asked for more looks than you got.
    */
   skipped: number
+}
+
+/** One image attached as a sheet, as `addAvatarSheets` answers it. */
+export interface AddedAvatarSheet {
+  /** Position of the image in the request. */
+  inputIndex: number
+  /** The sheet's one id. */
+  sheetId: string
+  /** The slot of the sheet the avatar now shows. */
+  itemIndex: number
+  /** False when the image was already a slot of one of your sheets and was linked rather than made. */
+  created: boolean
+  /** The sheet as the sheets list returns it. */
+  row: Record<string, unknown>
+}
+
+/** What `addAvatarSheets` returns. */
+export interface AddAvatarSheetsResult {
+  /** One entry per attached image, in request order. */
+  sheets: AddedAvatarSheet[]
+  /** Request positions that were not attached because the image is not this account's. CHECK THIS. */
+  skipped: number[]
 }
 
 /** A voice as returned by `listVoices` (the list projection). */
