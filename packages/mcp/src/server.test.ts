@@ -4102,7 +4102,7 @@ test('update_timeline and update_canvas say a batch is atomic; get_project names
     assert.match(description(name), /A batch is ordered and atomic: when any operation is refused, nothing is stored/)
   }
   assert.match(description('get_project'), /whether it is the main track and whether it is muted or hidden/)
-  assert.match(description('get_project'), /speed, whether it is disabled and source/)
+  assert.match(description('get_project'), /speed, whether it is disabled, its volume in dB when it is not the default \(null when muted\) and its fade-in and fade-out seconds when set, and source/)
 })
 
 /**

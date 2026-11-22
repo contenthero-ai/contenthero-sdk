@@ -2901,6 +2901,8 @@ export interface CardSummary {
   scheduledAt: string | null
   publishedAt: string | null
   publishUrl: string | null
+  /** The slug the card's blog post publishes under; null lets the post's slug be written for it. */
+  blogSlug: string | null
   createdAt: string | null
   updatedAt: string | null
   /** Distinct platforms this card has posts for. */
@@ -3222,6 +3224,8 @@ export interface UpdateCardInput extends Placement {
   scheduledAt?: string | null
   publishedAt?: string | null
   publishUrl?: string | null
+  /** The slug the card's blog post publishes under: lowercase words joined by single hyphens, at most 60 characters. `null` clears it. */
+  blogSlug?: string | null
   notes?: string | null
   /**
    * The `revision` you read from `getCard` before composing `notes`. **REQUIRED whenever `notes` is
@@ -4388,6 +4392,11 @@ export interface ProjectSummaryClip {
   startFromSeconds?: number
   speed?: number
   disabled?: true
+  /** Level in dB, present only when not 0; `null` means muted. Audio and video clips only. */
+  volume?: number | null
+  /** Fade lengths in seconds, present only when set above 0. Audio and video clips only. */
+  fadeInSeconds?: number
+  fadeOutSeconds?: number
   groupId?: string
   groupOrdinal?: number
   [key: string]: unknown

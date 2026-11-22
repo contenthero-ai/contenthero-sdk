@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.51
+
+- `ProjectSummaryClip` lists `volume` (dB, when not 0; `null` when muted), `fadeInSeconds` and `fadeOutSeconds` (when above 0) for audio and video clips, so `get_project` at the default detail shows clip sound.
+
 ## 0.4.50
 
 - `addAvatarSheets` and the `add_sheet` avatar op: attach images you already own to an avatar as sheets. Each answer carries the sheet as the sheets list returns it, and `skipped` lists request positions.

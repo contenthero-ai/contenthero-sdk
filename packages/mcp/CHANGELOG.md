@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.56
+
+- Tests only: the `get_project` description assertion matches the current wording. No change to the server.
+
 ## 0.4.55
 
 - `update_avatar` takes an `add_sheet` op: attach images the account already owns to the avatar as sheets.

@@ -277,6 +277,7 @@ export function registerCard(program: Command): void {
     .option('--cover-output-id <id>', 'media token (short id, output id or first 8 characters, optionally with "-N") for the cover')
     .option('--tags <list>', 'comma-separated tag names (replaces the set; must exist)', toList)
     .option('--schedule <when>', 'ISO-8601 publish time for the card AND its posts, or "clear"')
+    .option('--blog-slug <slug>', 'the slug the card\'s blog post publishes under, or "clear"')
     .option('--posts <json>', 'the card\'s posts as JSON. REPLACES the set, keyed by platform; [] detaches all', toJson)
     .option(
       '--assets <json>',
@@ -307,6 +308,7 @@ export function registerCard(program: Command): void {
             : isClear(opts.schedule)
               ? null
               : (opts.schedule as string),
+        blogSlug: opts.blogSlug === undefined ? undefined : isClear(opts.blogSlug) ? null : (opts.blogSlug as string),
         posts: opts.posts as UpdateCardInput['posts'],
         assets: opts.assets as UpdateCardInput['assets'],
         ...placementFrom(opts),

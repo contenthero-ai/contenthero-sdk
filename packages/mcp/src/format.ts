@@ -2383,6 +2383,7 @@ export function cardResult(p: CardDetail): CallToolResult {
       p.scheduledAt ? `scheduled: ${p.scheduledAt}` : null,
       p.publishedAt ? `published: ${p.publishedAt}` : null,
       p.publishUrl ? `publish url: ${p.publishUrl}` : null,
+      p.blogSlug ? `blog slug: ${p.blogSlug}` : null,
       p.notes ? `notes: ${p.notes}` : null,
       /**
        * ⭐⭐⭐ **PRINTED UNCONDITIONALLY, INCLUDING AT 0, BECAUSE IT IS AN INPUT TO THE NEXT CALL.**
