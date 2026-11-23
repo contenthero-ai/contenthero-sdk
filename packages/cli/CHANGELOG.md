@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.47
+
+- `generate --voice-settings <json>`: delivery dials for speech as JSON, including `cloneStrength` for a professional voice clone, as `get_model` lists them for the voice.
+
 ## 0.3.46
 
 - `tier-list export`: render tier list tabs as PNGs on the server, one picture per tab, filed in the library. Staff only, like the rest of `tier-list`.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.58
+
+- `generate` passes `voiceSettings` to speech models, including `cloneStrength` for a professional voice clone, as `get_model` lists it for the voice.
+
 ## 0.4.57
 
 - `export_tier_list`: render tier list tabs as PNGs on the server, one picture per tab. Staff only, like the other tier list tools.

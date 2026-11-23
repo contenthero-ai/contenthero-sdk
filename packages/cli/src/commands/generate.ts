@@ -323,6 +323,7 @@ export function registerGenerate(program: Command): void {
       .option('--voice-name <name>', 'for TTS: human-readable voice name (display only)')
       .option('--duration <seconds>', 'for music / sfx: length in seconds', toFloat)
       .option('--prompt-influence <0-1>', 'for sfx: how literally to follow the prompt', toFloat)
+      .option('--voice-settings <json>', 'for TTS: delivery dials as JSON, as get_model lists them for the voice', toJson)
       .option('--composition-plan <json>', music('compositionPlan'), toJson)
       .option('--seed <n>', music('seed'), toInt)
       .option('--with-timestamps', music('withTimestamps'))
@@ -341,6 +342,7 @@ export function registerGenerate(program: Command): void {
         voiceName: opts.voiceName as string | undefined,
         durationSeconds: opts.duration as number | undefined,
         promptInfluence: opts.promptInfluence as number | undefined,
+        voiceSettings: opts.voiceSettings as GenerateRequest['voiceSettings'],
         compositionPlan: opts.compositionPlan as GenerateRequest['compositionPlan'],
         seed: opts.seed as number | undefined,
         withTimestamps: opts.withTimestamps === true ? true : undefined,

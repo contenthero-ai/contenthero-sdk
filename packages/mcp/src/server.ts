@@ -1345,6 +1345,7 @@ export function registerTools(server: McpServer, opts: RegisterToolsOptions): vo
           voiceName: args.voiceName,
           durationSeconds: args.durationSeconds,
           promptInfluence: args.promptInfluence,
+          voiceSettings: args.voiceSettings,
           compositionPlan: args.compositionPlan,
           seed: args.seed,
           withTimestamps: args.withTimestamps,

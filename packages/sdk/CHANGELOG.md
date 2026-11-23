@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.53
+
+- `voiceSettings` takes `cloneStrength` (0 to 1) for a professional voice clone on Eleven v4, and a setting can declare `appliesWhen: 'proVoiceClone'`, so a control shows only for such a voice.
+
 ## 0.4.52
 
 - `startTierListExport` and `exportTierListAndWait`: render tier list tabs as PNGs on the server, one picture per tab, like other exports. Staff only.

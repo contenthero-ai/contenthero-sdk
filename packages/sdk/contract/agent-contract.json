@@ -1147,6 +1147,34 @@
             "description": "For TTS: human-readable voice name (display only).",
             "type": "string"
           },
+          "voiceSettings": {
+            "additionalProperties": false,
+            "description": "Voice delivery dials, for a speech model that declares them.",
+            "properties": {
+              "cloneStrength": {
+                "description": "Only for a professional voice clone (a speech model's get_model lists the setting; other voices ignore it). Higher follows the clone's training recordings more closely. Lower smooths the voice and leaves the performance more room.",
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "similarity": {
+                "type": "number"
+              },
+              "speakerBoost": {
+                "type": "boolean"
+              },
+              "speed": {
+                "type": "number"
+              },
+              "stability": {
+                "type": "number"
+              },
+              "style": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
           "withTimestamps": {
             "description": "Music only: also return the sung words with their start and end times, and save them as the song's transcript.",
             "type": "boolean"
@@ -9333,7 +9361,7 @@
       "title": "Get Schema"
     }
   ],
-  "version": "fe2fb47178643925ba5a2d6b237ab2454ff47423314cea58c6fd388b90fb3c05",
+  "version": "af25c4d142dae43ee10c39d6ea6f99b7b13c97246546b1f9ffbcd9cf158ae9fb",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

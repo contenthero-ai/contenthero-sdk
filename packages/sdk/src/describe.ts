@@ -148,7 +148,7 @@ export function describeInputRules(capabilities: Record<string, unknown> | null 
   const settings = c.settings as ModelCapabilities['settings']
   if (Array.isArray(settings)) {
     for (const s of settings) {
-      const when = s.appliesWhen === 'referenceVideo' ? ' (applies while a reference video is attached)' : s.appliesWhen === 'speech' ? ' (applies to spoken output)' : s.appliesWhen === 'gif' ? ' (applies to GIF output)' : s.appliesWhen ? ` (applies when ${s.appliesWhen})` : ''
+      const when = s.appliesWhen === 'referenceVideo' ? ' (applies while a reference video is attached)' : s.appliesWhen === 'speech' ? ' (applies to spoken output)' : s.appliesWhen === 'gif' ? ' (applies to GIF output)' : s.appliesWhen === 'proVoiceClone' ? ' (applies to spoken output in a professional voice clone)' : s.appliesWhen ? ` (applies when ${s.appliesWhen})` : ''
       const choices = s.control === 'select' ? `; options: ${s.options.map(o => `${o.value} (${o.label})`).join(', ')}${s.allowCustom !== undefined ? `; custom values: ${s.allowCustom ? 'allowed' : 'refused'}` : ''}` : ''
       const range = s.control === 'slider' ? `; range: ${s.min} to ${s.max}; step: ${s.step}` : ''
       out.push(`setting ${s.key}${s.label ? ` (${s.label})` : ''}: ${s.control ?? 'value'}, default ${String(s.default)}${when}${choices}${range}${s.control === 'toggle' && s.resolutionWhenEnabled ? `; resolution when enabled: ${s.resolutionWhenEnabled}` : ''}`)

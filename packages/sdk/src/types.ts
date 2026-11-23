@@ -424,7 +424,7 @@ export interface GenerateRequest {
   /** Music only: keep the song with the provider so a later `compositionPlan` can reuse stretches of it. */
   storeForInpainting?: boolean
   /** Voice delivery dials, for a speech model that declares them. */
-  voiceSettings?: { speed?: number; stability?: number; similarity?: number; style?: number; speakerBoost?: boolean }
+  voiceSettings?: { speed?: number; stability?: number; similarity?: number; cloneStrength?: number; style?: number; speakerBoost?: boolean }
   /** Media kind. Optional: inferred from the model when omitted; when given, a model of another medium is refused. */
   contentType?: (typeof MEDIA_KINDS)[number]
   /**
@@ -2715,7 +2715,7 @@ export interface ModelCapabilities {
   background?: ModelChoice
   settings?: Array<{
     key: string; label: string; shortLabel?: string; info?: string
-    appliesWhen?: 'speech' | 'referenceVideo' | 'gif'
+    appliesWhen?: 'speech' | 'referenceVideo' | 'gif' | 'proVoiceClone'
   } & (
     { control: 'select'; default: string; options: Array<{ value: string; label: string }>; allowCustom?: boolean }
     | { control: 'slider'; default: number; min: number; max: number; step: number; display?: string }
