@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.54
+
+- `get_transcript` tells a caller who names a tracked post to read it with `get_content` and its transcript grain, instead of answering that the media was not found.
+
 ## 0.4.53
 
 - `voiceSettings` takes `cloneStrength` (0 to 1) for a professional voice clone on Eleven v4, and a setting can declare `appliesWhen: 'proVoiceClone'`, so a control shows only for such a voice.

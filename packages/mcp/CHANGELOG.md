@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.59
+
+- A test holds the server's tool listing to the contract, so a listing that drifts from the published tools fails before release.
+
 ## 0.4.58
 
 - `generate` passes `voiceSettings` to speech models, including `cloneStrength` for a professional voice clone, as `get_model` lists it for the voice.
