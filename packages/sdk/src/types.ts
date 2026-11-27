@@ -813,8 +813,9 @@ export interface EditAudioRequest {
    * themselves. The two are mutually exclusive: one produces a new library asset, the other edits a timeline.
    */
   sourceUrl?: string
-  /** Source audio length in seconds. Required for a cost estimate; on a real run
-   *  it refines the estimate (the authoritative charge is the processed duration). */
+  /** File mode: the source audio length in seconds, required for a cost estimate; on a real run it refines the
+   *  estimate (the authoritative charge is the processed duration). In-place mode ignores it: the cost comes from
+   *  the clips. */
   durationSeconds?: number
   /** Optional: place the processed audio onto this editor project's timeline in the same call. Omit for a
    *  standalone library output (today's behavior). A file split makes four files and places none, so it refuses a
@@ -1307,6 +1308,20 @@ export interface Avatar extends AvatarSummary {
   niche: string[]
   createdAt: string | null
   looks: AvatarLook[]
+  /** Reference images of the character: one entry per sheet image the avatar shows. */
+  sheets: AvatarSheetImage[]
+}
+
+/** One sheet image an avatar shows. `sheetId` and `itemIndex` are what `updateAvatar`'s sheet ops take. */
+export interface AvatarSheetImage {
+  sheetId: string
+  /** Which image of the sheet this is; a sheet can hold several. */
+  itemIndex: number
+  name: string | null
+  /** The template that generated the sheet, or null for an image filed as a sheet. */
+  sheetType: string | null
+  imageUrl: string | null
+  isArchived: boolean
 }
 
 /**
@@ -1369,7 +1384,7 @@ export interface UpdateAvatarRequest extends Placement {
   /** An ElevenLabs voice id, or null to clear it. */
   defaultVoiceId?: string | null
   /**
-   * Look changes to apply in the same call, in order.
+   * Look and sheet changes to apply in the same call, in order.
    *
    * ⚠️ NOT A TRANSACTION. Ops run before the field updates so `add_look` can create the look that
    * `defaultLookId` then points at, but a failure part-way leaves the earlier ops applied. The result's
@@ -1378,7 +1393,7 @@ export interface UpdateAvatarRequest extends Placement {
   ops?: AvatarOp[]
 }
 
-/** A look change applied through `updateAvatar`. */
+/** A look or sheet change applied through `updateAvatar`. */
 export type AvatarOp =
   | {
       op: 'add_look'
@@ -1390,7 +1405,14 @@ export type AvatarOp =
       /** Images you already own, as URLs. An image this account does not own is skipped, not an error. */
       imageUrls: string[]
     }
+  /** Takes the look off the avatar. The image stays in the library. */
   | { op: 'remove_look'; lookId: string }
+  /** Takes a sheet off the avatar, or one image of it when `itemIndex` is given. The image stays in the library. */
+  | { op: 'remove_sheet'; sheetId: string; itemIndex?: number }
+  /** Turns the look into one of the avatar's sheets. */
+  | { op: 'move'; lookId: string }
+  /** Turns a sheet image into one of the avatar's looks. `itemIndex` is required when the avatar shows several images of the sheet. */
+  | { op: 'move'; sheetId: string; itemIndex?: number }
 
 /** What `updateAvatar` returns: the avatar, plus a per-op record when `ops` were supplied. */
 export interface UpdateAvatarResult {

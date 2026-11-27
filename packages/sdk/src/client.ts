@@ -818,15 +818,15 @@ export class ContentHero {
   }
 
   /**
-   * Remove one look from an avatar.
+   * Take one look off an avatar. The image stays in the library; nothing is trashed.
    *
-   * ⚠️ REVERSIBLE. The image moves to trash and is recoverable for 30 days, the same as any other
-   * library item. If it was the avatar's default, that pointer is cleared.
+   * If it was the avatar's default, the newest remaining look becomes the default. Sheets, and moving an image
+   * between looks and sheets, go through `updateAvatar` ops.
    */
   async removeAvatarLook(
     avatarId: string,
     lookId: string,
-  ): Promise<{ deleted: boolean; lookId: string }> {
+  ): Promise<{ removed: boolean; lookId: string; message: string }> {
     return this.request(
       'DELETE',
       `/api/v1/avatars/${encodeURIComponent(avatarId)}/looks/${encodeURIComponent(lookId)}`,

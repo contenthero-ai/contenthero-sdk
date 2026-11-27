@@ -1,6 +1,6 @@
 /**
  * `contenthero avatar` / `voice` - the account's reusable identity assets.
- *   avatar list | get <id>              avatars (base look + default voice) and their looks
+ *   avatar list | get <id>              avatars (base look + default voice), their looks and sheets
  *   avatar create | update | delete     manage them
  *   avatar look add | remove            file existing images onto an avatar, or trash one
  *   voice  list | get <id>              saved voices (ids feed generate audio / lip-sync)
@@ -45,7 +45,7 @@ export function registerIdentity(program: Command): void {
 
   avatar
     .command('get')
-    .description('Get one avatar with its looks')
+    .description('Get one avatar with its looks and sheets')
     .argument('<id>', 'the avatar id')
     .action(async (id: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
@@ -59,6 +59,7 @@ export function registerIdentity(program: Command): void {
           ...(av.gender ? [['Gender', av.gender] as [string, string]] : []),
           ...(av.age ? [['Age', av.age] as [string, string]] : []),
           ['Looks', av.looks.length],
+          ['Sheets', av.sheets.length],
         ])
         const looks = av.looks.length
           ? '\n\nLooks:\n' +
@@ -72,7 +73,14 @@ export function registerIdentity(program: Command): void {
               ]),
             )
           : ''
-        return head + looks
+        const sheets = av.sheets.length
+          ? '\n\nSheets:\n' +
+            table(
+              ['SHEET ID', 'IMAGE', 'NAME'],
+              av.sheets.map((sh) => [sh.sheetId, String(sh.itemIndex), sh.name ?? '']),
+            )
+          : ''
+        return head + looks + sheets
       })
     })
 
@@ -206,13 +214,13 @@ export function registerIdentity(program: Command): void {
 
   look
     .command('remove')
-    .description('Remove a look (trashed, recoverable for 30 days)')
+    .description('Take a look off an avatar (the image stays in the library)')
     .argument('<avatarId>', 'the avatar id')
     .argument('<lookId>', 'the look id (see `contenthero avatar get`)')
     .action(async (avatarId: string, lookId: string, _opts, command: Command) => {
       const { client, ctx } = makeClient(command)
       const result = await client.removeAvatarLook(avatarId, lookId)
-      emit(result, ctx, () => `Removed look ${lookId}. Recoverable for 30 days.`)
+      emit(result, ctx, () => `Removed look ${lookId} from ${avatarId}. The image stays in the library.`)
     })
 
   const voice = program.command('voice').description("Browse the account's saved voices")

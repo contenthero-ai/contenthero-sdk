@@ -108,6 +108,7 @@ function fakeClient(overrides = {}) {
       niche: ['Technology'],
       createdAt: 't',
       looks: [{ id: 'lk1', name: 'Default', imageUrl: 'https://cdn/look.png', lookType: 'default', isDefault: true }],
+      sheets: [],
     }),
     listVoices: async () => ({
       voices: [{ voiceId: 'v1', name: "Taylan's Voice", provider: 'elevenlabs', isFavorited: true, previewUrl: 'https://cdn/p.mp3', lastUsedAt: 't' }],
@@ -1506,6 +1507,7 @@ test('get_avatar returns detail with looks and passes the id through', async () 
           niche: [],
           createdAt: 't',
           looks: [{ id: 'lk1', name: 'Default', imageUrl: 'https://cdn/look.png', lookType: 'default', isDefault: true }],
+          sheets: [{ sheetId: 'sh1', itemIndex: 1, name: 'Turnaround', sheetType: null, imageUrl: 'https://cdn/sheet.png', isArchived: false }],
         }
       },
     }),
@@ -1514,6 +1516,9 @@ test('get_avatar returns detail with looks and passes the id through', async () 
   assert.ok(!res.isError)
   assert.equal(capturedId, 'av1')
   assert.match(urlsIn(res), /https:\/\/cdn\/look\.png/)
+  // Sheets are listed with the ids update_avatar's sheet ops take.
+  assert.match(urlsIn(res), /https:\/\/cdn\/sheet\.png/)
+  assert.match(JSON.stringify(res.content), /sheetId sh1, itemIndex 1/)
 })
 
 /**
@@ -1535,7 +1540,7 @@ test('create_avatar says the avatar is NOT ready and names the poll call', async
           avatar: {
             id: 'av-new', name: 'Mika', imageUrl: null, defaultVoiceId: null, isDefault: false,
             status: 'processing', description: null, age: '20s', gender: 'female', ethnicity: null,
-            niche: [], createdAt: 't', looks: [],
+            niche: [], createdAt: 't', looks: [], sheets: [],
           },
           status: 'processing',
           message: 'Avatar created; its first look is generating.',
@@ -1587,7 +1592,7 @@ test('update_avatar forwards look ops alongside fields', async () => {
           avatar: {
             id, name: 'Renamed', imageUrl: 'https://cdn/l.png', defaultVoiceId: null, isDefault: false,
             status: 'completed', description: null, age: null, gender: null, ethnicity: null,
-            niche: [], createdAt: 't', looks: [],
+            niche: [], createdAt: 't', looks: [], sheets: [],
           },
           applied: [{ op: 'add_look', lookIds: ['lk9'], skipped: 0 }],
         }
@@ -6054,7 +6059,7 @@ test('every hand-arranged list tool takes afterId, beforeId and position, and fo
       createCard: async (input) => ((seen.create_card = input), card),
       updateCard: async (_id, input) => ((seen.update_card = input), card),
       createStage: async (input) => ((seen.create_stage = input), { id: 'st1', name: 'S' }),
-      updateAvatar: async (_id, input) => ((seen.update_avatar = input), { avatar: { id: 'av1', name: 'A', looks: [], niche: [] }, applied: [] }),
+      updateAvatar: async (_id, input) => ((seen.update_avatar = input), { avatar: { id: 'av1', name: 'A', looks: [], sheets: [], niche: [] }, applied: [] }),
       updateTrackedAccount: async (_id, input) => (
         (seen.update_tracked_account = input),
         { account: { id: 'ta1', platform: 'youtube', handle: 'h' }, contentCount: 0, totals: { views: 0, likes: 0, comments: 0 }, averages: { views: null, engagementRate: null, outlierScore: null }, topContent: [], recentContent: [] }

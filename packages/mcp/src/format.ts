@@ -1083,7 +1083,7 @@ export function avatarListResult({ avatars, nextCursor }: AvatarListResult): Cal
   return text(lines([`${avatars.length} avatar(s):`, ...rows, moreLine(nextCursor)]))
 }
 
-/** One avatar's full detail, including its looks. */
+/** One avatar's full detail, including its looks and sheets. */
 export function avatarResult(a: Avatar): CallToolResult {
   const traits = [a.gender, a.age, a.ethnicity].filter(Boolean).join(', ')
   return text(
@@ -1098,6 +1098,11 @@ export function avatarResult(a: Avatar): CallToolResult {
       ...a.looks.map(
         (l) =>
           `  - ${l.name ?? l.lookType ?? 'look'} (${idOf(l)})${l.isDefault ? ' [default]' : ''}${l.isFavorited ? ' [favorite]' : ''}${l.isArchived ? ' [archived]' : ''}: ${l.imageUrl ?? 'none'}`,
+      ),
+      a.sheets.length ? `sheets (${a.sheets.length}):` : 'sheets: none',
+      ...a.sheets.map(
+        (sh) =>
+          `  - ${sh.name ?? sh.sheetType ?? 'sheet'} (sheetId ${sh.sheetId}, itemIndex ${sh.itemIndex})${sh.isArchived ? ' [archived]' : ''}: ${sh.imageUrl ?? 'none'}`,
       ),
     ]),
   )

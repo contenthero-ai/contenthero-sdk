@@ -1212,7 +1212,7 @@
             "type": "array"
           },
           "durationSeconds": {
-            "description": "Source audio length in seconds. Required for getCost, and for enhancement pricing when the source is not a stored ContentHero asset.",
+            "description": "File mode: the source audio length in seconds, required for getCost and for enhancement pricing when the source is not a stored ContentHero asset. In-place mode ignores it: the cost comes from the clips.",
             "type": "number"
           },
           "getCost": {
@@ -3759,7 +3759,7 @@
         "readOnlyHint": true
       },
       "description": {
-        "mcp": "Get one avatar by id: its base image (use as a generate_video reference image for a lip-sync model), default voice, traits, and its looks (outfit variations)."
+        "mcp": "Get one avatar by id: its base image (use as a generate_video reference image for a lip-sync model), default voice, traits, its looks (outfit variations) and its sheets (reference images of the character, each image with the sheetId and itemIndex that update_avatar takes)."
       },
       "effect": "read",
       "group": "characters",
@@ -3861,7 +3861,7 @@
         "readOnlyHint": false
       },
       "description": {
-        "mcp": "Update an avatar and/or change its looks. Fields: name, description, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId. Looks are changed through ops, the same shape update_timeline and update_canvas use: add_look files images the account ALREADY OWNS onto the avatar, remove_look trashes one (recoverable for 30 days), and add_sheet attaches images the account ALREADY OWNS to the avatar as sheets (a sheet is a reference image of the character; nothing is copied). Ops run before the fields, so one call can add a look and make it the default. To GENERATE a new look instead of filing an existing image, call generate_image with avatarId."
+        "mcp": "Update an avatar and/or change its looks and sheets. Fields: name, description, defaultLookId (also becomes the avatar's profile photo), defaultVoiceId. Looks and sheets are changed through ops, the same shape update_timeline and update_canvas use: add_look and add_sheet file images the account ALREADY OWNS onto the avatar (nothing is copied), move turns a look into a sheet or a sheet image into a look, and remove_look and remove_sheet take an image off the avatar while it stays in the library. A look is an outfit variation used as the avatar's portrait; a sheet is a reference image of the character. Ops run before the fields, so one call can add a look and make it the default. To GENERATE a new look instead of filing an existing image, call generate_image with avatarId."
       },
       "effect": "update",
       "group": "characters",
@@ -3953,7 +3953,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "lookId": {
-                      "description": "A look id from get_avatar.",
+                      "description": "A look id from get_avatar. Takes the look off this avatar; the image stays in the library.",
                       "type": "string"
                     },
                     "op": {
@@ -3964,6 +3964,72 @@
                   "required": [
                     "lookId",
                     "op"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "itemIndex": {
+                      "description": "Which of the sheet's images to take off, as get_avatar lists it. Omit to take off every image of that sheet.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "op": {
+                      "const": "remove_sheet",
+                      "type": "string"
+                    },
+                    "sheetId": {
+                      "description": "A sheet id from get_avatar. Takes the sheet off this avatar; the image stays in the library.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "sheetId"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "lookId": {
+                      "description": "A look id from get_avatar. The look becomes one of this avatar's sheets.",
+                      "type": "string"
+                    },
+                    "op": {
+                      "const": "move",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "lookId",
+                    "op"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "itemIndex": {
+                      "description": "Which of the sheet's images to move, as get_avatar lists it. Required when the avatar shows more than one image of that sheet.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "op": {
+                      "const": "move",
+                      "type": "string"
+                    },
+                    "sheetId": {
+                      "description": "A sheet id from get_avatar. That sheet image becomes one of this avatar's looks.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "sheetId"
                   ],
                   "type": "object"
                 }
@@ -9361,7 +9427,7 @@
       "title": "Get Schema"
     }
   ],
-  "version": "0e78f439d6e8b2f356bf81ae2382554e11657ac3ed3ab48e637a34204e196400",
+  "version": "992655cf591f344ebc8646ac03d55e7bd8503d28acc697264fcd061f34735a10",
   "vocabularies": {
     "ANALYSIS_COPY_RESOLUTIONS": [
       "720p",

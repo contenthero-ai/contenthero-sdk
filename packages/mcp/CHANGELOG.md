@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.4.60
+
+- `get_avatar` prints the avatar's sheets with the `sheetId` and `itemIndex` that `update_avatar` takes; the listing printed looks only.
+- `get_avatar` lists the avatar's sheets, each with the `sheetId` and `itemIndex` that `update_avatar` takes. `update_avatar` gains `remove_sheet` (take a sheet off an avatar) and `move` (a look becomes a sheet, a sheet image becomes a look). `remove_look` takes a look off the avatar and keeps its image in the library, for every kind of look; it used to trash the image and failed on a look filed from an existing image. A name given to `add_look` is now kept on the look.
+
 ## 0.4.59
 
 - A test holds the server's tool listing to the contract, so a listing that drifts from the published tools fails before release.

@@ -150,7 +150,7 @@ function server(path: Path) {
     }
     if (method === 'POST' && p === '/api/v1/avatars') {
       return {
-        avatar: { id: AVATAR.id, shortId: AVATAR.shortId, appUrl: AVATAR.appUrl, name: 'Mika', imageUrl: null, status: 'processing', looks: [] },
+        avatar: { id: AVATAR.id, shortId: AVATAR.shortId, appUrl: AVATAR.appUrl, name: 'Mika', imageUrl: null, status: 'processing', looks: [], sheets: [] },
         status: 'processing',
       }
     }

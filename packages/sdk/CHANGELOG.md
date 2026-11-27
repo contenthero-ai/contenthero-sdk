@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.4.55
+
+- `getAvatar` lists the avatar's `sheets`, each with the `sheetId` and `itemIndex` that `updateAvatar` takes. New `updateAvatar` ops: `remove_sheet` takes a sheet off an avatar, and `move` turns a look into a sheet or a sheet image into a look. `remove_look` and `removeAvatarLook` take a look off the avatar and keep its image in the library, for every kind of look: they used to trash the image, and failed on a look filed from an existing image. `removeAvatarLook` answers `removed` instead of `deleted`. A name given to `add_look` is now kept on the look.
+- `edit_audio` in-place cost previews quote the clips' own job plan (one job per source for enhance), the same number the run charges; `durationSeconds` is a file-mode input only.
+
 ## 0.4.54
 
 - `get_transcript` tells a caller who names a tracked post to read it with `get_content` and its transcript grain, instead of answering that the media was not found.

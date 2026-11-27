@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.48
+
+- `avatar get` lists the avatar's sheets with the ids `update_avatar` takes. `avatar look remove` takes the look off the avatar and keeps its image in the library, for every kind of look, instead of trashing it.
+
 ## 0.3.47
 
 - `generate --voice-settings <json>`: delivery dials for speech as JSON, including `cloneStrength` for a professional voice clone, as `get_model` lists them for the voice.
