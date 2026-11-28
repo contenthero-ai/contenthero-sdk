@@ -52,6 +52,14 @@ test('an upscale builds its request from the one reference source', () => {
   })
 })
 
+test('an upscale without a factor is sent as is, for the server to judge per model', () => {
+  const plan = planMediumCall(model('up', 'image', 'upscale'), 'image', { modelId: 'up', referenceImages: ['u'] })
+  assert.deepEqual(plan, {
+    route: 'operation',
+    request: { contentType: 'image', modelId: 'up', kind: 'upscale', references: { images: ['u'] } },
+  })
+})
+
 test('a video upscale needs the source length', () => {
   assert.throws(
     () => planMediumCall(model('vu', 'video', 'upscale'), 'video', { modelId: 'vu', referenceVideos: ['u'], upscaleFactor: '2x' }),

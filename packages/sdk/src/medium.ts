@@ -275,7 +275,8 @@ export function planMediumCall(model: ModelInfo, medium: 'image' | 'video', inpu
     case 'generate':
       return { route: 'generate' }
     case 'upscale': {
-      need(model, 'upscaleFactor', input.upscaleFactor)
+      // The factor is not required here: a model may scale by a fixed amount and take none, and a model with a
+      // choice has a default. The server owns which factors each model accepts and names them when one is wrong.
       if (video) need(model, 'sourceDurationSeconds (the source video length, for pricing)', input.sourceDurationSeconds)
       const source = oneOf(model, video ? 'referenceVideos' : 'referenceImages', video ? input.referenceVideos : input.referenceImages)
       return {

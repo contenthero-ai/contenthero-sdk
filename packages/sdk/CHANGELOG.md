@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.56
+
+- An upscale no longer has to name `upscaleFactor`: a model that scales by a fixed amount takes none, and a model with a factor choice uses its default. The server says which factors a model accepts when one is wrong.
+
 ## 0.4.55
 
 - `getAvatar` lists the avatar's `sheets`, each with the `sheetId` and `itemIndex` that `updateAvatar` takes. New `updateAvatar` ops: `remove_sheet` takes a sheet off an avatar, and `move` turns a look into a sheet or a sheet image into a look. `remove_look` and `removeAvatarLook` take a look off the avatar and keep its image in the library, for every kind of look: they used to trash the image, and failed on a look filed from an existing image. `removeAvatarLook` answers `removed` instead of `deleted`. A name given to `add_look` is now kept on the look.
